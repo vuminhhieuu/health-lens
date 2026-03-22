@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HealthLens — Team Kickoff</title>
+<style>
+/* ─── RESET & BASE ──────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0F172A;--surface:#1E293B;--border:#334155;--border2:#475569;
+  --text:#F1F5F9;--muted:#94A3B8;--faint:#475569;
+  --blue:#3B82F6;--blue-d:#1D4ED8;--blue-l:#EFF6FF;
+  --green:#22C55E;--green-d:#166534;
+  --amber:#F59E0B;--amber-d:#92400E;
+  --red:#EF4444;--purple:#A78BFA;--teal:#2DD4BF;
+  --brand:#3B82F6;
+  --r:8px;--r-lg:12px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;height:100vh}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:'SF Mono','Fira Code',monospace;font-size:.85em;background:#1E293B;padding:2px 6px;border-radius:4px;color:#93C5FD}
+strong{color:#F1F5F9}
+kbd{background:#1E293B;border:1px solid #475569;border-radius:4px;padding:1px 7px;font-family:monospace;font-size:.85em;color:#94A3B8}
+
+/* ─── TOP BAR ───────────────────────────────────────── */
+#topbar{position:fixed;top:0;left:0;right:0;z-index:200;height:48px;background:#0F172A;border-bottom:1px solid #1E293B;display:flex;align-items:center;padding:0 20px;gap:12px}
+.tb-brand{font-size:14px;font-weight:700;color:#fff;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.tb-logo{width:28px;height:28px;background:linear-gradient(135deg,#3B82F6,#8B5CF6);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff}
+.tb-title{color:#94A3B8;font-size:13px;margin-left:4px}
+.tb-sections{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;flex:1;margin:0 12px}
+.tb-sections::-webkit-scrollbar{display:none}
+.sec-btn{background:none;border:none;color:#475569;font-size:12px;font-weight:500;padding:4px 10px;border-radius:6px;cursor:pointer;white-space:nowrap;transition:all .12s}
+.sec-btn:hover{color:#94A3B8;background:#1E293B}
+.sec-btn.active{color:#fff;background:#1D4ED8}
+.tb-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.mode-btn{display:flex;align-items:center;gap:6px;background:#1E293B;border:1px solid #334155;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:500;color:#94A3B8;cursor:pointer;transition:all .12s}
+.mode-btn:hover{border-color:#475569;color:#F1F5F9}
+.slide-counter{font-size:12px;color:#475569;min-width:50px;text-align:right}
+
+/* ─── SLIDE MODE ────────────────────────────────────── */
+#slide-mode{display:flex;flex-direction:column;height:100vh;padding-top:48px}
+.slide-stage{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;padding:24px}
+.slide{display:none;width:100%;max-width:1000px;animation:sIn .22s ease-out}
+.slide.active{display:block}
+@keyframes sIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.slide-nav{height:52px;background:#0F172A;border-top:1px solid #1E293B;display:flex;align-items:center;justify-content:space-between;padding:0 28px;flex-shrink:0}
+.nav-dots{display:flex;gap:5px;align-items:center}
+.dot{width:6px;height:6px;border-radius:50%;background:#1E293B;transition:all .15s;cursor:pointer}
+.dot.done{background:#334155}
+.dot.active{background:#3B82F6;width:18px;border-radius:3px}
+.snav-btn{background:#1E293B;border:1px solid #334155;color:#94A3B8;padding:7px 18px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;display:flex;align-items:center;gap:6px}
+.snav-btn:hover{border-color:#475569;color:#F1F5F9}
+.snav-btn:disabled{opacity:.3;cursor:not-allowed}
+.snav-btn.primary{background:#1D4ED8;border-color:#1D4ED8;color:#fff}
+.snav-btn.primary:hover{background:#2563EB}
+.progress-line{position:absolute;top:48px;left:0;height:2px;background:linear-gradient(90deg,#3B82F6,#8B5CF6);transition:width .3s;z-index:199}
+
+/* ─── DOC MODE ──────────────────────────────────────── */
+#doc-mode{display:none;padding-top:48px;height:100vh;overflow:hidden}
+.doc-layout{display:flex;height:calc(100vh - 48px)}
+.doc-sidebar{width:220px;background:#0F172A;border-right:1px solid #1E293B;overflow-y:auto;padding:16px 0;flex-shrink:0}
+.doc-sidebar::-webkit-scrollbar{width:3px}
+.doc-sidebar::-webkit-scrollbar-thumb{background:#334155}
+.doc-sec-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#475569;padding:10px 14px 4px}
+.doc-item{font-size:12px;color:#64748B;padding:5px 14px;cursor:pointer;border-left:2px solid transparent;transition:all .1s;line-height:1.4}
+.doc-item:hover{color:#94A3B8;background:#1E293B20}
+.doc-item.active{color:#fff;border-left-color:#3B82F6;background:#1D4ED815}
+.doc-body{flex:1;overflow-y:auto;padding:32px 40px 60px}
+.doc-body::-webkit-scrollbar{width:4px}
+.doc-body::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
+.doc-section{margin-bottom:56px;scroll-margin-top:24px}
+.doc-sec-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#475569;margin-bottom:6px}
+.doc-title{font-size:28px;font-weight:700;color:#F1F5F9;margin-bottom:8px;line-height:1.2}
+.doc-content{font-size:14px;color:#CBD5E1;line-height:1.7}
+
+/* ─── SLIDE CONTENT COMPONENTS ──────────────────────── */
+.slide-inner{background:#1E293B;border:1px solid #334155;border-radius:16px;padding:36px 44px;min-height:440px;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.slide-inner::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent-l,#3B82F6),var(--accent-r,#8B5CF6))}
+.slide-sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--accent-l,#3B82F6);margin-bottom:10px}
+.slide-h1{font-size:32px;font-weight:800;color:#F1F5F9;line-height:1.2;margin-bottom:8px}
+.slide-h2{font-size:22px;font-weight:700;color:#F1F5F9;margin-bottom:6px}
+.slide-sub{font-size:15px;color:#94A3B8;margin-bottom:24px;line-height:1.5}
+.slide-body{font-size:14px;color:#CBD5E1;line-height:1.7;flex:1}
+.slide-note{margin-top:auto;padding-top:16px;font-size:12px;color:#475569;border-top:1px solid #334155}
+.tag{display:inline-block;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;margin:2px}
+.tag-blue{background:#1D4ED820;color:#60A5FA;border:1px solid #1D4ED860}
+.tag-green{background:#16653420;color:#4ADE80;border:1px solid #16653460}
+.tag-amber{background:#92400E20;color:#FCD34D;border:1px solid #92400E60}
+.tag-red{background:#99180020;color:#F87171;border:1px solid #99180060}
+.tag-purple{background:#5B21B620;color:#C4B5FD;border:1px solid #5B21B660}
+.tag-teal{background:#0F766E20;color:#2DD4BF;border:1px solid #0F766E60}
+
+/* card grid */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.card{background:#0F172A;border:1px solid #334155;border-radius:10px;padding:16px}
+.card-icon{font-size:22px;margin-bottom:8px}
+.card-title{font-size:13px;font-weight:700;color:#F1F5F9;margin-bottom:4px}
+.card-desc{font-size:12px;color:#64748B;line-height:1.5}
+.card-tag{margin-top:8px}
+
+/* table */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{background:#0F172A;color:#94A3B8;padding:8px 12px;text-align:left;font-weight:600;border-bottom:1px solid #334155}
+.tbl td{padding:8px 12px;border-bottom:1px solid #1E293B;color:#CBD5E1}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:nth-child(even) td{background:#0F172A30}
+
+/* code block */
+.codeblock{background:#0D1117;border:1px solid #30363D;border-radius:8px;padding:14px 16px;font-family:'SF Mono','Fira Code',monospace;font-size:12px;line-height:1.8;margin:10px 0;overflow-x:auto}
+.codeblock .p{color:#7EE787}
+.codeblock .c{color:#C9D1D9}
+.codeblock .k{color:#FF7B72}
+.codeblock .s{color:#A5D6FF}
+.codeblock .cm{color:#8B949E}
+
+/* good/bad */
+.gb{display:flex;flex-direction:column;gap:4px}
+.good{border-left:3px solid #22C55E;padding:5px 10px;background:#0D2D0D;border-radius:0 6px 6px 0;font-family:monospace;font-size:12px;color:#86EFAC}
+.bad{border-left:3px solid #EF4444;padding:5px 10px;background:#1A0000;border-radius:0 6px 6px 0;font-family:monospace;font-size:12px;color:#FCA5A5}
+.gl{font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:2px;color:#22C55E}
+.bl{font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:2px;color:#EF4444}
+
+/* alert */
+.alert{border-radius:8px;padding:10px 14px;font-size:13px;display:flex;gap:10px;align-items:flex-start;margin:10px 0}
+.ai{background:#1D4ED815;color:#93C5FD;border:1px solid #1D4ED850}
+.aw{background:#92400E15;color:#FCD34D;border:1px solid #92400E50}
+.ar{background:#99000015;color:#FCA5A5;border:1px solid #99000050}
+.ag{background:#16653415;color:#86EFAC;border:1px solid #16653450}
+.aico{flex-shrink:0;font-size:15px}
+
+/* persona card */
+.persona{background:#0F172A;border:1px solid #334155;border-radius:10px;padding:16px;display:flex;gap:12px}
+.persona-avatar{width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff}
+.persona-name{font-size:14px;font-weight:700;color:#F1F5F9;margin-bottom:3px}
+.persona-desc{font-size:12px;color:#64748B;line-height:1.5}
+
+/* step list */
+.steps{list-style:none;padding:0;counter-reset:s}
+.steps li{counter-increment:s;display:flex;gap:12px;padding:8px 0;border-bottom:1px solid #1E293B;font-size:13px;color:#CBD5E1;align-items:flex-start}
+.steps li:last-child{border-bottom:none}
+.steps li::before{content:counter(s);background:#1D4ED8;color:#fff;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;margin-top:1px}
+
+/* checklist */
+.cl-item{display:flex;align-items:flex-start;gap:10px;padding:7px 10px;border-radius:7px;margin-bottom:3px;cursor:pointer;user-select:none;border:1px solid transparent;transition:background .1s}
+.cl-item:hover{background:#1E293B;border-color:#334155}
+.cl-item.done{background:#0D2D0D15;border-color:#16653440}
+.cl-item.done .cl-txt{color:#4ADE80;text-decoration:line-through}
+.cl-box{width:16px;height:16px;border-radius:4px;border:1.5px solid #475569;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;transition:all .15s}
+.cl-item.done .cl-box{background:#16A34A;border-color:#16A34A}
+.cl-txt{font-size:13px;color:#CBD5E1}
+.cl-note{font-size:11px;color:#475569;margin-left:auto;padding-left:8px;white-space:nowrap}
+
+/* magic word */
+.mw{background:#0D1117;border:1px solid #334155;border-radius:8px;padding:12px 16px;text-align:center}
+.mw-kw{font-family:monospace;font-size:20px;font-weight:800;color:#60A5FA;margin-bottom:4px}
+.mw-note{font-size:11px;color:#64748B}
+
+/* tool card */
+.tool-card{background:#0F172A;border:1px solid #334155;border-radius:10px;padding:14px;display:flex;gap:12px;align-items:flex-start}
+.tc-icon{font-size:24px;flex-shrink:0;margin-top:2px}
+.tc-name{font-size:13px;font-weight:700;color:#F1F5F9;margin-bottom:2px}
+.tc-role{font-size:11px;color:#64748B;margin-bottom:6px}
+.tc-bullets{font-size:12px;color:#94A3B8;line-height:1.7;list-style:none;padding:0}
+.tc-bullets li::before{content:"› ";color:#3B82F6;font-weight:700}
+
+/* iframe wrapper */
+.demo-frame-wrap{background:#0F172A;border:1px solid #334155;border-radius:10px;overflow:hidden;height:400px;position:relative}
+.demo-frame-wrap iframe{width:100%;height:100%;border:none}
+.demo-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#0F172A;flex-direction:column;gap:12px}
+.demo-open-btn{background:#1D4ED8;color:#fff;border:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px}
+.demo-open-btn:hover{background:#2563EB}
+
+/* arch diagram */
+.arch-layer{border:1px solid #334155;border-radius:8px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px}
+.arch-layer-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#475569;width:60px;flex-shrink:0}
+.arch-tools{display:flex;gap:6px;flex-wrap:wrap}
+.arch-tool{font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap}
+
+/* hero layout */
+.hero-layout{display:flex;align-items:center;gap:40px}
+.hero-text{flex:1}
+.hero-visual{flex-shrink:0;width:260px}
+.hero-logo{width:100%;background:linear-gradient(135deg,#1E3A5F,#1E293B);border-radius:20px;padding:32px;text-align:center;border:1px solid #334155}
+.hero-logo-icon{font-size:56px;margin-bottom:12px}
+.hero-logo-name{font-size:28px;font-weight:800;color:#F1F5F9}
+.hero-logo-sub{font-size:13px;color:#64748B;margin-top:4px}
+
+/* progress bar top */
+#prog-line{position:fixed;top:48px;left:0;height:2px;background:linear-gradient(90deg,#3B82F6,#8B5CF6);transition:width .3s;z-index:199;pointer-events:none}
+
+/* state badge */
+.sbadge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px}
+.sb-todo{background:#47556920;color:#94A3B8;border:1px solid #47556940}
+.sb-prog{background:#F5A62320;color:#F5A623;border:1px solid #F5A62340}
+.sb-rev{background:#A78BFA20;color:#A78BFA;border:1px solid #A78BFA40}
+.sb-done{background:#22C55E20;color:#22C55E;border:1px solid #22C55E40}
+
+/* auto badge */
+.auto{background:#16A34A;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;display:inline-flex;align-items:center;gap:3px;vertical-align:middle}
+
+/* compliance badge */
+.comply{background:#7C3AED20;color:#C4B5FD;border:1px solid #7C3AED40;border-radius:8px;padding:10px 14px;font-size:13px;display:flex;gap:10px;margin-top:10px}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div class="tb-brand">
+    <div class="tb-logo">HL</div>
+    HealthLens
+    <span class="tb-title">Team Kickoff</span>
+  </div>
+  <div class="tb-sections" id="sec-nav"></div>
+  <div class="tb-right">
+    <div class="slide-counter" id="slide-counter">1 / 19</div>
+    <button class="mode-btn" id="mode-toggle" onclick="toggleMode()">
+      <span id="mode-icon">📄</span>
+      <span id="mode-label">Doc mode</span>
+    </button>
+  </div>
+</div>
+<div id="prog-line"></div>
+
+<!-- ════════════════════════════════════════════════════
+     SLIDE MODE
+════════════════════════════════════════════════════ -->
+<div id="slide-mode">
+  <div class="slide-stage" id="slides-container"></div>
+  <div class="slide-nav">
+    <button class="snav-btn" id="btn-prev" onclick="navigate(-1)">← Trước</button>
+    <div class="nav-dots" id="nav-dots"></div>
+    <button class="snav-btn primary" id="btn-next" onclick="navigate(1)">Tiếp theo →</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     DOC MODE
+════════════════════════════════════════════════════ -->
+<div id="doc-mode">
+  <div class="doc-layout">
+    <div class="doc-sidebar" id="doc-sidebar"></div>
+    <div class="doc-body" id="doc-body"></div>
+  </div>
+</div>
+
+<!-- CHECKLIST DATA -->
+<script>
+const CL_KEY = 'hl-kickoff-cl';
+const loadCL = () => JSON.parse(localStorage.getItem(CL_KEY)||'{}');
+const saveCL = d => localStorage.setItem(CL_KEY, JSON.stringify(d));
+function toggleCL(key, el) {
+  const s = loadCL(); s[key] = !s[key]; saveCL(s);
+  el.classList.toggle('done', !!s[key]);
+  el.querySelector('.cl-box').textContent = s[key] ? '✓' : '';
+}
+function renderCL(items, prefix) {
+  const s = loadCL();
+  return items.map((item, i) => {
+    const key = prefix + '_' + i, done = !!s[key];
+    return `<div class="cl-item ${done?'done':''}" onclick="toggleCL('${key}',this)">
+      <div class="cl-box">${done?'✓':''}</div>
+      <div class="cl-txt">${item.t}</div>
+      ${item.n ? `<div class="cl-note">${item.n}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════════════
+// SLIDES DATA
+// ════════════════════════════════════════════════════
+const SECTIONS = [
+  { id:'project', label:'Dự án', color:['#3B82F6','#6366F1'] },
+  { id:'tools',   label:'Công cụ', color:['#06B6D4','#3B82F6'] },
+  { id:'conv',    label:'Conventions', color:['#8B5CF6','#EC4899'] },
+  { id:'demo',    label:'Workflow Demo', color:['#F59E0B','#EF4444'] },
+  { id:'config',  label:'Config Guide', color:['#22C55E','#06B6D4'] },
+  { id:'links',   label:'Links & Q&A', color:['#F472B6','#A78BFA'] },
+];
+
+const SLIDES = [
+// ── S1: Hero ────────────────────────────────────────────
+{ sec:0, html:`
+<div class="slide-inner" style="--accent-l:#3B82F6;--accent-r:#6366F1">
+  <div class="slide-sec">Dự án — HealthLens</div>
+  <div class="hero-layout">
+    <div class="hero-text">
+      <div class="slide-h1" style="font-size:36px">Personal Health<br>Intelligence</div>
+      <div class="slide-sub" style="font-size:16px;margin-top:10px">Biến kết quả khám bệnh thô thành hiểu biết có thể hành động được — cho người Việt Nam.</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin:20px 0">
+        <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:#CBD5E1"><span style="color:#3B82F6;font-size:18px">🔍</span><span><strong>Hiểu</strong> — OCR + LLM giải thích chỉ số bằng tiếng Việt thường</span></div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:#CBD5E1"><span style="color:#22C55E;font-size:18px">💊</span><span><strong>Hành động</strong> — Gợi ý lối sống, dinh dưỡng cá nhân hóa</span></div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:#CBD5E1"><span style="color:#F59E0B;font-size:18px">📈</span><span><strong>Theo dõi</strong> — Lịch sử chỉ số, nhận diện xu hướng</span></div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:#CBD5E1"><span style="color:#A78BFA;font-size:18px">👨‍👩‍👧</span><span><strong>Chia sẻ</strong> — Mạng lưới sức khỏe gia đình, theo dõi cross-profile</span></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <span class="tag tag-blue">Web (Next.js)</span>
+        <span class="tag tag-blue">Mobile (React Native)</span>
+        <span class="tag tag-blue">Backend (Spring Boot)</span>
+        <span class="tag tag-amber">Healthcare</span>
+        <span class="tag tag-purple">NĐ 13/2023</span>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="hero-logo">
+        <div class="hero-logo-icon">🏥</div>
+        <div class="hero-logo-name">HealthLens</div>
+        <div class="hero-logo-sub">health-lens · ie303 · 2026</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-note">Vấn đề: người dùng nhận kết quả khám nhưng không hiểu các chỉ số có nghĩa gì và không biết làm gì tiếp theo. HealthLens giải quyết khoảng trống này.</div>
+</div>`},
+
+// ── S2: Personas ─────────────────────────────────────────
+{ sec:0, html:`
+<div class="slide-inner" style="--accent-l:#3B82F6;--accent-r:#6366F1">
+  <div class="slide-sec">Dự án — Người dùng mục tiêu</div>
+  <div class="slide-h2">3 personas từ PRD</div>
+  <div class="slide-sub">Hiểu người dùng trước khi code — mỗi feature phục vụ ai?</div>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div class="persona">
+      <div class="persona-avatar" style="background:#3B82F6">BL</div>
+      <div>
+        <div class="persona-name">Bà Lan — 58 tuổi, Hà Nội 👵</div>
+        <div class="persona-desc">Mỡ máu cao 3 năm, khám hàng tháng, không hiểu LDL/HDL/Triglyceride. <strong>Primary user</strong> — lần đầu thực sự hiểu con số trên tờ giấy khám là khoảnh khắc "aha". Upload mobile, xem giải thích tiếng Việt đơn giản.</div>
+      </div>
+    </div>
+    <div class="persona">
+      <div class="persona-avatar" style="background:#8B5CF6">AM</div>
+      <div>
+        <div class="persona-name">Anh Minh — 32 tuổi, TP.HCM 👨‍💻</div>
+        <div class="persona-desc">Bố 61 tuổi, tiểu đường type 2, sống một mình ở HN. <strong>Family sharing user</strong> — mở web dashboard sáng thứ 2 trước họp, biết ngay HbA1c bố như thế nào mà không cần gọi điện.</div>
+      </div>
+    </div>
+    <div class="persona">
+      <div class="persona-avatar" style="background:#F59E0B;color:#0F172A">AD</div>
+      <div>
+        <div class="persona-name">Admin hệ thống 🛠</div>
+        <div class="persona-desc">Cập nhật reference data y tế (ngưỡng chuẩn LDL, HbA1c...) theo guideline mới. MFA bắt buộc, audit log mọi thay đổi, approve workflow trước khi áp dụng.</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-note">J1 (Bà Lan) = core loop phải hoàn hảo. Nếu upload → OCR → giải thích không mượt, user không quay lại.</div>
+</div>`},
+
+// ── S3: Tech stack ───────────────────────────────────────
+{ sec:0, html:`
+<div class="slide-inner" style="--accent-l:#3B82F6;--accent-r:#6366F1">
+  <div class="slide-sec">Dự án — Tech Stack</div>
+  <div class="slide-h2">Kiến trúc hệ thống</div>
+  <div class="slide-sub">Web App + Mobile App + Backend + AI/OCR pipeline</div>
+  <div class="grid2" style="gap:12px;margin-bottom:14px">
+    <div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#475569;margin-bottom:8px">Frontend</div>
+      <div class="card" style="margin-bottom:8px">
+        <div style="font-size:13px;font-weight:700;color:#F1F5F9;margin-bottom:4px">🌐 Web — Next.js App Router</div>
+        <div style="font-size:12px;color:#64748B">SSR cho landing page, CSR cho dashboard. Desktop-first. WCAG 2.1 AA.</div>
+      </div>
+      <div class="card">
+        <div style="font-size:13px;font-weight:700;color:#F1F5F9;margin-bottom:4px">📱 Mobile — React Native / Expo</div>
+        <div style="font-size:12px;color:#64748B">iOS + Android. Camera chụp giấy khám. SQLite offline cache. Expo Document Picker.</div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#475569;margin-bottom:8px">Backend & AI</div>
+      <div class="card" style="margin-bottom:8px">
+        <div style="font-size:13px;font-weight:700;color:#F1F5F9;margin-bottom:4px">☕ Backend — Java Spring Boot</div>
+        <div style="font-size:12px;color:#64748B">REST API + WebSocket (P2). Auth + MFA admin. Audit log. Async OCR queue.</div>
+      </div>
+      <div class="card">
+        <div style="font-size:13px;font-weight:700;color:#F1F5F9;margin-bottom:4px">🤖 AI Pipeline</div>
+        <div style="font-size:12px;color:#64748B">OCR → extract chỉ số. LLM → giải thích tiếng Việt. Cache theo hash. ≤10s target.</div>
+      </div>
+    </div>
+  </div>
+  <div class="codeblock"><span class="cm">// Real-time flow</span>
+<span class="c">Mobile upload → Spring Boot API → OCR (async) → DB</span>
+<span class="c">    → Polling 30s (MVP) / WebSocket (P2) → Web Dashboard</span>
+<span class="c">    → Push Notification → Mobile (thành viên gia đình)</span></div>
+  <div class="slide-note">MVP dùng polling 30s thay WebSocket để giảm complexity. WebSocket upgrade ở P2 sau launch.</div>
+</div>`},
+
+// ── S4: Features + Compliance ────────────────────────────
+{ sec:0, html:`
+<div class="slide-inner" style="--accent-l:#3B82F6;--accent-r:#6366F1">
+  <div class="slide-sec">Dự án — P1 Features & Compliance</div>
+  <div class="slide-h2">Launch scope + ràng buộc pháp lý</div>
+  <div class="grid2" style="margin-bottom:14px">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#22C55E;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">✅ P1 — Launch (Must Have)</div>
+      <div style="font-size:13px;color:#CBD5E1;line-height:2">
+        📸 Upload ảnh/PDF + camera → OCR → chỉ số<br>
+        ✏️ Manual fallback khi OCR thất bại<br>
+        🤖 LLM giải thích tiếng Việt (Mức A+B)<br>
+        🚨 Cảnh báo chỉ số bất thường<br>
+        📅 Lịch sử khám theo timeline<br>
+        👨‍👩‍👧 Multi-profile (≥3/tài khoản)<br>
+        🌐 Web dashboard read-only<br>
+        🔐 Consent flow + right-to-delete
+      </div>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#F59E0B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">⏳ Deferrable → P2</div>
+      <div style="font-size:13px;color:#64748B;line-height:2">
+        WebSocket (polling 30s trong MVP)<br>
+        Push notifications<br>
+        Trend charts<br>
+        PDF export<br>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 8px">🎯 Success Metrics</div>
+      <div style="font-size:13px;color:#94A3B8;line-height:1.8">
+        300 WAU — T+3 tháng<br>
+        Weekly retention ≥40%<br>
+        Upload completion ≥70%<br>
+        OCR accuracy ≥85%
+      </div>
+    </div>
+  </div>
+  <div class="comply">
+    <span style="font-size:18px">⚖️</span>
+    <div>
+      <div style="font-size:12px;font-weight:700;color:#C4B5FD;margin-bottom:4px">Nghị định 13/2023/NĐ-CP — Dữ liệu cá nhân nhạy cảm</div>
+      <div style="font-size:12px;color:#94A3B8">Consent tường minh trước khi thu thập · Right-to-delete ≤72h · Không share bên thứ 3 khi chưa có đồng ý · Mã hóa AES-256 at rest + TLS 1.2+ in transit</div>
+    </div>
+  </div>
+</div>`},
+
+// ── S5: System Architecture ──────────────────────────────
+{ sec:1, html:`
+<div class="slide-inner" style="--accent-l:#06B6D4;--accent-r:#3B82F6">
+  <div class="slide-sec">Công cụ — Tổng quan hệ thống</div>
+  <div class="slide-h2">Stack quản lý dự án — $0</div>
+  <div class="slide-sub" style="margin-bottom:16px">Click vào từng công cụ để xem chi tiết ở slide tiếp theo.</div>
+  <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+    <div class="arch-layer">
+      <div class="arch-layer-label">PLAN</div>
+      <div class="arch-tools">
+        <span class="arch-tool" style="background:#1D4ED820;color:#60A5FA;border:1px solid #1D4ED840">📋 Linear — Issues, Cycles, Git Automation</span>
+        <span class="arch-tool" style="background:#0F766E20;color:#2DD4BF;border:1px solid #0F766E40">🤖 Geekbot — Async Standup</span>
+        <span class="arch-tool" style="background:#1D4ED820;color:#60A5FA;border:1px solid #1D4ED840">📅 Google Calendar — Meetings</span>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="arch-layer-label">CODE</div>
+      <div class="arch-tools">
+        <span class="arch-tool" style="background:#33415520;color:#94A3B8;border:1px solid #33415540">🐙 GitHub — Code, PR, CI/CD, Branch Protection</span>
+        <span class="arch-tool" style="background:#7C3AED20;color:#C4B5FD;border:1px solid #7C3AED40">🔔 PullNotifier — PR → Slack</span>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="arch-layer-label">NOTIFY</div>
+      <div class="arch-tools">
+        <span class="arch-tool" style="background:#4A154B30;color:#E879F9;border:1px solid #4A154B60">💬 Slack — 5 channels · 6/10 app slots</span>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="arch-layer-label">STORE</div>
+      <div class="arch-tools">
+        <span class="arch-tool" style="background:#16653420;color:#4ADE80;border:1px solid #16653440">📊 Google Sheets — 5 tabs long-term data</span>
+        <span class="arch-tool" style="background:#92400E20;color:#FCD34D;border:1px solid #92400E40">⚙️ Apps Script — Automation hub</span>
+        <span class="arch-tool" style="background:#1D4ED820;color:#60A5FA;border:1px solid #1D4ED840">📈 Dashboard — HTML Web App</span>
+      </div>
+    </div>
+  </div>
+  <div class="alert ai"><span class="aico">💡</span>Lý do chọn GitHub <strong>personal account</strong> thay vì Organization: GitHub Free Org không có required reviewers trên private repo. Personal account có → hard-block merge nếu thiếu approval.</div>
+</div>`},
+
+// ── S6: Linear ──────────────────────────────────────────
+{ sec:1, html:`
+<div class="slide-inner" style="--accent-l:#5E6AD2;--accent-r:#3B82F6">
+  <div class="slide-sec">Công cụ — Linear</div>
+  <div class="slide-h2">📋 Linear — Issue tracker + Sprint cycles</div>
+  <div class="grid2">
+    <div>
+      <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Vai trò trong team</div>
+      <div style="font-size:13px;color:#CBD5E1;line-height:1.8;margin-bottom:12px">Trung tâm quản lý công việc. Mỗi task = 1 issue. Sprint = 1 Cycle 2 tuần. Linear tự động update state khi bạn làm việc trên GitHub.</div>
+      <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Shortcuts quan trọng</div>
+      <table class="tbl" style="font-size:12px">
+        <tr><td><kbd>C</kbd></td><td>Tạo issue mới</td></tr>
+        <tr><td><kbd>Ctrl+Shift+.</kbd></td><td>Copy branch → <strong>In Progress auto</strong></td></tr>
+        <tr><td><kbd>G+I</kbd></td><td>My Issues</td></tr>
+        <tr><td><kbd>G+C</kbd></td><td>Cycles</td></tr>
+      </table>
+    </div>
+    <div>
+      <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Workflow states</div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span class="sbadge sb-todo">Backlog</span><span class="sbadge sb-todo">Todo</span><span style="color:#475569">→ Manual</span></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span class="sbadge sb-prog">In Progress</span><span style="color:#F5A623">→</span><span style="color:#64748B">Ctrl+Shift+. copy branch</span><span class="auto">AUTO</span></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span class="sbadge sb-rev">In Review</span><span style="color:#A78BFA">→</span><span style="color:#64748B">Tạo PR với Fixes LIN-XX</span><span class="auto">AUTO</span></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span class="sbadge sb-done">Done</span><span style="color:#22C55E">→</span><span style="color:#64748B">PR được merged</span><span class="auto">AUTO</span></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:12px 0 8px">Labels bắt buộc</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">
+        <span class="tag tag-blue">feature</span>
+        <span class="tag tag-red">bug ⚡</span>
+        <span class="tag" style="background:#33415520;color:#94A3B8;border:1px solid #33415540">chore</span>
+        <span class="tag tag-green">docs</span>
+      </div>
+      <div class="alert aw" style="margin-top:8px"><span class="aico">⚠</span>Label <code>bug</code> trigger Apps Script ghi bug_log Sheets tự động. Phải viết <em>lowercase</em>.</div>
+    </div>
+  </div>
+</div>`},
+
+// ── S7: GitHub ──────────────────────────────────────────
+{ sec:1, html:`
+<div class="slide-inner" style="--accent-l:#334155;--accent-r:#3B82F6">
+  <div class="slide-sec">Công cụ — GitHub</div>
+  <div class="slide-h2">🐙 GitHub — Code, PR, Branch Protection</div>
+  <div class="grid2">
+    <div>
+      <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Branch Protection Rules</div>
+      <div style="font-size:13px;color:#CBD5E1;line-height:1.8;margin-bottom:10px">Không ai push thẳng vào <code>main</code>. Mọi thay đổi đều qua PR.</div>
+      <table class="tbl" style="font-size:12px">
+        <tr><td>Required approvals</td><td style="color:#22C55E;font-weight:700">1 reviewer bắt buộc</td></tr>
+        <tr><td>Block force pushes</td><td style="color:#22C55E;font-weight:700">Bật</td></tr>
+        <tr><td>Dismiss stale reviews</td><td style="color:#22C55E;font-weight:700">Bật</td></tr>
+        <tr><td>CI phải pass</td><td style="color:#22C55E;font-weight:700">Trước khi merge</td></tr>
+      </table>
+      <div class="alert ar" style="margin-top:10px"><span class="aico">🚫</span>Không ai được merge PR của chính mình.</div>
+    </div>
+    <div>
+      <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Git commands cơ bản</div>
+      <div class="codeblock"><span class="cm"># Luôn pull trước khi tạo branch</span>
+<span class="p">$</span> <span class="c">git checkout main && git pull</span>
+<span class="p">$</span> <span class="c">git checkout -b feat/LIN-42-ten</span>
+<span class="p">$</span> <span class="c">git commit -m "feat(LIN-42): ..."</span>
+<span class="p">$</span> <span class="c">git push origin feat/LIN-42-ten</span></div>
+      <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:10px 0 6px">Merge strategy</div>
+      <div style="font-size:13px;color:#CBD5E1">Dùng <strong>Squash and merge</strong> — 1 PR = 1 clean commit trên main. Branch tự xóa sau merge.</div>
+      <div class="alert ai" style="margin-top:8px"><span class="aico">💡</span>Reviewer respond trong <strong>24 giờ</strong> sau khi được assign.</div>
+    </div>
+  </div>
+</div>`},
+
+// ── S8: Slack ───────────────────────────────────────────
+{ sec:1, html:`
+<div class="slide-inner" style="--accent-l:#4A154B;--accent-r:#6366F1">
+  <div class="slide-sec">Công cụ — Slack + Geekbot</div>
+  <div class="slide-h2">💬 Slack — 5 channels, 6/10 app slots</div>
+  <div class="grid2">
+    <div>
+      <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Channels & notification</div>
+      <table class="tbl" style="font-size:12px">
+        <tr><th>Channel</th><th>Notification</th></tr>
+        <tr><td><code>#standup</code></td><td>Every new message</td></tr>
+        <tr><td><code>#dev-mr</code></td><td>Every new message</td></tr>
+        <tr><td><code>#dev-tasks</code></td><td>Only mentions</td></tr>
+        <tr><td><code>#sprint</code></td><td>Every new message</td></tr>
+        <tr><td><code>#general</code></td><td>Only mentions</td></tr>
+      </table>
+    </div>
+    <div>
+      <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">🤖 Geekbot — Async standup</div>
+      <div style="font-size:13px;color:#CBD5E1;line-height:1.8;margin-bottom:10px">8:00 DM 3 câu hỏi → reply trước 9:00 → 9:00 tổng hợp vào #standup. Không có meeting bắt buộc.</div>
+      <table class="tbl" style="font-size:12px">
+        <tr><th>Lệnh DM Geekbot</th><th>Tác dụng</th></tr>
+        <tr><td><code>OOO</code></td><td>Set nghỉ phép, chọn ngày</td></tr>
+        <tr><td><code>back</code></td><td>Hủy OOO, quay lại standup</td></tr>
+      </table>
+      <div class="alert ag" style="margin-top:8px"><span class="aico">💡</span>Apps Script nhận webhook từ Geekbot → ghi standup_log vào Google Sheets tự động.</div>
+    </div>
+  </div>
+</div>`},
+
+// ── S9: Apps Script + Sheets ────────────────────────────
+{ sec:1, html:`
+<div class="slide-inner" style="--accent-l:#854F0B;--accent-r:#16A34A">
+  <div class="slide-sec">Công cụ — Apps Script & Sheets</div>
+  <div class="slide-h2">⚙️ Apps Script — Automation hub · 📊 Google Sheets — Data storage</div>
+  <div class="grid2">
+    <div>
+      <div style="font-size:12px;font-weight:600;color:#FCD34D;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Apps Script — 4 workflows</div>
+      <div style="font-size:13px;color:#CBD5E1;line-height:1.9">
+        <span style="color:#FCD34D">W1</span> Geekbot standup → <code>standup_log</code><br>
+        <span style="color:#FCD34D">W2</span> PR merged → <code>mr_stats</code> (review hours)<br>
+        <span style="color:#FCD34D">W3</span> Issue bug → <code>bug_log</code> (create + close)<br>
+        <span style="color:#FCD34D">W4</span> <code>/sprint-summary</code> → #sprint + <code>velocity</code>
+      </div>
+      <div class="alert aw" style="margin-top:10px"><span class="aico">💡</span>Luôn dùng <strong>Edit deployment → New version</strong> thay vì New deployment để giữ URL không đổi.</div>
+    </div>
+    <div>
+      <div style="font-size:12px;font-weight:600;color:#4ADE80;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Google Sheets — 5 tabs</div>
+      <table class="tbl" style="font-size:12px">
+        <tr><th>Tab</th><th>Ghi bởi</th></tr>
+        <tr><td><code>standup_log</code></td><td>Geekbot webhook</td></tr>
+        <tr><td><code>sprint_tasks</code></td><td>Linear API</td></tr>
+        <tr><td><code>mr_stats</code></td><td>GitHub webhook</td></tr>
+        <tr><td><code>bug_log</code></td><td>Linear (label bug)</td></tr>
+        <tr><td><code>velocity</code></td><td>/sprint-summary</td></tr>
+      </table>
+      <div style="font-size:12px;color:#64748B;margin-top:8px">Slack Free giữ 90 ngày history — Sheets backup mãi mãi. Nguồn data cho Dashboard.</div>
+    </div>
+  </div>
+</div>`},
+
+// ── S10: Branch conventions ──────────────────────────────
+{ sec:2, html:`
+<div class="slide-inner" style="--accent-l:#8B5CF6;--accent-r:#EC4899">
+  <div class="slide-sec">Conventions — Branch Naming</div>
+  <div class="slide-h2">🌿 Branch naming — pattern bắt buộc</div>
+  <div style="background:#0F172A;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:14px;text-align:center">
+    <div style="font-family:monospace;font-size:20px;font-weight:700;color:#C4B5FD">prefix/<span style="color:#F59E0B">US-XX</span>-ten-ngan-gon-kebab-case</div>
+    <div style="font-size:12px;color:#64748B;margin-top:6px"><span style="color:#F59E0B">US-XX</span> = ID story từ BMAD, ví dụ <code>US-01</code>, <code>US-07</code>.</div>
+  </div>
+  <div class="grid2">
+    <div>
+      <table class="tbl" style="font-size:12px;margin-bottom:0">
+        <tr><th>Prefix</th><th>Dùng khi</th></tr>
+        <tr><td><code>feat/</code></td><td>Tính năng mới</td></tr>
+        <tr><td><code>fix/</code></td><td>Sửa bug</td></tr>
+        <tr><td><code>chore/</code></td><td>Refactor, deps, cleanup</td></tr>
+        <tr><td><code>docs/</code></td><td>Tài liệu, README</td></tr>
+        <tr><td><code>hotfix/</code></td><td>Fix gấp production</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="gb">
+        <div class="gl">✓ Đúng</div>
+        <div class="good">feat/US-01-add-user-login</div>
+        <div class="good">fix/US-07-null-pointer-auth</div>
+        <div class="bl">✗ Sai</div>
+        <div class="bad">LIN-42-login (thiếu prefix)</div>
+        <div class="bad">feature/add-login (thiếu ISSUE-ID)</div>
+        <div class="bad">feat/LIN-XX-login (XX không phải ID thật)</div>
+        <div class="bad">feat/LIN-42-Add-Login (camelCase)</div>
+      </div>
+    </div>
+  </div>
+  <div class="alert aw" style="margin-top:10px"><span class="aico">⚠</span>Branch phải có <strong>US-XX thật</strong> (US-01, US-07...) để Linear Git Automation nhận diện và tự chuyển state sang In Progress. <a href="https://linear.app/docs/github#git-automation" target="_blank">→ Linear docs</a></div>
+</div>`},
+
+// ── S11: Commit conventions ──────────────────────────────
+{ sec:2, html:`
+<div class="slide-inner" style="--accent-l:#8B5CF6;--accent-r:#EC4899">
+  <div class="slide-sec">Conventions — Commit Message</div>
+  <div class="slide-h2">💬 Conventional Commits</div>
+  <div style="background:#0F172A;border:1px solid #334155;border-radius:10px;padding:14px;margin-bottom:14px;text-align:center">
+    <div style="font-family:monospace;font-size:18px;font-weight:700">
+      <span style="color:#7EE787">type</span><span style="color:#64748B">(</span><span style="color:#F59E0B">ISSUE-ID</span><span style="color:#64748B">):</span> <span style="color:#C9D1D9">mô tả bằng tiếng Anh lowercase</span>
+    </div>
+  </div>
+  <div class="grid2">
+    <div>
+      <table class="tbl" style="font-size:12px">
+        <tr><th>Type</th><th>Dùng khi</th></tr>
+        <tr><td><code>feat</code></td><td>Tính năng mới</td></tr>
+        <tr><td><code>fix</code></td><td>Sửa bug</td></tr>
+        <tr><td><code>chore</code></td><td>Refactor, deps, build</td></tr>
+        <tr><td><code>docs</code></td><td>Tài liệu, comment</td></tr>
+        <tr><td><code>test</code></td><td>Thêm / sửa tests</td></tr>
+        <tr><td><code>perf</code></td><td>Tối ưu performance</td></tr>
+        <tr><td><code>ci</code></td><td>CI/CD config</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="gb">
+        <div class="gl">✓ Đúng</div>
+        <div class="good">feat(LIN-42): add user login with JWT</div>
+        <div class="good">fix(LIN-17): fix null pointer in auth</div>
+        <div class="good">chore(LIN-8): update axios to 1.6.0</div>
+        <div class="bl">✗ Sai</div>
+        <div class="bad">fix bug (thiếu type và ISSUE-ID)</div>
+        <div class="bad">LIN-42: add login (thiếu type)</div>
+        <div class="bad">feat(LIN-42): Add Login. (hoa, dấu chấm)</div>
+      </div>
+      <div style="font-size:12px;color:#64748B;margin-top:8px">Spec: <a href="https://www.conventionalcommits.org" target="_blank">conventionalcommits.org</a></div>
+    </div>
+  </div>
+</div>`},
+
+// ── S12: PR + Magic words ────────────────────────────────
+{ sec:2, html:`
+<div class="slide-inner" style="--accent-l:#8B5CF6;--accent-r:#EC4899">
+  <div class="slide-sec">Conventions — Pull Request</div>
+  <div class="slide-h2">🔀 PR Convention + Magic Words</div>
+  <div class="grid2">
+    <div>
+      <div style="font-size:12px;font-weight:600;color:#8B5CF6;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Magic Words — Closing Keywords</div>
+      <div style="font-size:13px;color:#CBD5E1;margin-bottom:10px">Khi dùng keyword + ISSUE-ID trong body PR, GitHub + Linear tự động đóng issue khi merge vào main.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">
+        <div class="mw"><div class="mw-kw">Fixes</div><div class="mw-note">Phổ biến nhất</div></div>
+        <div class="mw"><div class="mw-kw">Closes</div><div class="mw-note">Tương đương</div></div>
+        <div class="mw"><div class="mw-kw">Resolves</div><div class="mw-note">Tương đương</div></div>
+      </div>
+      <div class="gb">
+        <div class="gl">✓ Format đúng</div>
+        <div class="good">Fixes US-01</div>
+        <div class="good">Resolves US-01, Fixes US-03</div>
+        <div class="bl">✗ Không trigger</div>
+        <div class="bad">Fix LIN-42 (sai keyword)</div>
+        <div class="bad">fixes LIN-42 (lowercase)</div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:12px;font-weight:600;color:#8B5CF6;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">PR Rules</div>
+      <div style="font-size:13px;color:#CBD5E1;line-height:1.9">
+        🚫 Không merge PR của chính mình<br>
+        ⏱ Reviewer respond trong <strong>24h</strong><br>
+        ✅ CI phải pass trước merge<br>
+        💬 Resolve tất cả comments trước merge<br>
+        🗃 Squash merge — 1 PR = 1 commit<br>
+        🗑 Branch tự xóa sau merge
+      </div>
+      <div class="alert ar" style="margin-top:10px"><span class="aico">⛔</span><strong>Fixes LIN-XX BẮT BUỘC</strong> trong body PR (không phải title). Thiếu → Linear không tự chuyển Done. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue" target="_blank">→ GitHub docs</a></div>
+    </div>
+  </div>
+</div>`},
+
+// ── S13: Code review etiquette ───────────────────────────
+{ sec:2, html:`
+<div class="slide-inner" style="--accent-l:#8B5CF6;--accent-r:#EC4899">
+  <div class="slide-sec">Conventions — Code Review</div>
+  <div class="slide-h2">👁 Code Review Etiquette</div>
+  <div class="slide-sub">Rules giúp review process nhanh và không tạo friction.</div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;gap:14px;padding:10px;background:#0F172A;border-radius:8px;border:1px solid #334155;font-size:13px">
+      <div style="font-weight:700;color:#C4B5FD;min-width:160px;flex-shrink:0">Comment xây dựng</div>
+      <div style="color:#94A3B8">Chỉ rõ vấn đề + gợi ý fix. Không comment "cái này sai" mà không giải thích.</div>
+    </div>
+    <div style="display:flex;gap:14px;padding:10px;background:#0F172A;border-radius:8px;border:1px solid #334155;font-size:13px">
+      <div style="font-weight:700;color:#C4B5FD;min-width:160px;flex-shrink:0">nit: non-blocking</div>
+      <div style="color:#94A3B8">Dùng tiền tố <code>nit:</code> cho comment style, naming nhỏ không blocking. Blocking → Request changes.</div>
+    </div>
+    <div style="display:flex;gap:14px;padding:10px;background:#0F172A;border-radius:8px;border:1px solid #334155;font-size:13px">
+      <div style="font-weight:700;color:#C4B5FD;min-width:160px;flex-shrink:0">Approve rõ ràng</div>
+      <div style="color:#94A3B8">Bấm nút <strong>Approve</strong> trong GitHub — không chỉ comment "LGTM". Không Approve = không merge được.</div>
+    </div>
+    <div style="display:flex;gap:14px;padding:10px;background:#0F172A;border-radius:8px;border:1px solid #334155;font-size:13px">
+      <div style="font-weight:700;color:#C4B5FD;min-width:160px;flex-shrink:0">Không rewrite code</div>
+      <div style="color:#94A3B8">Muốn refactor → tạo issue riêng. Không sửa thẳng code của người khác trong review.</div>
+    </div>
+    <div style="display:flex;gap:14px;padding:10px;background:#0F172A;border-radius:8px;border:1px solid #334155;font-size:13px">
+      <div style="font-weight:700;color:#C4B5FD;min-width:160px;flex-shrink:0">Đọc context trước</div>
+      <div style="color:#94A3B8">Mở issue Linear + đọc PR description trước khi xem code — hiểu "why" trước khi đánh giá "how".</div>
+    </div>
+  </div>
+  <div class="alert ai" style="margin-top:10px"><span class="aico">💡</span>Sau khi Request changes: author fix → commit → reply "Done" vào comment → re-request review. Reviewer kiểm tra lại rồi Approve.</div>
+</div>`},
+
+// ── S14: Workflow Demo ───────────────────────────────────
+{ sec:3, html:`
+<div class="slide-inner" style="--accent-l:#F59E0B;--accent-r:#EF4444;padding:20px">
+  <div class="slide-sec">Workflow Demo — Interactive</div>
+  <div class="slide-h2" style="margin-bottom:6px">▶ Demo 5 workflows thực tế</div>
+  <div class="slide-sub" style="margin-bottom:14px">Standup · Làm task · Review PR · Bug report · Sprint summary</div>
+  <div class="demo-frame-wrap" id="demo-frame-wrap" style="height:370px">
+    <div class="demo-overlay" id="demo-overlay">
+      <div style="font-size:40px;margin-bottom:8px">▶</div>
+      <div style="font-size:14px;color:#94A3B8;margin-bottom:16px">Interactive simulation với mock UI thật</div>
+      <button class="demo-open-btn" onclick="loadDemo()">
+        Mở Workflow Demo
+      </button>
+      <div style="font-size:12px;color:#475569;margin-top:8px">hoặc <a href="demo.html" target="_blank" style="color:#60A5FA">mở trong tab mới →</a></div>
+    </div>
+  </div>
+</div>`},
+
+// ── S15: Member checklist ────────────────────────────────
+{ sec:4, html:`
+<div class="slide-inner" style="--accent-l:#22C55E;--accent-r:#06B6D4">
+  <div class="slide-sec">Config Guide — Thành viên</div>
+  <div class="slide-h2">✅ Checklist onboarding — mỗi thành viên</div>
+  <div style="font-size:12px;color:#475569;margin-bottom:12px">Click để tick ✓ — progress lưu tự động trong browser</div>
+  <div class="grid2" style="gap:10px">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">🐙 GitHub</div>
+      ${renderCL([
+        {t:'Tạo GitHub personal account',n:''},
+        {t:'Accept invite vào repos',n:'Kiểm tra email'},
+        {t:'Config git user.name & user.email',n:''},
+        {t:'Clone ít nhất 1 repo về máy',n:''},
+        {t:'Đọc kỹ tab Conventions',n:'Bắt buộc trước khi code'},
+      ], 'mb_gh')}
+      <div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:12px 0 8px">📋 Linear</div>
+      ${renderCL([
+        {t:'Accept invite vào workspace',n:''},
+        {t:'Set timezone Asia/Ho_Chi_Minh',n:'Settings → Account'},
+        {t:'Bật Move to In Progress khi copy branch',n:'Settings → Preferences'},
+        {t:'Bật email notification due date',n:''},
+      ], 'mb_ln')}
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">💬 Slack</div>
+      ${renderCL([
+        {t:'Join workspace, display name là tên thật',n:''},
+        {t:'Set timezone Ho Chi Minh City',n:''},
+        {t:'Join 5 channels + notification đúng',n:''},
+        {t:'Connect Google Calendar, agenda 8:00',n:''},
+        {t:'Connect PullNotifier với GitHub',n:'DM PullNotifier bot'},
+        {t:'Gửi Slack Member ID cho team lead',n:'Để điền SLACK_USER_MAP'},
+      ], 'mb_sl')}
+      <div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:12px 0 8px">🤖 Geekbot</div>
+      ${renderCL([
+        {t:'Thử reply standup (team lead Send now)',n:''},
+        {t:'Thử set OOO rồi nhắn back',n:''},
+      ], 'mb_gb')}
+    </div>
+  </div>
+</div>`},
+
+// ── S16: Team lead checklist ─────────────────────────────
+{ sec:4, html:`
+<div class="slide-inner" style="--accent-l:#22C55E;--accent-r:#06B6D4">
+  <div class="slide-sec">Config Guide — Team Lead</div>
+  <div class="slide-h2">🔧 Checklist team lead — 7 phases</div>
+  <div style="font-size:12px;color:#475569;margin-bottom:12px">Click để tick ✓</div>
+  <div class="grid2" style="gap:10px">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Phase 1–3</div>
+      ${renderCL([
+        {t:'GitHub personal account + repos Private',n:''},
+        {t:'Branch ruleset Protect main active',n:'Test: push main phải bị block'},
+        {t:'Members invite, quyền Write',n:''},
+        {t:'CI/CD file commit vào tất cả repos',n:''},
+        {t:'Linear: workspace, 6 states, Cycles',n:''},
+        {t:'Linear: 4 labels + GitHub connected',n:'bug phải lowercase'},
+        {t:'Linear: 4 Git automation triggers',n:''},
+        {t:'Slack: 5 channels, Sprint Bot app',n:'Webhook + Bot Token'},
+        {t:'PullNotifier: user map + repo map',n:''},
+      ], 'tl_1')}
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Phase 4–7</div>
+      ${renderCL([
+        {t:'Geekbot: 3 câu hỏi tiếng Việt',n:''},
+        {t:'Geekbot non-responder alert 9:00',n:''},
+        {t:'Sheets: 5 tabs, header frozen',n:''},
+        {t:'Apps Script: Code.gs + CONFIG đủ',n:''},
+        {t:'Deploy Web App → copy URL',n:''},
+        {t:'setupTriggers() đã chạy',n:''},
+        {t:'Slash command /sprint-summary',n:''},
+        {t:'Webhooks: GitHub + Linear + Geekbot',n:'Paste Web App URL'},
+        {t:'SLACK_USER_MAP: tất cả thành viên',n:''},
+        {t:'E2E test: 7 test cases pass',n:''},
+      ], 'tl_2')}
+    </div>
+  </div>
+</div>`},
+
+// ── S17: Trước Sprint 1 ──────────────────────────────────
+{ sec:4, html:`
+<div class="slide-inner" style="--accent-l:#22C55E;--accent-r:#06B6D4">
+  <div class="slide-sec">Config Guide — Trước Sprint 1</div>
+  <div class="slide-h2">🏃 Những việc cần làm trước Sprint 1</div>
+  <div class="grid2">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#22C55E;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Team lead làm</div>
+      <ol class="steps" style="font-size:13px">
+        <li>Tạo Cycle 1 trong Linear với ngày bắt đầu và kết thúc</li>
+        <li>Sprint planning: cả team kéo issues Backlog → Todo vào Cycle</li>
+        <li>Estimate story points cho từng issue</li>
+        <li>Đảm bảo <code>CURRENT_SPRINT: "Sprint 1"</code> trong Code.gs → deploy</li>
+        <li>Gửi link Linear + GitHub + Sheets cho team</li>
+        <li>Chạy Geekbot Send now để test standup flow</li>
+        <li>Test <code>/sprint-summary</code> trong #sprint</li>
+      </ol>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#06B6D4;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Mỗi thành viên làm</div>
+      <ol class="steps" style="font-size:13px">
+        <li>Hoàn thành Checklist onboarding (slide trước)</li>
+        <li>Setup local dev environment</li>
+        <li>Clone tất cả repos về máy</li>
+        <li>Tạo 1 issue test trong Linear → copy branch → push → tạo PR</li>
+        <li>Verify: Linear tự chuyển In Progress → In Review</li>
+        <li>Reply standup test từ Geekbot</li>
+        <li>Thống nhất với team lead: ai làm gì trong Sprint 1</li>
+      </ol>
+      <div class="alert ai" style="margin-top:10px"><span class="aico">💡</span>Đừng bắt đầu code feature thật khi chưa verify automation workflow — mất công update thủ công sau.</div>
+    </div>
+  </div>
+</div>`},
+
+// ── S18: Thêm TV mới / repo mới ──────────────────────────
+{ sec:4, html:`
+<div class="slide-inner" style="--accent-l:#22C55E;--accent-r:#06B6D4">
+  <div class="slide-sec">Config Guide — Vận hành</div>
+  <div class="slide-h2">👥 Thêm thành viên mới · 📁 Thêm repo mới</div>
+  <div class="grid2">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#06B6D4;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Khi thêm thành viên mới</div>
+      <ol class="steps" style="font-size:13px">
+        <li>GitHub: invite vào tất cả repos → quyền Write</li>
+        <li>Linear: invite vào workspace</li>
+        <li>Slack: invite workspace + join 5 channels</li>
+        <li>PullNotifier: thêm user mapping GitHub → Slack</li>
+        <li>Geekbot: thêm vào participants</li>
+        <li>Code.gs: cập nhật SLACK_USER_MAP → deploy new version</li>
+        <li>Thành viên hoàn thành Checklist onboarding</li>
+      </ol>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#22C55E;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Khi thêm repo mới</div>
+      <ol class="steps" style="font-size:13px">
+        <li>Tạo repo GitHub, visibility Private</li>
+        <li>Invite tất cả members → quyền Write</li>
+        <li>Setup branch ruleset Protect main</li>
+        <li>Thêm <code>.github/workflows/ci.yml</code></li>
+        <li>GitHub webhook → Apps Script Web App URL (events: Pull requests)</li>
+        <li>Code.gs: thêm tên repo vào GITHUB_REPOS → deploy</li>
+        <li>PullNotifier: thêm repo → map vào #dev-mr</li>
+      </ol>
+    </div>
+  </div>
+  <div class="alert aw" style="margin-top:12px"><span class="aico">⚠</span>Đầu mỗi sprint mới: cập nhật <code>CURRENT_SPRINT: "Sprint 2"</code> trong Code.gs → Edit deployment → New version.</div>
+</div>`},
+
+// ── S10b: BMAD Overview ─────────────────────────────────
+{ sec:1, html:`
+<div class="slide-inner" style="--accent-l:#7C3AED;--accent-r:#3B82F6">
+  <div class="slide-sec">Công cụ — BMAD v6</div>
+  <div class="slide-h2">🤖 BMAD v6 — AI-driven development framework</div>
+  <div class="slide-sub">Source of truth của mọi story. Linear là downstream — issue trên Linear bắt nguồn từ BMAD story file.</div>
+  <div class="grid2">
+    <div>
+      <div style="font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">4 Phases</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="padding:8px 12px;background:#0F172A;border-radius:8px;border-left:3px solid #64748B;font-size:12px;color:#94A3B8"><span style="color:#F1F5F9;font-weight:600">Phase 1</span> Analysis — Brainstorm, research</div>
+        <div style="padding:8px 12px;background:#0F172A;border-radius:8px;border-left:3px solid #64748B;font-size:12px;color:#94A3B8"><span style="color:#F1F5F9;font-weight:600">Phase 2</span> Planning — PRD (đã xong ✓)</div>
+        <div style="padding:8px 12px;background:#0F172A;border-radius:8px;border-left:3px solid #64748B;font-size:12px;color:#94A3B8"><span style="color:#F1F5F9;font-weight:600">Phase 3</span> Solutioning — Architecture, Epics (đã xong ✓)</div>
+        <div style="padding:8px 12px;background:#0F172A;border-radius:8px;border-left:3px solid #A78BFA;font-size:12px;color:#C4B5FD"><span style="color:#fff;font-weight:700">Phase 4</span> Implementation — Stories, Dev, Review ← <strong style="color:#A78BFA">Đây là phần team đang làm</strong></div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Agents & Ai dùng</div>
+      <table class="tbl" style="font-size:12px">
+        <tr><th>Agent</th><th>Ai dùng</th><th>Skill</th></tr>
+        <tr><td>Scrum Master</td><td style="color:#C4B5FD">Team lead</td><td><code>bmad-sm</code></td></tr>
+        <tr><td>Developer</td><td style="color:#4ADE80">Mọi dev</td><td><code>bmad-dev</code></td></tr>
+        <tr><td>PM / Architect</td><td style="color:#94A3B8">Team lead (đã xong)</td><td><code>bmad-pm</code></td></tr>
+      </table>
+      <div class="alert ai" style="margin-top:10px"><span class="aico">📁</span><code>project-context.md</code> là "constitution" — mọi AI session tự động load. Phải có trước Sprint 1.</div>
+    </div>
+  </div>
+</div>`},
+
+// ── S10c: BMAD Dev Workflow ──────────────────────────────
+{ sec:1, html:`
+<div class="slide-inner" style="--accent-l:#7C3AED;--accent-r:#A78BFA">
+  <div class="slide-sec">Công cụ — BMAD Dev Workflow</div>
+  <div class="slide-h2">Làm việc với BMAD trong IDE — từng bước</div>
+  <div class="alert ai" style="margin-bottom:14px"><span class="aico">📖</span><strong>Story file là entry point.</strong> Mỗi story US-XX có 1 file self-contained — dev chỉ cần đọc file đó, không cần mở PRD hay architecture doc.</div>
+  <div class="grid2">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Team lead (Opencode)</div>
+      <ol class="steps" style="font-size:12px">
+        <li><code>bmad-sm</code> → CS → tạo <code>story-US-01-ten.md</code></li>
+        <li>Tạo Linear issue US-01 từ story</li>
+        <li><code>bmad-sm</code> → SP → cập nhật sprint-status.yaml</li>
+      </ol>
+      <div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:12px 0 8px">Dev (Cursor / VS Code)</div>
+      <ol class="steps" style="font-size:12px">
+        <li>Linear: <kbd>Ctrl+Shift+.</kbd> → branch, In Progress auto</li>
+        <li>Mở <code>story-US-01-ten.md</code> → đọc ACs</li>
+        <li><code>bmad-dev</code> → <strong>DS</strong> (Dev Story) → implement</li>
+        <li><code>bmad-dev</code> → <strong>CR</strong> (Code Review) → self-review</li>
+        <li>Verify sprint-status.yaml → tạo PR <code>Fixes US-01</code></li>
+      </ol>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Story file structure</div>
+      <div class="codeblock" style="font-size:11px"><span class="cm"># story-US-01-user-login.md</span>
+<span class="c">---</span>
+<span class="c">story_id: US-01</span>
+<span class="c">linear_issue: US-01</span>
+<span class="c">status: ready</span>
+<span class="c">---</span>
+<span class="cm"># Story: User Login với JWT</span>
+<span class="cm">## Why</span>
+<span class="c">[context từ PRD]</span>
+<span class="cm">## Acceptance Criteria</span>
+<span class="c">- AC1: ...</span>
+<span class="c">- AC2: ...</span>
+<span class="cm">## Technical Notes</span>
+<span class="c">[từ architecture.md]</span>
+<span class="cm">## Tasks</span>
+<span class="c">- [ ] Task 1</span>
+<span class="c">- [ ] Task 2</span></div>
+      <div class="alert aw" style="margin-top:8px"><span class="aico">⚠</span>Convention: <code>story-US-XX-ten-kebab.md</code>. Include US-XX trong tên để dev biết ngay file nào tương ứng với Linear issue nào.</div>
+    </div>
+  </div>
+</div>`},
+
+// ── S19: Links & Q&A ────────────────────────────────────
+{ sec:5, html:`
+<div class="slide-inner" style="--accent-l:#F472B6;--accent-r:#A78BFA">
+  <div class="slide-sec">Links & Q&A</div>
+  <div class="slide-h2">📎 Quick links & Câu hỏi</div>
+  <div class="grid2" style="margin-bottom:20px">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">📁 Tài liệu</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <a href="index.html" target="_blank" style="display:flex;align-items:center;gap:10px;background:#0F172A;border:1px solid #334155;border-radius:8px;padding:10px 14px;color:#F1F5F9;text-decoration:none">
+          <span style="font-size:16px">📖</span>
+          <div><div style="font-size:13px;font-weight:600">PM Guide</div><div style="font-size:11px;color:#64748B">index.html — setup guide, conventions, troubleshooting</div></div>
+        </a>
+        <a href="demo.html" target="_blank" style="display:flex;align-items:center;gap:10px;background:#0F172A;border:1px solid #334155;border-radius:8px;padding:10px 14px;color:#F1F5F9;text-decoration:none">
+          <span style="font-size:16px">▶</span>
+          <div><div style="font-size:13px;font-weight:600">Workflow Demo</div><div style="font-size:11px;color:#64748B">demo.html — interactive mock UI simulation</div></div>
+        </a>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">🛠 Tools</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:10px;background:#0F172A;border:1px solid #334155;border-radius:8px;padding:10px 14px">
+          <span style="font-size:16px">📋</span>
+          <div><div style="font-size:13px;font-weight:600">Linear Workspace</div><div style="font-size:11px;color:#64748B">linear.app — HealthLens team (link thật điền sau)</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;background:#0F172A;border:1px solid #334155;border-radius:8px;padding:10px 14px">
+          <span style="font-size:16px">🐙</span>
+          <div><div style="font-size:13px;font-weight:600">GitHub Repos</div><div style="font-size:11px;color:#64748B">github.com/[username] — health-lens-backend, health-lens-web</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;background:#0F172A;border:1px solid #334155;border-radius:8px;padding:10px 14px">
+          <span style="font-size:16px">📊</span>
+          <div><div style="font-size:13px;font-weight:600">Google Sheets</div><div style="font-size:11px;color:#64748B">Sprint Data — link điền sau khi setup</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="text-align:center;padding:16px;background:#0F172A;border-radius:10px;border:1px solid #334155">
+    <div style="font-size:20px;margin-bottom:6px">🙋</div>
+    <div style="font-size:15px;font-weight:600;color:#F1F5F9;margin-bottom:4px">Câu hỏi?</div>
+    <div style="font-size:13px;color:#64748B">Hỏi trong <code>#general</code> trên Slack — không tự mò quá 15 phút 😄</div>
+  </div>
+</div>`},
+];
+
+// ════════════════════════════════════════════════════════════
+// ENGINE
+// ════════════════════════════════════════════════════════════
+let cur = 0;
+let isDocMode = false;
+
+function buildSlides() {
+  const container = document.getElementById('slides-container');
+  container.innerHTML = SLIDES.map((s, i) =>
+    `<div class="slide ${i===0?'active':''}" id="slide-${i}">${s.html}</div>`
+  ).join('');
+  const dots = document.getElementById('nav-dots');
+  dots.innerHTML = SLIDES.map((_,i) =>
+    `<div class="dot ${i===0?'active':''}" id="dot-${i}" onclick="goTo(${i})"></div>`
+  ).join('');
+}
+
+function buildSecNav() {
+  document.getElementById('sec-nav').innerHTML = SECTIONS.map((s,i) =>
+    `<button class="sec-btn ${i===0?'active':''}" id="secbtn-${i}" onclick="goToSection(${i})">${s.label}</button>`
+  ).join('');
+}
+
+function updateUI() {
+  // slide
+  document.querySelectorAll('.slide').forEach((el,i) => el.classList.toggle('active', i===cur));
+  document.querySelectorAll('.dot').forEach((el,i) => {
+    el.classList.toggle('active', i===cur);
+    el.classList.toggle('done', i<cur);
+  });
+  // progress
+  const pct = ((cur+1)/SLIDES.length*100).toFixed(1);
+  document.getElementById('prog-line').style.width = pct + '%';
+  document.getElementById('slide-counter').textContent = (cur+1) + ' / ' + SLIDES.length;
+  document.getElementById('btn-prev').disabled = cur===0;
+  document.getElementById('btn-next').disabled = false;
+  document.getElementById('btn-next').textContent = cur===SLIDES.length-1 ? '🎉 Xong!' : 'Tiếp theo →';
+  // section nav
+  const secIdx = SLIDES[cur].sec;
+  document.querySelectorAll('.sec-btn').forEach((b,i) => b.classList.toggle('active', i===secIdx));
+  // doc active
+  document.querySelectorAll('.doc-item').forEach((el,i) => el.classList.toggle('active', i===cur));
+}
+
+function navigate(dir) {
+  const next = cur + dir;
+  if (next < 0 || next >= SLIDES.length) return;
+  cur = next; updateUI();
+}
+
+function goTo(i) { cur = i; updateUI(); }
+
+function goToSection(secIdx) {
+  const idx = SLIDES.findIndex(s => s.sec === secIdx);
+  if (idx >= 0) goTo(idx);
+}
+
+// Doc mode sidebar & body
+function buildDocMode() {
+  const sidebar = document.getElementById('doc-sidebar');
+  const body = document.getElementById('doc-body');
+  sidebar.innerHTML = SLIDES.map((s, i) => {
+    const sec = SECTIONS[s.sec];
+    const isFirst = i === 0 || SLIDES[i-1].sec !== s.sec;
+    const label = s.html.match(/slide-h2">(.*?)<\/div>/)?.[1]?.replace(/<[^>]+>/g,'') ||
+                  s.html.match(/slide-h1"[^>]*>(.*?)<\/div>/)?.[1]?.replace(/<[^>]+>/g,'') || 'Slide '+(i+1);
+    return (isFirst ? `<div class="doc-sec-label">${sec.label}</div>` : '') +
+           `<div class="doc-item ${i===cur?'active':''}" onclick="goTo(${i}); scrollDocTo(${i})" id="dsi-${i}">${label.substring(0,40)}</div>`;
+  }).join('');
+  body.innerHTML = SLIDES.map((s,i) =>
+    `<div class="doc-section" id="doc-sec-${i}">
+      <div style="margin-bottom:16px">${s.html.replace(/class="slide-inner"/g,'style="background:#1E293B;border:1px solid #334155;border-radius:12px;padding:24px"')}</div>
+    </div>`
+  ).join('');
+}
+
+function scrollDocTo(i) {
+  document.getElementById('doc-sec-'+i)?.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function toggleMode() {
+  isDocMode = !isDocMode;
+  document.getElementById('slide-mode').style.display = isDocMode ? 'none' : 'flex';
+  document.getElementById('doc-mode').style.display   = isDocMode ? 'block' : 'none';
+  document.getElementById('mode-icon').textContent    = isDocMode ? '▶' : '📄';
+  document.getElementById('mode-label').textContent   = isDocMode ? 'Slide mode' : 'Doc mode';
+  document.getElementById('prog-line').style.display  = isDocMode ? 'none' : 'block';
+  if (isDocMode) buildDocMode();
+}
+
+// Demo iframe loader
+function loadDemo() {
+  const wrap = document.getElementById('demo-frame-wrap');
+  const overlay = document.getElementById('demo-overlay');
+  overlay.style.display = 'none';
+  const iframe = document.createElement('iframe');
+  iframe.src = 'demo.html';
+  iframe.style.cssText = 'width:100%;height:100%;border:none';
+  wrap.appendChild(iframe);
+}
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (isDocMode) return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); navigate(1); }
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp') { e.preventDefault(); navigate(-1); }
+});
+
+// Init
+buildSlides();
+buildSecNav();
+updateUI();
+</script>
+</body>
+</html>
