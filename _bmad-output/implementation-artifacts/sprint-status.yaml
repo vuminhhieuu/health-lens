@@ -1,0 +1,114 @@
+# generated: 2026-03-29
+# last_updated: 2026-03-29
+# project: health-lens
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: {project-root}/_bmad-output/implementation-artifacts/epic-<N>/<story-key>.md
+# infrastructure stories: {project-root}/_bmad-output/implementation-artifacts/infrastructure/<story-key>.md
+#
+# EXECUTION ORDER (Web-first):
+#   Phase 1 — Web MVP: Epic 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 (theo phụ thuộc nghiệp vụ trong từng epic).
+#   Phase 2 — Mobile: Epic 9 chỉ bắt đầu sau khi Web MVP (Epic 1–8) đã đạt mục tiêu đóng.
+#   Story Phase 2 trong sprint-status: trạng thái `backlog` cho tới khi team chuyển sang mobile.
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog -> in-progress: Automatically when first story is created (via create-story)
+#   - in-progress -> done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Epic 9 (mobile): stories remain backlog until Phase 1 Web MVP is complete
+
+generated: 2026-03-29
+last_updated: 2026-03-29
+project: health-lens
+project_key: NOKEY
+tracking_system: file-system
+story_location: '{project-root}/_bmad-output/implementation-artifacts/epic-<N>|infrastructure'
+
+development_status:
+  epic-1: in-progress
+  1-1-starter-template-setup: ready-for-dev
+  1-2-email-password-registration: ready-for-dev
+  1-3-secure-login-logout-session: ready-for-dev
+  1-4-password-reset-via-email: ready-for-dev
+  1-5-sensitive-health-data-consent: ready-for-dev
+  1-6-account-data-deletion-request: ready-for-dev
+  epic-1-retrospective: optional
+
+  epic-2: in-progress
+  2-1-update-account-personal-info: ready-for-dev
+  2-2-create-health-profile: ready-for-dev
+  2-3-profile-name-and-notes: ready-for-dev
+  epic-2-retrospective: optional
+
+  epic-3: in-progress
+  3-1-upload-pdf-image-library: ready-for-dev
+  3-3-ocr-extract-and-review-list: ready-for-dev
+  3-4-manual-edit-input-ocr-fallback: ready-for-dev
+  3-5-ocr-failure-recovery-flow: ready-for-dev
+  3-6-metric-source-tag-and-profile-link: ready-for-dev
+  epic-3-retrospective: optional
+
+  epic-4: in-progress
+  4-1-metric-card-status-reference-range: ready-for-dev
+  4-2-age-gender-context-reference-range: ready-for-dev
+  4-3-simple-vietnamese-metric-explanations: ready-for-dev
+  4-4-lifestyle-recommendations-with-disclaimer: ready-for-dev
+  4-5-highlight-alerts-progressive-disclosure: ready-for-dev
+  epic-4-retrospective: optional
+
+  epic-5: in-progress
+  5-1-profile-history-timeline: ready-for-dev
+  5-2-open-history-result-details: ready-for-dev
+  5-3-delete-health-result-record: ready-for-dev
+  epic-5-retrospective: optional
+
+  epic-6: in-progress
+  6-1-invite-family-member-by-email: ready-for-dev
+  6-2-shared-profile-web-view-access: ready-for-dev
+  6-3-revoke-family-access-anytime: ready-for-dev
+  6-4-web-dashboard-new-result-updates: ready-for-dev
+  epic-6-retrospective: optional
+
+  epic-7: in-progress
+  7-1-admin-login-with-mfa: ready-for-dev
+  7-2-admin-crud-metric-reference-data: ready-for-dev
+  7-3-import-reference-data-csv-json: ready-for-dev
+  7-4-approve-reference-data-change-set: ready-for-dev
+  7-5-reference-data-audit-log-view: ready-for-dev
+  epic-7-retrospective: optional
+
+  epic-8: in-progress
+  8-1-dashboard-user-growth-overview: ready-for-dev
+  8-2-dashboard-wau-upload-volume: ready-for-dev
+  8-3-dashboard-upload-success-failure-rate: ready-for-dev
+  epic-8-retrospective: optional
+
+  epic-9: backlog
+  9-1-mobile-camera-capture-ux: backlog
+  9-2-mobile-offline-readonly-history: backlog
+  9-3-auto-sync-when-back-online: backlog
+  epic-9-retrospective: optional

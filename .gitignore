@@ -1,0 +1,142 @@
+# -----------------------------------------------------------------------------
+# HealthLens — ignore patterns (OS, IDE, secrets, build outputs)
+# Bổ sung theo stack: Spring Boot, Next.js, Expo, Docker, GitHub Actions
+# -----------------------------------------------------------------------------
+
+# --- Secrets & môi trường local (luôn giữ .env.example trong git) -------------
+.env
+.env.*
+!.env.example
+!**/.env.example
+!.env.*.example
+!**/.env.*.example
+*.pem
+*.key
+!*.key.example
+
+# Cursor: cấu hình MCP thường chứa API key (chỉ máy local)
+.cursor/mcp.json
+
+# --- Hệ điều hành -----------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+
+# --- IDE / editor ----------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+*.swp
+*.swo
+
+# --- Java / Gradle / Spring Boot -------------------------------------------
+.gradle/
+**/build/
+!**/gradle/wrapper/gradle-wrapper.jar
+!**/gradle/wrapper/gradle-wrapper.properties
+**/out/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+hs_err_pid*
+replay_pid*
+
+# --- Node.js / pnpm / Next.js / TypeScript ---------------------------------
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+# Lockfile (package-lock.json, pnpm-lock.yaml, yarn.lock, bun.lock) — nên commit
+
+.turbo/
+.next/
+out/
+dist/
+.cache/
+*.tsbuildinfo
+.vercel/
+
+# --- Expo / React Native ----------------------------------------------------
+.expo/
+.expo-shared/
+web-build/
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+*.orig.*
+
+# Android
+**/android/.gradle/
+**/android/app/build/
+**/android/build/
+**/android/local.properties
+**/android/*.keystore
+!**/android/debug.keystore
+
+# iOS
+**/ios/Pods/
+**/ios/build/
+**/ios/*.xcworkspace/xcuserdata/
+**/ios/*.xcodeproj/xcuserdata/
+**/ios/DerivedData/
+
+# --- Docker ----------------------------------------------------------------
+# Không ignore Dockerfile; chỉ file env do compose override local
+docker-compose.override.yml
+.env.docker
+
+# --- Kiểm thử & coverage ---------------------------------------------------
+coverage/
+.nyc_output/
+junit.xml
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# --- Python (nếu có script/tooling) ----------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Jekyll / GitHub Pages (_pages hoặc docs site) --------------------------
+_site/
+.jekyll-cache/
+.jekyll-metadata
+.sass-cache/
+
+# --- Logs & tạm ------------------------------------------------------------
+logs/
+*.log
+tmp/
+temp/
+*.tmp
+*.bak
+
+# --- OS / misc -------------------------------------------------------------
+*.pid
+*.seed
+*.pid.lock
