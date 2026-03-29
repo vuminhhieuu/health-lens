@@ -1,6 +1,6 @@
 # Viết Pull Request Documentation
 
-Nhiệm vụ của bạn là sinh ra tiêu đề và mô tả Pull Request chuyên nghiệp.
+Nhiệm vụ của bạn là sinh ra tiêu đề và mô tả Pull Request chuyên nghiệp (trong pull request description các heading là tiếng Anh, còn nội dung chính là tiếng Việt).
 
 ## Dữ liệu đầu vào
 
