@@ -1,6 +1,6 @@
 # Story 1.1: Thiết lập dự án ban đầu từ starter template
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 
@@ -31,48 +31,57 @@ so that **Phase 1** có thể triển khai nhất quán **web và backend**; **m
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Khởi tạo monorepo root và Gradle Kotlin DSL wrapper (AC: #1)
-  - [ ] Tạo thư mục root: `apps/api`, `apps/web`, `apps/mobile`, `packages/shared`, `docker/`, `docs/`
-  - [ ] Tạo `settings.gradle.kts` tại root với các subprojects
-  - [ ] Tạo `.gitignore` phù hợp với Gradle, Node, Expo và IntelliJ
-- [ ] Task 2 — Khởi tạo Spring Boot 4.0.3 backend (AC: #1, #2)
-  - [ ] Chạy lệnh Spring Initializr đặc biệt trong `apps/api/` với đúng dependencies
-  - [ ] Xác minh `apps/api` `./gradlew bootRun` khởi động thành công
-  - [ ] Cấu hình `application.yml` cho profile `dev` với datasource, Redis, và placeholder OCR/LLM keys
-  - [ ] Tạo `apps/api/src/main/java/com/healthlens/api/HealthLensApplication.java`
-- [ ] Task 3 — Khởi tạo Next.js 16.x web app (AC: #1, #2)
-  - [ ] Chạy `npx create-next-app@latest` với đúng flags (TypeScript, Tailwind, App Router, Turbopack)
-  - [ ] Cài thêm: `@tanstack/react-query`, `axios`, `zustand`, `@radix-ui/themes`, `lucide-react`, `react-hook-form`, `zod`, `@hookform/resolvers`, `date-fns`
-  - [ ] Xác minh `pnpm dev` khởi động thành công
-  - [ ] Tạo cấu trúc thư mục: `src/app/(auth)/`, `src/app/(dashboard)/`, `src/components/ui/`, `src/components/features/`, `src/hooks/`, `src/lib/api/`, `src/stores/`
-- [ ] Task 4 — **Phase 2 — Mobile:** Khởi tạo Expo SDK 55 trong `apps/mobile/` (AC: #1, #2 khi triển khai mobile)
-  - [ ] Chạy `npx create-expo-app@latest healthlens-mobile --template default@sdk-55` trong `apps/mobile/`
-  - [ ] Cài thêm: `expo-router`, `expo-camera`, `expo-document-picker`, `expo-image-picker`, `expo-sqlite`, `expo-secure-store`, `expo-notifications`
-  - [ ] Cài shared: `@tanstack/react-query`, `axios`, `zustand`, `react-hook-form`, `zod`, `@hookform/resolvers`
-  - [ ] Xác minh `npx expo start` khởi động thành công
-  - [ ] Tạo cấu trúc: `app/`, `components/`, `hooks/`, `lib/api/`, `stores/`
-- [ ] Task 5 — Khởi tạo packages/shared (AC: #3)
-  - [ ] Tạo `packages/shared/package.json` với TypeScript config
-  - [ ] Tạo `packages/shared/types/index.ts` với placeholder types (User, Profile, HealthRecord)
-  - [ ] Tạo `packages/shared/schemas/index.ts` với placeholder Zod schemas
-  - [ ] Tạo `packages/shared/constants/index.ts` với status enums, error codes
-  - [ ] Cấu hình tsconfig để web và mobile có thể import từ `@healthlens/shared`
-- [ ] Task 6 — Setup Docker Compose dev environment (AC: #5)
-  - [ ] Tạo `docker/docker-compose.dev.yml` với PostgreSQL 16, Redis 7, MinIO
-  - [ ] Cấu hình PostgreSQL: database `healthlens_dev`, user `healthlens`, port 5432
-  - [ ] Cấu hình Redis: port 6379, không password (dev only)
-  - [ ] Cấu hình MinIO: port 9000 (API), 9001 (Console)
-  - [ ] Thêm healthchecks cho từng service
-- [ ] Task 7 — Setup GitHub Actions CI skeleton (AC: #4)
-  - [ ] Tạo workflow (ví dụ `.github/workflows/ci.yml`) với jobs tương đương stages: `test`, `build`
-  - [ ] Thêm job `api:test` — `./gradlew test`
-  - [ ] Thêm job `web:test` — `pnpm test`
-  - [ ] Thêm job `api:build` — `./gradlew bootBuildImage` (hoặc build jar/image tùy chọn)
-  - [ ] (Tùy chọn) `deploy:staging` / `deploy:production` — manual hoặc environment protection trên GitHub
-- [ ] Task 8 — Tạo README.md và .env.example (AC: #1)
-  - [ ] `README.md` root với hướng dẫn setup local
-  - [ ] `.env.example` với tất cả required env vars (DB, Redis, MinIO, OCR, LLM, JWT)
-  - [ ] Tạo `docs/` folder với placeholder architecture doc
+- [x] Task 1 — Khởi tạo monorepo root và Gradle Kotlin DSL wrapper (AC: #1)
+  - [x] Tạo thư mục root: `apps/api`, `apps/web`, `apps/mobile`, `packages/shared`, `docker/`, `docs/`
+  - [x] Tạo `settings.gradle.kts` tại root với các subprojects
+  - [x] Tạo `.gitignore` phù hợp với Gradle, Node, Expo và IntelliJ
+- [x] Task 2 — Khởi tạo Spring Boot 4.0.3 backend (AC: #1, #2)
+  - [x] Chạy lệnh Spring Initializr đặc biệt trong `apps/api/` với đúng dependencies
+  - [x] Xác minh `apps/api` `./gradlew bootRun` khởi động thành công
+  - [x] Cấu hình `application.yml` cho profile `dev` với datasource, Redis, và placeholder OCR/LLM keys
+  - [x] Tạo `apps/api/src/main/java/com/healthlens/api/HealthLensApplication.java`
+- [x] Task 3 — Khởi tạo Next.js 16.x web app (AC: #1, #2)
+  - [x] Chạy `npx create-next-app@latest` với đúng flags (TypeScript, Tailwind, App Router, Turbopack)
+  - [x] Cài thêm: `@tanstack/react-query`, `axios`, `zustand`, `@radix-ui/themes`, `lucide-react`, `react-hook-form`, `zod`, `@hookform/resolvers`, `date-fns`
+  - [x] Xác minh `pnpm dev` khởi động thành công
+  - [x] Tạo cấu trúc thư mục: `src/app/(auth)/`, `src/app/(dashboard)/`, `src/components/ui/`, `src/components/features/`, `src/hooks/`, `src/lib/api/`, `src/stores/`
+- [x] Task 4 — **Phase 2 — Mobile:** Khởi tạo Expo SDK 55 trong `apps/mobile/` (AC: #1, #2 khi triển khai mobile)
+  - [x] Chạy `npx create-expo-app@latest healthlens-mobile --template default@sdk-55` trong `apps/mobile/`
+  - [x] Cài thêm: `expo-router`, `expo-camera`, `expo-document-picker`, `expo-image-picker`, `expo-sqlite`, `expo-secure-store`, `expo-notifications`
+  - [x] Cài shared: `@tanstack/react-query`, `axios`, `zustand`, `react-hook-form`, `zod`, `@hookform/resolvers`
+  - [x] Xác minh `npx expo start` khởi động thành công
+  - [x] Tạo cấu trúc: `app/`, `components/`, `hooks/`, `lib/api/`, `stores/`
+- [x] Task 5 — Khởi tạo packages/shared (AC: #3)
+  - [x] Tạo `packages/shared/package.json` với TypeScript config
+  - [x] Tạo `packages/shared/types/index.ts` với placeholder types (User, Profile, HealthRecord)
+  - [x] Tạo `packages/shared/schemas/index.ts` với placeholder Zod schemas
+  - [x] Tạo `packages/shared/constants/index.ts` với status enums, error codes
+  - [x] Cấu hình tsconfig để web và mobile có thể import từ `@healthlens/shared`
+- [x] Task 6 — Setup Docker Compose dev environment (AC: #5)
+  - [x] Tạo `docker/docker-compose.dev.yml` với PostgreSQL 16, Redis 7, MinIO
+  - [x] Cấu hình PostgreSQL: database `healthlens_dev`, user `healthlens`, port 5432
+  - [x] Cấu hình Redis: port 6379, không password (dev only)
+  - [x] Cấu hình MinIO: port 9000 (API), 9001 (Console)
+  - [x] Thêm healthchecks cho từng service
+- [x] Task 7 — Setup GitHub Actions CI skeleton (AC: #4)
+  - [x] Tạo workflow (ví dụ `.github/workflows/ci.yml`) với jobs tương đương stages: `test`, `build`
+  - [x] Thêm job `api:test` — `./gradlew test`
+  - [x] Thêm job `web:test` — `pnpm test`
+  - [x] Thêm job `api:build` — `./gradlew bootBuildImage` (hoặc build jar/image tùy chọn)
+  - [x] (Tùy chọn) `deploy:staging` / `deploy:production` — manual hoặc environment protection trên GitHub
+- [x] Task 8 — Tạo README.md và .env.example (AC: #1)
+  - [x] `README.md` root với hướng dẫn setup local
+  - [x] `.env.example` với tất cả required env vars (DB, Redis, MinIO, OCR, LLM, JWT)
+  - [x] Tạo `docs/` folder với placeholder architecture doc
+
+### Review Findings
+
+- [x] [Review][Patch] Root `dev` script filter không khớp tên package web [`package.json`:7]
+- [x] [Review][Patch] Root `build/test` scripts dễ fail khi workspace chưa có script tương ứng [`package.json`:8]
+- [x] [Review][Patch] CI thiếu bước `web:build`, stage build chưa cover đầy đủ API + Web [`/.github/workflows/ci.yml`:40]
+- [x] [Review][Patch] `web:test` hiện là placeholder `echo`, tạo false green cho quality gate [`apps/web/package.json`:11]
+- [x] [Review][Patch] README chưa hướng dẫn chạy API với profile `dev`, dễ lệch runtime DB/Redis [`README.md`:35]
+- [x] [Review][Defer] Bổ sung persistence volumes cho Postgres/MinIO trong compose dev [`docker/docker-compose.dev.yml`:1] — deferred, pre-existing
 
 ## Dev Notes
 
@@ -163,10 +172,91 @@ Không cần Container Registry thực tế cho story này — chỉ cần workf
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+gpt-5.3-codex-low
 
 ### Debug Log References
 
+- Đã bật Gradle toolchain auto-download bằng `org.gradle.toolchains.foojay-resolver-convention` + `org.gradle.java.installations.auto-download=true`.
+- `./gradlew test` tại `apps/api` pass sau khi bổ sung fallback `runtimeOnly("com.h2database:h2")`.
+- `./gradlew bootRun` tại `apps/api` khởi động thành công trên Java 21 (toolchain auto-provisioned).
+- `docker compose -f docker/docker-compose.dev.yml up -d` và `docker compose -f docker/docker-compose.dev.yml ps` đã chạy thành công; `postgres`, `redis`, `minio` đều `healthy`.
+- `pnpm test && pnpm build` tại `apps/web` pass.
+- `npx expo start --non-interactive` start thành công (Expo cảnh báo dùng `CI=1` cho non-interactive).
+
 ### Completion Notes List
 
+- Đã scaffold monorepo đầy đủ với `apps/api`, `apps/web`, `apps/mobile`, `packages/shared`, `docker`.
+- API đã được tạo từ Spring Initializr, đổi main class sang `HealthLensApplication`, và thêm `application.yml` profile `dev`.
+- Web đã tạo từ Next.js 16 + dependencies theo yêu cầu + folder structure theo task.
+- Mobile đã scaffold Expo SDK 55, bổ sung dependencies và structure cơ bản cho giai đoạn Phase 2.
+- Đã thêm `packages/shared` với `types`, `schemas`, `constants` và alias import cho web/mobile.
+- Đã thêm `docker/docker-compose.dev.yml`, CI skeleton `.github/workflows/ci.yml`, `.env.example`, và cập nhật `README.md`.
+- Đã xử lý blocker Java 21 cho API bằng Gradle toolchain auto-provision và xác minh lại `test` + `bootRun`.
+- Đã xử lý blocker Docker permission phía môi trường local và xác nhận tất cả service dev lên trạng thái healthy.
+
 ### File List
+
+- settings.gradle.kts
+- package.json
+- pnpm-workspace.yaml
+- pnpm-lock.yaml
+- .env.example
+- README.md
+- docs/architecture-placeholder.md
+- apps/api/.gitattributes
+- apps/api/.gitignore
+- apps/api/build.gradle.kts
+- apps/api/gradle.properties
+- apps/api/gradlew
+- apps/api/gradlew.bat
+- apps/api/settings.gradle.kts
+- apps/api/HELP.md
+- apps/api/gradle/wrapper/gradle-wrapper.properties
+- apps/api/gradle/wrapper/gradle-wrapper.jar
+- apps/api/src/main/java/com/healthlens/api/HealthLensApplication.java
+- apps/api/src/main/resources/application.yml
+- apps/api/src/test/java/com/healthlens/api/HealthLensApplicationTests.java
+- apps/web/.gitignore
+- apps/web/eslint.config.mjs
+- apps/web/next-env.d.ts
+- apps/web/next.config.ts
+- apps/web/package.json
+- apps/web/postcss.config.mjs
+- apps/web/README.md
+- apps/web/tsconfig.json
+- apps/web/public/*
+- apps/web/src/app/(auth)/login/page.tsx
+- apps/web/src/app/(dashboard)/home/page.tsx
+- apps/web/src/components/ui/index.ts
+- apps/web/src/components/features/index.ts
+- apps/web/src/hooks/index.ts
+- apps/web/src/lib/api/index.ts
+- apps/web/src/stores/index.ts
+- apps/web/src/app/*
+- apps/mobile/.gitignore
+- apps/mobile/app.json
+- apps/mobile/package.json
+- apps/mobile/README.md
+- apps/mobile/tsconfig.json
+- apps/mobile/assets/*
+- apps/mobile/src/*
+- apps/mobile/app/index.tsx
+- apps/mobile/components/index.ts
+- apps/mobile/hooks/index.ts
+- apps/mobile/lib/api/index.ts
+- apps/mobile/stores/index.ts
+- docker/docker-compose.dev.yml
+- packages/shared/package.json
+- packages/shared/tsconfig.json
+- packages/shared/index.ts
+- packages/shared/types/index.ts
+- packages/shared/schemas/index.ts
+- packages/shared/constants/index.ts
+- .github/workflows/ci.yml
+
+## Change Log
+
+- 2026-03-29: Scaffold monorepo starter template cho Story 1.1; còn blocker môi trường local cho Java 21 và Docker permission.
+- 2026-03-29: Đã xử lý blocker Java 21 (Gradle toolchain auto-download + H2 fallback cho local test/run); còn blocker Docker permission.
+- 2026-03-29: Đã xác nhận Docker Compose dev environment chạy thành công (`postgres`, `redis`, `minio` healthy); story sẵn sàng review.
+- 2026-03-29: Code review batch-apply hoàn tất 5 patch findings; cập nhật story sang `done`.
