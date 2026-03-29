@@ -1,6 +1,6 @@
 ---
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
-inputDocuments: ['prd.md']
+inputDocuments: ['prd.md', 'technical-ocr-llms-solution-research-2026-03-29.md']
 workflowType: 'architecture'
 project_name: 'health-lens'
 user_name: 'ie303'
@@ -8,11 +8,20 @@ date: '2026-03-17'
 lastStep: 8
 status: 'complete'
 completedAt: '2026-03-17'
+lastUpdated: '2026-03-29'
+updateNote: 'Updated with findings from Technical Research: PaddleOCR, Ollama + Qwen 3.5, Qdrant, cost analysis, ADR-001/ADR-002'
 ---
 
 # Tài Liệu Quyết Định Kiến Trúc — HealthLens
 
 _Tài liệu này được xây dựng hợp tác qua từng bước khám phá. Các phần được bổ sung khi chúng ta làm việc qua từng quyết định kiến trúc._
+
+> **Cập Nhật 2026-03-29:** Tài liệu đã được cập nhật với kết quả từ Technical Research về OCR và LLMs:
+> - **OCR:** PaddleOCR (self-hosted) cho MVP, AWS Textract fallback cho production
+> - **LLM:** Ollama + Qwen 3.5 (local) cho MVP, Claude API fallback cho production  
+> - **Embeddings:** nomic-embed-text (local) qua Ollama
+> - **Vector DB:** Qdrant (self-hosted)
+> - **Chi Phí MVP:** ~$0-20/tháng (so với $2,000-5,000 cloud-only)
 
 ## Phân Tích Bối Cảnh Dự Án
 
@@ -262,13 +271,17 @@ healthlens/
 | Cache | Redis 7 | LLM response cache, session store, job queue |
 | Object Storage | MinIO (dev) / S3 (prod) | Lưu trữ file PDF/ảnh |
 | Message Queue | Redis Streams | Xử lý job OCR async |
+| Vector DB | Qdrant | Semantic search cho RAG pipeline (embeddings storage) |
+| Local AI | Ollama | Self-hosted LLM (Qwen 3.5) và embeddings (nomic-embed-text) |
 
 #### Tích Hợp Dịch Vụ Bên Ngoài
 
 | Dịch Vụ | Tùy Chọn Provider | Mục Đích |
 |---------|-------------------|----------|
-| OCR | Google Vision API, AWS Textract | Trích xuất văn bản từ tài liệu |
-| LLM | OpenAI GPT-4, Anthropic Claude | Giải thích sức khỏe bằng tiếng Việt |
+| OCR | **PaddleOCR** (MVP), AWS Textract (Production) | Trích xuất văn bản từ tài liệu |
+| LLM | **Ollama + Qwen 3.5** (MVP), Claude API (Production) | Giải thích sức khỏe bằng tiếng Việt |
+| Embeddings | **nomic-embed-text** (local), OpenAI ada-3 (cloud) | Semantic search cho RAG pipeline |
+| Vector DB | **Qdrant** (self-hosted) | Lưu trữ embeddings cho semantic search |
 | Push Notifications | FCM (Android), APNs (iOS) | Thông báo mobile |
 | Email | SendGrid, AWS SES | Email giao dịch |
 
@@ -478,9 +491,14 @@ CREATE INDEX idx_health_records_metrics ON health_records USING GIN (metrics);
 **Quyết Định:** Docker Compose (dev) + Kubernetes-ready (prod)
 **Lý Do:** Đơn giản cho local dev, khả năng mở rộng production cho 500 người dùng đồng thời
 **Triển Khai:**
-- `docker-compose.dev.yml`: PostgreSQL, Redis, MinIO, API
+- `docker-compose.dev.yml`: PostgreSQL, Redis, MinIO, API, Ollama, Qdrant
 - Kubernetes manifests trong folder `/k8s/`
 - Horizontal Pod Autoscaler cho API pods
+
+**Docker Services cho AI:**
+- **Ollama:** Self-hosted LLM (Qwen 3.5) và embeddings (nomic-embed-text)
+- **Qdrant:** Vector database cho semantic search
+- **PaddleOCR:** Optional nếu không có GPU, chạy trong API container
 
 #### CI/CD Pipeline
 
@@ -995,7 +1013,10 @@ healthlens/
 │   │   │   │   │   │   ├── RedisConfig.java
 │   │   │   │   │   │   ├── S3Config.java
 │   │   │   │   │   │   ├── OpenApiConfig.java
-│   │   │   │   │   │   └── JwtConfig.java
+│   │   │   │   │   │   ├── JwtConfig.java
+│   │   │   │   │   │   ├── OllamaConfig.java
+│   │   │   │   │   │   ├── QdrantConfig.java
+│   │   │   │   │   │   └── PaddleOcrConfig.java
 │   │   │   │   │   ├── controller/
 │   │   │   │   │   │   ├── AuthController.java
 │   │   │   │   │   │   ├── UserController.java
@@ -1014,6 +1035,8 @@ healthlens/
 │   │   │   │   │   │   ├── HealthRecordService.java
 │   │   │   │   │   │   ├── OcrService.java
 │   │   │   │   │   │   ├── LlmService.java
+│   │   │   │   │   │   ├── VectorService.java
+│   │   │   │   │   │   ├── EmbeddingService.java
 │   │   │   │   │   │   ├── StorageService.java
 │   │   │   │   │   │   ├── FamilySharingService.java
 │   │   │   │   │   │   ├── ReferenceDataService.java
@@ -1360,6 +1383,10 @@ healthlens/
 │   │   └── Dockerfile.prod
 │   ├── web/
 │   │   └── Dockerfile.prod
+│   ├── ollama/
+│   │   └── Dockerfile
+│   ├── qdrant/
+│   │   └── Dockerfile
 │   └── nginx/
 │       └── nginx.conf
 │
@@ -1458,7 +1485,11 @@ healthlens/
 │                                                                    │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │
 │  │ProfileService│  │HealthRecord │  │ OcrService   │             │
-│  │              │  │   Service    │  │ (Ngoài)      │             │
+│  │              │  │   Service    │  │ (PaddleOCR)  │             │
+│  └──────────────┘  └──────────────┘  └──────────────┘             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │
+│  │ LlmService   │  │VectorService │  │StorageService│             │
+│  │ (Ollama)     │  │ (Qdrant)     │  │              │             │
 │  └──────────────┘  └──────────────┘  └──────────────┘             │
 └───────────────────────────────────┬───────────────────────────────┘
                                     │
@@ -1473,6 +1504,7 @@ healthlens/
                     │      PostgreSQL       │
                     │        Redis          │
                     │       S3/MinIO        │
+                    │       Qdrant          │
                     └───────────────────────┘
 ```
 
@@ -1569,8 +1601,10 @@ healthlens/
 - Request/Response: JSON với camelCase keys
 
 **Backend → Dịch Vụ Ngoài:**
-- **OCR API:** HTTP client với retry (3x), timeout (15s)
-- **LLM API:** HTTP client với retry (3x), timeout (30s), response caching
+- **OCR Service:** PaddleOCR (self-hosted) cho MVP, AWS Textract làm production fallback
+- **LLM Service:** Ollama + Qwen 3.5 (self-hosted) cho MVP, Claude API làm production fallback
+- **Embeddings:** nomic-embed-text qua Ollama (self-hosted)
+- **Vector DB:** Qdrant (self-hosted) cho semantic search
 - **S3/MinIO:** AWS SDK, pre-signed URLs cho client uploads
 
 **Backend → Database:**
@@ -1582,8 +1616,9 @@ healthlens/
 
 | Dịch Vụ | Điểm Tích Hợp | Xử Lý Lỗi |
 |---------|---------------|-----------|
-| OCR API (Google Vision) | `service/OcrService.java` | Timeout → fallback nhập thủ công |
-| LLM API (OpenAI/Claude) | `service/LlmService.java` | Timeout → cached response hoặc giải thích generic |
+| PaddleOCR (Self-hosted) | `service/OcrService.java` | Timeout → AWS Textract fallback hoặc nhập thủ công |
+| Ollama + Qwen 3.5 (Local) | `service/LlmService.java` | Timeout → Claude API fallback hoặc cached response |
+| Qdrant (Vector DB) | `service/VectorService.java` | Connection retry, graceful degradation |
 | S3/MinIO | `service/StorageService.java` | Pre-signed URL hết hạn → tạo lại |
 | FCM/APNs | `service/NotificationService.java` | Thất bại im lặng, log để retry |
 | Email (SendGrid) | `service/NotificationService.java` | Queue để retry |
@@ -1845,6 +1880,87 @@ Tất cả technology choices đã được kiểm tra tương thích:
 1. **OpenAPI Schema** — Auto-generated từ Spring Boot, có thể thêm custom schema file
 2. **E2E Test Framework** — Playwright cho web, Detox cho mobile (đề cập nhưng chưa chi tiết)
 3. **Performance Testing** — Có thể thêm k6 scripts cho load testing
+
+### Chiến Lược Chi Phí & Tối Ưu Hóa
+
+#### So Sánh Chi Phí Theo Giai Đoạn
+
+| Giai Đoạn | OCR | LLM | Embeddings | Vector DB | Ước Tính/tháng |
+|-----------|-----|-----|------------|-----------|-----------------|
+| **MVP (Local-first)** | PaddleOCR (free) | Ollama + Qwen 3.5 (free) | nomic-embed-text (free) | Qdrant (self-hosted) | **$0-20** (server) |
+| **Production (Hybrid)** | PaddleOCR + Textract fallback | Ollama + Claude API | nomic-embed-text + ada-3 | Qdrant (prod) | **$500-1,000** |
+| **Enterprise (Cloud-only)** | AWS Textract | Claude API + BAA | OpenAI ada-3 | Pinecone | **$2,000-5,000** |
+
+#### Chi Phí MVP Chi Tiết
+
+**Infrastructure (Local-first):**
+- Server với GPU (cho Ollama): ~$50-100/tháng (nếu không có GPU local)
+- Không tốn chi phí API cho OCR, LLM, Embeddings
+- Qdrant có thể chạy trên cùng server
+
+**Tiết Kiệm So Với Cloud-only:**
+- 3 năm: ~$18,000-36,000 (so với Claude API only)
+- OCR: ~$500-1,000/năm (PaddleOCR vs $1.50/1K pages AWS)
+
+#### Mô Hình Lai (Hybrid) Cho Production
+
+**Khi Nào Chuyển Sang Hybrid:**
+1. Khi traffic vượt ngưỡng xử lý local (50+ requests/giờ)
+2. Khi cần HIPAA compliance với BAA (Business Associate Agreement)
+3. Khi latency trở thành vấn đề (local GPU không đủ)
+
+**Fallback Strategy:**
+```
+Ollama (Primary) → Claude API (Fallback) → Cached Response → Generic Message
+PaddleOCR (Primary) → AWS Textract (Fallback) → Manual Input
+```
+
+### Architecture Decision Records (ADR)
+
+#### ADR-001: Local-First AI Strategy cho MVP
+
+**Context:**
+Dự án cần tối ưu chi phí trong giai đoạn MVP, đồng thời đảm bảo privacy cho dữ liệu y tế nhạy cảm.
+
+**Quyết Định:**
+- **OCR:** PaddleOCR (self-hosted) là primary, AWS Textract là fallback
+- **LLM:** Ollama + Qwen 3.5 (local) là primary, Claude API là fallback  
+- **Embeddings:** nomic-embed-text (Ollama) cho semantic search
+- **Vector DB:** Qdrant (self-hosted) cho embeddings storage
+
+**Lý Do:**
+1. **Chi phí:** Zero API costs cho MVP với ~$50-100 server/month
+2. **Privacy:** Dữ liệu y tế không rời khỏi infrastructure
+3. **Latency:** Không có network latency cho local inference
+4. **HIPAA:** Dễ dàng compliance với self-hosted infrastructure
+
+**Hệ Quả:**
+- Cần server với GPU (8GB VRAM cho Qwen 3.5)
+- Cần maintain Ollama deployment và updates
+- Fallback logic phức tạp hơn cho production
+
+**Đường Nâng Cấp:**
+- P2: Thêm Claude API khi cần complex reasoning
+- P3: Full hybrid với AWS Textract fallback
+
+#### ADR-002: Qdrant cho Vector Storage
+
+**Context:**
+Cần semantic search cho RAG pipeline để cải thiện LLM response quality.
+
+**Quyết Định:**
+Sử dụng Qdrant (self-hosted) thay vì Pinecone hoặc cloud solutions.
+
+**Lý Do:**
+1. **Chi phí:** Free self-hosted vs $0.20/1K vectors Pinecone
+2. **Performance:** Tối ưu cho embeddings với HNSW index
+3. **Flexibility:** Docker deployment đơn giản
+4. **Privacy:** Dữ liệu embeddings ở local
+
+**Hệ Quả:**
+- Cần Docker container management
+- Backup strategy cho vector database
+- Monitoring cho Qdrant health
 
 ### Vấn Đề Xác Thực Đã Giải Quyết
 

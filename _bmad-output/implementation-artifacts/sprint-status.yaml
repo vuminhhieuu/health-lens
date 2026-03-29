@@ -1,5 +1,10 @@
 # generated: 2026-03-29
-# last_updated: 2026-03-29
+# last_updated: 2026-03-29T17:00:00+07:00
+#
+# SPRINT PLANNING (chạy lại workflow khi cần làm mới):
+#   Gợi ý sprint ngắn (Web MVP): 1-1 → 1-2 → 1-3 trước; sau đó 1-4..1-6.
+#   Epic 2+ kéo vào sprint khi Epic 1 đủ nền auth; Epic 7 (reference data) cân nhắc song song sớm với Epic 4.
+#   Epic 9: giữ backlog đến khi đóng Phase 1 (Epic 1–8).
 # project: health-lens
 # project_key: NOKEY
 # tracking_system: file-system
@@ -42,7 +47,7 @@
 # - Epic 9 (mobile): stories remain backlog until Phase 1 Web MVP is complete
 
 generated: 2026-03-29
-last_updated: 2026-03-29
+last_updated: 2026-03-29T17:00:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -56,6 +61,8 @@ development_status:
   1-4-password-reset-via-email: ready-for-dev
   1-5-sensitive-health-data-consent: ready-for-dev
   1-6-account-data-deletion-request: ready-for-dev
+  1-7-ollama-local-ai-setup: ready-for-dev  # NEW: Local AI infrastructure
+  1-8-qdrant-vector-db-setup: ready-for-dev  # NEW: Vector database infrastructure
   epic-1-retrospective: optional
 
   epic-2: in-progress

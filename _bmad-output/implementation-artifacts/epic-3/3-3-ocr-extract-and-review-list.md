@@ -62,6 +62,47 @@ so that tôi kiểm tra tính đúng đắn của kết quả trích xuất.
 
 ## Dev Notes
 
+### OCR Service Architecture (Updated 2026-03-29)
+
+**Primary:** PaddleOCR (self-hosted) — zero cost, privacy-first
+**Fallback:** AWS Textract — for production or when PaddleOCR fails
+
+```java
+// OcrService.java - Updated architecture
+public class OcrService {
+    private final PaddleOcrClient paddleOcr;
+    private final AwsTextractClient textractFallback;
+    
+    public OcrResult processImage(byte[] imageData) {
+        try {
+            // Primary: PaddleOCR (self-hosted)
+            return paddleOcr.extract(imageData);
+        } catch (OcrException e) {
+            // Fallback: AWS Textract
+            log.warn("PaddleOCR failed, falling back to AWS Textract");
+            return textractFallback.extract(imageData);
+        }
+    }
+}
+```
+
+### PaddleOCR Configuration
+
+```yaml
+# application.yml
+ocr:
+  primary: paddleocr  # self-hosted
+  fallback: textract   # cloud fallback
+  paddleocr:
+    enabled: true
+    model-path: /models/paddleocr
+    gpu-enabled: true
+  textract:
+    enabled: true  # only for fallback
+    region: ap-southeast-1
+    # AWS credentials via environment variables
+```
+
 ### OCR Metric JSON Schema
 
 ```json
@@ -121,6 +162,7 @@ interface HealthStatusBadgeProps {
 
 - [Source: ux-design-specification.md#UX-DR4]
 - [Source: architecture.md#Kiến-Trúc-Dữ-Liệu]
+- [Source: architecture.md#ADR-001-Local-First-AI]
 - [Source: epics.md#Story-3.3]
 
 ## Dev Agent Record

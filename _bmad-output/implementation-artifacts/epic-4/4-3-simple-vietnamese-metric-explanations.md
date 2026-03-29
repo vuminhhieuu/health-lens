@@ -55,12 +55,15 @@ so that tôi hiểu ý nghĩa sức khỏe của kết quả.
 
 ## Dev Notes
 
-### Cache Strategy
+### Cache Strategy (Updated 2026-03-29)
 
 ```
 Key: llm:explanation:{SHA256(metricName + "|" + normalizedValue + "|" + status + "|" + rangeMin + "|" + rangeMax)}
 Value: explanation text (plain string)
 TTL: 604800 seconds (7 ngày)
+
+Note: With local Ollama, cache hit rate is critical for performance.
+      Consider caching at multiple levels: LLM response cache (Redis) + embedding cache (Qdrant).
 ```
 
 ### Prompt Template
@@ -85,22 +88,55 @@ export const METRIC_FALLBACK_EXPLANATIONS: Record<string, string> = {
 };
 ```
 
-### LLM Provider Config
+### LLM Provider Config (Updated 2026-03-29)
+
+**Primary:** Ollama + Qwen 3.5 (self-hosted) — zero cost, privacy-first
+**Fallback:** Claude API (Anthropic) — for production or complex reasoning
 
 ```yaml
 # application.yml
 llm:
-  provider: openai  # hoặc anthropic
-  api-key: ${LLM_API_KEY}
-  model: gpt-4o-mini  # balance cost/quality
-  max-tokens: 200
-  timeout-seconds: 10
+  primary: ollama        # self-hosted (MVP)
+  fallback: claude       # cloud (production)
+  ollama:
+    base-url: http://localhost:11434
+    model: qwen3.5:7b   # 76.8% MMLU, 8GB VRAM
+    embedding-model: nomic-embed-text
+    timeout-seconds: 30
+  claude:
+    enabled: true
+    api-key: ${CLAUDE_API_KEY}
+    model: claude-sonnet-4-20250514
+    max-tokens: 200
+    timeout-seconds: 30
+```
+
+### Ollama Service Architecture
+
+```java
+// LlmService.java - Updated architecture
+public class LlmService {
+    private final OllamaClient ollamaClient;
+    private final ClaudeClient claudeFallback;
+    
+    public String generateExplanation(MetricContext context) {
+        try {
+            // Primary: Ollama + Qwen 3.5 (local)
+            return ollamaClient.generate(prompt, context);
+        } catch (LlmException e) {
+            // Fallback: Claude API
+            log.warn("Ollama failed, falling back to Claude API");
+            return claudeFallback.generate(prompt, context);
+        }
+    }
+}
 ```
 
 ### References
 
 - [Source: architecture.md#Chiến-Lược-Cache]
 - [Source: architecture.md#Tích-Hợp-Dịch-Vụ-Bên-Ngoài]
+- [Source: architecture.md#ADR-001-Local-First-AI]
 - [Source: epics.md#Story-4.3]
 
 ## Dev Agent Record

@@ -93,10 +93,42 @@ const CAMERA_TIPS = [
 ];
 ```
 
+### OCR Failure Flow (Updated 2026-03-29)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    OCR Processing Pipeline                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Image Upload ──► PaddleOCR (Primary)                       │
+│                          │                                   │
+│                    ┌──────┴──────┐                           │
+│                    │ Success?    │                           │
+│                    └──────┬──────┘                           │
+│                     Yes    │ No                              │
+│                      │     │                                │
+│                      ▼     ▼                                │
+│                 Return    AWS Textract (Fallback)           │
+│                   OCR         │                             │
+│                   Result      │                             │
+│                                 │                            │
+│                          ┌─────┴─────┐                       │
+│                          │ Success?  │                       │
+│                          └─────┬─────┘                       │
+│                           Yes   │ No                         │
+│                            │    │                            │
+│                            ▼    ▼                            │
+│                       Return   Recovery Screen              │
+│                         OCR    (Story 3.5)                  │
+│                        Result                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ### References
 
 - [Source: ux-design-specification.md#UX-DR4]
 - [Source: architecture.md#Xử-Lý-Lỗi-&-Khả-Năng-Phục-Hồi]
+- [Source: architecture.md#ADR-001-Local-First-AI]
 - [Source: epics.md#Story-3.5]
 
 ## Dev Agent Record
