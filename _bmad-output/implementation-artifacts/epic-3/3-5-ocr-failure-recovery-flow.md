@@ -93,19 +93,20 @@ const CAMERA_TIPS = [
 ];
 ```
 
-### OCR Failure Flow (Updated 2026-03-29)
+### OCR Failure Flow (Option B+ - Updated 2026-04-01)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    OCR Processing Pipeline                    │
+│                    OCR Processing Pipeline (Option B+)       │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│  Image Upload ──► PaddleOCR (Primary)                       │
+│  Image Upload ──► EasyOCR Service (localhost:8001)          │
 │                          │                                   │
 │                    ┌──────┴──────┐                           │
 │                    │ Success?    │                           │
+│                    │ Timeout?     │                           │
 │                    └──────┬──────┘                           │
-│                     Yes    │ No                              │
+│                     Yes    │ No/Timeout                      │
 │                      │     │                                │
 │                      ▼     ▼                                │
 │                 Return    AWS Textract (Fallback)           │
@@ -123,6 +124,16 @@ const CAMERA_TIPS = [
 │                        Result                              │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+**EasyOCR Details:**
+- Vietnamese accuracy: ~90%
+- Processing time: 3-8s on CPU
+- Timeout: 10 seconds (configurable)
+
+**Fallback Chain:**
+1. EasyOCR Service (local Python microservice)
+2. AWS Textract (cloud, $1.50/1K pages)
+3. Recovery Screen (Story 3.5) - Manual input option
 
 ### References
 

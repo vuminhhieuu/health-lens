@@ -62,46 +62,56 @@ so that tôi kiểm tra tính đúng đắn của kết quả trích xuất.
 
 ## Dev Notes
 
-### OCR Service Architecture (Updated 2026-03-29)
+### OCR Service Architecture (Option B+ - Updated 2026-04-01)
 
-**Primary:** PaddleOCR (self-hosted) — zero cost, privacy-first
-**Fallback:** AWS Textract — for production or when PaddleOCR fails
+**Primary:** EasyOCR (local Python microservice) — ~500MB RAM, good Vietnamese support
+**Fallback:** AWS Textract — when EasyOCR fails or timeout
+
+**Flow:**
+```
+Image Upload → Spring API → EasyOCR Service (localhost:8001) → Fallback: AWS Textract
+```
+
+### EasyOCR Configuration
+
+**EasyOCR Service Setup:** See Story 1.9 (`1-9-easyocr-service-setup.md`)
 
 ```java
-// OcrService.java - Updated architecture
+// OcrService.java - Option B+ Architecture
+@Service
 public class OcrService {
-    private final PaddleOcrClient paddleOcr;
+    private final RestTemplate restTemplate;
     private final AwsTextractClient textractFallback;
+    private final String ocrServiceUrl = "http://localhost:8001";
     
-    public OcrResult processImage(byte[] imageData) {
+    public OcrResult processImage(String imageUrl) {
         try {
-            // Primary: PaddleOCR (self-hosted)
-            return paddleOcr.extract(imageData);
+            // Primary: EasyOCR microservice
+            return callEasyOcr(imageUrl);
         } catch (OcrException e) {
             // Fallback: AWS Textract
-            log.warn("PaddleOCR failed, falling back to AWS Textract");
-            return textractFallback.extract(imageData);
+            log.warn("EasyOCR failed, falling back to AWS Textract");
+            return textractFallback.extract(imageUrl);
         }
     }
 }
 ```
 
-### PaddleOCR Configuration
+### OCR Service Configuration
 
 ```yaml
 # application.yml
 ocr:
-  primary: paddleocr  # self-hosted
-  fallback: textract   # cloud fallback
-  paddleocr:
-    enabled: true
-    model-path: /models/paddleocr
-    gpu-enabled: true
+  service:
+    url: http://localhost:8001  # EasyOCR microservice
+    timeout-ms: 10000  # 10 second timeout
   textract:
-    enabled: true  # only for fallback
+    enabled: true  # fallback only
     region: ap-southeast-1
     # AWS credentials via environment variables
 ```
+
+**Note:** EasyOCR accuracy ~90% for Vietnamese is acceptable for MVP. Confidence-based UI (AC #3, #4) handles lower confidence results.
 
 ### OCR Metric JSON Schema
 

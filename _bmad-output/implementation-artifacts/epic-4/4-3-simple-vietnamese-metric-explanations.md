@@ -88,55 +88,83 @@ export const METRIC_FALLBACK_EXPLANATIONS: Record<string, string> = {
 };
 ```
 
-### LLM Provider Config (Updated 2026-03-29)
+### LLM Provider Config (Option B+ - Updated 2026-04-01)
 
-**Primary:** Ollama + Qwen 3.5 (self-hosted) — zero cost, privacy-first
-**Fallback:** Claude API (Anthropic) — for production or complex reasoning
+**Primary:** Groq API with qwen-2.5-72b-versatile — fast inference, excellent Vietnamese support
+**Fallback:** OpenRouter / Claude API — when Groq unavailable
+
+**Setup:** See Story 1.7 (`1-7-groq-api-setup.md`)
 
 ```yaml
 # application.yml
-llm:
-  primary: ollama        # self-hosted (MVP)
-  fallback: claude       # cloud (production)
-  ollama:
-    base-url: http://localhost:11434
-    model: qwen3.5:7b   # 76.8% MMLU, 8GB VRAM
-    embedding-model: nomic-embed-text
-    timeout-seconds: 30
-  claude:
-    enabled: true
-    api-key: ${CLAUDE_API_KEY}
-    model: claude-sonnet-4-20250514
-    max-tokens: 200
-    timeout-seconds: 30
+spring:
+  ai:
+    groq:
+      api-key: ${GROQ_API_KEY}
+      chat:
+        options:
+          model: qwen-2.5-72b-versatile
+          temperature: 0.7
+          max-tokens: 500
+        endpoint: https://api.groq.com/openai/v1
+
+# Fallback Configuration
+app:
+  ai:
+    primary: groq
+    fallback:
+      enabled: true
+      provider: openrouter  # or: claude
+    retry:
+      max-attempts: 3
+      initial-delay-ms: 1000
+      multiplier: 2.0
 ```
 
-### Ollama Service Architecture
+### Groq Service Architecture
+
+**Why Groq for HealthLens:**
+- **Speed:** LPU inference chips - fastest available
+- **Vietnamese:** qwen-2.5-72b excellent for Vietnamese text
+- **Free Tier:** 14,400 requests/minute - sufficient for MVP
+- **OpenAI Compatible:** Easy Spring AI integration
 
 ```java
-// LlmService.java - Updated architecture
+// LlmService.java - Option B+ Architecture
+@Service
+@RequiredArgsConstructor
 public class LlmService {
-    private final OllamaClient ollamaClient;
-    private final ClaudeClient claudeFallback;
+    private final ChatClient groqChatClient;
     
-    public String generateExplanation(MetricContext context) {
+    public String generateExplanation(String metricName, String value, 
+                                     String unit, String status) {
+        String prompt = buildPrompt(metricName, value, unit, status);
+        
         try {
-            // Primary: Ollama + Qwen 3.5 (local)
-            return ollamaClient.generate(prompt, context);
-        } catch (LlmException e) {
-            // Fallback: Claude API
-            log.warn("Ollama failed, falling back to Claude API");
-            return claudeFallback.generate(prompt, context);
+            return groqChatClient.prompt()
+                .user(prompt)
+                .call()
+                .content();
+        } catch (Exception e) {
+            log.warn("Groq API failed: {}, returning fallback", e.getMessage());
+            return getFallbackExplanation(metricName);
         }
     }
 }
 ```
 
+**Groq Available Models:**
+| Model | Context | Vietnamese | Best For |
+|-------|---------|------------|----------|
+| `qwen-2.5-72b-versatile` | 128K | ✅ Excellent | Health explanations |
+| `llama-3.3-70b-versatile` | 128K | ⚠️ Good | Complex reasoning |
+
 ### References
 
 - [Source: architecture.md#Chiến-Lược-Cache]
 - [Source: architecture.md#Tích-Hợp-Dịch-Vụ-Bên-Ngoài]
-- [Source: architecture.md#ADR-001-Local-First-AI]
+- [Source: architecture.md#ADR-003-Cloud-First-AI]
+- [Source: 1-7-groq-api-setup.md]
 - [Source: epics.md#Story-4.3]
 
 ## Dev Agent Record
