@@ -34,6 +34,17 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
 	implementation("org.flywaydb:flyway-database-postgresql")
+
+	// Spring AI - Groq (LLM + Embeddings)
+	implementation("org.springframework.ai:spring-ai-starter-groq")
+	implementation("org.springframework.ai:spring-ai-starter-openai")
+
+	// Spring AI - Qdrant VectorStore
+	implementation("org.springframework.ai:spring-ai-starter-vectorstore-qdrant")
+
+	// Jackson for JSON processing
+	implementation("com.fasterxml.jackson.core:jackson-databind")
+
 	compileOnly("org.projectlombok:lombok")
 	developmentOnly("org.springframework.boot:spring-boot-devtools")
 	runtimeOnly("com.h2database:h2")
@@ -48,6 +59,7 @@ dependencies {
 	testImplementation("org.springframework.boot:spring-boot-starter-security-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-validation-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+	testImplementation("org.springframework.ai:spring-ai-starter-test")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

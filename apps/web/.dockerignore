@@ -1,0 +1,56 @@
+# Dependencies
+node_modules
+.npm
+
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Next.js build output
+.next
+out
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test coverage
+coverage
+.nyc_output
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+*.md
+docs/
+
+# Agent artifacts
+**/_bmad-output/
+**/.agent/
+
+# Environment files (build from .env.example)
+.env
+.env.local
+.env.*.local
+
+# Turborepo
+.turbo
+
+# Playwright
+playwright-report/
+test-results/

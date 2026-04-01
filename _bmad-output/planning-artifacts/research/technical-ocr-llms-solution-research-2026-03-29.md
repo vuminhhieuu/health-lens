@@ -4,9 +4,19 @@ version: 1.0.0
 date: 2026-03-29
 author: ie303
 researchType: Technical
-status: Complete
+status: Superseded
 stepsCompleted: [1, 2, 3, 4, 5, 6]
-conclusion: Approved
+conclusion: Superseded by Option B+ (2026-04-01)
+supersededBy: technical-option-bplus-analysis-2026-04-01.md, technical-option-bplus-feasibility-2026-04-01.md
+
+> ⚠️ **SUPERSEDED: 2026-04-01**
+> 
+> Document này đã bị thay thế bởi **Option B+ Architecture**. Xem:
+> - `technical-option-bplus-analysis-2026-04-01.md`
+> - `technical-option-bplus-feasibility-2026-04-01.md`
+>
+> **Lý do superseded:** 16GB RAM dev machines không thể chạy full local AI stack (PaddleOCR + Ollama + Qdrant = 14-31GB RAM).
+
 ---
 
 # Comprehensive Technical Research: OCR Services và LLMs Integration cho Health Lens
@@ -17,17 +27,17 @@ Nghiên cứu kỹ thuật toàn diện này phân tích chiến lược tích h
 
 **Key Technical Findings:**
 
-- **OCR Solutions:** PaddleOCR (self-hosted) cho chi phí zero và privacy-first, AWS Textract cho production với HIPAA compliance
-- **LLM Strategy:** Ollama + Qwen 3.5 cho MVP (zero cost), Claude API cho complex reasoning với BAA
-- **Embeddings:** nomic-embed-text (local) vs OpenAI ada-3 (cloud) - local tiết kiệm 100% API cost
+- **OCR Solutions:** ~~PaddleOCR (self-hosted)~~ → **EasyOCR (local)** cho chi phí zero và privacy-first, AWS Textract cho production với HIPAA compliance
+- **LLM Strategy:** ~~Ollama + Qwen 3.5~~ → **Groq API (qwen-2.5-72b)** cho MVP (zero cost), Claude API cho complex reasoning với BAA
+- **Embeddings:** ~~nomic-embed-text (local)~~ → **Groq embed-multilingual-v3** (cloud) - free tier
 - **Architecture Pattern:** Monolithic modular cho MVP → Microservices khi scale
-- **Cost Optimization:** Local-first approach giảm 90%+ chi phí so với cloud-only
+- **Cost Optimization:** ~~Local-first approach~~ → **Cloud-First (Option B+)** giảm RAM usage từ 14-31GB xuống 2GB
 
-**Technical Recommendations:**
+**Technical Recommendations (UPDATED - Option B+):**
 
-1. **MVP Phase:** PaddleOCR + Ollama + Qdrant (local) - chi phí ~$0/tháng
-2. **Production Phase:** Hybrid local + Claude API fallback - chi phí $500-1000/tháng
-3. **Enterprise:** Azure Document Intelligence + Claude BAA - HIPAA-ready
+1. **MVP Phase:** EasyOCR + Groq API + Qdrant Cloud + Neon PostgreSQL - chi phí ~$0-5/tháng
+2. **Production Phase:** EasyOCR + Groq (paid) + Claude fallback - chi phí $20-50/tháng
+3. **Enterprise:** AWS Textract + Claude BAA - HIPAA-ready
 
 **Business Impact:**
 - Giảm 90% chi phí API với local-first approach
