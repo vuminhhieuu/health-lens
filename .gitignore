@@ -143,7 +143,13 @@ temp/
 
 
 # ---- BMAD IDE -------
-.agent/
-.cursor/
-.github/skills/
-.opencode 
+.agent/*
+!.agent/.keep
+.cursor/*
+!.cursor/.keep
+.github/skills/*
+!.github/skills/.keep
+.opencode/* 
+!.opencode/.keep
+_bmad/*
+!_bmad/.keep
