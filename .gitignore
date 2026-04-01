@@ -140,3 +140,10 @@ temp/
 *.pid
 *.seed
 *.pid.lock
+
+
+# ---- BMAD IDE -------
+.agent/
+.cursor/
+.github/skills/
+.opencode 
