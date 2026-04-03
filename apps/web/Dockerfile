@@ -13,7 +13,11 @@ RUN npm install -g pnpm@9 && pnpm install --frozen-lockfile
 FROM base AS builder
 WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
+RUN npm install -g pnpm@9
+
+# Copy toàn bộ workspace đã install từ deps (bao gồm node_modules của từng package)
+# Dùng COPY /app thay vì chỉ /app/node_modules để giữ nguyên pnpm workspace structure
+COPY --from=deps /app ./
 COPY . .
 
 RUN pnpm --filter web build
@@ -25,9 +29,9 @@ ENV NODE_ENV=production
 
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/apps/web/public ./public
+COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 
 USER nextjs
 
@@ -36,4 +40,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+# Trong monorepo, next standalone tạo server.js tại apps/web/server.js
+CMD ["node", "apps/web/server.js"]

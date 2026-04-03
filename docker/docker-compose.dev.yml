@@ -34,8 +34,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    profiles:
-      - with-redis
+    restart: unless-stopped
+    # Redis chạy mặc định vì LlmService dùng @Cacheable
+    # Dùng profile with-redis-external nếu muốn kết nối Redis ngoài
 
   # =========================================
   # MinIO: Object Storage (local S3-compatible)
@@ -102,25 +103,24 @@ services:
       - "8080:8080"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      # Neon PostgreSQL Cloud
-      - DB_URL=${NEON_DATABASE_URL}
-      - DB_USERNAME=${NEON_USER}
-      - DB_PASSWORD=${NEON_PASSWORD}
-      # Groq API
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      # Qdrant Cloud
-      - QDRANT_HOST=${QDRANT_HOST}
-      - QDRANT_API_KEY=${QDRANT_API_KEY}
       # OCR Service (optional - use profile with-ocr)
       - OCR_SERVICE_URL=${OCR_SERVICE_URL:-}
-      # Optional services
-      - REDIS_HOST=${REDIS_HOST:-}
+      # Redis: dùng tên service "redis" trong Docker network
+      # Override bằng REDIS_HOST trong .env nếu dùng Redis ngoài
+      - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - MAIL_HOST=mailhog
       - MAIL_PORT=1025
+    env_file:
+      - ../.env
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      # Dùng /liveness thay vì /health để tránh Redis của container bị DOWN làm container unhealthy
+      # /liveness: chỉ check app alive (không check external dependencies)
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health/liveness || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -132,8 +132,12 @@ services:
   # =========================================
   web:
     build:
-      context: ../apps/web
-      dockerfile: Dockerfile
+      # Context là root monorepo vì Dockerfile cần truy cập:
+      # - pnpm-workspace.yaml (root)
+      # - packages/shared/package.json
+      # - apps/web/ (toàn bộ web app)
+      context: ..
+      dockerfile: apps/web/Dockerfile
     ports:
       - "3000:3000"
     environment:
@@ -142,6 +146,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    env_file:
+      - ../.env
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
@@ -193,8 +199,8 @@ volumes:
 # Start with OCR service:
 #   docker compose -f docker/docker-compose.dev.yml --profile with-ocr up
 #
-# Start with Redis:
-#   docker compose -f docker/docker-compose.dev.yml --profile with-redis up
+# Redis chạy mặc định (cần cho @Cacheable trong LlmService)
+# Nếu muốn dùng Redis ngoài: set REDIS_HOST trong .env
 #
 # Start with MinIO:
 #   docker compose -f docker/docker-compose.dev.yml --profile with-minio up
