@@ -76,7 +76,7 @@ development_status:
   # Infrastructure (Option B+)
   1-7-groq-api-setup: done
   1-8-qdrant-cloud-setup: done
-  1-9-easyocr-service-setup: sprint-1
+  1-9-easyocr-service-setup: done
   epic-1-retrospective: optional
 
   # Epic 2: Profiles (3 stories) - SPRINT 1

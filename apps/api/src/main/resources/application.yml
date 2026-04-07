@@ -39,6 +39,14 @@ app:
       max-attempts: 3
       initial-delay-ms: 1000
       multiplier: 2.0
+  ocr:
+    service:
+      url: ${OCR_SERVICE_URL:http://localhost:8001}
+      timeout-ms: ${OCR_TIMEOUT_MS:10000}
+      connect-timeout-ms: 5000
+    textract:
+      enabled: false
+      region: ${AWS_REGION:ap-southeast-1}
 
 ---
 spring:

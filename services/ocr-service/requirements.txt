@@ -1,0 +1,22 @@
+# HealthLens OCR Service Dependencies
+# =====================================
+
+# Web framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# OCR engine
+easyocr>=1.7.0
+
+# Image processing
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# HTTP client (for downloading images from URLs)
+requests>=2.31.0
+
+# Data validation
+pydantic>=2.0.0
+
+# Multipart form support
+python-multipart>=0.0.6
