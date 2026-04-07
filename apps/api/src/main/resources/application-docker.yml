@@ -1,0 +1,54 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${NEON_HOST}:5432/healthlens?sslmode=require
+    username: ${NEON_USER}
+    password: ${NEON_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  data:
+    redis:
+      # Trong Docker network, Redis host là tên service "redis" (không phải localhost)
+      host: ${REDIS_HOST:-redis}
+      port: ${REDIS_PORT:-6379}
+
+  cache:
+    # Dùng Redis làm cache provider trong Docker
+    type: redis
+  
+  ai:
+    openai:
+      # Groq API (OpenAI-compatible endpoint)
+      api-key: ${GROQ_API_KEY}
+      base-url: https://api.groq.com/openai
+      chat:
+        options:
+          model: ${GROQ_CHAT_MODEL:qwen-2.5-72b-versatile}
+          temperature: 0.7
+          max-tokens: 500
+      embedding:
+        # Embedding provider riêng (Groq KHÔNG hỗ trợ embedding API).
+        # EMBEDDING_BASE_URL: đổi nếu dùng provider khác OpenAI (ví dụ: https://api.jina.ai/v1)
+        # EMBEDDING_API_KEY: phải set riêng, KHÔNG dùng GROQ_API_KEY
+        base-url: ${EMBEDDING_BASE_URL:https://api.openai.com}
+        api-key: ${EMBEDDING_API_KEY}
+        options:
+          model: ${EMBEDDING_MODEL:text-embedding-3-small}
+    vectorstore:
+      qdrant:
+        # QUAN TRỌNG: QDRANT_HOST phải là hostname THUẦN, KHÔNG có https://
+        # Đúng:   ep-xxxx.cloud.qdrant.io
+        # Sai:    https://ep-xxxx.cloud.qdrant.io  ← gây lỗi "Invalid host or port"
+        host: ${QDRANT_HOST}
+        port: 6334
+        api-key: ${QDRANT_API_KEY}
+        use-tls: true
+
+# Actuator for Health Checks
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+  endpoint:
+    health:
+      show-details: always

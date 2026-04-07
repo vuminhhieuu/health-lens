@@ -74,7 +74,7 @@ development_status:
   1-5-sensitive-health-data-consent: sprint-1
   1-6-account-data-deletion-request: sprint-1
   # Infrastructure (Option B+)
-  1-7-groq-api-setup: sprint-1
+  1-7-groq-api-setup: done
   1-8-qdrant-cloud-setup: sprint-1
   1-9-easyocr-service-setup: sprint-1
   epic-1-retrospective: optional

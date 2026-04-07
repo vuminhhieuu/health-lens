@@ -1,6 +1,35 @@
 spring:
   application:
     name: healthlens-api
+  cache:
+    # Dùng in-memory cache cho môi trường local/test (không cần Redis)
+    # Override bằng spring.cache.type=redis trong application-docker.yml
+    type: simple
+  ai:
+    openai:
+      # Groq API (OpenAI-compatible)
+      api-key: ${GROQ_API_KEY:dev-placeholder}
+      base-url: https://api.groq.com/openai
+      chat:
+        options:
+          model: ${GROQ_CHAT_MODEL:qwen-2.5-72b-versatile}
+          temperature: 0.7
+          max-tokens: 500
+      embedding:
+        options:
+          model: ${EMBEDDING_MODEL:text-embedding-3-small}
+
+# App-level AI config
+app:
+  ai:
+    primary: groq
+    fallback:
+      enabled: true
+      explanation: "Kết quả cần được bác sĩ chuyên khoa giải thích thêm."
+    retry:
+      max-attempts: 3
+      initial-delay-ms: 1000
+      multiplier: 2.0
 
 ---
 spring:

@@ -1,0 +1,66 @@
+# Root .dockerignore - dùng khi build context là monorepo root
+# Loại trừ các file lớn/không cần thiết để tăng tốc Docker build
+
+# Version control
+.git
+.gitignore
+
+# Node / npm / pnpm
+node_modules
+**/node_modules
+.pnpm-store
+.pnpm-debug.log
+
+# Next.js build output
+**/.next
+**/out
+**/dist
+
+# Java build output
+apps/api/build
+apps/api/.gradle
+**/.gradle
+
+# IDE và editor
+.idea
+.vscode
+*.iml
+*.iws
+
+# Tests và coverage
+**/coverage
+**/.nyc_output
+**/test-results
+
+# Logs
+*.log
+logs/
+
+# Environment files (không copy vào image)
+.env
+.env.local
+.env.production
+.env.*
+
+# Docker files
+docker/
+**/Dockerfile.dev
+
+# Documentation
+docs/
+*.md
+!apps/api/README.md
+
+# Agent/CI config
+.agent/
+.bmad-output/
+_bmad-output/
+.github/
+
+# macOS
+.DS_Store
+Thumbs.db
+
+# Temp files
+tmp/
+*.tmp

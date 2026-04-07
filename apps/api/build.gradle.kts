@@ -13,6 +13,8 @@ java {
 	}
 }
 
+val springAiVersion = "2.0.0-M4"
+
 configurations {
 	compileOnly {
 		extendsFrom(configurations.annotationProcessor.get())
@@ -21,10 +23,19 @@ configurations {
 
 repositories {
 	mavenCentral()
+	maven { url = uri("https://repo.spring.io/milestone") }
+	maven { url = uri("https://repo.spring.io/snapshot") }
+}
+
+dependencyManagement {
+	imports {
+		mavenBom("org.springframework.ai:spring-ai-bom:$springAiVersion")
+	}
 }
 
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
+	implementation("org.springframework.boot:spring-boot-starter-cache")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	implementation("org.springframework.boot:spring-boot-starter-data-redis")
 	implementation("org.springframework.boot:spring-boot-starter-flyway")
@@ -35,12 +46,11 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
 	implementation("org.flywaydb:flyway-database-postgresql")
 
-	// Spring AI - Groq (LLM + Embeddings)
-	implementation("org.springframework.ai:spring-ai-starter-groq")
-	implementation("org.springframework.ai:spring-ai-starter-openai")
+	// Spring AI - OpenAI (Compatible with Groq)
+	implementation("org.springframework.ai:spring-ai-starter-model-openai")
 
 	// Spring AI - Qdrant VectorStore
-	implementation("org.springframework.ai:spring-ai-starter-vectorstore-qdrant")
+	implementation("org.springframework.ai:spring-ai-starter-vector-store-qdrant")
 
 	// Jackson for JSON processing
 	implementation("com.fasterxml.jackson.core:jackson-databind")
@@ -59,7 +69,7 @@ dependencies {
 	testImplementation("org.springframework.boot:spring-boot-starter-security-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-validation-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
-	testImplementation("org.springframework.ai:spring-ai-starter-test")
+	testImplementation("org.springframework.ai:spring-ai-test")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
