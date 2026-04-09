@@ -18,6 +18,15 @@ spring:
       embedding:
         options:
           model: ${EMBEDDING_MODEL:text-embedding-3-small}
+    vectorstore:
+      qdrant:
+        host: ${QDRANT_HOST:b189ed5b-51e0-4209-8703-12d4728ed745.us-east-2-0.aws.cloud.qdrant.io}
+        port: 6334
+        api-key: ${QDRANT_API_KEY:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIiwic3ViamVjdCI6ImFwaS1rZXk6ZGUyZGFlNGQtNWJhOS00NDE2LWJjZTQtYjlmZTI1OTBiYjhmIn0.t0bnQJpoNO1WDcEu5qH2bD0utg-occzXkEqwnb7eCLA}
+        use-tls: true
+        collection-name: healthlens
+        timeout: 30s
+        vector-dimension: 1024
 
 # App-level AI config
 app:

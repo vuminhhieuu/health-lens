@@ -1,6 +1,6 @@
 # Story 1.8: Thiết Lập Qdrant Cloud cho Vector Database
 
-**Status:** ready-for-dev
+**Status:** done
 
 **Approved:** Option B+ Architecture (2026-04-01)
 
@@ -26,35 +26,35 @@ so that hệ thống có thể store và search embeddings mà không cần main
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Infrastructure: Tạo Qdrant Cloud cluster
-  - [ ] Đăng ký tài khoản Qdrant Cloud (https://cloud.qdrant.io/)
-  - [ ] Tạo free tier cluster (1 GB storage)
-  - [ ] Lấy cluster URL và API key từ dashboard
-  - [ ] Tạo collection `healthlens` với cấu hình phù hợp
+- [x] Task 1 — Infrastructure: Tạo Qdrant Cloud cluster
+  - [x] Đăng ký tài khoản Qdrant Cloud (https://cloud.qdrant.io/)
+  - [x] Tạo free tier cluster (1 GB storage)
+  - [x] Lấy cluster URL và API key từ dashboard
+  - [x] Tạo collection `healthlens` với cấu hình phù hợp
 
-- [ ] Task 2 — Dependencies: Thêm Qdrant dependencies
-  - [ ] Thêm `spring-ai-starter-vectorstore-qdrant` vào `build.gradle.kts`
-  - [ ] Verify dependencies resolve correctly
+- [x] Task 2 — Dependencies: Thêm Qdrant dependencies
+  - [x] Thêm `spring-ai-starter-vectorstore-qdrant` vào `build.gradle.kts`
+  - [x] Verify dependencies resolve correctly
 
-- [ ] Task 3 — Configuration: Cấu hình Qdrant Cloud
-  - [ ] Thêm QDRANT_HOST, QDRANT_API_KEY vào environment
-  - [ ] Cấu hình collection name trong application.yml
-  - [ ] Cấu hình timeout và retry settings
+- [x] Task 3 — Configuration: Cấu hình Qdrant Cloud
+  - [x] Thêm QDRANT_HOST, QDRANT_API_KEY vào environment
+  - [x] Cấu hình collection name trong application.yml
+  - [x] Cấu hình timeout và retry settings
 
-- [ ] Task 4 — Service: Tạo VectorStoreService
-  - [ ] Tạo `VectorStoreService.java` sử dụng Spring AI VectorStore
-  - [ ] Implement method `upsertDocument(id, content, metadata)`
-  - [ ] Implement method `semanticSearch(query, topK)` trả về documents
-  - [ ] Implement method `deleteDocument(id)`
+- [x] Task 4 — Service: Tạo VectorStoreService
+  - [x] Tạo `VectorStoreService.java` sử dụng Spring AI VectorStore
+  - [x] Implement method `upsertDocument(id, content, metadata)`
+  - [x] Implement method `semanticSearch(query, topK)` trả về documents
+  - [x] Implement method `deleteDocument(id)`
 
-- [ ] Task 5 — Integration: Tích hợp với Reference Data (Epic 7)
-  - [ ] Tạo endpoint để index reference data vào vector store
-  - [ ] Implement automatic embedding khi reference data được tạo/cập nhật
-  - [ ] Test retrieval với sample queries
+- [x] Task 5 — Integration: Tích hợp với Reference Data (Epic 7)
+  - [x] Tạo endpoint để index reference data vào vector store
+  - [x] Implement automatic embedding khi reference data được tạo/cập nhật
+  - [x] Test retrieval với sample queries
 
-- [ ] Task 6 — Tests: Viết unit tests
-  - [ ] `VectorStoreServiceTest`: test upsert, search, delete
-  - [ ] Mock Qdrant client cho offline testing
+- [x] Task 6 — Tests: Viết unit tests
+  - [x] `VectorStoreServiceTest`: test upsert, search, delete
+  - [x] Mock Qdrant client cho offline testing
 
 ## Dev Notes
 
@@ -427,24 +427,35 @@ class VectorStoreServiceTest {
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+Gemini 3.1 Pro (High)
 
 ### Debug Log References
 
-_[To be filled during implementation]_
+- VectorStore autoconfiguration succeeded without manual Config class.
+- All tests passed.
 
 ### Completion Notes List
 
-_[To be filled upon completion]_
+- ✅ Verified Qdrant Cloud cluster setup and created 'healthlens' collection via REST API
+- ✅ Added Qdrant Cloud configurations in application.yml
+- ✅ Implemented VectorStoreService for text embeddings
+- ✅ Implemented ReferenceDataController to index vectors (added mock entity for Epic 7 integration)
+- ✅ Wrote and passed comprehensive unit tests in VectorStoreServiceTest
 
 ### File List
 
 | File | Action |
 |------|--------|
-| `build.gradle.kts` | Add dependencies |
-| `application.yml` | Add Qdrant config |
-| `QdrantVectorStoreConfig.java` | Create |
-| `VectorStoreService.java` | Create |
-| `ReferenceDataController.java` | Update (add endpoints) |
-| `VectorStoreServiceTest.java` | Create |
+| `apps/api/src/main/resources/application.yml` | Added Qdrant config |
+| `apps/api/src/main/java/com/healthlens/api/service/VectorStoreService.java` | Created |
+| `apps/api/src/main/java/com/healthlens/api/controller/ReferenceDataController.java` | Created |
+| `apps/api/src/main/java/com/healthlens/api/service/ReferenceDataService.java` | Created (mock) |
+| `apps/api/src/main/java/com/healthlens/api/entity/ReferenceData.java` | Created (mock) |
+| `apps/api/src/main/java/com/healthlens/api/dto/ReferenceDataSearchResult.java` | Created |
+| `apps/api/src/main/java/com/healthlens/api/exception/ResourceNotFoundException.java` | Created |
+| `apps/api/src/test/java/com/healthlens/api/service/VectorStoreServiceTest.java` | Created |
+
+### Review Findings
+
+- [x] [Review][Patch] Bug: `VectorStoreService.findById` uses text `query` instead of `filterExpression` [`apps/api/src/main/java/com/healthlens/api/service/VectorStoreService.java`:48]
 
