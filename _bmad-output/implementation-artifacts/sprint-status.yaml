@@ -68,7 +68,7 @@ development_status:
   # Epic 1: Auth (10 stories) - SPRINT 1
   epic-1: in-progress
   1-1-starter-template-setup: done
-  1-2-email-password-registration: sprint-1
+  1-2-email-password-registration: review
   1-3-secure-login-logout-session: sprint-1
   1-4-password-reset-via-email: sprint-1
   1-5-sensitive-health-data-consent: sprint-1

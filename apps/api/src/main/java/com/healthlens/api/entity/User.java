@@ -1,0 +1,70 @@
+package com.healthlens.api.entity;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.UUID;
+
+@Getter
+@Setter
+@Entity
+@Table(name = "users")
+public class User {
+
+    @Id
+    private UUID id;
+
+    @Column(nullable = false, unique = true, length = 255)
+    private String email;
+
+    @Column(name = "full_name", nullable = false, length = 120)
+    private String fullName;
+
+    @Column(name = "birth_date", nullable = false)
+    private LocalDate birthDate;
+
+    @Column(name = "password_hash", nullable = false, length = 255)
+    private String passwordHash;
+
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private UserRole role;
+
+    @Column(name = "created_at", nullable = false)
+    private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
+    @PrePersist
+    public void prePersist() {
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
+        if (role == null) {
+            role = UserRole.ROLE_USER;
+        }
+        emailVerified = false;
+        Instant now = Instant.now();
+        createdAt = now;
+        updatedAt = now;
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        updatedAt = Instant.now();
+    }
+}
