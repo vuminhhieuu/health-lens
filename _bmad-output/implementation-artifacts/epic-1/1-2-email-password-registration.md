@@ -1,6 +1,6 @@
 # Story 1.2: Đăng ký tài khoản bằng email và mật khẩu
 
-Status: ready-for-dev
+Status: review
 
 ## Execution scope
 
@@ -34,37 +34,37 @@ so that tôi có thể bắt đầu sử dụng HealthLens.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Tạo User entity và Flyway migration (AC: #4)
-  - [ ] Tạo `apps/api/src/main/java/com/healthlens/api/entity/User.java` với fields: id (UUID), email, passwordHash, emailVerified, role, createdAt, updatedAt
-  - [ ] Tạo Flyway migration `V001__create_users_table.sql` trong `apps/api/src/main/resources/db/migration/`
-  - [ ] Index trên `users_uk_email` (unique constraint)
-- [ ] Task 2 — Backend: Register API endpoint (AC: #1, #2, #3)
-  - [ ] Tạo `RegisterRequest` DTO với `@Email`, `@NotBlank` validation
-  - [ ] Tạo `AuthController.java` với `POST /api/v1/auth/register`
-  - [ ] Tạo `AuthService.java` với method `register()`: check duplicate, hash password (BCrypt), save user, send email
-  - [ ] Tạo `UserRepository.java` extends `JpaRepository<User, UUID>`
-  - [ ] Implement `GlobalExceptionHandler` bắt `ConstraintViolationException`, `MethodArgumentNotValidException` → RFC 7807 format
-  - [ ] Tạo email verification token (UUID, lưu bảng `email_verification_tokens`, TTL 24h)
-  - [ ] Tạo Flyway migration `V002__create_email_verification_tokens_table.sql`
-- [ ] Task 3 — Backend: Email service integration (AC: #6)
-  - [ ] Tạo `EmailService.java` với method `sendVerificationEmail(user, token)`
-  - [ ] Cấu hình Spring Mail trong `application.yml` (dev: Mailhog/MailDev local)
-  - [ ] Tạo email template HTML đơn giản tiếng Việt
-- [ ] Task 4 — Web: Register form (AC: #5)
-  - [ ] Tạo page `apps/web/src/app/(auth)/register/page.tsx`
-  - [ ] Form fields: email, password, confirmPassword với React Hook Form + Zod
-  - [ ] Zod schema trong `packages/shared/schemas/auth.ts`
-  - [ ] Error display theo field-level
-  - [ ] Submit → gọi `POST /api/v1/auth/register` qua axios
-  - [ ] Success state: redirect hoặc hiển thị "Kiểm tra email của bạn"
+- [x] Task 1 — Tạo User entity và Flyway migration (AC: #4)
+  - [x] Tạo `apps/api/src/main/java/com/healthlens/api/entity/User.java` với fields: id (UUID), email, passwordHash, emailVerified, role, createdAt, updatedAt
+  - [x] Tạo Flyway migration `V001__create_users_table.sql` trong `apps/api/src/main/resources/db/migration/`
+  - [x] Index trên `users_uk_email` (unique constraint)
+- [x] Task 2 — Backend: Register API endpoint (AC: #1, #2, #3)
+  - [x] Tạo `RegisterRequest` DTO với `@Email`, `@NotBlank` validation
+  - [x] Tạo `AuthController.java` với `POST /api/v1/auth/register`
+  - [x] Tạo `AuthService.java` với method `register()`: check duplicate, hash password (BCrypt), save user, send email
+  - [x] Tạo `UserRepository.java` extends `JpaRepository<User, UUID>`
+  - [x] Implement `GlobalExceptionHandler` bắt `ConstraintViolationException`, `MethodArgumentNotValidException` → RFC 7807 format
+  - [x] Tạo email verification token (UUID, lưu bảng `email_verification_tokens`, TTL 24h)
+  - [x] Tạo Flyway migration `V002__create_email_verification_tokens_table.sql`
+- [x] Task 3 — Backend: Email service integration (AC: #6)
+  - [x] Tạo `EmailService.java` với method `sendVerificationEmail(user, token)`
+  - [x] Cấu hình Spring Mail trong `application.yml` (dev: Mailhog/MailDev local)
+  - [x] Tạo email template HTML đơn giản tiếng Việt
+- [x] Task 4 — Web: Register form (AC: #5)
+  - [x] Tạo page `apps/web/src/app/(auth)/register/page.tsx`
+  - [x] Form fields: email, password, confirmPassword với React Hook Form + Zod
+  - [x] Zod schema trong `packages/shared/schemas/auth.ts`
+  - [x] Error display theo field-level
+  - [x] Submit → gọi `POST /api/v1/auth/register` qua axios
+  - [x] Success state: redirect hoặc hiển thị "Kiểm tra email của bạn"
 - [ ] Task 5 — Mobile (Phase 2): Register screen (AC: #5)
   - [ ] Tạo screen `apps/mobile/app/(auth)/register.tsx`
   - [ ] Form fields tương tự web, React Hook Form + Zod shared schema
   - [ ] Native keyboard handling và accessibility labels
-- [ ] Task 6 — Tests (AC: #1, #2, #3, #4)
-  - [ ] Backend unit test: `AuthServiceTest` — register thành công, email trùng, password yếu
-  - [ ] Backend integration test: `AuthControllerTest` — POST /api/v1/auth/register với MockMvc
-  - [ ] Web component test: form validation với Vitest
+- [x] Task 6 — Tests (AC: #1, #2, #3, #4)
+  - [x] Backend unit test: `AuthServiceTest` — register thành công, email trùng, password yếu
+  - [x] Backend integration test: `AuthControllerTest` — POST /api/v1/auth/register với MockMvc
+  - [x] Web component test: form validation với Vitest
 
 ## Dev Notes
 
@@ -176,10 +176,54 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+gpt-5.3-codex
 
 ### Debug Log References
 
+- `pnpm --filter web test`: pass (1 test, `src/app/(auth)/register/page.test.tsx`).
+- `./gradlew test --no-daemon --tests '*Auth*'`: pass sau khi bổ sung test cho DB integrity violation -> 409 và cập nhật mock `saveAndFlush`.
+- `./gradlew test --no-daemon`: pass toàn bộ backend test suite sau khi thêm integration test kiểm tra trạng thái user trong DB.
+
 ### Completion Notes List
 
+- Hoàn thành flow đăng ký backend: tạo user, hash bcrypt strength 12, chống email trùng, tạo token xác thực email TTL 24h, trả response 201.
+- Bổ sung RFC 7807 cho lỗi trùng email (409) và validation lỗi có field-level details.
+- Bổ sung xử lý race condition email trùng ở tầng DB: bắt `DataIntegrityViolationException` và map về RFC 7807 status 409.
+- Hoàn thành web register form với React Hook Form + Zod validation realtime và submit qua axios tới API register.
+- Thêm shared schema `registerSchema` và export qua `packages/shared/schemas/index.ts`.
+- Hoàn thành test coverage cho story scope: `AuthServiceTest`, `AuthControllerTest`, `AuthServiceIntegrationTest`, và Vitest cho register form.
+- Task 5 (Mobile Phase 2) giữ nguyên chưa thực hiện theo execution scope của story (Phase 1 Web MVP).
+
 ### File List
+
+- apps/api/src/main/java/com/healthlens/api/config/SecurityConfig.java
+- apps/api/src/main/java/com/healthlens/api/controller/AuthController.java
+- apps/api/src/main/java/com/healthlens/api/dto/request/RegisterRequest.java
+- apps/api/src/main/java/com/healthlens/api/entity/User.java
+- apps/api/src/main/java/com/healthlens/api/entity/UserRole.java
+- apps/api/src/main/java/com/healthlens/api/entity/EmailVerificationToken.java
+- apps/api/src/main/java/com/healthlens/api/exception/EmailAlreadyExistsException.java
+- apps/api/src/main/java/com/healthlens/api/exception/WeakPasswordException.java
+- apps/api/src/main/java/com/healthlens/api/exception/GlobalExceptionHandler.java
+- apps/api/src/main/java/com/healthlens/api/repository/UserRepository.java
+- apps/api/src/main/java/com/healthlens/api/repository/EmailVerificationTokenRepository.java
+- apps/api/src/main/java/com/healthlens/api/service/AuthService.java
+- apps/api/src/main/java/com/healthlens/api/service/EmailService.java
+- apps/api/src/main/resources/application.yml
+- apps/api/src/main/resources/db/migration/V001__create_users_table.sql
+- apps/api/src/main/resources/db/migration/V002__create_email_verification_tokens_table.sql
+- apps/api/src/test/java/com/healthlens/api/controller/AuthControllerTest.java
+- apps/api/src/test/java/com/healthlens/api/service/AuthServiceTest.java
+- apps/api/src/test/java/com/healthlens/api/service/AuthServiceIntegrationTest.java
+- apps/web/package.json
+- apps/web/vitest.config.ts
+- apps/web/vitest.setup.ts
+- apps/web/src/app/(auth)/register/page.tsx
+- apps/web/src/app/(auth)/register/page.test.tsx
+- packages/shared/schemas/auth.ts
+- packages/shared/schemas/index.ts
+
+## Change Log
+
+- 2026-04-11: Implement Story 1.2 (Phase 1 scope): backend register API + RFC7807 errors + email verification token/migrations + web register form + tests (API/Web). Story moved to `review`, mobile phase 2 task deferred.
+- 2026-04-11: Review-fix applied: xử lý race condition duplicate email về RFC7807 `409`, thêm integration test kiểm tra trạng thái user trong DB (bcrypt hash, `email_verified=false`, `ROLE_USER`), toàn bộ backend tests pass.
