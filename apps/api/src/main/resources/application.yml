@@ -30,7 +30,7 @@ spring:
         timeout: 30s
         vector-dimension: 1024
 
-# App-level AI config
+# App-level config
 app:
   ai:
     primary: groq
@@ -49,6 +49,24 @@ app:
     textract:
       enabled: false
       region: ${AWS_REGION:ap-southeast-1}
+  cookie:
+    secure: ${APP_COOKIE_SECURE:true}
+  security:
+    blacklist-fail-closed: ${APP_SECURITY_BLACKLIST_FAIL_CLOSED:false}
+    rate-limit-fail-closed: ${APP_SECURITY_RATE_LIMIT_FAIL_CLOSED:false}
+
+jwt:
+  secret: ${JWT_SECRET:dev-test-secret-key-min-32-chars-for-local}
+  access-ttl: 900000     # 15 minutes in ms
+  refresh-ttl: 604800000  # 7 days in ms
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
 
 ---
 spring:
@@ -75,6 +93,9 @@ app:
     from: ${MAIL_FROM:no-reply@healthlens.vn}
   frontend:
     verification-url: ${WEB_VERIFY_URL:http://localhost:3000/verify-email}
+
+jwt:
+  secret: ${JWT_SECRET:healthlens-dev-secret-key-must-be-at-least-256-bits-long-for-hs256-algo}
 
 healthlens:
   ocr:

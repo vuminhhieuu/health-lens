@@ -1,10 +1,14 @@
 package com.healthlens.api.exception;
 
+import com.healthlens.api.security.LoginRateLimiter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.ProblemDetail;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -16,6 +20,41 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private final LoginRateLimiter rateLimiter;
+
+    public GlobalExceptionHandler(LoginRateLimiter rateLimiter) {
+        this.rateLimiter = rateLimiter;
+    }
+
+    /**
+     * AC #6: 429 Too Many Requests with Retry-After header
+     */
+    @ExceptionHandler(AccountLockedException.class)
+    public ResponseEntity<ProblemDetail> handleAccountLocked(AccountLockedException ex, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+        problem.setType(URI.create("https://healthlens.vn/errors/account-locked"));
+        problem.setTitle("Tai khoan bi khoa tam thoi");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        problem.setProperty("retryAfterSeconds", ex.getRetryAfterSeconds());
+        
+        return ResponseEntity
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .body(problem);
+    }
+
+    /**
+     * AC #5: 401 Unauthorized with generic message (no email leak)
+     */
+    @ExceptionHandler(BadCredentialsException.class)
+    public ProblemDetail handleBadCredentials(BadCredentialsException ex, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problem.setType(URI.create("https://healthlens.vn/errors/unauthorized"));
+        problem.setTitle("Unauthorized");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        return problem;
+    }
 
     @ExceptionHandler(EmailAlreadyExistsException.class)
     public ProblemDetail handleEmailExists(EmailAlreadyExistsException ex, HttpServletRequest request) {
