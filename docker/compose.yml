@@ -1,0 +1,91 @@
+# ============================================
+# HealthLens Docker Compose - Base Services
+# ============================================
+#
+# Shared services used by development environment.
+# Production uses managed cloud services instead.
+#
+# Usage:
+#   Development:  docker compose -f compose.yml -f compose.dev.yml up
+#   Production:   (No compose needed - uses cloud services + SSH deploy)
+#
+# Profiles:
+#   core  - Redis, MinIO (default)
+#   mail  - Mailhog (dev only)
+#   ocr   - OCR Service (dev only)
+
+name: healthlens
+
+services:
+  # ==========================================
+  # Redis - Caching & Session Store
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-healthlens}-redis
+    restart: unless-stopped
+    networks:
+      - healthlens
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # MinIO - S3-compatible Object Storage
+  # ==========================================
+  minio:
+    image: minio/minio:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-healthlens}-minio
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    networks:
+      - healthlens
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # Mailhog - Email Testing (Dev only)
+  # NOTE: Moved to compose.dev.yml (no profile = always starts)
+  # ==========================================
+
+networks:
+  healthlens:
+    name: ${COMPOSE_NETWORK:-healthlens-network}
+    driver: bridge
+
+volumes:
+  redis_data:
+    name: ${COMPOSE_PROJECT_NAME:-healthlens}-redis-data
+  minio_data:
+    name: ${COMPOSE_PROJECT_NAME:-healthlens}-minio-data
+
+# ============================================
+# SERVICE MATRIX
+# ============================================
+#
+# | Service      | Dev (Docker) | Staging        | Production        |
+# |--------------|--------------|----------------|-------------------|
+# | PostgreSQL   | Docker       | Neon branch    | Neon main         |
+# | Redis        | Docker       | Railway addon  | Railway addon     |
+# | MinIO        | Docker       | S3 Cloud       | S3 Cloud          |
+# | Mail         | Mailhog/SMTP | SMTP (Resend)  | SMTP (Resend)     |
+# | Qdrant       | Cloud        | Cloud          | Cloud             |
+#
+# NOTE: Dev uses Docker Compose.
+#       Staging uses Vercel + Railway (no Docker).
+#       Production uses Docker via SSH deploy.

@@ -1,36 +1,98 @@
-# HealthLens API - Spring Boot
-FROM eclipse-temurin:21-jdk AS builder
+# ============================================
+# HealthLens API - Spring Boot Dockerfile
+# Multi-stage build for optimized production image
+# ============================================
+#
+# Build stages:
+#   1. deps    - Download dependencies (cached)
+#   2. builder - Compile and create JAR
+#   3. runner  - Minimal runtime image
+#
+# Build context: Project root (where docker-compose.yml is)
+#
+# Usage:
+#   docker build -t healthlens-api:latest -f apps/api/Dockerfile .
+#   docker build --target builder -t healthlens-api:dev -f apps/api/Dockerfile .
+
+# ============================================
+# Stage 1: Dependencies
+# ============================================
+FROM eclipse-temurin:21-jdk-alpine AS deps
 
 WORKDIR /app
 
-COPY gradle gradle
-COPY gradlew build.gradle.kts settings.gradle.kts gradle.properties ./
+# Copy gradle files from apps/api/ relative to build context
+COPY apps/api/gradle apps/api/gradle
+COPY apps/api/gradlew apps/api/gradlew
+COPY apps/api/build.gradle.kts apps/api/build.gradle.kts
+COPY apps/api/settings.gradle.kts apps/api/settings.gradle.kts
+COPY apps/api/gradle.properties apps/api/gradle.properties
 
-RUN chmod +x gradlew
-RUN ./gradlew dependencies --no-daemon
+# Download dependencies
+RUN chmod +x apps/api/gradlew \
+    && cd apps/api \
+    && ./gradlew dependencies --no-daemon --console=plain
 
-COPY src ./src
-RUN ./gradlew bootJar --no-daemon
-
-FROM eclipse-temurin:21-jre
+# ============================================
+# Stage 2: Builder
+# ============================================
+FROM eclipse-temurin:21-jdk-alpine AS builder
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends wget \
-    && rm -rf /var/lib/apt/lists/*
+# Copy gradle files
+COPY apps/api/gradle apps/api/gradle
+COPY apps/api/gradlew apps/api/gradlew
+COPY apps/api/build.gradle.kts apps/api/build.gradle.kts
+COPY apps/api/settings.gradle.kts apps/api/settings.gradle.kts
+COPY apps/api/gradle.properties apps/api/gradle.properties
 
-RUN groupadd -g 1001 appgroup && useradd -u 1001 -g appgroup -m -s /bin/sh appuser
+# Copy cached dependencies from deps stage
+COPY --from=deps /app/apps/api/.gradle apps/api/.gradle
 
-COPY --from=builder /app/build/libs/*.jar app.jar
+# Copy source code and build
+COPY apps/api/src apps/api/src
+RUN chmod +x apps/api/gradlew \
+    && cd apps/api \
+    && ./gradlew bootJar --no-daemon --console=plain \
+    && ls -la build/libs/
 
+# ============================================
+# Stage 3: Runner (Production)
+# ============================================
+FROM eclipse-temurin:21-jre-alpine AS runner
+
+WORKDIR /app
+
+# Security: Create non-root user
+RUN addgroup -g 1001 -S appgroup \
+    && adduser -u 1001 -S appuser -G appgroup
+
+# Install minimal runtime tools
+RUN apk add --no-cache wget curl \
+    && rm -rf /var/cache/apk/*
+
+# Copy JAR from builder (in apps/api subdirectory)
+COPY --from=builder /app/apps/api/build/libs/*.jar app.jar
+
+# Set ownership
 RUN chown -R appuser:appgroup /app
 
+# Switch to non-root user
 USER appuser
 
+# Expose port
 EXPOSE 8080
 
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
+    CMD wget --no-verbose --tries=1 -q -O- http://localhost:8080/actuator/health/liveness \
+    || curl -f http://localhost:8080/actuator/health/liveness \
+    || exit 1
 
-ENTRYPOINT ["java", "-Dio.grpc.netty.shaded.io.netty.handler.ssl.noOpenSsl=true", "-Dio.netty.handler.ssl.noOpenSsl=true", "-jar", "-Xms512m", "-Xmx1024m", "/app/app.jar"]
+# JVM tuning
+ENV JAVA_OPTS="-XX:+UseContainerSupport \
+    -XX:MaxRAMPercentage=75.0 \
+    -Dio.netty.handler.ssl.noOpenSsl=true"
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]

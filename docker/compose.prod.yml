@@ -1,0 +1,137 @@
+# ============================================
+# HealthLens - Production Environment
+# ============================================
+#
+# Production deployment via SSH + Docker on dedicated server.
+# Uses cloud managed services instead of local Docker.
+#
+# Prerequisites:
+#   - Server with Docker installed
+#   - SSH access configured
+#   - Environment secrets set in .env.production
+#
+# Usage:
+#   docker compose -f compose.yml -f compose.prod.yml --env-file .env.production up -d
+#
+# Production services:
+#   - API: Spring Boot (connects to Neon, Redis, Qdrant cloud)
+#   - Web: Next.js standalone
+#
+# NOT included in production compose:
+#   - PostgreSQL (uses Neon cloud)
+#   - Redis (uses Railway managed)
+#   - MinIO (uses S3 cloud)
+#   - Mailhog (uses Resend/SendGrid)
+
+services:
+  # ==========================================
+  # API - Spring Boot Production
+  # ==========================================
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-healthlens}-api-prod
+    restart: unless-stopped
+    networks:
+      - healthlens
+    expose:
+      - "8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=production
+      - SPRING_PROGRAM_NAME=healthlens-api
+      # Database (Neon cloud)
+      - DB_URL=${NEON_DATABASE_URL}
+      # Redis (managed)
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      # Email (Resend)
+      - MAIL_DRIVER=${MAIL_DRIVER:-resend}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - MAIL_FROM=${MAIL_FROM}
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-WARN}
+    env_file:
+      - ../.env.production
+    deploy:
+      replicas: ${API_REPLICAS:-2}
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 30s
+        failure_action: rollback
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -q -O- http://localhost:8080/actuator/health/liveness || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ==========================================
+  # Web - Next.js Production
+  # ==========================================
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-healthlens}-web-prod
+    restart: unless-stopped
+    networks:
+      - healthlens
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+    env_file:
+      - ../.env.production
+    deploy:
+      replicas: ${WEB_REPLICAS:-2}
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 30s
+        failure_action: rollback
+    depends_on:
+      - api
+
+  # ==========================================
+  # Nginx - Reverse Proxy (Optional)
+  # ==========================================
+  # Uncomment nếu cần reverse proxy với SSL termination
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: ${COMPOSE_PROJECT_NAME:-healthlens}-nginx
+  #   restart: unless-stopped
+  #   networks:
+  #     - healthlens
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./nginx/ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - api
+  #     - web

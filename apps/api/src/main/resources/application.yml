@@ -10,8 +10,8 @@ spring:
   ai:
     openai:
       # Groq API (OpenAI-compatible)
-      api-key: ${GROQ_API_KEY:dev-placeholder}
-      base-url: https://api.groq.com/openai
+      api-key: ${GROQ_API_KEY:?GROQ_API_KEY is required}
+      base-url: ${GROQ_BASE_URL:https://api.groq.com/openai}
       chat:
         options:
           model: ${GROQ_CHAT_MODEL:qwen-2.5-72b-versatile}
@@ -22,13 +22,13 @@ spring:
           model: ${EMBEDDING_MODEL:text-embedding-3-small}
     vectorstore:
       qdrant:
-        host: ${QDRANT_HOST:b189ed5b-51e0-4209-8703-12d4728ed745.us-east-2-0.aws.cloud.qdrant.io}
-        port: 6334
-        api-key: ${QDRANT_API_KEY:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIiwic3ViamVjdCI6ImFwaS1rZXk6ZGUyZGFlNGQtNWJhOS00NDE2LWJjZTQtYjlmZTI1OTBiYjhmIn0.t0bnQJpoNO1WDcEu5qH2bD0utg-occzXkEqwnb7eCLA}
-        use-tls: true
-        collection-name: healthlens
+        host: ${QDRANT_HOST:localhost}
+        port: ${QDRANT_PORT:6333}
+        api-key: ${QDRANT_API_KEY:test-api-key}
+        use-tls: false
+        collection-name: ${QDRANT_COLLECTION:healthlens}
         timeout: 30s
-        vector-dimension: 1024
+        vector-dimension: ${QDRANT_VECTOR_DIMENSION:1024}
 
 # App-level config
 app:
@@ -102,3 +102,119 @@ healthlens:
     api-key: ${OCR_API_KEY:dev-placeholder}
   llm:
     api-key: ${LLM_API_KEY:dev-placeholder}
+
+---
+# Staging Profile - Railway + Neon
+spring:
+  config:
+    activate:
+      on-profile: staging
+  datasource:
+    url: ${DB_URL:?Database URL is required}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 5000
+  mail:
+    host: smtp.resend.com
+    port: 587
+    username: ${RESEND_API_KEY}
+    password: ${RESEND_API_KEY}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+app:
+  mail:
+    from: ${MAIL_FROM:noreply@healthlens.vn}
+    driver: ${MAIL_DRIVER:resend}
+  frontend:
+    verification-url: ${WEB_VERIFY_URL:https://healthlens-staging.vercel.app/auth/verify-email}
+    reset-password-url: ${WEB_RESET_PASSWORD_URL:https://healthlens-staging.vercel.app/auth/reset-password}
+    login-url: ${WEB_LOGIN_URL:https://healthlens-staging.vercel.app/auth/login}
+  storage:
+    endpoint: ${MINIO_ENDPOINT:}
+    access-key: ${MINIO_ACCESS_KEY:}
+    secret-key: ${MINIO_SECRET_KEY:}
+    bucket: ${MINIO_BUCKET:healthlens-staging}
+    use-ssl: true
+
+jwt:
+  secret: ${JWT_SECRET:?JWT_SECRET is required}
+
+healthlens:
+  ocr:
+    api-key: ${OCR_API_KEY:}
+    service-url: ${OCR_SERVICE_URL:}
+
+---
+# Production Profile
+spring:
+  config:
+    activate:
+      on-profile: production
+  datasource:
+    url: ${DB_URL:?Database URL is required}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 5000
+  mail:
+    host: smtp.resend.com
+    port: 587
+    username: ${RESEND_API_KEY}
+    password: ${RESEND_API_KEY}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+  flyway:
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+app:
+  mail:
+    from: ${MAIL_FROM:noreply@healthlens.vn}
+    driver: resend
+  cookie:
+    secure: true
+  frontend:
+    verification-url: ${WEB_VERIFY_URL:https://healthlens.vn/auth/verify-email}
+    reset-password-url: ${WEB_RESET_PASSWORD_URL:https://healthlens.vn/auth/reset-password}
+    login-url: ${WEB_LOGIN_URL:https://healthlens.vn/auth/login}
+  storage:
+    endpoint: ${MINIO_ENDPOINT:}
+    access-key: ${MINIO_ACCESS_KEY:}
+    secret-key: ${MINIO_SECRET_KEY:}
+    bucket: ${MINIO_BUCKET:healthlens-prod}
+    use-ssl: true
+
+jwt:
+  secret: ${JWT_SECRET:?JWT_SECRET is required}

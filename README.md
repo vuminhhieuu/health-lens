@@ -9,240 +9,277 @@ HealthLens is a monorepo containing a full-stack healthcare application that hel
 - Get AI-powered explanations of health metrics in Vietnamese
 - Track and manage health records over time
 
-### Architecture
+## Architecture
 
-HealthLens uses **Option B+ (Fully Cloud)** architecture optimized for development on resource-constrained laptops (16GB RAM):
-
-| Component | Technology | Location |
-|-----------|------------|----------|
-| Database | PostgreSQL | Neon Cloud (managed) |
-| Vector DB | Qdrant | Qdrant Cloud (managed) |
-| LLM | Groq API | Cloud (qwen-2.5-72b) |
-| Embeddings | Groq API | Cloud (embed-multilingual-v3) |
-| OCR | EasyOCR | Local Docker |
-| Object Storage | MinIO / AWS S3 | Local / Cloud |
-| Backend | Spring Boot 4.0 | Docker |
-| Frontend | Next.js 16 | Docker |
+| Component | Technology | Dev | Staging | Production |
+|-----------|------------|-----|---------|------------|
+| Database | PostgreSQL | Docker | Neon | Neon |
+| Redis | Redis | Docker | Railway | Railway |
+| Object Storage | MinIO/S3 | Docker | S3 | S3 |
+| Email | SMTP | Mailhog/Resend | Resend | Resend |
+| Vector DB | Qdrant | Cloud | Cloud | Cloud |
+| LLM | Groq API | Cloud | Cloud | Cloud |
+| API | Spring Boot | Docker | Railway | Docker SSH |
+| Web | Next.js | Docker | Vercel | Docker SSH |
 
 ## Project Structure
 
 ```
 healthlens/
 ├── apps/
-│   ├── api/           # Spring Boot 4.0 REST API
-│   ├── web/           # Next.js 16 frontend
-│   └── mobile/        # Expo mobile app (Phase 2)
+│   ├── api/              # Spring Boot 4.0 REST API
+│   ├── web/              # Next.js 16 frontend
+│   └── mobile/           # Expo mobile app (Phase 2)
 ├── packages/
-│   └── shared/        # Shared types, schemas, constants
-├── docker/
-│   └── docker-compose.dev.yml
-└── docs/              # Documentation
+│   └── shared/           # Shared types, schemas, constants
+├── services/
+│   └── ocr-service/      # EasyOCR FastAPI service
+├── docker/               # Docker configuration
+│   ├── compose.yml       # Base services (Redis, MinIO)
+│   ├── compose.dev.yml   # Development (PostgreSQL, API, Web)
+│   ├── compose.prod.yml  # Production (API, Web)
+│   └── scripts/          # Helper scripts
+├── .env                  # Development environment
+├── .env.production       # Production environment
+└── .env.example         # Environment template
 ```
 
 ## Prerequisites
 
 | Tool | Version | Notes |
 |------|---------|-------|
-| Java | 21+ | Required for Spring Boot |
-| Node.js | 20+ | Required for Next.js |
-| pnpm | 9+ | Package manager |
 | Docker | 24+ | For containerized services |
 | Docker Compose | 2.20+ | Service orchestration |
 
+---
+
 ## Quick Start
 
-### 1. Clone and Install
-
 ```bash
-git clone https://github.com/your-org/healthlens.git
-cd healthlens
-pnpm install
-```
-
-### 2. Configure Environment
-
-Copy the environment template and fill in your credentials:
-
-```bash
+# 1. Copy environment file
 cp .env.example .env
+
+# 2. Configure .env with your credentials
+#    - Add Groq API key
+#    - Add Qdrant credentials
+#    - (Optional) Add Resend API key for real emails
+
+# 3. Start development environment
+cd docker
+./scripts/up.sh
+
+# 4. View logs
+./scripts/logs.sh api -f
 ```
 
-Required environment variables:
+---
+
+## Development Environment
+
+### Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| API | 8080 | Spring Boot backend |
+| Web | 3000 | Next.js frontend |
+| PostgreSQL | 5432 | Local database |
+| Redis | 6379 | Caching & sessions |
+| MinIO | 9000/9001 | S3 storage + Console |
+| Mailhog | 1025/8025 | Email testing UI |
+
+### Start Development
 
 ```bash
-# Neon PostgreSQL (https://neon.tech)
-NEON_DATABASE_URL=postgresql://user:pass@host/db?sslmode=require
-NEON_USER=your-username
-NEON_PASSWORD=your-password
+# All services (API, Web, PostgreSQL, Redis, MinIO)
+cd docker
+./scripts/up.sh
 
-# Groq API (https://console.groq.com)
+# With Mailhog (email testing)
+./scripts/up.sh --mail
+
+# With OCR Service (~2GB RAM)
+./scripts/up.sh --ocr
+
+# Rebuild images
+./scripts/up.sh --build
+
+# Stop
+./scripts/down.sh
+```
+
+### Email Configuration
+
+Dev environment supports two options:
+
+**Option 1: Mailhog (Default)**
+```bash
+# Emails captured locally, view at http://localhost:8025
+# No real emails sent
+```
+
+**Option 2: Resend (Real emails)**
+```bash
+# In .env, uncomment Resend section:
+MAIL_ENABLED=true
+MAIL_DRIVER=resend
+RESEND_API_KEY=re_xxxxxxxxxxxx
+MAIL_FROM=noreply@healthlens.vn
+```
+
+### Scripts
+
+```bash
+./scripts/up.sh          # Start all services
+./scripts/up.sh --mail  # Include Mailhog
+./scripts/up.sh --build # Rebuild images
+./scripts/down.sh       # Stop services
+./scripts/down.sh -v    # Stop and remove volumes
+./scripts/logs.sh api   # View API logs
+```
+
+---
+
+## Environment Files
+
+| File | Purpose | Git |
+|------|---------|-----|
+| `.env` | Development | `.gitignore` |
+| `.env.staging` | Vercel staging | `.gitignore` |
+| `.env.staging.api` | Railway staging | `.gitignore` |
+| `.env.production` | Production server | `.gitignore` |
+| `.env.example` | Template | ✅ Commit |
+
+### .env Variables
+
+```bash
+# Database
+DB_HOST=postgres
+DB_NAME=healthlens_dev
+
+# Email
+MAIL_HOST=mailhog          # or Resend API
+RESEND_API_KEY=re_xxx
+
+# External Services
 GROQ_API_KEY=sk-xxxxx
-
-# Qdrant Cloud (https://cloud.qdrant.io)
-QDRANT_HOST=https://xxxx.cloud.qdrant.io
-QDRANT_API_KEY=qdrant_api_key_xxxx
+QDRANT_HOST=https://xxx.qdrant.io
 ```
 
-### 3. Start Services
+---
 
+## Deployment
+
+### Branch Strategy
+
+| Branch | Deploy To | Purpose |
+|--------|-----------|---------|
+| `dev` | Vercel + Railway | Development testing |
+| `staging` | Vercel + Railway | Pre-production testing |
+| `main` | Production server | Live production |
+
+### Staging Deployment
+
+Push to `staging` branch → Manual deploy:
+
+**1. Create staging branch:**
 ```bash
-# Start all core services (API, Web, MinIO)
-docker compose -f docker/docker-compose.dev.yml up -d
-
-# Or start with optional services
-docker compose -f docker/docker-compose.dev.yml \
-  --profile with-ocr \
-  --profile with-mail \
-  up -d
+git checkout dev
+git checkout -b staging
+git push origin staging
 ```
 
-### 4. Verify Services
+**2. Configure services:**
 
-| Service | URL | Description |
-|---------|-----|-------------|
-| Web App | http://localhost:3000 | Frontend |
-| API | http://localhost:8080 | REST API |
-| API Health | http://localhost:8080/actuator/health | Health check |
-| MinIO Console | http://localhost:9001 | Object storage UI |
-| Mailhog | http://localhost:8025 | Email testing (with --profile with-mail) |
+| Service | Platform | Setup Guide |
+|---------|----------|-------------|
+| Web | Vercel | [Staging Deployment](docs/STAGING_DEPLOYMENT.md) |
+| API | Railway | Import repo, set `apps/api` as root |
+| Database | Neon | Free tier PostgreSQL |
+| OCR | Railway | Import repo, set `services/ocr-service` as root |
+| Storage | MinIO Cloud / AWS S3 | Create bucket |
 
-## Development
+**3. Environment variables:**
+- See `.env.staging` for Web (Vercel)
+- See `.env.staging.api` for API (Railway)
 
-### Running Services Locally
+### Production (Docker SSH)
 
-For iterative development, run services outside Docker:
+Push to `main` branch → GitHub Actions:
+1. Build Docker images
+2. Push to GHCR
+3. SSH to server
+4. Pull images & restart containers
 
-```bash
-# API (Spring Boot)
-cd apps/api
-./gradlew bootRun --args='--spring.profiles.active=dev'
+Required GitHub Secrets:
+- `PRODUCTION_SSH_KEY`
+- `PRODUCTION_HOST`
+- `PRODUCTION_USER`
 
-# Web (Next.js)
-cd apps/web
-pnpm dev
-```
+---
 
-### Running Tests
+## Testing
 
 ```bash
 # All tests
 pnpm test
 
-# API tests only
-cd apps/api
-./gradlew test
+# API tests
+cd apps/api && ./gradlew test
 
-# Web tests only
-cd apps/web
-pnpm test
+# Web tests
+cd apps/web && pnpm test
 ```
 
-### Building for Production
+---
 
-```bash
-# Build Docker images
-docker compose -f docker/docker-compose.dev.yml build
-
-# Or build individually
-docker build -t healthlens/api ./apps/api
-docker build -t healthlens/web ./apps/web
-```
-
-## Services Reference
-
-### Core Services
-
-| Service | Description | Port |
-|---------|-------------|------|
-| **api** | Spring Boot REST API | 8080 |
-| **web** | Next.js frontend | 3000 |
-| **minio** | S3-compatible object storage | 9000/9001 |
-
-### Optional Services
-
-Enable with `--profile` flag:
-
-| Profile | Service | Description |
-|---------|---------|-------------|
-| `with-ocr` | EasyOCR | Local OCR processing (~500MB RAM) |
-| `with-redis` | Redis | Caching layer |
-| `with-mail` | Mailhog | Email testing interface |
-
-## API Documentation
-
-### Authentication
-
-HealthLens uses JWT-based authentication. Include the token in requests:
-
-```bash
-curl -H "Authorization: Bearer <token>" \
-  http://localhost:8080/api/v1/health-records
-```
-
-### Key Endpoints
+## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/v1/auth/register` | User registration |
 | POST | `/api/v1/auth/login` | User login |
-| GET | `/api/v1/health-records` | List health records |
-| POST | `/api/v1/health-records` | Upload new record |
-| POST | `/api/v1/ocr/extract` | Extract metrics via OCR |
-| POST | `/api/v1/llm/explain` | Get metric explanation |
-| GET | `/api/v1/reference-data/search` | Search reference data |
+| POST | `/api/v1/auth/refresh` | Refresh token |
+| GET | `/api/v1/profiles` | List profiles |
+| POST | `/api/v1/health-records` | Upload record |
+| POST | `/api/v1/ocr/extract` | OCR extraction |
+
+---
 
 ## Troubleshooting
 
 ### Port Conflicts
-
-If ports are already in use:
-
 ```bash
-# Check what's using port 8080
-lsof -i :8080
-
-# Check what's using port 3000
-lsof -i :3000
+lsof -i :8080  # API
+lsof -i :3000  # Web
+lsof -i :5432  # PostgreSQL
 ```
 
-### Database Connection Issues
+### Database Issues
+```bash
+# Check PostgreSQL logs
+docker compose logs postgres
 
-1. Verify Neon credentials in `.env`
-2. Check Neon dashboard for connection issues
-3. Ensure your IP is whitelisted in Neon
-
-### OCR Service Not Starting
-
-The OCR service requires significant memory. Ensure Docker has adequate resources:
-
-```json
-{
-  "memory": 4096,
-  "vm.memory": 4096
-}
+# Recreate database
+docker compose -f compose.yml -f compose.dev.yml down -v
+docker compose -f compose.yml -f compose.dev.yml up -d
 ```
 
-### MinIO Access Issues
+### OCR Memory
+OCR requires ~2GB RAM. Enable with `--ocr` profile.
 
-Default credentials for local development:
-- Access Key: `minioadmin`
-- Secret Key: `minioadmin`
-
-Create a bucket named `healthlens` in the MinIO console.
+---
 
 ## Contributing
 
-1. Create a feature branch: `git checkout -b feature/my-feature`
-2. Commit changes: `git commit -m 'feat: add new feature'`
-3. Push to branch: `git push origin feature/my-feature`
-4. Open a Pull Request
-
-## License
-
-MIT License - see LICENSE file for details.
+```bash
+git checkout -b feature/my-feature
+git commit -m 'feat: add feature'
+git push origin feature/my-feature
+# Open Pull Request
+```
 
 ## Support
 
-- Documentation: `/docs`
+- Docs: `/docs`
 - Architecture: `_bmad-output/planning-artifacts/`
 - Stories: `_bmad-output/implementation-artifacts/`

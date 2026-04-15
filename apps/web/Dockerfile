@@ -1,44 +1,52 @@
-# HealthLens Web - Next.js
-FROM node:20-alpine AS base
+# ============================================
+# HealthLens Web - Next.js Dockerfile
+# ============================================
+FROM node:20-alpine
 
-FROM base AS deps
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@9
+
+# Copy workspace config and lockfile
+COPY pnpm-workspace.yaml ./
+COPY pnpm-lock.yaml ./
+
+# Copy all package.json files for dependency resolution
+COPY package.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/web/package.json ./apps/web/
 
-RUN npm install -g pnpm@9 && pnpm install --frozen-lockfile
+# Install dependencies (will resolve workspace packages)
+RUN pnpm install --frozen-lockfile
 
-FROM base AS builder
+# Copy source code
+COPY packages/shared ./packages/shared
+COPY apps/web ./apps/web
+
+# Build shared package first (creates proper exports)
+WORKDIR /app/packages/shared
+RUN pnpm build || true
+
+# Build Next.js
+WORKDIR /app/apps/web
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN pnpm build
+
+# Final stage
+FROM node:20-alpine
+
 WORKDIR /app
 
-RUN npm install -g pnpm@9
+COPY --from=0 /app/apps/web/.next/standalone ./
+COPY --from=0 /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=0 /app/apps/web/public ./apps/web/public
 
-# Copy toàn bộ workspace đã install từ deps (bao gồm node_modules của từng package)
-# Dùng COPY /app thay vì chỉ /app/node_modules để giữ nguyên pnpm workspace structure
-COPY --from=deps /app ./
-COPY . .
-
-RUN pnpm --filter web build
-
-FROM base AS runner
-WORKDIR /app
-
-ENV NODE_ENV=production
-
-RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
-
-COPY --from=builder /app/apps/web/public ./apps/web/public
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
-
+RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -S nextjs -G nodejs
 USER nextjs
 
 EXPOSE 3000
-
 ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
+ENV NODE_ENV=production
 
-# Trong monorepo, next standalone tạo server.js tại apps/web/server.js
 CMD ["node", "apps/web/server.js"]
