@@ -1,6 +1,6 @@
 package com.healthlens.api.controller;
 
-import com.healthlens.api.common.ApiRoutes;
+import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.repository.UserRepository;
 import org.springframework.context.annotation.Profile;

@@ -1,0 +1,151 @@
+# ============================================
+# HealthLens - Development Environment
+# ============================================
+#
+# Local development with hot-reload enabled.
+# All services run with development settings.
+#
+# Usage:
+#   docker compose -f compose.yml -f compose.dev.yml up
+#   docker compose -f compose.yml -f compose.dev.yml up --build
+#
+# Optional services:
+#   docker compose -f compose.yml -f compose.dev.yml --profile mail up
+
+services:
+  # ==========================================
+  # PostgreSQL - Local Database
+  # ==========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-healthlens}-postgres
+    restart: unless-stopped
+    networks:
+      - healthlens
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME:-healthlens_dev}
+      POSTGRES_USER: ${DB_USERNAME:-healthlens}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-healthlens_dev_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-healthlens}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # API - Spring Boot Development
+  # ==========================================
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-healthlens}-api-dev
+    restart: unless-stopped
+    networks:
+      - healthlens
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_PROGRAM_NAME=healthlens-api
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-healthlens_dev}
+      - DB_USERNAME=${DB_USERNAME:-healthlens}
+      - DB_PASSWORD=${DB_PASSWORD:-healthlens_dev_password}
+      - DB_URL=jdbc:postgresql://postgres:5432/${DB_NAME:-healthlens_dev}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MAIL_HOST=${MAIL_HOST:-mailhog}
+      - MAIL_PORT=${MAIL_PORT:-1025}
+    env_file:
+      - ../.env
+    volumes:
+      - gradle_cache:/root/.gradle/caches
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -q -O- http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # ==========================================
+  # Web - Next.js Development
+  # ==========================================
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-healthlens}-web-dev
+    restart: unless-stopped
+    networks:
+      - healthlens
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - WATCHPACK_POLLING=true
+    env_file:
+      - ../.env
+    volumes:
+      - node_modules_web:/app/apps/web/node_modules
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # ==========================================
+  # OCR Service - EasyOCR (Optional)
+  # ==========================================
+  ocr:
+    build:
+      context: ../services/ocr-service
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-healthlens}-ocr
+    restart: unless-stopped
+    networks:
+      - healthlens
+    ports:
+      - "8001:8001"
+    environment:
+      - EASYOCR_MODEL_PATH=/models
+    volumes:
+      - ocr_models:/root/.EasyOCR
+    profiles:
+      - ocr
+
+  # ==========================================
+  # Mailhog - Email Testing
+  # ==========================================
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-healthlens}-mailhog
+    restart: unless-stopped
+    networks:
+      - healthlens
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+
+volumes:
+  postgres_data:
+    name: ${COMPOSE_PROJECT_NAME:-healthlens}-postgres-data
+  gradle_cache:
+    name: ${COMPOSE_PROJECT_NAME:-healthlens}-gradle-cache
+  node_modules_web:
+    name: ${COMPOSE_PROJECT_NAME:-healthlens}-web-node-modules
+  ocr_models:
+    name: ${COMPOSE_PROJECT_NAME:-healthlens}-ocr-models
+
+networks:
+  healthlens:
+    name: ${COMPOSE_NETWORK:-healthlens-network}

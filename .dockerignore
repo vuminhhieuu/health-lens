@@ -1,66 +1,92 @@
-# Root .dockerignore - dùng khi build context là monorepo root
-# Loại trừ các file lớn/không cần thiết để tăng tốc Docker build
+# ============================================
+# HealthLens Monorepo - .dockerignore
+# ====================================
+# Prevents sensitive files and build artifacts
+# from being included in Docker build context
 
-# Version control
+# Git
 .git
 .gitignore
+.gitattributes
 
-# Node / npm / pnpm
-node_modules
-**/node_modules
-.pnpm-store
-.pnpm-debug.log
-
-# Next.js build output
-**/.next
-**/out
-**/dist
-
-# Java build output
-apps/api/build
-apps/api/.gradle
-**/.gradle
-
-# IDE và editor
+# IDE
 .idea
 .vscode
+*.swp
+*.swo
 *.iml
-*.iws
 
-# Tests và coverage
-**/coverage
-**/.nyc_output
-**/test-results
-
-# Logs
-*.log
-logs/
-
-# Environment files (không copy vào image)
-.env
-.env.local
-.env.production
-.env.*
-
-# Docker files
-docker/
-**/Dockerfile.dev
-
-# Documentation
-docs/
-*.md
-!apps/api/README.md
-
-# Agent/CI config
-.agent/
-.bmad-output/
-_bmad-output/
-.github/
-
-# macOS
+# OS
 .DS_Store
 Thumbs.db
 
-# Temp files
+# Build artifacts
+**/build
+**/.gradle
+**/dist
+**/.next
+**/out
+**/.turbo
+**/.cache
+
+# Dependencies (will be reinstalled in Docker)
+**/node_modules
+**/.npm
+.pnpm-store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# Test reports
+coverage/
+.nyc_output
+playwright-report/
+test-results/
+
+# Docker files (not needed in context)
+**/Dockerfile
+**/docker-compose*.yml
+**/.dockerignore
+
+# Documentation
+*.md
+docs/
+README.md
+
+# Development artifacts
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+
+# CI/CD
+.github/
+.github Actions/
+
+# Agent/Bot artifacts
+**/_bmad/
+**/_bmad-output/
+**/.agent/
+**/.cursor/
+
+# Secrets (NEVER include)
+**/*.pem
+**/*.key
+**/secrets/
+**/credentials/
+
+# Temporary files
 tmp/
+temp/
 *.tmp
+*.temp
+
+# Database dumps
+*.sql
+*.dump
+*.bak

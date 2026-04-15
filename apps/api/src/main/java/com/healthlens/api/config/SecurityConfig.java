@@ -1,6 +1,6 @@
 package com.healthlens.api.config;
 
-import com.healthlens.api.common.ApiRoutes;
+import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;

@@ -1,36 +1,73 @@
-# HealthLens OCR Service
-# ======================
-# EasyOCR Python microservice for Vietnamese/English text extraction
-# Story 1.9 — Option B+ Architecture
+# ============================================
+# HealthLens OCR Service - FastAPI + EasyOCR
+# ============================================
+#
+# Vietnamese/English text extraction for medical documents.
+#
+# Usage:
+#   Development:  docker build --target builder -t healthlens-ocr:dev .
+#   Production:   docker build -t healthlens-ocr:latest .
+#
+# Note:
+#   EasyOCR models are downloaded at first run.
+#   For faster startup, pre-download models and mount as volume.
 
-FROM python:3.11-slim
+# ============================================
+# Base stage
+# ============================================
+FROM python:3.11-slim AS base
 
 WORKDIR /app
 
-# Install system dependencies required by OpenCV and image processing
-# Note: python:3.11-slim does NOT include curl, use wget for healthcheck
+# ============================================
+# Dependencies stage
+# ============================================
+FROM base AS deps
+
+# Install system dependencies first
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
-    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for Docker layer caching
+# Copy and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY app.py .
+# ============================================
+# Builder stage (for dev)
+# ============================================
+FROM deps AS builder
 
-# Health check using wget (curl not available in slim image)
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ============================================
+# Runner stage (production)
+# ============================================
+FROM deps AS runner
+
+# Security: Create non-root user
+RUN groupadd -g 1001 ocrgroup && useradd -u 1001 -g ocrgroup -m -s /bin/sh ocruser
+
+WORKDIR /app
+
+# Copy application code
+COPY --chown=ocruser:ocrgroup app.py .
+
+# Switch to non-root user
+USER ocruser
+
+# Expose port
+EXPOSE 8001
+
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD wget --no-verbose --tries=1 -q -O- http://localhost:8001/health || exit 1
-
-# Expose OCR service port
-EXPOSE 8001
 
 # Run with uvicorn
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8001"]

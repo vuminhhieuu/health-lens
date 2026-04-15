@@ -1,6 +1,6 @@
 package com.healthlens.api.controller;
 
-import com.healthlens.api.common.ApiRoutes;
+import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.LoginRequest;
 import com.healthlens.api.dto.request.RegisterRequest;
 import com.healthlens.api.dto.response.LoginResponse;

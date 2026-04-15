@@ -1,10 +1,13 @@
-export enum ProfileStatus {
-  ACTIVE = "ACTIVE",
-  INACTIVE = "INACTIVE",
-}
+/**
+ * HealthLens Shared Constants
+ * 
+ * Centralized constants for the entire application.
+ */
 
-export enum ErrorCode {
-  VALIDATION_ERROR = "VALIDATION_ERROR",
-  NOT_FOUND = "NOT_FOUND",
-  UNAUTHORIZED = "UNAUTHORIZED",
-}
+// Constants
+export * from './api';
+export * from './error-codes';
+export * from './status';
+
+// Config (from parent directory)
+export * from '../config';

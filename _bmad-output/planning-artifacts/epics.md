@@ -253,6 +253,14 @@ FR38: Epic 8 - Dashboard thống kê user và upload
 
 ## Epic List
 
+### Phase 0 — Infrastructure Foundation (Epic 0)
+
+### Epic 0: Nền Tảng Hạ Tầng và DevOps
+Thiết lập nền tảng hạ tầng hoàn chỉnh bao gồm: Docker multi-environment, environment configuration, CI/CD pipeline, và security fixes.
+**Stories covered:** infra-devops-foundation.
+
+**Status:** ✅ Completed
+
 ### Phase 1 — Web MVP (Epic 1–8)
 
 ### Epic 1: Truy Cập An Toàn và Quyền Riêng Tư Dữ Liệu
