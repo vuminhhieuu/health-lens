@@ -1,6 +1,6 @@
 # Story 1.3: Đăng nhập/đăng xuất với quản lý phiên bảo mật
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 
@@ -35,44 +35,51 @@ so that tôi truy cập đúng dữ liệu của mình và kiểm soát phiên �
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: JWT infrastructure (AC: #1, #2)
-  - [ ] Tạo `JwtUtil.java` với `generateAccessToken()`, `generateRefreshToken()`, `validateToken()`, `extractClaims()`
-  - [ ] Thêm dependency `io.jsonwebtoken:jjwt-api:0.12.x`, `jjwt-impl`, `jjwt-jackson`
-  - [ ] Cấu hình JWT secret, access TTL (15m), refresh TTL (7d) trong `application.yml`
-  - [ ] Tạo `JwtAuthenticationFilter.java` extends `OncePerRequestFilter` — đọc Bearer token, validate, set SecurityContext
-- [ ] Task 2 — Backend: Login endpoint (AC: #1, #5)
-  - [ ] Tạo `LoginRequest` DTO với email, password
-  - [ ] Tạo `POST /api/v1/auth/login` trong `AuthController`
-  - [ ] `AuthService.login()`: authenticate credentials, generate tokens, set refresh token HttpOnly cookie
-  - [ ] Implement `UserDetailsService` load user từ DB
-  - [ ] Trả về `LoginResponse` với access token, user info (id, email, role)
-- [ ] Task 3 — Backend: Token refresh endpoint (AC: #2)
-  - [ ] Tạo `POST /api/v1/auth/refresh` — đọc HttpOnly cookie, validate refresh token, issue new token pair
-  - [ ] Implement refresh token rotation (invalidate old, issue new) lưu trong bảng `refresh_tokens`
-  - [ ] Flyway migration `V003__create_refresh_tokens_table.sql`
-- [ ] Task 4 — Backend: Logout endpoint (AC: #4)
-  - [ ] Tạo `POST /api/v1/auth/logout` — blacklist access token trong Redis (TTL = remaining expiry), xóa refresh token cookie
-  - [ ] Redis key pattern: `blacklist:token:{jti}` với TTL bằng thời gian còn lại của access token
-- [ ] Task 5 — Backend: Rate limiting / account lock (AC: #6)
-  - [ ] Track failed login attempts trong Redis: key `login_attempts:{email}`, TTL 15 phút
-  - [ ] Sau 5 lần sai: trả về 429 Too Many Requests với `Retry-After` header
-- [ ] Task 6 — Backend: Spring Security config (AC: #1)
-  - [ ] Tạo/cập nhật `SecurityConfig.java`: permit `/api/v1/auth/**`, authenticate tất cả routes khác
-  - [ ] Thêm `JwtAuthenticationFilter` vào filter chain trước `UsernamePasswordAuthenticationFilter`
-- [ ] Task 7 — Web: Login form và auth state (AC: #1, #4)
-  - [ ] Tạo `apps/web/src/app/(auth)/login/page.tsx`
-  - [ ] Form: email, password với React Hook Form + Zod
-  - [ ] Submit → `POST /api/v1/auth/login`, lưu access token vào `useAuthStore` (Zustand)
-  - [ ] Tạo `apps/web/src/stores/authStore.ts` với state: `user`, `accessToken`, `isAuthenticated`
-  - [ ] Auto-refresh: axios interceptor → gọi `/api/v1/auth/refresh` khi 401
-  - [ ] Protected route middleware: `(dashboard)/layout.tsx` check auth, redirect về `/login`
+- [x] Task 1 — Backend: JWT infrastructure (AC: #1, #2)
+  - [x] Tạo `JwtUtil.java` với `generateAccessToken()`, `generateRefreshToken()`, `validateToken()`, `extractClaims()`
+  - [x] Thêm dependency `io.jsonwebtoken:jjwt-api:0.12.6`, `jjwt-impl`, `jjwt-jackson`
+  - [x] Cấu hình JWT secret, access TTL (15m), refresh TTL (7d) trong `application.yml`
+  - [x] Tạo `JwtAuthenticationFilter.java` extends `OncePerRequestFilter` — đọc Bearer token, validate, set SecurityContext
+- [x] Task 2 — Backend: Login endpoint (AC: #1, #5)
+  - [x] Tạo `LoginRequest` DTO với email, password
+  - [x] Tạo `POST /api/v1/auth/login` trong `AuthController`
+  - [x] `AuthService.login()`: authenticate credentials, generate tokens, set refresh token HttpOnly cookie
+  - [x] Implement `UserDetailsService` load user từ DB
+  - [x] Trả về `LoginResponse` với access token, user info (id, email, role)
+- [x] Task 3 — Backend: Token refresh endpoint (AC: #2)
+  - [x] Tạo `POST /api/v1/auth/refresh` — đọc HttpOnly cookie, validate refresh token, issue new token pair
+  - [x] Implement refresh token rotation (invalidate old, issue new) lưu trong bảng `refresh_tokens`
+  - [x] Flyway migration `V003__create_refresh_tokens_table.sql`
+- [x] Task 4 — Backend: Logout endpoint (AC: #4)
+  - [x] Tạo `POST /api/v1/auth/logout` — blacklist access token trong Redis (TTL = remaining expiry), xóa refresh token cookie
+  - [x] Redis key pattern: `blacklist:token:{jti}` với TTL bằng thời gian còn lại của access token
+- [x] Task 5 — Backend: Rate limiting / account lock (AC: #6)
+  - [x] Track failed login attempts trong Redis: key `login_attempts:{email}`, TTL 15 phút
+  - [x] Sau 5 lần sai: trả về 429 Too Many Requests với `Retry-After` header
+- [x] Task 6 — Backend: Spring Security config (AC: #1)
+  - [x] Tạo/cập nhật `SecurityConfig.java`: permit `/api/v1/auth/**`, authenticate tất cả routes khác
+  - [x] Thêm `JwtAuthenticationFilter` vào filter chain trước `UsernamePasswordAuthenticationFilter`
+- [x] Task 7 — Web: Login form và auth state (AC: #1, #4)
+  - [x] Tạo `apps/web/src/app/(auth)/login/page.tsx`
+  - [x] Form: email, password với React Hook Form + Zod
+  - [x] Submit → `POST /api/v1/auth/login`, lưu access token vào `useAuthStore` (Zustand)
+  - [x] Tạo `apps/web/src/stores/authStore.ts` với state: `user`, `accessToken`, `isAuthenticated`
+  - [x] Auto-refresh: axios interceptor → gọi `/api/v1/auth/refresh` khi 401
+  - [x] Protected route middleware: `(dashboard)/layout.tsx` check auth, redirect về `/login`
 - [ ] Task 8 — Mobile (Phase 2): Login screen và auth state (AC: #1, #4)
   - [ ] Tạo `apps/mobile/app/(auth)/login.tsx`
   - [ ] Share `useAuthStore` logic tương tự web (access token trong SecureStore của Expo)
   - [ ] Expo SecureStore thay thế HttpOnly cookie cho mobile (refresh token)
-- [ ] Task 9 — Tests (AC: #1, #2, #4, #5, #6)
-  - [ ] `AuthServiceTest`: login thành công, sai password, tài khoản bị lock
-  - [ ] `AuthControllerTest`: integration test cho login, refresh, logout
+- [x] Task 9 — Tests (AC: #1, #2, #4, #5, #6)
+  - [x] `AuthServiceTest`: login thành công, sai password, tài khoản bị lock
+  - [x] `AuthControllerTest`: integration test cho login, refresh, logout
+- [x] Task 10 — Backend: Tích hợp Swagger / OpenAPI (User Requested)
+  - [x] Thêm `springdoc-openapi` dependency
+  - [x] Cấu hình `OpenApiConfig` để hỗ trợ Bearer Auth
+  - [x] Expose endpoint `/swagger-ui.html` trong `SecurityConfig`
+- [x] Task 11 — Refactor: Gom nhóm API Routes Constants (User Requested)
+  - [x] Tạo `ApiRoutes.java` cho Backend và `routes.ts` cho Frontend
+  - [x] Thay thế toàn bộ hardcoded path strings trong Controller và SecurityConfig
 
 ## Dev Notes
 
@@ -173,10 +180,59 @@ interface AuthState {
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+Claude Opus 4.6 (Thinking) via Antigravity
 
 ### Debug Log References
 
+- Spring Boot 4 `DaoAuthenticationProvider` constructor changed → requires `UserDetailsService` in constructor
+- JPQL `CURRENT_TIMESTAMP` không tương thích với `Instant` field trong Hibernate → dùng explicit `Instant` parameter
+- Flyway `gen_random_uuid()` không hỗ trợ H2 → dùng `@PrePersist` UUID generation thay thế
+- `@MockitoBean JwtAuthenticationFilter` không chain filter → thêm `doAnswer` delegate trong `@BeforeEach`
+
 ### Completion Notes List
 
+- ✅ Task 1: JwtUtil (HS256, access 15m, refresh 7d), JwtAuthenticationFilter (Bearer + Redis blacklist check), JJWT 0.12.6 deps
+- ✅ Task 2: LoginRequest/LoginResponse DTOs, AuthController.login(), AuthService.login() với email verification gate
+- ✅ Task 3: RefreshToken entity, V003 migration, token rotation trong AuthService.refresh()
+- ✅ Task 4: AuthController.logout() → Redis blacklist (TTL = remaining expiry) + clear HttpOnly cookie
+- ✅ Task 5: LoginRateLimiter (Redis `login_attempts:{email}`, 5 max, 15m TTL), AccountLockedException → 429
+- ✅ Task 6: SecurityConfig stateless JWT, permit `/api/v1/auth/**`, DaoAuthenticationProvider, CustomUserDetailsService
+- ✅ Task 7: Login page (Stitch Meridian design), Zustand authStore, apiClient (axios interceptor + refresh queue), dashboard protected layout
+- ⏭️ Task 8: Mobile — Phase 2, skipped per story scope
+- ✅ Task 9: AuthServiceTest (10 tests), AuthControllerTest (11 tests) — all 78 tests pass
+- ✅ **Bonus 1**: Tích hợp Swagger (SpringDoc OpenAPI) tại `/swagger-ui.html`
+- ✅ **Bonus 2**: Gom tất cả API routes vào `ApiRoutes.java` (backend) và `API_ROUTES` (frontend)
+
+### Change Log
+
+- 2026-04-14: Story 1.3 implemented — JWT auth, login/refresh/logout endpoints, rate limiting, login UI, auth state management
+
 ### File List
+
+**New files:**
+- `apps/api/src/main/java/com/healthlens/api/util/JwtUtil.java`
+- `apps/api/src/main/java/com/healthlens/api/security/JwtAuthenticationFilter.java`
+- `apps/api/src/main/java/com/healthlens/api/security/CustomUserDetailsService.java`
+- `apps/api/src/main/java/com/healthlens/api/security/LoginRateLimiter.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/request/LoginRequest.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/response/LoginResponse.java`
+- `apps/api/src/main/java/com/healthlens/api/entity/RefreshToken.java`
+- `apps/api/src/main/java/com/healthlens/api/repository/RefreshTokenRepository.java`
+- `apps/api/src/main/java/com/healthlens/api/exception/AccountLockedException.java`
+- `apps/api/src/main/resources/db/migration/V003__create_refresh_tokens_table.sql`
+- `apps/api/src/test/java/com/healthlens/api/service/AuthServiceTest.java`
+- `apps/web/src/stores/authStore.ts`
+- `apps/web/src/lib/api/apiClient.ts`
+- `apps/web/src/app/(dashboard)/layout.tsx`
+
+**Modified files:**
+- `apps/api/build.gradle.kts` — thêm JJWT dependencies
+- `apps/api/src/main/resources/application.yml` — thêm jwt config
+- `apps/api/src/main/java/com/healthlens/api/config/SecurityConfig.java` — stateless JWT, filter chain
+- `apps/api/src/main/java/com/healthlens/api/service/AuthService.java` — thêm login/refresh/logout
+- `apps/api/src/main/java/com/healthlens/api/controller/AuthController.java` — thêm login/refresh/logout endpoints
+- `apps/api/src/main/java/com/healthlens/api/repository/UserRepository.java` — thêm findByEmailIgnoreCase
+- `apps/api/src/main/java/com/healthlens/api/exception/GlobalExceptionHandler.java` — thêm AccountLocked/BadCredentials handlers
+- `apps/api/src/test/java/com/healthlens/api/controller/AuthControllerTest.java` — thêm login/refresh/logout tests
+- `apps/web/src/app/(auth)/login/page.tsx` — login form UI (Stitch design)
+- `packages/shared/schemas/auth.ts` — thêm loginSchema

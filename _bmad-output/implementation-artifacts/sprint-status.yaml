@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-04-07T10:27:00+07:00
+last_updated: 2026-04-14T19:32:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -68,8 +68,8 @@ development_status:
   # Epic 1: Auth (10 stories) - SPRINT 1
   epic-1: in-progress
   1-1-starter-template-setup: done
-  1-2-email-password-registration: review
-  1-3-secure-login-logout-session: sprint-1
+  1-2-email-password-registration: done
+  1-3-secure-login-logout-session: done
   1-4-password-reset-via-email: sprint-1
   1-5-sensitive-health-data-consent: sprint-1
   1-6-account-data-deletion-request: sprint-1
