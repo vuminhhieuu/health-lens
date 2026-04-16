@@ -4,8 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema } from "@healthlens/shared/schemas/auth";
 import { CircleHelp, Eye, EyeOff, LogIn, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, Suspense } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -16,7 +16,16 @@ import { useAuthStore } from "@/stores/authStore";
 type LoginInput = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#effcf9]" />}>
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const setAuth = useAuthStore((s) => s.setAuth);
 
   const [submitError, setSubmitError] = useState("");
@@ -51,7 +60,8 @@ export default function LoginPage() {
         accessToken,
       );
 
-      router.push("/home");
+      const returnUrl = searchParams.get("returnUrl") || "/";
+      router.push(returnUrl);
     } catch (error: unknown) {
       if (
         error &&

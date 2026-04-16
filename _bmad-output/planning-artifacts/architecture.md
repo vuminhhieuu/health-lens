@@ -937,7 +937,7 @@ const { isLoading, isFetching } = useHealthRecords();
 
 export const createProfileSchema = z.object({
   name: z.string().min(1, "Tên không được để trống").max(100),
-  dateOfBirth: z.string().date("Ngày sinh không hợp lệ"),
+  birthDate: z.string().date("Ngày sinh không hợp lệ"),
   gender: z.enum(["male", "female", "other"]),
 });
 

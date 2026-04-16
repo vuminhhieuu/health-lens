@@ -34,7 +34,7 @@ so that tôi vẫn tra cứu thông tin đã đồng bộ trước đó.
 
 - [ ] Task 1 — Mobile (Phase 2): SQLite schema setup (AC: #4)
   - [ ] Tạo `apps/mobile/lib/database/schema.ts` với Expo SQLite
-  - [ ] Bảng `cached_profiles(id, userId, displayName, notes, gender, dateOfBirth, syncedAt)`
+  - [ ] Bảng `cached_profiles(id, userId, displayName, notes, gender, birthDate, syncedAt)`
   - [ ] Bảng `cached_health_records(id, profileId, examDate, overallStatus, metrics_json, createdAt, syncedAt)`
   - [ ] Helper functions: `upsertProfile()`, `upsertHealthRecord()`, `getProfileRecords()`
 - [ ] Task 2 — Mobile (Phase 2): Network status detection (AC: #2, #3)

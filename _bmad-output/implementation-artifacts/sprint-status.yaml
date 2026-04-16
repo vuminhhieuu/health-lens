@@ -81,7 +81,7 @@ development_status:
 
   # Epic 2: Profiles (3 stories) - SPRINT 1
   epic-2: in-progress
-  2-1-update-account-personal-info: sprint-1
+  2-1-update-account-personal-info: done
   2-2-create-health-profile: sprint-1
   2-3-profile-name-and-notes: sprint-1
   epic-2-retrospective: optional

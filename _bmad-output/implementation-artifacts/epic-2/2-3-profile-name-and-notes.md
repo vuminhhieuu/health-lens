@@ -34,7 +34,7 @@ so that tôi phân biệt nhanh giữa nhiều hồ sơ.
 ## Tasks / Subtasks
 
 - [ ] Task 1 — Backend: Update profile endpoint (AC: #1, #2, #3, #5)
-  - [ ] `PUT /api/v1/profiles/{profileId}` với DTO: `{ displayName, notes, dateOfBirth, gender }`
+  - [ ] `PUT /api/v1/profiles/{profileId}` với DTO: `{ displayName, notes, birthDate, gender }`
   - [ ] Ownership check: profile.userId phải == JWT user ID, nếu không → 403
   - [ ] Validate: displayName not blank, max 100 chars; notes max 500 chars
 - [ ] Task 2 — Web: Edit profile flow (AC: #1, #2, #3)
@@ -65,7 +65,7 @@ Response 403: { "title": "Không có quyền truy cập hồ sơ này" }
 export const updateProfileSchema = z.object({
   displayName: z.string().min(1, 'Tên không được để trống').max(100),
   notes: z.string().max(500, 'Ghi chú tối đa 500 ký tự').optional(),
-  dateOfBirth: z.string().optional(),
+  birthDate: z.string().optional(),
   gender: z.enum(['male', 'female', 'other']).optional(),
 });
 ```

@@ -26,7 +26,7 @@ so that đánh giá bình thường/bất thường chính xác hơn.
 ## Acceptance Criteria
 
 1. **Given** hồ sơ có tuổi và giới tính hợp lệ, **When** hệ thống phân loại chỉ số, **Then** reference range được chọn theo rule context-aware từ reference data.
-2. **Given** profile thiếu dateOfBirth hoặc gender, **When** phân loại, **Then** dùng reference range mặc định (không phân biệt tuổi/giới).
+2. **Given** profile thiếu birthDate hoặc gender, **When** phân loại, **Then** dùng reference range mặc định (không phân biệt tuổi/giới).
 3. **Given** metric card hiển thị, **When** user xem reference range, **Then** có ghi chú "Theo [độ tuổi] [giới tính]" nếu áp dụng context-aware.
 4. **Given** phân loại thực hiện, **When** kiểm tra audit, **Then** log nguồn rule đã áp dụng (metric_id + reference_range_id).
 
@@ -34,7 +34,7 @@ so that đánh giá bình thường/bất thường chính xác hơn.
 
 - [ ] Task 1 — Backend: Context-aware reference range lookup (AC: #1, #2)
   - [ ] Cập nhật `ReferenceDataService.classifyMetric()` để nhận `Profile` object
-  - [ ] Query bảng `reference_ranges` với filter: `gender = profile.gender OR gender IS NULL`, age range overlaps với `profile.dateOfBirth`
+  - [ ] Query bảng `reference_ranges` với filter: `gender = profile.gender OR gender IS NULL`, age range overlaps với `profile.birthDate`
   - [ ] Priority: specific (gender + age) > gender-only > age-only > default (no filter)
   - [ ] Log rule áp dụng vào audit bảng
 - [ ] Task 2 — Backend: Enrich metrics endpoint với context (AC: #3)

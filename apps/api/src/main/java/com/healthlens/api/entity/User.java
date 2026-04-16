@@ -30,8 +30,11 @@ public class User {
     @Column(name = "full_name", nullable = false, length = 120)
     private String fullName;
 
-    @Column(name = "birth_date", nullable = false)
+    @Column(name = "date_of_birth", nullable = false)
     private LocalDate birthDate;
+
+    @Column(length = 10)
+    private String gender;
 
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;

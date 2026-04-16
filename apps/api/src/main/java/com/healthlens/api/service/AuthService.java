@@ -52,8 +52,7 @@ public class AuthService {
             EmailService emailService,
             JwtUtil jwtUtil,
             LoginRateLimiter rateLimiter,
-            StringRedisTemplate redisTemplate
-    ) {
+            StringRedisTemplate redisTemplate) {
         this.userRepository = userRepository;
         this.tokenRepository = tokenRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -104,7 +103,8 @@ public class AuthService {
 
     /**
      * Authenticate user and generate token pair.
-     * AC #1: email/password → access token (15m) + refresh token (7d, HttpOnly cookie)
+     * AC #1: email/password → access token (15m) + refresh token (7d, HttpOnly
+     * cookie)
      * AC #5: generic error message, does not leak email existence
      * AC #6: rate limit check before authentication
      */
@@ -152,8 +152,7 @@ public class AuthService {
 
         LoginResponse response = new LoginResponse(
                 accessToken,
-                new LoginResponse.UserInfo(user.getId(), user.getEmail(), user.getRole().name())
-        );
+                new LoginResponse.UserInfo(user.getId(), user.getEmail(), user.getRole().name()));
 
         return new LoginResult(response, rawRefreshToken);
     }
@@ -197,15 +196,15 @@ public class AuthService {
 
         LoginResponse response = new LoginResponse(
                 newAccessToken,
-                new LoginResponse.UserInfo(user.getId(), user.getEmail(), user.getRole().name())
-        );
+                new LoginResponse.UserInfo(user.getId(), user.getEmail(), user.getRole().name()));
 
         return new LoginResult(response, newRawRefreshToken);
     }
 
     /**
      * Logout: blacklist access token in Redis, revoke all refresh tokens.
-     * AC #4: access token blacklisted (TTL = remaining expiry), refresh token cookie cleared.
+     * AC #4: access token blacklisted (TTL = remaining expiry), refresh token
+     * cookie cleared.
      */
     @Transactional
     public void logout(String accessToken) {
@@ -218,8 +217,7 @@ public class AuthService {
                         BLACKLIST_KEY_PREFIX + jti,
                         "1",
                         remainingMs,
-                        TimeUnit.MILLISECONDS
-                );
+                        TimeUnit.MILLISECONDS);
             }
 
             // Revoke all refresh tokens for this user
@@ -237,7 +235,8 @@ public class AuthService {
     }
 
     private void validatePasswordPolicy(String password) {
-        if (password == null || password.length() < 8 || !password.matches(".*[A-Z].*") || !password.matches(".*\\d.*")) {
+        if (password == null || password.length() < 8 || !password.matches(".*[A-Z].*")
+                || !password.matches(".*\\d.*")) {
             throw new WeakPasswordException("Mat khau phai co it nhat 8 ky tu, gom 1 chu hoa va 1 chu so");
         }
     }
@@ -256,7 +255,8 @@ public class AuthService {
     }
 
     /**
-     * Result record pairing the API response with the raw refresh token (for HttpOnly cookie).
+     * Result record pairing the API response with the raw refresh token (for
+     * HttpOnly cookie).
      */
     public record LoginResult(LoginResponse response, String rawRefreshToken) {
     }
