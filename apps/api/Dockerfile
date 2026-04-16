@@ -21,6 +21,9 @@ FROM eclipse-temurin:21-jdk-alpine AS deps
 
 WORKDIR /app
 
+# Configure Gradle to use a local home inside the container to enable cross-stage caching
+ENV GRADLE_USER_HOME=/app/gradle_home
+
 # Copy gradle files from apps/api/ relative to build context
 COPY apps/api/gradle apps/api/gradle
 COPY apps/api/gradlew apps/api/gradlew
@@ -28,7 +31,7 @@ COPY apps/api/build.gradle.kts apps/api/build.gradle.kts
 COPY apps/api/settings.gradle.kts apps/api/settings.gradle.kts
 COPY apps/api/gradle.properties apps/api/gradle.properties
 
-# Download dependencies
+# Download dependencies (including Gradle itself)
 RUN chmod +x apps/api/gradlew \
     && cd apps/api \
     && ./gradlew dependencies --no-daemon --console=plain
@@ -40,6 +43,9 @@ FROM eclipse-temurin:21-jdk-alpine AS builder
 
 WORKDIR /app
 
+# Ensure we use the same Gradle home
+ENV GRADLE_USER_HOME=/app/gradle_home
+
 # Copy gradle files
 COPY apps/api/gradle apps/api/gradle
 COPY apps/api/gradlew apps/api/gradlew
@@ -47,8 +53,8 @@ COPY apps/api/build.gradle.kts apps/api/build.gradle.kts
 COPY apps/api/settings.gradle.kts apps/api/settings.gradle.kts
 COPY apps/api/gradle.properties apps/api/gradle.properties
 
-# Copy cached dependencies from deps stage
-COPY --from=deps /app/apps/api/.gradle apps/api/.gradle
+# Copy cached dependencies and Gradle distribution from deps stage
+COPY --from=deps /app/gradle_home /app/gradle_home
 
 # Copy source code and build
 COPY apps/api/src apps/api/src
@@ -82,6 +88,7 @@ RUN chown -R appuser:appgroup /app
 USER appuser
 
 # Expose port
+# Render will map this to public 80 or 443
 EXPOSE 8080
 
 # Health check
