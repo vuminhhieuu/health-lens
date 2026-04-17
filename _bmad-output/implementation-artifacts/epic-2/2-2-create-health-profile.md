@@ -34,7 +34,7 @@ so that tôi quản lý dữ liệu theo từng người.
 ## Tasks / Subtasks
 
 - [ ] Task 1 — Backend: Profile entity + migration (AC: #1, #5)
-  - [ ] Tạo entity `Profile.java`: id (UUID), userId (FK → users), displayName, notes, dateOfBirth, gender, createdAt, updatedAt
+  - [ ] Tạo entity `Profile.java`: id (UUID), userId (FK → users), displayName, notes, birthDate, gender, createdAt, updatedAt
   - [ ] Flyway migration `V009__create_profiles_table.sql`
   - [ ] `POST /api/v1/profiles` — tạo profile mới, gán userId từ JWT context (không từ request body)
   - [ ] `GET /api/v1/profiles` — trả về danh sách profiles của user hiện tại
@@ -43,7 +43,7 @@ so that tôi quản lý dữ liệu theo từng người.
   - [ ] Tạo `apps/web/src/app/(dashboard)/profiles/page.tsx`
   - [ ] Grid layout ProfileCards (UX-DR2)
   - [ ] Button "Tạo hồ sơ mới" → Dialog/modal tạo profile
-  - [ ] Form: displayName (required, max 50 chars), dateOfBirth (optional), gender (optional)
+  - [ ] Form: displayName (required, max 50 chars), birthDate (optional), gender (optional)
   - [ ] Sau tạo: invalidate query `['profiles']`, hiển thị card mới ngay (optimistic update)
 - [ ] Task 3 — Mobile (Phase 2): Profiles tab (AC: #1, #2)
   - [ ] Tạo `apps/mobile/app/(tabs)/profiles.tsx`
@@ -76,7 +76,7 @@ CONSTRAINT profiles_fk_user_id FOREIGN KEY (user_id) REFERENCES users(id)
 
 ```
 POST /api/v1/profiles
-Body: { "displayName": "Ba", "dateOfBirth": "1960-05-01", "gender": "male" }
+Body: { "displayName": "Ba", "birthDate": "1960-05-01", "gender": "male" }
 Response 201: { "data": { "id": "uuid", "displayName": "Ba", ... } }
 Response 409: { "title": "Đã đạt giới hạn 10 hồ sơ" }
 

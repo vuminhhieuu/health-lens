@@ -1,6 +1,6 @@
 # Story 1.2: Đăng ký tài khoản bằng email và mật khẩu
 
-Status: review
+Status: done
 
 ## Execution scope
 

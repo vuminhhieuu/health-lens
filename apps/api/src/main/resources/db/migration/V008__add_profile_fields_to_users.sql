@@ -1,0 +1,2 @@
+ALTER TABLE users RENAME COLUMN birth_date TO date_of_birth;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10);

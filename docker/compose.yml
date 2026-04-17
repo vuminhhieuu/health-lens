@@ -29,7 +29,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -39,6 +39,7 @@ services:
   # ==========================================
   minio:
     image: minio/minio:latest
+    platform: linux/amd64
     container_name: ${COMPOSE_PROJECT_NAME:-healthlens}-minio
     command: server /data --console-address ":9001"
     restart: unless-stopped
@@ -53,11 +54,10 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 10s
       timeout: 5s
       retries: 5
-
   # ==========================================
   # Mailhog - Email Testing (Dev only)
   # NOTE: Moved to compose.dev.yml (no profile = always starts)

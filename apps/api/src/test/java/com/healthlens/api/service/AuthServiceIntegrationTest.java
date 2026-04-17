@@ -39,7 +39,8 @@ class AuthServiceIntegrationTest {
     @Test
     @DisplayName("register luu user voi password da hash, email chưa verified, role ROLE_USER")
     void register_persistsUserWithExpectedState() {
-        RegisterRequest request = new RegisterRequest("Integration User", "integration@example.com", LocalDate.of(2000, 2, 20), "StrongPass1");
+        RegisterRequest request = new RegisterRequest("Integration User", "integration@example.com",
+                LocalDate.of(2000, 2, 20), "StrongPass1");
 
         UUID userId = authService.register(request);
 
