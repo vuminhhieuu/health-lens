@@ -43,7 +43,7 @@ Thumbs.db
 *.swp
 *.swo
 
-# --- Java / Gradle / Spring Boot -------------------------------------------
+# --- Java / Maven / Gradle / Spring Boot -------------------------------------------
 .gradle/
 **/build/
 !**/gradle/wrapper/gradle-wrapper.jar
@@ -56,6 +56,21 @@ Thumbs.db
 *.log
 hs_err_pid*
 replay_pid*
+
+# Maven
+.m2/
+**/target/
+*.jar
+*.war
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
 
 # --- Node.js / pnpm / Next.js / TypeScript ---------------------------------
 node_modules/
@@ -103,6 +118,14 @@ web-build/
 # Không ignore Dockerfile; chỉ file env do compose override local
 docker-compose.override.yml
 .env.docker
+
+# Docker build cache & volumes
+.docker/
+docker/data/
+docker/volumes/
+docker/postgres_data/
+docker/redis_data/
+docker/minio_data/
 
 # --- Kiểm thử & coverage ---------------------------------------------------
 coverage/

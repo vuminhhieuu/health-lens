@@ -11,6 +11,7 @@ import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
 import com.healthlens.api.security.LoginRateLimiter;
 import com.healthlens.api.service.AuthService;
+import com.healthlens.api.service.ConsentService;
 import com.healthlens.api.util.JwtUtil;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
@@ -58,6 +60,9 @@ class AuthControllerTest {
 
         @MockitoBean
         private StringRedisTemplate stringRedisTemplate;
+
+        @MockitoBean
+        private ConsentService consentService;
 
         @org.junit.jupiter.api.BeforeEach
         void setUp() throws Exception {
@@ -193,21 +198,53 @@ class AuthControllerTest {
         }
 
         @Test
-        @DisplayName("POST /api/v1/auth/refresh -> 200 khi refresh thanh cong (AC #2)")
+        @DisplayName("POST /api/v1/auth/refresh -> 200 khi refresh thanh cong (AC #2) with consent")
         void refresh_success() throws Exception {
                 UUID userId = UUID.randomUUID();
-                LoginResponse response = new LoginResponse(
-                                "new-access-token",
-                                new LoginResponse.UserInfo(userId, "user@example.com", "ROLE_USER"));
-                AuthService.LoginResult result = new AuthService.LoginResult(response, "new-refresh-token");
+                com.healthlens.api.dto.response.RefreshResponse response = new com.healthlens.api.dto.response.RefreshResponse(
+                        "new-access-token",
+                        new com.healthlens.api.dto.response.RefreshResponse.UserInfo(userId, "user@example.com", "ROLE_USER"),
+                        true,
+                        "1.0"
+                );
+                AuthService.RefreshResult result = new AuthService.RefreshResult(response, "new-refresh-token");
 
-                when(authService.refresh("old-refresh-token")).thenReturn(result);
+                when(authService.refreshWithConsent("old-refresh-token")).thenReturn(result);
 
                 mockMvc.perform(post("/api/v1/auth/refresh")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .cookie(new jakarta.servlet.http.Cookie("refresh_token", "old-refresh-token")))
-                                .andExpect(status().isOk())
-                                .andExpect(jsonPath("$.data.accessToken").value("new-access-token"));
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.data.accessToken").value("new-access-token"))
+                        .andExpect(jsonPath("$.data.user.id").value(userId.toString()))
+                        .andExpect(jsonPath("$.data.user.email").value("user@example.com"))
+                        .andExpect(jsonPath("$.data.user.role").value("ROLE_USER"))
+                        .andExpect(jsonPath("$.data.consentGiven").value(true))
+                        .andExpect(jsonPath("$.data.consentVersion").value("1.0"));
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/auth/refresh -> 200 khi consentVersion null")
+        void refresh_success_withNullConsentVersion() throws Exception {
+                UUID userId = UUID.randomUUID();
+                com.healthlens.api.dto.response.RefreshResponse response = new com.healthlens.api.dto.response.RefreshResponse(
+                        "new-access-token",
+                        new com.healthlens.api.dto.response.RefreshResponse.UserInfo(userId, "user@example.com", "ROLE_USER"),
+                        false,
+                        null
+                );
+                AuthService.RefreshResult result = new AuthService.RefreshResult(response, "new-refresh-token");
+
+                when(authService.refreshWithConsent("old-refresh-token")).thenReturn(result);
+
+                mockMvc.perform(post("/api/v1/auth/refresh")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .cookie(new jakarta.servlet.http.Cookie("refresh_token", "old-refresh-token")))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.data.accessToken").value("new-access-token"))
+                        .andExpect(jsonPath("$.data.user.id").value(userId.toString()))
+                        .andExpect(jsonPath("$.data.consentGiven").value(false))
+                        .andExpect(jsonPath("$.data.consentVersion").value(nullValue()));
         }
 
         // ========== LOGOUT TESTS ==========

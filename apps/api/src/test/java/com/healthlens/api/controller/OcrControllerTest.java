@@ -1,5 +1,6 @@
 package com.healthlens.api.controller;
 
+import com.healthlens.api.annotation.RequiresConsent;
 import com.healthlens.api.dto.OcrResult;
 import com.healthlens.api.exception.OcrProcessingException;
 import com.healthlens.api.service.OcrService;
@@ -24,6 +25,13 @@ class OcrControllerTest {
     private OcrService ocrService;
 
     private OcrController controller;
+
+    @Test
+    @DisplayName("OcrController.extractText has @RequiresConsent annotation")
+    void extractText_hasRequiresConsentAnnotation() throws NoSuchMethodException {
+        var method = OcrController.class.getMethod("extractText", Map.class);
+        assertThat(method.isAnnotationPresent(RequiresConsent.class)).isTrue();
+    }
 
     @Test
     @DisplayName("Valid https URL → returns 200 with result")

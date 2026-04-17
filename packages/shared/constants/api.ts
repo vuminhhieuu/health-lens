@@ -26,6 +26,12 @@ export const ApiPaths = {
     RESET_PASSWORD: `/api/${API_VERSION}/auth/reset-password`,
   },
 
+  /** Consent (requires authenticated session for all routes below) */
+  CONSENT: {
+    ME: `/api/${API_VERSION}/users/me/consent`,
+    ME_ACTIVE_VERSION: `/api/${API_VERSION}/users/me/consent/active-version`,
+  },
+
   /** Dev endpoints (dev profile only) */
   DEV: {
     BASE: `/api/${API_VERSION}/dev`,

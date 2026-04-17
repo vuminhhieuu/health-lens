@@ -3,6 +3,7 @@ package com.healthlens.api.service;
 import com.healthlens.api.dto.request.LoginRequest;
 import com.healthlens.api.dto.request.RegisterRequest;
 import com.healthlens.api.dto.response.LoginResponse;
+import com.healthlens.api.dto.response.RefreshResponse;
 import com.healthlens.api.entity.EmailVerificationToken;
 import com.healthlens.api.entity.RefreshToken;
 import com.healthlens.api.entity.User;
@@ -11,6 +12,7 @@ import com.healthlens.api.exception.EmailAlreadyExistsException;
 import com.healthlens.api.exception.WeakPasswordException;
 import com.healthlens.api.repository.EmailVerificationTokenRepository;
 import com.healthlens.api.repository.RefreshTokenRepository;
+import com.healthlens.api.constants.ConsentConstants;
 import com.healthlens.api.repository.UserRepository;
 import com.healthlens.api.security.LoginRateLimiter;
 import com.healthlens.api.util.JwtUtil;
@@ -43,6 +45,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final LoginRateLimiter rateLimiter;
     private final StringRedisTemplate redisTemplate;
+    private final ConsentService consentService;
 
     public AuthService(
             UserRepository userRepository,
@@ -52,7 +55,9 @@ public class AuthService {
             EmailService emailService,
             JwtUtil jwtUtil,
             LoginRateLimiter rateLimiter,
-            StringRedisTemplate redisTemplate) {
+            StringRedisTemplate redisTemplate,
+            ConsentService consentService
+    ) {
         this.userRepository = userRepository;
         this.tokenRepository = tokenRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -61,6 +66,7 @@ public class AuthService {
         this.jwtUtil = jwtUtil;
         this.rateLimiter = rateLimiter;
         this.redisTemplate = redisTemplate;
+        this.consentService = consentService;
     }
 
     @Transactional
@@ -161,8 +167,62 @@ public class AuthService {
      * Refresh access token using the raw refresh token from HttpOnly cookie.
      * AC #2: expired access token → use refresh token to get new pair.
      * Implements refresh token rotation (invalidate old, issue new).
+     * Returns refresh response including consent information.
      */
     @Transactional
+    public RefreshResult refreshWithConsent(String rawRefreshToken) {
+        String tokenHash = sha256(rawRefreshToken);
+
+        RefreshToken storedToken = refreshTokenRepository
+                .findByTokenHashAndRevokedAtIsNull(tokenHash)
+                .orElseThrow(() -> new BadCredentialsException("Refresh token khong hop le"));
+
+        if (storedToken.isExpired()) {
+            storedToken.setRevokedAt(Instant.now());
+            refreshTokenRepository.save(storedToken);
+            throw new BadCredentialsException("Refresh token da het han");
+        }
+
+        // Revoke old refresh token (rotation)
+        storedToken.setRevokedAt(Instant.now());
+        refreshTokenRepository.save(storedToken);
+
+        // Find user and generate new tokens
+        User user = userRepository.findById(storedToken.getUserId())
+                .orElseThrow(() -> new BadCredentialsException("User khong ton tai"));
+
+        String newAccessToken = jwtUtil.generateAccessToken(user);
+        String newRawRefreshToken = jwtUtil.generateRefreshToken();
+        String newTokenHash = sha256(newRawRefreshToken);
+
+        RefreshToken newRefreshToken = new RefreshToken();
+        newRefreshToken.setUserId(user.getId());
+        newRefreshToken.setTokenHash(newTokenHash);
+        newRefreshToken.setExpiresAt(Instant.now().plusMillis(jwtUtil.getRefreshTtl()));
+        refreshTokenRepository.save(newRefreshToken);
+
+        // Fetch current consent status
+        com.healthlens.api.dto.response.ConsentResponse consentStatus =
+            consentService.getConsentStatus(user.getId(), ConsentConstants.ACTIVE_VERSION);
+
+        RefreshResponse response = new RefreshResponse(
+                newAccessToken,
+                new RefreshResponse.UserInfo(user.getId(), user.getEmail(), user.getRole().name()),
+                consentStatus.isConsentGiven(),
+                consentStatus.getConsentVersion()
+        );
+
+        return new RefreshResult(response, newRawRefreshToken);
+    }
+
+    /**
+     * Refresh access token using the raw refresh token from HttpOnly cookie.
+     * AC #2: expired access token → use refresh token to get new pair.
+     * Implements refresh token rotation (invalidate old, issue new).
+     * @deprecated Use {@link #refreshWithConsent(String)} instead for new endpoints
+     */
+    @Transactional
+    @Deprecated
     public LoginResult refresh(String rawRefreshToken) {
         String tokenHash = sha256(rawRefreshToken);
 
@@ -259,5 +319,11 @@ public class AuthService {
      * HttpOnly cookie).
      */
     public record LoginResult(LoginResponse response, String rawRefreshToken) {
+    }
+
+    /**
+     * Result record for refresh endpoint, including consent information.
+     */
+    public record RefreshResult(RefreshResponse response, String rawRefreshToken) {
     }
 }

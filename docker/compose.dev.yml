@@ -10,7 +10,9 @@
 #   docker compose -f compose.yml -f compose.dev.yml up --build
 #
 # Optional services:
-#   docker compose -f compose.yml -f compose.dev.yml --profile mail up
+#   docker compose -f compose.yml -f compose.dev.yml --profile ocr up
+#
+# Email: Mailhog (SMTP 1025, UI http://localhost:8025) — API gửi mail vào đây khi chạy stack dev.
 
 services:
   # ==========================================
@@ -35,6 +37,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ==========================================
+  # Mailhog - Local SMTP capture (dev email)
+  # ==========================================
+  mailhog:
+    image: mailhog/mailhog:latest
+    platform: linux/amd64
+    container_name: ${COMPOSE_PROJECT_NAME:-healthlens}-mailhog
+    restart: unless-stopped
+    networks:
+      - healthlens
+    ports:
+      - "${MAILHOG_SMTP_PORT:-1025}:1025"
+      - "${MAILHOG_UI_PORT:-8025}:8025"
 
   # ==========================================
   # API - Spring Boot Development
@@ -62,15 +78,20 @@ services:
       - REDIS_PORT=6379
       - MAIL_HOST=${MAIL_HOST:-mailhog}
       - MAIL_PORT=${MAIL_PORT:-1025}
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
     env_file:
       - ../.env
     volumes:
       - gradle_cache:/root/.gradle/caches
+      - gradle_home:/app/gradle_home
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mailhog:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 -q -O- http://localhost:8080/actuator/health || exit 1"]
       interval: 30s
@@ -123,24 +144,13 @@ services:
     profiles:
       - ocr
 
-  # ==========================================
-  # Mailhog - Email Testing
-  # ==========================================
-  mailhog:
-    image: mailhog/mailhog:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-healthlens}-mailhog
-    restart: unless-stopped
-    networks:
-      - healthlens
-    ports:
-      - "1025:1025"  # SMTP
-      - "8025:8025"  # Web UI
-
 volumes:
   postgres_data:
     name: ${COMPOSE_PROJECT_NAME:-healthlens}-postgres-data
   gradle_cache:
     name: ${COMPOSE_PROJECT_NAME:-healthlens}-gradle-cache
+  gradle_home:
+    name: ${COMPOSE_PROJECT_NAME:-healthlens}-gradle-home
   node_modules_web:
     name: ${COMPOSE_PROJECT_NAME:-healthlens}-web-node-modules
   ocr_models:

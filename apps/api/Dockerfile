@@ -15,53 +15,46 @@
 #   docker build --target builder -t healthlens-api:dev -f apps/api/Dockerfile .
 
 # ============================================
-# Stage 1: Dependencies
+# Stage 1: Dependencies (Gradle cache layer)
 # ============================================
 FROM eclipse-temurin:21-jdk-alpine AS deps
 
 WORKDIR /app
 
-# Configure Gradle to use a local home inside the container to enable cross-stage caching
-ENV GRADLE_USER_HOME=/app/gradle_home
+# Configure Gradle for optimal container performance
+ENV GRADLE_USER_HOME=/app/gradle_home \
+    GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx1024m -XX:+UseG1GC"
 
-# Copy gradle files from apps/api/ relative to build context
+# Copy only gradle configuration files (smallest layer)
 COPY apps/api/gradle apps/api/gradle
 COPY apps/api/gradlew apps/api/gradlew
 COPY apps/api/build.gradle.kts apps/api/build.gradle.kts
 COPY apps/api/settings.gradle.kts apps/api/settings.gradle.kts
 COPY apps/api/gradle.properties apps/api/gradle.properties
+COPY settings.gradle.kts ./settings.gradle.kts
 
-# Download dependencies (including Gradle itself)
-RUN chmod +x apps/api/gradlew \
-    && cd apps/api \
-    && ./gradlew dependencies --no-daemon --console=plain
+# Download dependencies once (cached layer)
+RUN chmod +x apps/api/gradlew && \
+    cd apps/api && \
+    ./gradlew dependencies --no-daemon --console=plain && \
+    cd .. && \
+    echo "Gradle dependencies cached successfully"
 
 # ============================================
 # Stage 2: Builder
 # ============================================
-FROM eclipse-temurin:21-jdk-alpine AS builder
+FROM deps AS builder
 
 WORKDIR /app
 
-# Ensure we use the same Gradle home
-ENV GRADLE_USER_HOME=/app/gradle_home
-
-# Copy gradle files
-COPY apps/api/gradle apps/api/gradle
-COPY apps/api/gradlew apps/api/gradlew
-COPY apps/api/build.gradle.kts apps/api/build.gradle.kts
-COPY apps/api/settings.gradle.kts apps/api/settings.gradle.kts
-COPY apps/api/gradle.properties apps/api/gradle.properties
-
-# Copy cached dependencies and Gradle distribution from deps stage
-COPY --from=deps /app/gradle_home /app/gradle_home
-
-# Copy source code and build
+# Copy source code AFTER dependency caching
 COPY apps/api/src apps/api/src
-RUN chmod +x apps/api/gradlew \
-    && cd apps/api \
-    && ./gradlew bootJar --no-daemon --console=plain \
-    && ls -la build/libs/
+
+# Build JAR (uses cached dependencies)
+RUN cd apps/api && \
+    ./gradlew bootJar --no-daemon --console=plain && \
+    ls -la build/libs/ && \
+    echo "Build completed successfully"
 
 # ============================================
 # Stage 3: Runner (Production)

@@ -9,6 +9,9 @@ import { useState, Suspense } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { ApiPaths } from "@healthlens/shared/constants";
+
+import { syncActiveConsentVersion } from "@/lib/consent/syncActiveConsentVersion";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { useAuthStore } from "@/stores/authStore";
@@ -27,6 +30,7 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const setAuth = useAuthStore((s) => s.setAuth);
+  const setConsentState = useAuthStore((s) => s.setConsentState);
 
   const [submitError, setSubmitError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -56,9 +60,26 @@ function LoginContent() {
       const { accessToken, user } = response.data.data;
 
       setAuth(
-        { id: user.id, email: user.email, role: user.role },
+        { id: String(user.id), email: user.email, role: user.role },
         accessToken,
       );
+
+      try {
+        await syncActiveConsentVersion().catch(() => {});
+        const consentRes = await apiClient.get<{
+          consentGiven?: boolean;
+          consentVersion?: string | null;
+        }>(ApiPaths.CONSENT.ME);
+        const body = consentRes.data;
+        const cg = body?.consentGiven ?? false;
+        const cv =
+          body?.consentVersion === undefined || body?.consentVersion === null
+            ? null
+            : String(body.consentVersion);
+        setConsentState(cg, cv);
+      } catch {
+        // Keep consent reset from setAuth until next refresh/bootstrap.
+      }
 
       const returnUrl = searchParams.get("returnUrl") || "/";
       router.push(returnUrl);

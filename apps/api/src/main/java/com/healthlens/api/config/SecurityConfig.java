@@ -5,12 +5,14 @@ import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.ExceptionHandlingConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -53,6 +55,11 @@ public class SecurityConfig {
                     .requestMatchers(ApiRoutes.SWAGGER_UI_PATTERN, ApiRoutes.SWAGGER_HTML, ApiRoutes.API_DOCS_PATTERN).permitAll()
                     .anyRequest().authenticated()
             )
+            // Return 401 (not 403) for missing/invalid auth so frontend can trigger refresh flow.
+            .exceptionHandling((ExceptionHandlingConfigurer<HttpSecurity> ex) ->
+                    ex.authenticationEntryPoint((request, response, authException) ->
+                    response.sendError(HttpStatus.UNAUTHORIZED.value(), HttpStatus.UNAUTHORIZED.getReasonPhrase())
+            ))
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
