@@ -38,4 +38,5 @@ export const API_ROUTES = {
   USERS: {
     ME: "/api/v1/users/me",
   },
+  PROFILES: ApiPaths.PROFILES,
 } as const;

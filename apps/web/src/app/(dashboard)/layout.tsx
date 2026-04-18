@@ -44,9 +44,9 @@ export default function DashboardLayout({
 
   const navItems = [
     { name: "Trang chủ", href: "/", icon: Home, exact: true },
-    { name: "Hồ sơ sức khỏe", href: "/health-records", icon: FileText, exact: false },
+    { name: "Kết quả khám", href: "/health-records", icon: FileText, exact: false },
     { name: "Hồ sơ của tôi", href: "/settings/profile", icon: User, exact: true },
-    { name: "Chia sẻ gia đình", href: "/family-sharing", icon: Users, exact: false },
+    { name: "Hồ sơ gia đình", href: "/profiles", icon: Users, exact: false },
     { name: "Cài đặt", href: "/settings", icon: Settings, exact: true },
   ];
 

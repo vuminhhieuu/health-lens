@@ -25,6 +25,9 @@ public final class ApiRoutes {
     // ===== Users =====
     public static final String USERS_BASE = API_BASE + "/users";
 
+    // ===== Profiles =====
+    public static final String PROFILES_BASE = API_BASE + "/profiles";
+
     // ===== Patterns (for SecurityConfig permitAll) =====
     public static final String AUTH_PATTERN = AUTH_BASE + "/**";
     public static final String DEV_PATTERN = DEV_BASE + "/**";
