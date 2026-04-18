@@ -9,12 +9,15 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import org.thymeleaf.TemplateEngine;
+import org.thymeleaf.context.Context;
 
 @Slf4j
 @Service
 public class EmailService {
 
     private final JavaMailSender mailSender;
+    private final TemplateEngine templateEngine;
 
     @Value("${app.mail.from:no-reply@healthlens.vn}")
     private String fromAddress;
@@ -25,8 +28,9 @@ public class EmailService {
     @Value("${app.frontend.reset-password-url:http://localhost:3000/reset-password}")
     private String resetPasswordBaseUrl;
 
-    public EmailService(ObjectProvider<JavaMailSender> mailSenderProvider) {
+    public EmailService(ObjectProvider<JavaMailSender> mailSenderProvider, ObjectProvider<TemplateEngine> templateEngineProvider) {
         this.mailSender = mailSenderProvider.getIfAvailable();
+        this.templateEngine = templateEngineProvider.getIfAvailable();
     }
 
     public void sendVerificationEmail(User user, String token) {
@@ -37,24 +41,14 @@ public class EmailService {
         }
 
         String verificationLink = verificationBaseUrl + "?token=" + token;
-        String htmlContent = """
-                <html>
-                  <body style=\"font-family: Arial, sans-serif; color: #111827;\">
-                    <h2>Chao mung ban den voi HealthLens</h2>
-                    <p>Cam on ban da dang ky tai khoan.</p>
-                    <p>Vui long bam vao lien ket ben duoi de xac thuc email (hieu luc 24 gio):</p>
-                    <p><a href=\"%s\">Xac thuc email</a></p>
-                    <p>Neu ban khong thuc hien dang ky, hay bo qua email nay.</p>
-                  </body>
-                </html>
-                """.formatted(verificationLink);
+        String htmlContent = renderVerificationTemplate(verificationLink);
 
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
             helper.setFrom(fromAddress);
             helper.setTo(user.getEmail());
-            helper.setSubject("[HealthLens] Xac thuc email dang ky");
+            helper.setSubject("[HealthLens] Xác thực email đăng ký");
             helper.setText(htmlContent, true);
 
             mailSender.send(message);
@@ -100,5 +94,23 @@ public class EmailService {
             log.error("[EmailService] Failed to send password reset email to {}", user.getEmail(), e);
             throw new IllegalStateException("Gui email dat lai mat khau that bai", e);
         }
+    }
+
+    private String renderVerificationTemplate(String verificationLink) {
+        if (templateEngine == null) {
+            return """
+                    <html>
+                      <body style="font-family: Arial, sans-serif; color: #111827;">
+                        <h2>HealthLens</h2>
+                        <p>Cảm ơn bạn đã đăng ký. Vui lòng xác thực email:</p>
+                        <p><a href="%s">Xác thực email</a></p>
+                      </body>
+                    </html>
+                    """.formatted(verificationLink);
+        }
+
+        Context context = new Context();
+        context.setVariable("verificationLink", verificationLink);
+        return templateEngine.process("email/verification", context);
     }
 }

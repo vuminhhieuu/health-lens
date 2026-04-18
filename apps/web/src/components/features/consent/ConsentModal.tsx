@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { apiClient } from '@/lib/api/apiClient';
 import { syncActiveConsentVersion } from '@/lib/consent/syncActiveConsentVersion';
 import { ArrowRight, ShieldCheck, TriangleAlert, AlertCircle } from "lucide-react";
+import { usePathname } from 'next/navigation';
 
 interface ToastMessage {
     id: string;
@@ -15,6 +16,7 @@ interface ToastMessage {
 }
 
 export const ConsentModal: React.FC = () => {
+    const pathname = usePathname();
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
     const consentGiven = useAuthStore((s) => s.consentGiven);
     const activeConsentVersion = useAuthStore((s) => s.activeConsentVersion);
@@ -34,7 +36,10 @@ export const ConsentModal: React.FC = () => {
     const policyVersion = activeConsentVersion ?? CONSENT_VERSION;
 
     // consentGiven is derived server-side against the active policy version (refresh / GET me/consent).
-    if (!isAuthenticated || consentGiven) {
+    const hiddenPaths = ["/login", "/register", "/forgot-password", "/reset-password", "/verify-email"];
+    const shouldHideOnAuthRoutes = hiddenPaths.some((path) => pathname?.startsWith(path));
+
+    if (!isAuthenticated || consentGiven || shouldHideOnAuthRoutes) {
         return null;
     }
 

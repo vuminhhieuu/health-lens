@@ -46,9 +46,14 @@ services:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      # Email (Resend)
-      - MAIL_DRIVER=${MAIL_DRIVER:-resend}
-      - RESEND_API_KEY=${RESEND_API_KEY}
+      # Email (Brevo SMTP)
+      - MAIL_DRIVER=${MAIL_DRIVER:-smtp}
+      - MAIL_HOST=${MAIL_HOST:-smtp-relay.brevo.com}
+      - MAIL_PORT=${MAIL_PORT:-587}
+      - MAIL_USERNAME=${MAIL_USERNAME}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - MAIL_SMTP_AUTH=${MAIL_SMTP_AUTH:-true}
+      - MAIL_SMTP_STARTTLS=${MAIL_SMTP_STARTTLS:-true}
       - MAIL_FROM=${MAIL_FROM}
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-WARN}
