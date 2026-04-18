@@ -1,8 +1,10 @@
 package com.healthlens.api.controller;
 
 import com.healthlens.api.constants.ApiRoutes;
+import com.healthlens.api.dto.request.ForgotPasswordRequest;
 import com.healthlens.api.dto.request.LoginRequest;
 import com.healthlens.api.dto.request.RegisterRequest;
+import com.healthlens.api.dto.request.ResetPasswordRequest;
 import com.healthlens.api.service.AuthService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -159,6 +161,45 @@ public class AuthController {
         clearRefreshTokenCookie(response);
 
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * POST /api/v1/auth/forgot-password
+     * AC #1: email tồn tại -> tạo reset token, gửi email
+     * AC #2: email không tồn tại -> vẫn trả 200 OK (an toàn thông tin)
+     */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, Object>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+
+        Map<String, Object> body = Map.of(
+                "data", Map.of("message", "Neu email ton tai, ban se nhan duoc huong dan dat lai mat khau."),
+                "meta", Map.of(
+                        "timestamp", Instant.now().toString(),
+                        "requestId", UUID.randomUUID().toString()
+                )
+        );
+
+        return ResponseEntity.ok(body);
+    }
+
+    /**
+     * POST /api/v1/auth/reset-password
+     * AC #3, #4, #5: validate token, cập nhật mật khẩu
+     */
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, Object>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+
+        Map<String, Object> body = Map.of(
+                "data", Map.of("message", "Mat khau da duoc dat lai thanh cong."),
+                "meta", Map.of(
+                        "timestamp", Instant.now().toString(),
+                        "requestId", UUID.randomUUID().toString()
+                )
+        );
+
+        return ResponseEntity.ok(body);
     }
 
     private void setRefreshTokenCookie(HttpServletResponse response, String value) {

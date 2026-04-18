@@ -4,18 +4,24 @@ import com.healthlens.api.dto.request.LoginRequest;
 import com.healthlens.api.dto.request.RegisterRequest;
 import com.healthlens.api.dto.response.LoginResponse;
 import com.healthlens.api.dto.response.RefreshResponse;
+import com.healthlens.api.dto.request.ForgotPasswordRequest;
+import com.healthlens.api.dto.request.ResetPasswordRequest;
 import com.healthlens.api.entity.EmailVerificationToken;
+import com.healthlens.api.entity.PasswordResetToken;
 import com.healthlens.api.entity.RefreshToken;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.entity.UserRole;
 import com.healthlens.api.exception.EmailAlreadyExistsException;
 import com.healthlens.api.exception.WeakPasswordException;
 import com.healthlens.api.repository.EmailVerificationTokenRepository;
+import com.healthlens.api.repository.PasswordResetTokenRepository;
 import com.healthlens.api.repository.RefreshTokenRepository;
 import com.healthlens.api.constants.ConsentConstants;
 import com.healthlens.api.repository.UserRepository;
+import com.healthlens.api.security.ForgotPasswordRateLimiter;
 import com.healthlens.api.security.LoginRateLimiter;
 import com.healthlens.api.util.JwtUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -32,6 +38,7 @@ import java.util.HexFormat;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @Service
 public class AuthService {
 
@@ -39,32 +46,38 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final EmailVerificationTokenRepository tokenRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final JwtUtil jwtUtil;
     private final LoginRateLimiter rateLimiter;
+    private final ForgotPasswordRateLimiter forgotPasswordRateLimiter;
     private final StringRedisTemplate redisTemplate;
     private final ConsentService consentService;
 
     public AuthService(
             UserRepository userRepository,
             EmailVerificationTokenRepository tokenRepository,
+            PasswordResetTokenRepository passwordResetTokenRepository,
             RefreshTokenRepository refreshTokenRepository,
             PasswordEncoder passwordEncoder,
             EmailService emailService,
             JwtUtil jwtUtil,
             LoginRateLimiter rateLimiter,
+            ForgotPasswordRateLimiter forgotPasswordRateLimiter,
             StringRedisTemplate redisTemplate,
             ConsentService consentService
     ) {
         this.userRepository = userRepository;
         this.tokenRepository = tokenRepository;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
         this.jwtUtil = jwtUtil;
         this.rateLimiter = rateLimiter;
+        this.forgotPasswordRateLimiter = forgotPasswordRateLimiter;
         this.redisTemplate = redisTemplate;
         this.consentService = consentService;
     }
@@ -292,6 +305,71 @@ public class AuthService {
                 // Token may be expired/invalid at logout — acceptable
             }
         }
+    }
+
+    /**
+     * Forgot password: check rate limit, generate token, send email. (AC #1, #2)
+     * Always returns success to prevent user enumeration.
+     */
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest request) {
+        String normalizedEmail = request.email().trim().toLowerCase();
+        log.info("[AuthService] Processing forgot password request for email: {}", normalizedEmail);
+
+        // AC #2: Rate limiting
+        forgotPasswordRateLimiter.checkRateLimit(normalizedEmail);
+
+        try {
+            User user = userRepository.findByEmailIgnoreCase(normalizedEmail).orElse(null);
+
+            if (user != null) {
+                log.info("[AuthService] User found: {}. Generating reset token.", user.getEmail());
+                // AC #1: Generate reset token
+                String tokenValue = UUID.randomUUID().toString();
+                PasswordResetToken token = new PasswordResetToken();
+                token.setUser(user);
+                token.setToken(tokenValue);
+                token.setExpiresAt(Instant.now().plus(1, ChronoUnit.HOURS));
+                passwordResetTokenRepository.save(token);
+
+                // Send email
+                emailService.sendPasswordResetEmail(user, tokenValue);
+            } else {
+                log.info("[AuthService] User NOT found for email: {}. Skipping email for security reasons.", normalizedEmail);
+            }
+        } catch (Exception e) {
+            // AC #5: generic success response to keep responses indistinguishable even if SMTP/DB fails
+            log.error("[AuthService] Error during forgot password processing for {}: {}", normalizedEmail, e.getMessage());
+        } finally {
+            // Record request for rate limiting (even if user not found or error occurred)
+            forgotPasswordRateLimiter.recordRequest(normalizedEmail);
+        }
+    }
+
+    /**
+     * Reset password: validate token, update password, revoke tokens. (AC #3, #4, #5, #6)
+     */
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        PasswordResetToken token = passwordResetTokenRepository.findByToken(request.token())
+                .orElseThrow(() -> new BadCredentialsException("Token khong hop le hoac da het han"));
+
+        if (token.isUsed() || token.isExpired()) {
+            throw new BadCredentialsException("Token khong hop le hoac da het han");
+        }
+
+        // AC #3: Update password
+        validatePasswordPolicy(request.newPassword());
+        User user = token.getUser();
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(user);
+
+        // AC #3: Mark token as used
+        token.setUsedAt(Instant.now());
+        passwordResetTokenRepository.save(token);
+
+        // AC #6: Revoke all refresh tokens
+        refreshTokenRepository.revokeAllByUserId(user.getId(), Instant.now());
     }
 
     private void validatePasswordPolicy(String password) {

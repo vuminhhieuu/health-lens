@@ -1,6 +1,6 @@
 # Story 2.2: Tạo hồ sơ sức khỏe mới trong tài khoản
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 
