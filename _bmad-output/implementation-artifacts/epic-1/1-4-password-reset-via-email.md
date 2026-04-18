@@ -1,6 +1,6 @@
 # Story 1.4: Đặt lại mật khẩu qua email
 
-Status: ready-for-dev
+Status: review
 
 ## Execution scope
 
@@ -35,35 +35,35 @@ so that tôi khôi phục quyền truy cập mà không cần hỗ trợ thủ c
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: Forgot password endpoint (AC: #1, #2)
-  - [ ] Tạo `POST /api/v1/auth/forgot-password` với body `{ "email": "..." }`
-  - [ ] Nếu email tồn tại: tạo reset token (UUID, TTL 1 giờ), lưu bảng `password_reset_tokens`, gửi email
-  - [ ] Nếu email không tồn tại: vẫn trả 200 OK (không lộ thông tin)
-  - [ ] Rate limit: tối đa 3 request mỗi email mỗi giờ (Redis counter)
-- [ ] Task 2 — Database: Password reset tokens table (AC: #3, #4)
-  - [ ] Flyway migration `V004__create_password_reset_tokens_table.sql`
-  - [ ] Schema: id, user_id, token, expires_at, used_at, created_at
-- [ ] Task 3 — Backend: Reset password endpoint (AC: #3, #4, #5, #6)
-  - [ ] Tạo `POST /api/v1/auth/reset-password` với body `{ "token": "...", "newPassword": "..." }`
-  - [ ] Validate token: tồn tại, chưa dùng, chưa hết hạn
-  - [ ] Cập nhật `password_hash` của user, đánh dấu token `used_at`, revoke tất cả refresh tokens
-  - [ ] Validate `newPassword` theo policy (min 8 ký tự, 1 chữ hoa, 1 số)
-- [ ] Task 4 — Backend: Email template tiếng Việt (AC: #1)
-  - [ ] HTML email với subject "HealthLens - Đặt lại mật khẩu"
-  - [ ] Link reset: `{frontendUrl}/auth/reset-password?token={token}`
-  - [ ] Ghi rõ: "Link có hiệu lực trong 1 giờ"
-- [ ] Task 5 — Web: Forgot password page (AC: #1, #2)
-  - [ ] Tạo `apps/web/src/app/(auth)/forgot-password/page.tsx`
-  - [ ] Form nhập email, submit → POST `/api/v1/auth/forgot-password`
-  - [ ] Success state: "Kiểm tra email của bạn" (không phân biệt email có tồn tại hay không)
-- [ ] Task 6 — Web: Reset password page (AC: #3, #4)
-  - [ ] Tạo `apps/web/src/app/(auth)/reset-password/page.tsx`
-  - [ ] Đọc `?token=` từ URL params
-  - [ ] Form: newPassword, confirmPassword với Zod validation (dùng shared `passwordSchema`)
-  - [ ] Submit → POST `/api/v1/auth/reset-password`, redirect đến `/login` khi thành công
-  - [ ] Error state: "Link đã hết hạn hoặc đã được sử dụng"
-- [ ] Task 7 — Tests (AC: #1, #2, #3, #4, #6)
-  - [ ] `AuthServiceTest`: forgot-password email tồn tại, không tồn tại, reset token hợp lệ, hết hạn, đã dùng
+- [x] Task 1 — Backend: Forgot password endpoint (AC: #1, #2)
+  - [x] Tạo `POST /api/v1/auth/forgot-password` với body `{ "email": "..." }`
+  - [x] Nếu email tồn tại: tạo reset token (UUID, TTL 1 giờ), lưu bảng `password_reset_tokens`, gửi email
+  - [x] Nếu email không tồn tại: vẫn trả 200 OK (không lộ thông tin)
+  - [x] Rate limit: tối đa 3 request mỗi email mỗi giờ (Redis counter)
+- [x] Task 2 — Database: Password reset tokens table (AC: #3, #4)
+  - [x] Flyway migration `V004__create_password_reset_tokens_table.sql`
+  - [x] Schema: id, user_id, token, expires_at, used_at, created_at
+- [x] Task 3 — Backend: Reset password endpoint (AC: #3, #4, #5, #6)
+  - [x] Tạo `POST /api/v1/auth/reset-password` với body `{ "token": "...", "newPassword": "..." }`
+  - [x] Validate token: tồn tại, chưa dùng, chưa hết hạn
+  - [x] Cập nhật `password_hash` của user, đánh dấu token `used_at`, revoke tất cả refresh tokens
+  - [x] Validate `newPassword` theo policy (min 8 ký tự, 1 chữ hoa, 1 số)
+- [x] Task 4 — Backend: Email template tiếng Việt (AC: #1)
+  - [x] HTML email với subject "HealthLens - Đặt lại mật khẩu"
+  - [x] Link reset: `{frontendUrl}/auth/reset-password?token={token}`
+  - [x] Ghi rõ: "Link có hiệu lực trong 1 giờ"
+- [x] Task 5 — Web: Forgot password page (AC: #1, #2)
+  - [x] Tạo `apps/web/src/app/(auth)/forgot-password/page.tsx`
+  - [x] Form nhập email, submit → POST `/api/v1/auth/forgot-password`
+  - [x] Success state: "Kiểm tra email của bạn" (không phân biệt email có tồn tại hay không)
+- [x] Task 6 — Web: Reset password page (AC: #3, #4)
+  - [x] Tạo `apps/web/src/app/(auth)/reset-password/page.tsx`
+  - [x] Đọc `?token=` từ URL params
+  - [x] Form: newPassword, confirmPassword với Zod validation (dùng shared `passwordSchema`)
+  - [x] Submit → POST `/api/v1/auth/reset-password`, redirect đến `/login` khi thành công
+  - [x] Error state: "Link đã hết hạn hoặc đã được sử dụng"
+- [x] Task 7 — Tests (AC: #1, #2, #3, #4, #6)
+  - [x] `AuthServiceTest`: forgot-password email tồn tại, không tồn tại, reset token hợp lệ, hết hạn, đã dùng
 
 ## Dev Notes
 
@@ -140,10 +140,36 @@ export const resetPasswordSchema = z.object({
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+Gemini 3 Flash
 
 ### Debug Log References
 
 ### Completion Notes List
 
+- Triển khai đầy đủ luồng đặt lại mật khẩu qua email.
+- Backend:
+  - Migration V004 tạo bảng `password_reset_tokens`.
+  - Endpoint `forgot-password` có rate limiting (3 y/c mỗi giờ).
+  - Endpoint `reset-password` validate token và cập nhật mật khẩu, đồng thời revoke tất cả sessions của user.
+  - Template email tiếng Việt chuyên nghiệp.
+- Frontend:
+  - Trang Quên mật khẩu (/forgot-password) giao diện đồng bộ với design system.
+  - Trang Đặt lại mật khẩu (/reset-password) xử lý token từ URL và validate mật khẩu mới.
+- Shared:
+  - Thêm validation schemas dùng chung cho cả frontend và backend.
+
 ### File List
+
+- apps/api/src/main/resources/db/migration/V004__create_password_reset_tokens_table.sql
+- apps/api/src/main/java/com/healthlens/api/entity/PasswordResetToken.java
+- apps/api/src/main/java/com/healthlens/api/repository/PasswordResetTokenRepository.java
+- apps/api/src/main/java/com/healthlens/api/dto/request/ForgotPasswordRequest.java
+- apps/api/src/main/java/com/healthlens/api/dto/request/ResetPasswordRequest.java
+- apps/api/src/main/java/com/healthlens/api/security/ForgotPasswordRateLimiter.java
+- apps/api/src/main/java/com/healthlens/api/service/AuthService.java
+- apps/api/src/main/java/com/healthlens/api/service/EmailService.java
+- apps/api/src/main/java/com/healthlens/api/controller/AuthController.java
+- packages/shared/schemas/auth.ts
+- apps/web/src/app/(auth)/forgot-password/page.tsx
+- apps/web/src/app/(auth)/reset-password/page.tsx
+- apps/api/src/test/java/com/healthlens/api/service/AuthServiceTest.java

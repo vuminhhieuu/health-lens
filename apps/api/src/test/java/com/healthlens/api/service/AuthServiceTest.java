@@ -1,14 +1,19 @@
 package com.healthlens.api.service;
 
+import com.healthlens.api.dto.request.ForgotPasswordRequest;
 import com.healthlens.api.dto.request.LoginRequest;
+import com.healthlens.api.dto.request.ResetPasswordRequest;
 import com.healthlens.api.dto.response.ConsentResponse;
+import com.healthlens.api.entity.PasswordResetToken;
 import com.healthlens.api.entity.RefreshToken;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.entity.UserRole;
 import com.healthlens.api.exception.AccountLockedException;
 import com.healthlens.api.repository.EmailVerificationTokenRepository;
+import com.healthlens.api.repository.PasswordResetTokenRepository;
 import com.healthlens.api.repository.RefreshTokenRepository;
 import com.healthlens.api.repository.UserRepository;
+import com.healthlens.api.security.ForgotPasswordRateLimiter;
 import com.healthlens.api.security.LoginRateLimiter;
 import com.healthlens.api.util.JwtUtil;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,11 +47,13 @@ class AuthServiceTest {
 
     @Mock private UserRepository userRepository;
     @Mock private EmailVerificationTokenRepository tokenRepository;
+    @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
     @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private EmailService emailService;
     @Mock private JwtUtil jwtUtil;
     @Mock private LoginRateLimiter rateLimiter;
+    @Mock private ForgotPasswordRateLimiter forgotPasswordRateLimiter;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ConsentService consentService;
     @Mock private ValueOperations<String, String> valueOperations;
@@ -56,8 +63,9 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         authService = new AuthService(
-                userRepository, tokenRepository, refreshTokenRepository,
-                passwordEncoder, emailService, jwtUtil, rateLimiter, redisTemplate, consentService
+                userRepository, tokenRepository, passwordResetTokenRepository,
+                refreshTokenRepository, passwordEncoder, emailService,
+                jwtUtil, rateLimiter, forgotPasswordRateLimiter, redisTemplate, consentService
         );
     }
 
@@ -268,6 +276,93 @@ class AuthServiceTest {
         verify(refreshTokenRepository).revokeAllByUserId(eq(userId), any(java.time.Instant.class));
     }
 
+    // ========== PASSWORD RESET TESTS ==========
+
+    @Test
+    @DisplayName("forgotPassword gui email neu user ton tai (AC #1)")
+    void forgotPassword_userExists() {
+        User user = createVerifiedUser();
+        ForgotPasswordRequest request = new ForgotPasswordRequest("user@example.com");
+
+        when(userRepository.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
+
+        authService.forgotPassword(request);
+
+        verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
+        verify(emailService).sendPasswordResetEmail(eq(user), anyString());
+        verify(forgotPasswordRateLimiter).recordRequest("user@example.com");
+    }
+
+    @Test
+    @DisplayName("forgotPassword khong gui email neu user khong ton tai nhung van thanh cong (AC #2)")
+    void forgotPassword_userNotFound() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest("nonexistent@example.com");
+
+        when(userRepository.findByEmailIgnoreCase("nonexistent@example.com")).thenReturn(Optional.empty());
+
+        authService.forgotPassword(request);
+
+        verify(forgotPasswordRateLimiter).recordRequest("nonexistent@example.com");
+        verify(emailService, org.mockito.Mockito.never()).sendPasswordResetEmail(any(), anyString());
+    }
+
+    @Test
+    @DisplayName("forgotPassword throw exception khi bi rate limit (AC #2)")
+    void forgotPassword_rateLimited() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest("limited@example.com");
+
+        doThrow(new AccountLockedException("Rate limit exceeded")).when(forgotPasswordRateLimiter).checkRateLimit("limited@example.com");
+
+        assertThatThrownBy(() -> authService.forgotPassword(request))
+                .isInstanceOf(AccountLockedException.class);
+    }
+
+    @Test
+    @DisplayName("resetPassword thanh cong voi token hop le (AC #3, #6)")
+    void resetPassword_success() {
+        User user = createVerifiedUser();
+        PasswordResetToken token = createValidResetToken(user);
+        ResetPasswordRequest request = new ResetPasswordRequest("valid-token", "NewStrongPass1");
+
+        when(passwordResetTokenRepository.findByToken("valid-token")).thenReturn(Optional.of(token));
+        when(passwordEncoder.encode("NewStrongPass1")).thenReturn("new-hashed-pass");
+
+        authService.resetPassword(request);
+
+        assertThat(user.getPasswordHash()).isEqualTo("new-hashed-pass");
+        assertThat(token.getUsedAt()).isNotNull();
+        verify(refreshTokenRepository).revokeAllByUserId(eq(user.getId()), any(Instant.class));
+    }
+
+    @Test
+    @DisplayName("resetPassword throw exception voi token het han (AC #4)")
+    void resetPassword_expired() {
+        User user = createVerifiedUser();
+        PasswordResetToken token = createExpiredResetToken(user);
+        ResetPasswordRequest request = new ResetPasswordRequest("expired-token", "NewStrongPass1");
+
+        when(passwordResetTokenRepository.findByToken("expired-token")).thenReturn(Optional.of(token));
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessage("Token khong hop le hoac da het han");
+    }
+
+    @Test
+    @DisplayName("resetPassword throw exception voi token da duoc su dung (AC #4, #5)")
+    void resetPassword_usedToken() {
+        User user = createVerifiedUser();
+        PasswordResetToken token = createValidResetToken(user);
+        token.setUsedAt(Instant.now());
+        ResetPasswordRequest request = new ResetPasswordRequest("used-token", "NewStrongPass1");
+
+        when(passwordResetTokenRepository.findByToken("used-token")).thenReturn(Optional.of(token));
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessage("Token khong hop le hoac da het han");
+    }
+
     // ========== HELPERS ==========
 
     private User createVerifiedUser() {
@@ -299,6 +394,20 @@ class AuthServiceTest {
 
     private RefreshToken createExpiredRefreshToken() {
         RefreshToken token = createValidRefreshToken();
+        token.setExpiresAt(Instant.now().minus(1, ChronoUnit.HOURS));
+        return token;
+    }
+
+    private PasswordResetToken createValidResetToken(User user) {
+        PasswordResetToken token = new PasswordResetToken();
+        token.setUser(user);
+        token.setToken("valid-token");
+        token.setExpiresAt(Instant.now().plus(1, ChronoUnit.HOURS));
+        return token;
+    }
+
+    private PasswordResetToken createExpiredResetToken(User user) {
+        PasswordResetToken token = createValidResetToken(user);
         token.setExpiresAt(Instant.now().minus(1, ChronoUnit.HOURS));
         return token;
     }
