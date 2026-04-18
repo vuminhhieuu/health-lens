@@ -124,4 +124,22 @@ public class GlobalExceptionHandler {
                 "message", error.getDefaultMessage() == null ? "Invalid value" : error.getDefaultMessage()
         );
     }
+
+    @ExceptionHandler(ConsentRequiredException.class)
+    public ProblemDetail handleConsentRequired(ConsentRequiredException ex, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        problem.setType(URI.create("https://healthlens.vn/errors/consent-required"));
+        problem.setTitle("Consent Required");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        return problem;
+    }
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ProblemDetail handleUserNotFound(UserNotFoundException ex, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setType(URI.create("https://healthlens.vn/errors/user-not-found"));
+        problem.setTitle("User Not Found");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        return problem;
+    }
 }

@@ -31,6 +31,7 @@ export const FRONTEND_ROUTES = {
  */
 export const API_ROUTES = {
   AUTH: ApiPaths.AUTH,
+  CONSENT: ApiPaths.CONSENT,
   DEV: ApiPaths.DEV,
   OCR: ApiPaths.OCR,
   HEALTH: ApiPaths.HEALTH,

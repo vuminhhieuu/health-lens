@@ -1,6 +1,8 @@
 import axios from "axios";
 
+import { syncActiveConsentVersion } from "@/lib/consent/syncActiveConsentVersion";
 import { useAuthStore } from "@/stores/authStore";
+import type { SessionConsent } from "@/stores/authStore";
 
 import { API_ROUTES } from "./routes";
 
@@ -65,12 +67,25 @@ apiClient.interceptors.response.use(
 
       try {
         const refreshResponse = await apiClient.post(API_ROUTES.AUTH.REFRESH);
-        const newAccessToken = refreshResponse.data?.data?.accessToken;
+        const payload = refreshResponse.data?.data;
+        const newAccessToken = payload?.accessToken;
+        const refreshedUser = payload?.user as
+          | { id: string; email: string; role: string }
+          | undefined;
+        const consent: SessionConsent = {
+          consentGiven: Boolean(payload?.consentGiven),
+          consentVersion:
+            payload?.consentVersion === undefined || payload?.consentVersion === null
+              ? null
+              : String(payload.consentVersion),
+        };
 
         if (newAccessToken) {
-          const { user } = useAuthStore.getState();
-          if (user) {
-            useAuthStore.getState().setAuth(user, newAccessToken);
+          const { user: currentUser } = useAuthStore.getState();
+          const userToPersist = refreshedUser ?? currentUser;
+          if (userToPersist) {
+            useAuthStore.getState().setAuth(userToPersist, newAccessToken, consent);
+            await syncActiveConsentVersion();
           }
           processQueue(null);
           return apiClient(originalRequest);

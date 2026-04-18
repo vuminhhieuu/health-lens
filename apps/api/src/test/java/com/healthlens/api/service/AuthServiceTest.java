@@ -1,6 +1,7 @@
 package com.healthlens.api.service;
 
 import com.healthlens.api.dto.request.LoginRequest;
+import com.healthlens.api.dto.response.ConsentResponse;
 import com.healthlens.api.entity.RefreshToken;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.entity.UserRole;
@@ -47,6 +48,7 @@ class AuthServiceTest {
     @Mock private JwtUtil jwtUtil;
     @Mock private LoginRateLimiter rateLimiter;
     @Mock private StringRedisTemplate redisTemplate;
+    @Mock private ConsentService consentService;
     @Mock private ValueOperations<String, String> valueOperations;
 
     private AuthService authService;
@@ -55,7 +57,7 @@ class AuthServiceTest {
     void setUp() {
         authService = new AuthService(
                 userRepository, tokenRepository, refreshTokenRepository,
-                passwordEncoder, emailService, jwtUtil, rateLimiter, redisTemplate
+                passwordEncoder, emailService, jwtUtil, rateLimiter, redisTemplate, consentService
         );
     }
 
@@ -144,6 +146,60 @@ class AuthServiceTest {
     }
 
     // ========== REFRESH TESTS ==========
+
+    @Test
+    @DisplayName("refreshWithConsent thanh cong tra ve token va consent info (AC #2)")
+    void refreshWithConsent_success() {
+        String rawRefreshToken = "old-refresh-token";
+        RefreshToken storedToken = createValidRefreshToken();
+        User user = createVerifiedUser();
+        ConsentResponse consentResponse = ConsentResponse.builder()
+                .consentGiven(true)
+                .consentVersion("1.0")
+                .build();
+
+        when(refreshTokenRepository.findByTokenHashAndRevokedAtIsNull(anyString()))
+                .thenReturn(Optional.of(storedToken));
+        when(userRepository.findById(storedToken.getUserId())).thenReturn(Optional.of(user));
+        when(jwtUtil.generateAccessToken(user)).thenReturn("new-access-token");
+        when(jwtUtil.generateRefreshToken()).thenReturn("new-refresh-token");
+        when(jwtUtil.getRefreshTtl()).thenReturn(604800000L);
+        when(consentService.getConsentStatus(eq(user.getId()), anyString()))
+                .thenReturn(consentResponse);
+
+        AuthService.RefreshResult result = authService.refreshWithConsent(rawRefreshToken);
+
+        assertThat(result.response().accessToken()).isEqualTo("new-access-token");
+        assertThat(result.response().consentGiven()).isTrue();
+        assertThat(result.response().consentVersion()).isEqualTo("1.0");
+        assertThat(result.rawRefreshToken()).isEqualTo("new-refresh-token");
+    }
+
+    @Test
+    @DisplayName("refreshWithConsent khi user khong co consent")
+    void refreshWithConsent_noConsent() {
+        String rawRefreshToken = "old-refresh-token";
+        RefreshToken storedToken = createValidRefreshToken();
+        User user = createVerifiedUser();
+        ConsentResponse consentResponse = ConsentResponse.builder()
+                .consentGiven(false)
+                .consentVersion(null)
+                .build();
+
+        when(refreshTokenRepository.findByTokenHashAndRevokedAtIsNull(anyString()))
+                .thenReturn(Optional.of(storedToken));
+        when(userRepository.findById(storedToken.getUserId())).thenReturn(Optional.of(user));
+        when(jwtUtil.generateAccessToken(user)).thenReturn("new-access-token");
+        when(jwtUtil.generateRefreshToken()).thenReturn("new-refresh-token");
+        when(jwtUtil.getRefreshTtl()).thenReturn(604800000L);
+        when(consentService.getConsentStatus(eq(user.getId()), anyString()))
+                .thenReturn(consentResponse);
+
+        AuthService.RefreshResult result = authService.refreshWithConsent(rawRefreshToken);
+
+        assertThat(result.response().consentGiven()).isFalse();
+        assertThat(result.response().consentVersion()).isNull();
+    }
 
     @Test
     @DisplayName("refresh thanh cong tra ve token pair moi (AC #2)")

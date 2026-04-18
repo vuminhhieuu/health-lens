@@ -11,7 +11,6 @@
 #
 # Profiles:
 #   core  - Redis, MinIO (default)
-#   mail  - Mailhog (dev only)
 #   ocr   - OCR Service (dev only)
 
 name: healthlens
@@ -58,10 +57,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-  # ==========================================
-  # Mailhog - Email Testing (Dev only)
-  # NOTE: Moved to compose.dev.yml (no profile = always starts)
-  # ==========================================
 
 networks:
   healthlens:
@@ -83,7 +78,7 @@ volumes:
 # | PostgreSQL   | Docker       | Neon branch    | Neon main         |
 # | Redis        | Docker       | Railway addon  | Railway addon     |
 # | MinIO        | Docker       | S3 Cloud       | S3 Cloud          |
-# | Mail         | Mailhog/SMTP | SMTP (Resend)  | SMTP (Resend)     |
+# | Mail         | Mailhog      | SMTP (Resend)  | SMTP (Resend)     |
 # | Qdrant       | Cloud        | Cloud          | Cloud             |
 #
 # NOTE: Dev uses Docker Compose.

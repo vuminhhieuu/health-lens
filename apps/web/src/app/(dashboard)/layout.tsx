@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuthStore } from "@/stores/authStore";
@@ -10,8 +11,6 @@ import {
   Search, Bell, HelpCircle,
   Home, FileText, User, Users, Settings, LogOut
 } from "lucide-react";
-
-import { useEffect } from "react";
 
 export default function DashboardLayout({
   children,

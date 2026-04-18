@@ -3,7 +3,6 @@ package com.healthlens.api.controller;
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.LoginRequest;
 import com.healthlens.api.dto.request.RegisterRequest;
-import com.healthlens.api.dto.response.LoginResponse;
 import com.healthlens.api.service.AuthService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,6 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -92,6 +93,8 @@ public class AuthController {
     /**
      * POST /api/v1/auth/refresh
      * AC #2: use refresh token (HttpOnly cookie) to get new access token
+     * Returns consent information alongside user data to enable frontend
+     * to update consent modal based on latest consent status.
      */
     @PostMapping("/refresh")
     public ResponseEntity<Map<String, Object>> refresh(
@@ -110,20 +113,29 @@ public class AuthController {
                     ));
         }
 
-        AuthService.LoginResult result = authService.refresh(rawRefreshToken);
+        AuthService.RefreshResult result = authService.refreshWithConsent(rawRefreshToken);
 
         // Set new refresh token cookie (rotation)
         setRefreshTokenCookie(response, result.rawRefreshToken());
 
-        Map<String, Object> body = Map.of(
-                "data", Map.of(
-                        "accessToken", result.response().accessToken()
-                ),
-                "meta", Map.of(
-                        "timestamp", Instant.now().toString(),
-                        "requestId", UUID.randomUUID().toString()
-                )
-        );
+        // Map.of does not allow null values; consentVersion can legitimately be null
+        // when user has not granted consent for the active version yet.
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("accessToken", result.response().accessToken());
+        data.put("user", Map.of(
+                "id", result.response().user().id(),
+                "email", result.response().user().email(),
+                "role", result.response().user().role()
+        ));
+        data.put("consentGiven", result.response().consentGiven());
+        data.put("consentVersion", result.response().consentVersion());
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("data", data);
+        body.put("meta", Map.of(
+                "timestamp", Instant.now().toString(),
+                "requestId", UUID.randomUUID().toString()
+        ));
 
         return ResponseEntity.ok(body);
     }

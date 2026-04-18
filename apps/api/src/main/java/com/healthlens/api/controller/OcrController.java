@@ -1,5 +1,6 @@
 package com.healthlens.api.controller;
 
+import com.healthlens.api.annotation.RequiresConsent;
 import com.healthlens.api.dto.OcrResult;
 import com.healthlens.api.exception.OcrProcessingException;
 import com.healthlens.api.service.OcrService;
@@ -38,10 +39,13 @@ public class OcrController {
      * Extract text từ image URL qua OCR pipeline.
      *
      * <p>Gọi EasyOCR service (primary), fallback sang Textract khi fail.
+     * 
+     * <p>Requires user consent before processing health data.
      *
      * @param request body chứa imageUrl
      * @return {@link OcrResult} với extracted text, confidence, source
      */
+    @RequiresConsent
     @PostMapping("/extract")
     public ResponseEntity<OcrResult> extractText(@RequestBody Map<String, String> request) {
         String imageUrl = request.get("imageUrl");
