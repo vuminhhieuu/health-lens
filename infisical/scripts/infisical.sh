@@ -162,28 +162,37 @@ push_prod() {
 }
 
 pull_dev() {
-  ensure_folder_path "$DEV_ENV" "$DEV_PATH"
-  infisical export --env="$DEV_ENV" --path="$DEV_PATH" --output-file="$DEV_FILE"
+  export_or_print_pull_help "$DEV_ENV" "$DEV_PATH" "$DEV_FILE"
 }
 
 pull_staging() {
-  create_staging_folders
   pull_staging_web
   pull_staging_api
 }
 
 pull_staging_web() {
-  create_staging_folders
-  infisical export --env="$STAGING_ENV" --path="$STAGING_WEB_PATH" --output-file="$STAGING_WEB_FILE"
+  export_or_print_pull_help "$STAGING_ENV" "$STAGING_WEB_PATH" "$STAGING_WEB_FILE"
 }
 
 pull_staging_api() {
-  create_staging_folders
-  infisical export --env="$STAGING_ENV" --path="$STAGING_API_PATH" --output-file="$STAGING_API_FILE"
+  export_or_print_pull_help "$STAGING_ENV" "$STAGING_API_PATH" "$STAGING_API_FILE"
 }
 
 pull_prod() {
-  infisical export --env="$PROD_ENV" --path="$PROD_PATH" --output-file="$PROD_FILE"
+  export_or_print_pull_help "$PROD_ENV" "$PROD_PATH" "$PROD_FILE"
+}
+
+export_or_print_pull_help() {
+  local env_name="$1"
+  local path_name="$2"
+  local output_file="$3"
+
+  if ! infisical export --env="$env_name" --path="$path_name" --output-file="$output_file"; then
+    echo "Unable to pull secrets for env '$env_name' at path '$path_name'." >&2
+    echo "Pull commands do not create folders automatically." >&2
+    echo "If the folder/path does not exist, run bootstrap/push with a write-capable account." >&2
+    return 1
+  fi
 }
 
 check() {

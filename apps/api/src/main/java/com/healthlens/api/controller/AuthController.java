@@ -98,7 +98,7 @@ public class AuthController {
         authService.verifyEmail(request.token());
 
         Map<String, Object> body = Map.of(
-                "data", Map.of("message", "Email verified successfully"),
+                "data", Map.of("message", "Email đã được xác thực thành công"),
                 "meta", Map.of(
                         "timestamp", Instant.now().toString(),
                         "requestId", UUID.randomUUID().toString()

@@ -197,7 +197,7 @@ class AuthControllerTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"token\":\"valid-token\"}"))
                         .andExpect(status().isOk())
-                        .andExpect(jsonPath("$.data.message").value("Email verified successfully"));
+                        .andExpect(jsonPath("$.data.message").value("Email đã được xác thực thành công"));
         }
 
         @Test

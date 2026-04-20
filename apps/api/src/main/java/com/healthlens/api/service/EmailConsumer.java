@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.ReadOffset;
+import org.springframework.data.redis.connection.stream.StreamInfo;
 import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.StreamOperations;
@@ -15,6 +16,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -51,11 +53,38 @@ public class EmailConsumer {
     }
 
     private void ensureConsumerGroup() {
+        StreamOperations<String, Object, Object> streamOps = redisTemplate.opsForStream();
         try {
-            // Ensure stream exists before creating the consumer group.
-            redisTemplate.opsForStream().add(emailEventStream, Map.of("_init", "1"));
-            redisTemplate.opsForStream().createGroup(emailEventStream, ReadOffset.latest(), consumerGroup);
+            boolean streamExists = Boolean.TRUE.equals(redisTemplate.hasKey(emailEventStream));
+            boolean groupExists = false;
+
+            if (streamExists) {
+                StreamInfo.XInfoGroups groups = streamOps.groups(emailEventStream);
+                if (groups != null) {
+                    for (StreamInfo.XInfoGroup group : groups) {
+                        if (consumerGroup.equals(group.groupName())) {
+                            groupExists = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (groupExists) {
+                return;
+            }
+
+            if (!streamExists) {
+                // Create stream once before creating group.
+                streamOps.add(emailEventStream, Map.of("_init", "1"));
+            }
+
+            streamOps.createGroup(emailEventStream, ReadOffset.latest(), consumerGroup);
         } catch (Exception ex) {
+            if (ex.getMessage() != null && ex.getMessage().contains("BUSYGROUP")) {
+                log.debug("[EmailConsumer] Consumer group {} already exists for stream {}", consumerGroup, emailEventStream);
+                return;
+            }
             log.debug("[EmailConsumer] Stream/group initialization skipped: {}", ex.getMessage());
         }
     }
@@ -64,14 +93,26 @@ public class EmailConsumer {
     @SuppressWarnings("unchecked")
     public void consumeEmailEvents() {
         StreamOperations<String, Object, Object> streamOps = redisTemplate.opsForStream();
-        List<MapRecord<String, Object, Object>> records;
+        List<MapRecord<String, Object, Object>> records = new ArrayList<>();
         try {
-            records = streamOps.read(
+            // Retry pending records owned by this consumer first.
+            List<MapRecord<String, Object, Object>> pendingRecords = streamOps.read(
+                    Consumer.from(consumerGroup, consumerName),
+                    org.springframework.data.redis.connection.stream.StreamReadOptions.empty().count(10),
+                    StreamOffset.create(emailEventStream, ReadOffset.from("0")));
+            if (pendingRecords != null && !pendingRecords.isEmpty()) {
+                records.addAll(pendingRecords);
+            }
+
+            List<MapRecord<String, Object, Object>> newRecords = streamOps.read(
                     Consumer.from(consumerGroup, consumerName),
                     org.springframework.data.redis.connection.stream.StreamReadOptions.empty()
                             .count(10)
                             .block(Duration.ofMillis(500)),
                     StreamOffset.create(emailEventStream, ReadOffset.lastConsumed()));
+            if (newRecords != null && !newRecords.isEmpty()) {
+                records.addAll(newRecords);
+            }
         } catch (Exception ex) {
             if (ex.getMessage() != null && ex.getMessage().contains("NOGROUP")) {
                 ensureConsumerGroup();

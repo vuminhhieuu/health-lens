@@ -63,7 +63,7 @@ app:
   stream:
     email-events: ${APP_STREAM_EMAIL_EVENTS:email.events}
     email-consumer-group: ${APP_STREAM_EMAIL_CONSUMER_GROUP:email-consumers}
-    email-consumer-name: ${APP_STREAM_EMAIL_CONSUMER_NAME:api-email-consumer}
+    email-consumer-name: ${APP_STREAM_EMAIL_CONSUMER_NAME:${HOSTNAME:${random.uuid}}}
     email-poll-delay-ms: ${APP_STREAM_EMAIL_POLL_DELAY_MS:1000}
 
 jwt:
@@ -108,7 +108,6 @@ spring:
 app:
   mail:
     from: ${MAIL_FROM:no-reply@healthlens.vn}
-    driver: ${MAIL_DRIVER:smtp}
   frontend:
     verification-url: ${WEB_VERIFY_URL:http://localhost:3000/verify-email}
 
@@ -161,11 +160,10 @@ spring:
 app:
   mail:
     from: ${MAIL_FROM:noreply@healthlens.vn}
-    driver: ${MAIL_DRIVER:smtp}
   frontend:
     verification-url: ${WEB_VERIFY_URL:https://healthlens-staging.vercel.app/verify-email}
-    reset-password-url: ${WEB_RESET_PASSWORD_URL:https://healthlens-staging.vercel.app/auth/reset-password}
-    login-url: ${WEB_LOGIN_URL:https://healthlens-staging.vercel.app/auth/login}
+    reset-password-url: ${WEB_RESET_PASSWORD_URL:https://healthlens-staging.vercel.app/reset-password}
+    login-url: ${WEB_LOGIN_URL:https://healthlens-staging.vercel.app/login}
   storage:
     endpoint: ${MINIO_ENDPOINT:}
     access-key: ${MINIO_ACCESS_KEY:}
@@ -223,13 +221,12 @@ spring:
 app:
   mail:
     from: ${MAIL_FROM:noreply@healthlens.vn}
-    driver: smtp
   cookie:
     secure: true
   frontend:
     verification-url: ${WEB_VERIFY_URL:https://healthlens.vn/verify-email}
-    reset-password-url: ${WEB_RESET_PASSWORD_URL:https://healthlens.vn/auth/reset-password}
-    login-url: ${WEB_LOGIN_URL:https://healthlens.vn/auth/login}
+    reset-password-url: ${WEB_RESET_PASSWORD_URL:https://healthlens.vn/reset-password}
+    login-url: ${WEB_LOGIN_URL:https://healthlens.vn/login}
   storage:
     endpoint: ${MINIO_ENDPOINT:}
     access-key: ${MINIO_ACCESS_KEY:}

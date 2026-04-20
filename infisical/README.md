@@ -12,7 +12,6 @@ Folder này chứa tài liệu và script vận hành Infisical cho dự án `he
 
 - `scripts/infisical.sh`: script all-in-one để push/pull/check/bootstrap.
 - `ONBOARDING.md`: hướng dẫn thành viên mới.
-- `config/.infisical.json.example`: mẫu cấu hình project link.
 
 ## Script chính
 
