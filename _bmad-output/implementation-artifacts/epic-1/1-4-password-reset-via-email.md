@@ -1,6 +1,6 @@
 # Story 1.4: Đặt lại mật khẩu qua email
 
-Status: review
+Status: done
 
 ## Execution scope
 

@@ -121,9 +121,9 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
-      - name: Build API image
+      - name: Build API artifact
         working-directory: apps/api
-        run: ./gradlew bootBuildImage
+        run: ./gradlew bootJar --no-daemon
 
   web-build:
     name: web:build

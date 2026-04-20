@@ -189,6 +189,31 @@ class AuthControllerTest {
         // ========== REFRESH TESTS ==========
 
         @Test
+        @DisplayName("POST /api/v1/auth/verify-email -> 200 khi token hop le")
+        void verifyEmail_success() throws Exception {
+                doNothing().when(authService).verifyEmail("valid-token");
+
+                mockMvc.perform(post("/api/v1/auth/verify-email")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"token\":\"valid-token\"}"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.data.message").value("Email đã được xác thực thành công"));
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/auth/verify-email -> 400 khi token khong hop le")
+        void verifyEmail_invalidToken() throws Exception {
+                org.mockito.Mockito.doThrow(new IllegalArgumentException("Token xác thực không hợp lệ"))
+                                .when(authService).verifyEmail("invalid-token");
+
+                mockMvc.perform(post("/api/v1/auth/verify-email")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"token\":\"invalid-token\"}"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.detail").value("Token xác thực không hợp lệ"));
+        }
+
+        @Test
         @DisplayName("POST /api/v1/auth/refresh -> 401 khi khong co cookie (AC #2)")
         void refresh_noCookie() throws Exception {
                 mockMvc.perform(post("/api/v1/auth/refresh")

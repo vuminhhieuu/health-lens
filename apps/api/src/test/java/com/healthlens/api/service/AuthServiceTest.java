@@ -4,6 +4,7 @@ import com.healthlens.api.dto.request.ForgotPasswordRequest;
 import com.healthlens.api.dto.request.LoginRequest;
 import com.healthlens.api.dto.request.ResetPasswordRequest;
 import com.healthlens.api.dto.response.ConsentResponse;
+import com.healthlens.api.entity.EmailVerificationToken;
 import com.healthlens.api.entity.PasswordResetToken;
 import com.healthlens.api.entity.RefreshToken;
 import com.healthlens.api.entity.User;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -57,6 +59,7 @@ class AuthServiceTest {
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ConsentService consentService;
     @Mock private ValueOperations<String, String> valueOperations;
+    @Mock private StreamOperations<String, Object, Object> streamOperations;
 
     private AuthService authService;
 
@@ -65,11 +68,58 @@ class AuthServiceTest {
         authService = new AuthService(
                 userRepository, tokenRepository, passwordResetTokenRepository,
                 refreshTokenRepository, passwordEncoder, emailService,
-                jwtUtil, rateLimiter, forgotPasswordRateLimiter, redisTemplate, consentService
+                jwtUtil, rateLimiter, forgotPasswordRateLimiter, redisTemplate, consentService, "email.events"
         );
     }
 
     // ========== LOGIN TESTS ==========
+
+    @Test
+    @DisplayName("register publish event vao Redis stream va khong gui email dong bo")
+    void register_publishEvent() {
+        com.healthlens.api.dto.request.RegisterRequest request =
+                new com.healthlens.api.dto.request.RegisterRequest(
+                        "Nguyen Van A", "user@example.com", java.time.LocalDate.of(1999, 1, 1), "StrongPass1");
+        User user = createUnverifiedUser();
+
+        when(userRepository.existsByEmailIgnoreCase("user@example.com")).thenReturn(false);
+        when(passwordEncoder.encode("StrongPass1")).thenReturn("hashed");
+        when(userRepository.saveAndFlush(any(User.class))).thenReturn(user);
+        when(redisTemplate.opsForStream()).thenReturn(streamOperations);
+
+        authService.register(request);
+
+        verify(streamOperations).add(eq("email.events"), any(java.util.Map.class));
+        verify(emailService, org.mockito.Mockito.never()).sendVerificationEmail(any(), anyString());
+    }
+
+    @Test
+    @DisplayName("verifyEmail thanh cong set emailVerified=true")
+    void verifyEmail_success() {
+        User user = createUnverifiedUser();
+        EmailVerificationToken token = new EmailVerificationToken();
+        token.setToken("valid-token");
+        token.setUser(user);
+        token.setExpiresAt(Instant.now().plus(1, ChronoUnit.HOURS));
+
+        when(tokenRepository.findByToken("valid-token")).thenReturn(Optional.of(token));
+
+        authService.verifyEmail("valid-token");
+
+        assertThat(user.isEmailVerified()).isTrue();
+        verify(userRepository).save(user);
+        verify(tokenRepository).save(token);
+    }
+
+    @Test
+    @DisplayName("verifyEmail voi token khong hop le throw IllegalArgumentException")
+    void verifyEmail_invalidToken() {
+        when(tokenRepository.findByToken("invalid-token")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.verifyEmail("invalid-token"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("không hợp lệ");
+    }
 
     @Test
     @DisplayName("login thanh cong tra ve token pair (AC #1)")

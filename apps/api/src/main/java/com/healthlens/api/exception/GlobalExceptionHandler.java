@@ -118,6 +118,15 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ProblemDetail handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setType(URI.create("https://healthlens.vn/errors/validation-error"));
+        problem.setTitle("Validation error");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        return problem;
+    }
+
     private Map<String, String> toFieldError(FieldError error) {
         return Map.of(
                 "field", error.getField(),

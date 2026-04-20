@@ -5,6 +5,7 @@ import com.healthlens.api.dto.request.ForgotPasswordRequest;
 import com.healthlens.api.dto.request.LoginRequest;
 import com.healthlens.api.dto.request.RegisterRequest;
 import com.healthlens.api.dto.request.ResetPasswordRequest;
+import com.healthlens.api.dto.request.VerifyEmailRequest;
 import com.healthlens.api.service.AuthService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -83,6 +84,21 @@ public class AuthController {
                                 "role", result.response().user().role()
                         )
                 ),
+                "meta", Map.of(
+                        "timestamp", Instant.now().toString(),
+                        "requestId", UUID.randomUUID().toString()
+                )
+        );
+
+        return ResponseEntity.ok(body);
+    }
+
+    @PostMapping("/verify-email")
+    public ResponseEntity<Map<String, Object>> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        authService.verifyEmail(request.token());
+
+        Map<String, Object> body = Map.of(
+                "data", Map.of("message", "Email đã được xác thực thành công"),
                 "meta", Map.of(
                         "timestamp", Instant.now().toString(),
                         "requestId", UUID.randomUUID().toString()

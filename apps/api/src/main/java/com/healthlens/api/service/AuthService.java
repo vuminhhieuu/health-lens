@@ -6,6 +6,7 @@ import com.healthlens.api.dto.response.LoginResponse;
 import com.healthlens.api.dto.response.RefreshResponse;
 import com.healthlens.api.dto.request.ForgotPasswordRequest;
 import com.healthlens.api.dto.request.ResetPasswordRequest;
+import com.healthlens.api.dto.event.EmailEvent;
 import com.healthlens.api.entity.EmailVerificationToken;
 import com.healthlens.api.entity.PasswordResetToken;
 import com.healthlens.api.entity.RefreshToken;
@@ -22,12 +23,15 @@ import com.healthlens.api.security.ForgotPasswordRateLimiter;
 import com.healthlens.api.security.LoginRateLimiter;
 import com.healthlens.api.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -35,6 +39,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -55,6 +60,7 @@ public class AuthService {
     private final ForgotPasswordRateLimiter forgotPasswordRateLimiter;
     private final StringRedisTemplate redisTemplate;
     private final ConsentService consentService;
+    private final String emailEventStream;
 
     public AuthService(
             UserRepository userRepository,
@@ -67,7 +73,8 @@ public class AuthService {
             LoginRateLimiter rateLimiter,
             ForgotPasswordRateLimiter forgotPasswordRateLimiter,
             StringRedisTemplate redisTemplate,
-            ConsentService consentService
+            ConsentService consentService,
+            @Value("${app.stream.email-events:email.events}") String emailEventStream
     ) {
         this.userRepository = userRepository;
         this.tokenRepository = tokenRepository;
@@ -80,6 +87,7 @@ public class AuthService {
         this.forgotPasswordRateLimiter = forgotPasswordRateLimiter;
         this.redisTemplate = redisTemplate;
         this.consentService = consentService;
+        this.emailEventStream = emailEventStream;
     }
 
     @Transactional
@@ -115,9 +123,26 @@ public class AuthService {
         token.setExpiresAt(Instant.now().plus(24, ChronoUnit.HOURS));
         tokenRepository.save(token);
 
-        emailService.sendVerificationEmail(savedUser, tokenValue);
+        publishVerificationEmailEvent(savedUser, tokenValue);
 
         return savedUser.getId();
+    }
+
+    @Transactional
+    public void verifyEmail(String token) {
+        EmailVerificationToken verificationToken = tokenRepository.findByToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Token xác thực không hợp lệ"));
+
+        if (verificationToken.getUsedAt() != null || verificationToken.getExpiresAt().isBefore(Instant.now())) {
+            throw new IllegalArgumentException("Token xác thực đã hết hạn hoặc đã được sử dụng");
+        }
+
+        User user = verificationToken.getUser();
+        user.setEmailVerified(true);
+        userRepository.save(user);
+
+        verificationToken.setUsedAt(Instant.now());
+        tokenRepository.save(verificationToken);
     }
 
     /**
@@ -376,6 +401,36 @@ public class AuthService {
         if (password == null || password.length() < 8 || !password.matches(".*[A-Z].*")
                 || !password.matches(".*\\d.*")) {
             throw new WeakPasswordException("Mat khau phai co it nhat 8 ky tu, gom 1 chu hoa va 1 chu so");
+        }
+    }
+
+    private void publishVerificationEmailEvent(User user, String token) {
+        EmailEvent emailEvent = new EmailEvent(
+                "verification",
+                user.getId(),
+                user.getEmail(),
+                Map.of("token", token));
+
+        // Publish after transaction commit so consumer never reads uncommitted user/token data.
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    publishEmailEvent(emailEvent);
+                }
+            });
+            return;
+        }
+
+        publishEmailEvent(emailEvent);
+    }
+
+    private void publishEmailEvent(EmailEvent emailEvent) {
+        try {
+            redisTemplate.opsForStream().add(emailEventStream, emailEvent.toStreamMap());
+        } catch (Exception ex) {
+            // Registration should stay fast and resilient even when Redis is unavailable.
+            log.warn("[AuthService] Cannot publish verification email event for user {}", emailEvent.userId(), ex);
         }
     }
 
