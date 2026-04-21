@@ -35,7 +35,7 @@ export default function DeleteAccountPage() {
         setPasswordError(null);
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
         e.preventDefault();
 
         // Validate password
