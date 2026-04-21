@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Box, Button, Callout } from "@radix-ui/themes";
-import { 
-  Pencil, Calendar, Cross, Key, Shield, Trash2, CheckCircle2, InfoIcon 
+import {
+  Pencil, Calendar, Cross, Key, Shield, Trash2, CheckCircle2, InfoIcon
 } from "lucide-react";
 
 import { apiClient } from "@/lib/api/apiClient";
@@ -85,7 +86,7 @@ export default function ProfileSettingsPage() {
 
   return (
     <div className="flex-grow p-6 md:p-12 lg:p-16 max-w-7xl mx-auto bg-[#effcf9] min-h-screen text-[#121e1c]">
-      
+
       {/* Breadcrumbs & Header */}
       <div className="mb-10">
         <nav className="flex text-sm text-[#6d7a77] mb-2">
@@ -107,14 +108,14 @@ export default function ProfileSettingsPage() {
 
       {/* Profile Bento Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        
+
         {/* Left Column: Primary Information */}
         <div className="lg:col-span-2 space-y-8">
-          
+
           {/* Profile Information Card */}
           <section className="bg-white rounded-3xl p-8 shadow-[0_8px_32px_rgba(18,30,28,0.04)] border border-[#bcc9c6]/20 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-[#00685f]/5 rounded-bl-full -mr-16 -mt-16"></div>
-            
+
             <div className="flex flex-col md:flex-row md:items-center gap-8 mb-10">
               <div className="relative group">
                 <div className="w-24 h-24 rounded-2xl overflow-hidden ring-4 ring-[#e9f6f3] shadow-md bg-[#d8e5e2]">
@@ -134,13 +135,13 @@ export default function ProfileSettingsPage() {
             </div>
 
             <form className="grid grid-cols-1 md:grid-cols-2 gap-6" onSubmit={handleSubmit(onSubmit)}>
-              
+
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#6d7a77]">Họ tên *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   {...register("fullName")}
-                  className="h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium w-full text-[#121e1c]" 
+                  className="h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium w-full text-[#121e1c]"
                   placeholder="Nhập họ và tên"
                 />
                 {errors.fullName && <p className="text-sm text-[#ba1a1a]">{errors.fullName.message}</p>}
@@ -148,21 +149,21 @@ export default function ProfileSettingsPage() {
 
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#6d7a77]">Email (Read-only)</label>
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   value={userProfile?.email || ""}
-                  readOnly 
-                  className="h-12 px-4 rounded-xl bg-[#d8e5e2]/40 border-none text-[#6d7a77] font-medium cursor-not-allowed w-full" 
+                  readOnly
+                  className="h-12 px-4 rounded-xl bg-[#d8e5e2]/40 border-none text-[#6d7a77] font-medium cursor-not-allowed w-full"
                 />
               </div>
 
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#6d7a77]">Ngày sinh</label>
                 <div className="relative">
-                  <input 
-                    type="date" 
+                  <input
+                    type="date"
                     {...register("birthDate")}
-                    className="h-12 w-full px-4 pr-10 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c]" 
+                    className="h-12 w-full px-4 pr-10 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c]"
                   />
                   <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6d7a77] pointer-events-none w-5 h-5" />
                 </div>
@@ -177,32 +178,32 @@ export default function ProfileSettingsPage() {
                   render={({ field }) => (
                     <div className="flex gap-6 h-12 items-center">
                       <label className="flex items-center gap-3 cursor-pointer group">
-                        <input 
-                          type="radio" 
+                        <input
+                          type="radio"
                           value="male"
                           checked={field.value === "male"}
                           onChange={() => field.onChange("male")}
-                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]" 
+                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]"
                         />
                         <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">Nam</span>
                       </label>
                       <label className="flex items-center gap-3 cursor-pointer group">
-                        <input 
-                          type="radio" 
+                        <input
+                          type="radio"
                           value="female"
                           checked={field.value === "female"}
                           onChange={() => field.onChange("female")}
-                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]" 
+                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]"
                         />
                         <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">Nữ</span>
                       </label>
                       <label className="flex items-center gap-3 cursor-pointer group">
-                        <input 
-                          type="radio" 
+                        <input
+                          type="radio"
                           value="other"
                           checked={field.value === "other"}
                           onChange={() => field.onChange("other")}
-                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]" 
+                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]"
                         />
                         <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">Khác</span>
                       </label>
@@ -213,15 +214,15 @@ export default function ProfileSettingsPage() {
               </div>
 
               <div className="md:col-span-2 flex justify-end gap-4 mt-4 pt-6 border-t border-[#bcc9c6]/20">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => reset()}
                   className="px-8 py-3 rounded-xl font-bold text-[#3d4947] hover:bg-[#e9f6f3] transition-colors"
                 >
                   Hủy
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={isSubmitting || !isValid}
                   className="px-8 py-3 bg-gradient-to-r from-[#00685f] to-[#008378] text-white rounded-xl font-bold shadow-lg shadow-[#00685f]/20 active:scale-95 transition-all disabled:opacity-60"
                 >
@@ -237,7 +238,7 @@ export default function ProfileSettingsPage() {
               <Cross className="text-[#00685f] w-6 h-6" />
               <h2 className="text-2xl font-bold text-[#121e1c]">Thông tin sức khỏe</h2>
             </div>
-            
+
             <div className="space-y-8 opacity-60 pointer-events-none">
               <div>
                 <label className="block text-sm font-bold text-[#6d7a77] mb-4">Bệnh mãn tính (Chưa khả dụng)</label>
@@ -266,14 +267,14 @@ export default function ProfileSettingsPage() {
 
         {/* Right Column: Settings & Support */}
         <div className="space-y-8">
-          
+
           {/* Account Settings Card */}
           <section className="bg-white rounded-3xl p-8 shadow-[0_8px_32px_rgba(18,30,28,0.04)] border border-[#bcc9c6]/20">
             <div className="flex items-center gap-3 mb-8">
               <Shield className="text-[#00685f] w-6 h-6" />
               <h2 className="text-xl font-bold text-[#121e1c]">Cài đặt tài khoản</h2>
             </div>
-            
+
             <div className="space-y-6">
               <a href="#" className="flex items-center justify-between group py-2">
                 <div className="flex items-center gap-3">
@@ -292,9 +293,9 @@ export default function ProfileSettingsPage() {
                 </div>
               </div>
               <div className="pt-6 border-t border-[#bcc9c6]/20">
-                <button type="button" className="w-full py-3 rounded-xl border-2 border-[#ba1a1a]/20 text-[#ba1a1a] font-bold hover:bg-[#ba1a1a]/5 transition-colors flex items-center justify-center gap-2">
+                <Link href="/settings/delete-account" className="w-full py-3 rounded-xl border-2 border-[#ba1a1a]/20 text-[#ba1a1a] font-bold hover:bg-[#ba1a1a]/5 transition-colors flex items-center justify-center gap-2 block">
                   <Trash2 className="w-4 h-4" /> Xóa tài khoản
-                </button>
+                </Link>
               </div>
             </div>
           </section>

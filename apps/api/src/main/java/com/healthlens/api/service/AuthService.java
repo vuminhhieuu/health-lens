@@ -12,8 +12,10 @@ import com.healthlens.api.entity.PasswordResetToken;
 import com.healthlens.api.entity.RefreshToken;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.entity.UserRole;
+import com.healthlens.api.entity.AccountStatus;
 import com.healthlens.api.exception.EmailAlreadyExistsException;
 import com.healthlens.api.exception.WeakPasswordException;
+import com.healthlens.api.exception.AccountPendingDeletionException;
 import com.healthlens.api.repository.EmailVerificationTokenRepository;
 import com.healthlens.api.repository.PasswordResetTokenRepository;
 import com.healthlens.api.repository.RefreshTokenRepository;
@@ -163,13 +165,12 @@ public class AuthService {
         User user = userRepository.findByEmailIgnoreCase(normalizedEmail)
                 .orElse(null);
 
+        if (user != null && user.getAccountStatus() == AccountStatus.PENDING_DELETION) {
+            throw new AccountPendingDeletionException();
+        }
+
         if (user == null || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            if (user != null) {
-                rateLimiter.recordFailure(normalizedEmail);
-            } else {
-                // Also record failure for non-existent emails to prevent timing attacks
-                rateLimiter.recordFailure(normalizedEmail);
-            }
+            rateLimiter.recordFailure(normalizedEmail);
             throw new BadCredentialsException("Email hoac mat khau khong dung");
         }
 
@@ -346,7 +347,7 @@ public class AuthService {
 
         try {
             User user = userRepository.findByEmailIgnoreCase(normalizedEmail).orElse(null);
-
+            
             if (user != null) {
                 log.info("[AuthService] User found: {}. Generating reset token.", user.getEmail());
                 // AC #1: Generate reset token

@@ -1,5 +1,8 @@
 package com.healthlens.api.security;
 
+import com.healthlens.api.entity.AccountStatus;
+import com.healthlens.api.entity.User;
+import com.healthlens.api.repository.UserRepository;
 import com.healthlens.api.util.JwtUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -9,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,6 +21,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -28,14 +33,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
     private final StringRedisTemplate redisTemplate;
+    private final UserRepository userRepository;
     private final boolean securityFailClosed;
 
     public JwtAuthenticationFilter(
             JwtUtil jwtUtil,
             StringRedisTemplate redisTemplate,
+            UserRepository userRepository,
             @Value("${app.security.blacklist-fail-closed:false}") boolean securityFailClosed) {
         this.jwtUtil = jwtUtil;
         this.redisTemplate = redisTemplate;
+        this.userRepository = userRepository;
         this.securityFailClosed = securityFailClosed;
     }
 
@@ -43,6 +51,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
+        String path = request.getRequestURI();
+
+        log.info("Incoming request: {}", path);
+
+        if (path.contains("/deletion-requests/cancel")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         String authHeader = request.getHeader(AUTHORIZATION_HEADER);
 
@@ -65,10 +81,36 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Set SecurityContext with authenticated user
+        // Extract user info from token
         String userId = jwtUtil.extractSubject(token);
         String role = jwtUtil.extractClaims(token).get("role", String.class);
 
+        // AC #3: Check if account is pending deletion or deleted
+        try {
+            User user = userRepository.findById(UUID.fromString(userId)).orElse(null);
+            if (user == null) {
+                log.warn("User not found: {}", userId);
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            if (user.getAccountStatus() == AccountStatus.PENDING_DELETION) {
+                log.warn("User pending deletion: {}", userId);
+            }
+        } catch (Exception e) {
+            log.error("Error checking account status for user: {}", userId, e);
+            response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
+            try {
+                response.setContentType("application/json");
+                response.getWriter().write("{\"error\":\"Lỗi hệ thống\"}");
+                response.getWriter().flush();
+            } catch (IOException ioe) {
+                log.error("Failed to write error response: {}", ioe.getMessage());
+            }
+            return;
+        }
+
+        // Set SecurityContext with authenticated user
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(
                         userId,

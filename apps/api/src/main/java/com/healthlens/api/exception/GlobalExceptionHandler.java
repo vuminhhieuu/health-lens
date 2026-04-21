@@ -44,6 +44,22 @@ public class GlobalExceptionHandler {
                 .body(problem);
     }
 
+    @ExceptionHandler(AccountPendingDeletionException.class)
+    public ProblemDetail handleAccountPendingDeletion(
+            AccountPendingDeletionException ex,
+            HttpServletRequest request) {
+
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.FORBIDDEN,
+                ex.getMessage()
+        );
+
+        problem.setTitle("Account Pending Deletion");
+        problem.setInstance(URI.create(request.getRequestURI()));
+
+        return problem;
+    }
+
     /**
      * AC #5: 401 Unauthorized with generic message (no email leak)
      */
@@ -148,6 +164,15 @@ public class GlobalExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problem.setType(URI.create("https://healthlens.vn/errors/user-not-found"));
         problem.setTitle("User Not Found");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        return problem;
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ProblemDetail handleIllegalState(IllegalStateException ex, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setType(URI.create("https://healthlens.vn/errors/invalid-state"));
+        problem.setTitle("Invalid Operation");
         problem.setInstance(URI.create(request.getRequestURI()));
         return problem;
     }
