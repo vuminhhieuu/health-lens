@@ -6,9 +6,11 @@ import { Callout } from "@radix-ui/themes";
 import { AlertTriangle, CheckCircle2, Lock } from "lucide-react";
 
 import { useAccountDeletion } from "@/hooks/useAccountDeletion";
+import { useAuthStore } from "@/stores/authStore";
 
 export default function DeleteAccountPage() {
     const router = useRouter();
+    const clearAuth = useAuthStore((state) => state.clearAuth);
     const {
         requestDeletion,
         isRequesting,
@@ -48,9 +50,10 @@ export default function DeleteAccountPage() {
             const result = await requestDeletion(password);
             setDeletionLink(result.cancellationLink);
             setPassword("");
-            // Optionally redirect after a delay
+            // AC #3: account is now PENDING_DELETION on the server. Clear local auth so the
+            // user is fully logged out before being redirected back to the login screen.
             setTimeout(() => {
-                // Logout the user after successful deletion request
+                clearAuth();
                 router.push("/login?deleted=true");
             }, 3000);
         } catch (err) {
