@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-04-20T23:10:00+07:00
+last_updated: 2026-04-22T12:10:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -83,7 +83,7 @@ development_status:
   epic-2: in-progress
   2-1-update-account-personal-info: done
   2-2-create-health-profile: sprint-1
-  2-3-profile-name-and-notes: sprint-1
+  2-3-profile-name-and-notes: done
   2-4-email-system-improvements: done
   epic-2-retrospective: optional
 

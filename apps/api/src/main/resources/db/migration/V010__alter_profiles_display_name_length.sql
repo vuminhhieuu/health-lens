@@ -1,0 +1,2 @@
+ALTER TABLE profiles
+    ALTER COLUMN display_name TYPE VARCHAR(100);

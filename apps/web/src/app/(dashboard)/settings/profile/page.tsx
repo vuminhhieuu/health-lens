@@ -11,7 +11,7 @@ import {
 
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
-import { updateProfileSchema, UpdateProfileInput } from "@healthlens/shared";
+import { updateUserProfileSchema, UpdateUserProfileInput } from "@healthlens/shared";
 
 type UserProfile = {
   id: string;
@@ -40,8 +40,8 @@ export default function ProfileSettingsPage() {
     control,
     reset,
     formState: { errors, isValid, isSubmitting },
-  } = useForm<UpdateProfileInput>({
-    resolver: zodResolver(updateProfileSchema),
+  } = useForm<UpdateUserProfileInput>({
+    resolver: zodResolver(updateUserProfileSchema),
     mode: "onBlur",
   });
 
@@ -56,7 +56,7 @@ export default function ProfileSettingsPage() {
   }, [userProfile, reset]);
 
   const updateMutation = useMutation({
-    mutationFn: async (data: UpdateProfileInput) => {
+    mutationFn: async (data: UpdateUserProfileInput) => {
       const payload = {
         ...data,
         birthDate: data.birthDate ? data.birthDate : null,
@@ -76,7 +76,7 @@ export default function ProfileSettingsPage() {
     },
   });
 
-  const onSubmit = (data: UpdateProfileInput) => {
+  const onSubmit = (data: UpdateUserProfileInput) => {
     updateMutation.mutate(data);
   };
 

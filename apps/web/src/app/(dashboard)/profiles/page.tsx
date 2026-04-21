@@ -7,7 +7,8 @@ import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { ProfileCard, HealthStatus } from "@/components/features/profiles/ProfileCard";
 import { CreateProfileModal } from "@/components/features/profiles/CreateProfileModal";
-import { CreateProfileInput } from "@healthlens/shared";
+import { EditProfileModal } from "@/components/features/profiles/EditProfileModal";
+import { CreateProfileInput, UpdateProfileInput } from "@healthlens/shared";
 
 type Profile = {
   id: string;
@@ -31,6 +32,8 @@ type UserProfile = {
 export default function ProfilesPage() {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   // 1. Fetch current user (Self)
@@ -82,6 +85,74 @@ export default function ProfilesPage() {
     },
   });
 
+  const updateProfileMutation = useMutation({
+    mutationFn: async ({ profileId, data }: { profileId: string; data: UpdateProfileInput }) => {
+      const payload = {
+        ...data,
+        birthDate: data.birthDate || null,
+        gender: data.gender || null,
+        notes: data.notes || null,
+      };
+      const response = await apiClient.put(API_ROUTES.PROFILES.UPDATE(profileId), payload);
+      return response.data.data as Profile;
+    },
+    onMutate: async ({ profileId, data }) => {
+      await queryClient.cancelQueries({ queryKey: ["profiles"] });
+
+      const previousProfiles = queryClient.getQueryData<Profile[]>(["profiles"]);
+      queryClient.setQueryData<Profile[]>(["profiles"], (old = []) =>
+        old.map((profile) => {
+          if (profile.id !== profileId) {
+            return profile;
+          }
+
+          return {
+            ...profile,
+            displayName: data.displayName.trim(),
+            birthDate: data.birthDate || undefined,
+            gender: data.gender || undefined,
+            notes: data.notes?.trim() || undefined,
+            updatedAt: new Date().toISOString(),
+          };
+        }),
+      );
+
+      return { previousProfiles };
+    },
+    onError: (error: unknown, _variables, context) => {
+      if (context?.previousProfiles) {
+        queryClient.setQueryData(["profiles"], context.previousProfiles);
+      }
+
+      let message = "Đã xảy ra lỗi khi cập nhật hồ sơ.";
+      if (error && typeof error === "object" && "response" in error) {
+        const axiosError = error as {
+          response?: {
+            data?: {
+              detail?: string;
+              title?: string;
+              message?: string;
+            };
+          };
+        };
+
+        const errorData = axiosError.response?.data;
+        message = errorData?.detail || errorData?.title || errorData?.message || message;
+      }
+
+      alert(message);
+    },
+    onSuccess: (updatedProfile) => {
+      queryClient.setQueryData<Profile[]>(["profiles"], (old = []) =>
+        old.map((profile) => (profile.id === updatedProfile.id ? updatedProfile : profile)),
+      );
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["profile", updatedProfile.id] });
+      setIsEditModalOpen(false);
+      setEditingProfileId(null);
+    },
+  });
+
   // Combine profiles for display
   const allProfiles = useMemo(() => {
     const combined: (Partial<Profile> & { 
@@ -119,13 +190,18 @@ export default function ProfilesPage() {
     );
   }, [currentUser, otherProfiles, searchQuery]);
 
+  const editingProfile = useMemo(
+    () => otherProfiles.find((profile) => profile.id === editingProfileId) ?? null,
+    [otherProfiles, editingProfileId],
+  );
+
   const isLimitReached = otherProfiles.length >= 10;
 
   const isLoading = isUserLoading || isProfilesLoading;
 
   if (isLoading) {
     return (
-      <div className="flex-grow flex items-center justify-center bg-[#effcf9] p-8">
+      <div className="grow flex items-center justify-center bg-[#effcf9] p-8">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-10 h-10 text-[#00685f] animate-spin" />
           <p className="font-bold text-[#6d7a77]">Đang tải danh sách hồ sơ...</p>
@@ -135,7 +211,7 @@ export default function ProfilesPage() {
   }
 
   return (
-    <div className="flex-grow p-6 md:p-12 lg:p-16 max-w-7xl mx-auto bg-[#effcf9] min-h-screen text-[#121e1c]">
+    <div className="grow p-6 md:p-12 lg:p-16 max-w-7xl mx-auto bg-[#effcf9] min-h-screen text-[#121e1c]">
       
       {/* Header & Stats */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
@@ -156,7 +232,7 @@ export default function ProfilesPage() {
         <button 
           onClick={() => setIsModalOpen(true)}
           disabled={isLimitReached}
-          className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-[#00685f] to-[#008378] text-white rounded-2xl font-bold shadow-lg shadow-[#00685f]/20 active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none"
+          className="flex items-center gap-2 px-8 py-3 bg-linear-to-r from-[#00685f] to-[#008378] text-white rounded-2xl font-bold shadow-lg shadow-[#00685f]/20 active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none"
         >
           <Plus size={20} />
           {isLimitReached ? "Đã đạt giới hạn" : "Tạo hồ sơ mới"}
@@ -165,7 +241,7 @@ export default function ProfilesPage() {
 
       {/* Search & Filters */}
       <div className="flex flex-col sm:flex-row gap-4 mb-8">
-        <div className="relative flex-grow">
+        <div className="relative grow">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6d7a77] w-5 h-5" />
           <input 
             type="text" 
@@ -189,8 +265,17 @@ export default function ProfilesPage() {
               key={profile.id}
               name={profile.displayName}
               relationship={profile.relationship}
+              notes={profile.notes}
               latestStatus={profile.latestStatus}
               lastUpdated={profile.updatedAt}
+              onPress={
+                profile.isSelf
+                  ? undefined
+                  : () => {
+                      setEditingProfileId(profile.id);
+                      setIsEditModalOpen(true);
+                    }
+              }
             />
           ))}
         </div>
@@ -214,7 +299,7 @@ export default function ProfilesPage() {
 
       {/* Limit Warning */}
       {isLimitReached && (
-        <div className="mt-12 p-6 rounded-[32px] bg-[#fffbeb] border border-[#f59e0b]/20 flex items-start gap-4">
+        <div className="mt-12 p-6 rounded-4xl bg-[#fffbeb] border border-[#f59e0b]/20 flex items-start gap-4">
           <div className="w-10 h-10 rounded-xl bg-[#f59e0b]/10 flex items-center justify-center text-[#92400e]">
             <AlertCircle size={24} />
           </div>
@@ -233,6 +318,17 @@ export default function ProfilesPage() {
         onClose={() => setIsModalOpen(false)}
         onSubmit={(data) => createMutation.mutate(data)}
         isLoading={createMutation.isPending}
+      />
+
+      <EditProfileModal
+        isOpen={isEditModalOpen}
+        profile={editingProfile}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingProfileId(null);
+        }}
+        onSubmit={(profileId, data) => updateProfileMutation.mutate({ profileId, data })}
+        isLoading={updateProfileMutation.isPending}
       />
     </div>
   );

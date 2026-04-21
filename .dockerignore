@@ -86,7 +86,6 @@ temp/
 *.tmp
 *.temp
 
-# Database dumps
-*.sql
+# Database dumps / backups
 *.dump
 *.bak
