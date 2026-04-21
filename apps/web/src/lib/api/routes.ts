@@ -38,6 +38,8 @@ export const API_ROUTES = {
   HEALTH_RECORDS: ApiPaths.HEALTH_RECORDS,
   USERS: {
     ME: "/api/v1/users/me",
+    DELETION_REQUEST: "/api/v1/users/me/deletion-request",
+    CANCEL_DELETION: "/api/v1/users/deletion-requests/cancel"
   },
   PROFILES: ApiPaths.PROFILES,
 } as const;

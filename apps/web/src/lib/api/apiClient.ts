@@ -19,9 +19,19 @@ const apiClient = axios.create({
 // Request interceptor: attach Authorization header
 apiClient.interceptors.request.use((config) => {
   const { accessToken } = useAuthStore.getState();
+
+  const isCancelDeletion =
+    config.url?.includes("/deletion-requests/cancel");
+
+  if (isCancelDeletion) {
+    delete config.headers.Authorization;
+    return config;
+  }
+
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
   }
+
   return config;
 });
 
@@ -49,11 +59,14 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
 
     // Only attempt refresh for 401 that is NOT from auth endpoints
+    const isCancelDeletion =
+      originalRequest.url?.startsWith(API_ROUTES.USERS.CANCEL_DELETION);
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
       !originalRequest.url?.includes(API_ROUTES.AUTH.LOGIN) &&
-      !originalRequest.url?.includes(API_ROUTES.AUTH.REFRESH)
+      !originalRequest.url?.includes(API_ROUTES.AUTH.REFRESH) &&
+      !isCancelDeletion
     ) {
       if (isRefreshing) {
         // Queue subsequent 401s while refresh is in progress

@@ -1,6 +1,7 @@
 package com.healthlens.api.service;
 
 import com.healthlens.api.entity.User;
+import com.healthlens.api.entity.DataDeletionRequest;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
@@ -93,6 +94,115 @@ public class EmailService {
         } catch (MessagingException e) {
             log.error("[EmailService] Failed to send password reset email to {}", user.getEmail(), e);
             throw new IllegalStateException("Gui email dat lai mat khau that bai", e);
+        }
+    }
+
+    public void sendDeletionConfirmationEmail(User user, DataDeletionRequest deletionRequest, String cancellationLink) {
+        log.info("[EmailService] Attempting to send deletion confirmation email to: {}", user.getEmail());
+        if (mailSender == null) {
+            log.error("[EmailService] JavaMailSender is not configured! Cannot send deletion confirmation email to {}", user.getEmail());
+            return;
+        }
+
+        String htmlContent = """
+                <html>
+                  <body style="font-family: Arial, sans-serif; color: #111827;">
+                    <h2>HealthLens - Xác nhận yêu cầu xóa tài khoản</h2>
+                    <p>Chào %s,</p>
+                    <p>Chúng tôi đã nhận được yêu cầu xóa tài khoản của bạn. Tài khoản của bạn sẽ bị xóa vĩnh viễn sau 72 giờ từ thời điểm này.</p>
+                    <p><strong>Thời gian xóa dự kiến:</strong> %s</p>
+                    <p>Nếu bạn muốn hủy yêu cầu này, vui lòng bấm vào liên kết bên dưới trong vòng 72 giờ:</p>
+                    <p><a href="%s" style="background-color: #00685f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Hủy yêu cầu xóa tài khoản</a></p>
+                    <p>Nếu bạn không thực hiện yêu cầu này, vui lòng liên hệ với đội hỗ trợ của chúng tôi.</p>
+                    <p>Xin cảm ơn,<br>Đội HealthLens</p>
+                  </body>
+                </html>
+                """.formatted(user.getFullName(), deletionRequest.getScheduledDeletionAt(), cancellationLink);
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(user.getEmail());
+            helper.setSubject("[HealthLens] Xác nhận yêu cầu xóa tài khoản");
+            helper.setText(htmlContent, true);
+
+            mailSender.send(message);
+            log.info("[EmailService] Deletion confirmation email sent successfully to: {}", user.getEmail());
+        } catch (MessagingException e) {
+            log.error("[EmailService] Failed to send deletion confirmation email to {}", user.getEmail(), e);
+            throw new IllegalStateException("Gui email xac nhan xoa tai khoan that bai", e);
+        }
+    }
+
+    public void sendCancellationConfirmationEmail(User user) {
+        log.info("[EmailService] Attempting to send cancellation confirmation email to: {}", user.getEmail());
+        if (mailSender == null) {
+            log.error("[EmailService] JavaMailSender is not configured! Cannot send cancellation confirmation email to {}", user.getEmail());
+            return;
+        }
+
+        String htmlContent = """
+                <html>
+                  <body style="font-family: Arial, sans-serif; color: #111827;">
+                    <h2>HealthLens - Hủy yêu cầu xóa tài khoản</h2>
+                    <p>Chào %s,</p>
+                    <p>Yêu cầu xóa tài khoản của bạn đã được hủy thành công. Tài khoản của bạn hiện tại đã được khôi phục và hoạt động bình thường.</p>
+                    <p>Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với đội hỗ trợ của chúng tôi.</p>
+                    <p>Xin cảm ơn,<br>Đội HealthLens</p>
+                  </body>
+                </html>
+                """.formatted(user.getFullName());
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(user.getEmail());
+            helper.setSubject("[HealthLens] Yêu cầu xóa tài khoản đã được hủy");
+            helper.setText(htmlContent, true);
+
+            mailSender.send(message);
+            log.info("[EmailService] Cancellation confirmation email sent successfully to: {}", user.getEmail());
+        } catch (MessagingException e) {
+            log.error("[EmailService] Failed to send cancellation confirmation email to {}", user.getEmail(), e);
+            throw new IllegalStateException("Gui email xac nhan huy xoa tai khoan that bai", e);
+        }
+    }
+
+    public void sendDeletionCompletionEmail(User user) {
+        log.info("[EmailService] Attempting to send deletion completion email to: {}", user.getEmail());
+        if (mailSender == null) {
+            log.error("[EmailService] JavaMailSender is not configured! Cannot send deletion completion email to {}", user.getEmail());
+            return;
+        }
+
+        String htmlContent = """
+                <html>
+                  <body style="font-family: Arial, sans-serif; color: #111827;">
+                    <h2>HealthLens - Xác nhận xóa tài khoản hoàn tất</h2>
+                    <p>Chào,</p>
+                    <p>Yêu cầu xóa tài khoản của bạn đã được hoàn tất. Tài khoản của bạn và toàn bộ dữ liệu cá nhân liên quan đã bị xóa vĩnh viễn khỏi hệ thống của chúng tôi.</p>
+                    <p>Dữ liệu có thể mất từ 7-30 ngày để bị xóa hoàn toàn từ các bản sao lưu.</p>
+                    <p>Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với đội hỗ trợ của chúng tôi.</p>
+                    <p>Xin cảm ơn,<br>Đội HealthLens</p>
+                  </body>
+                </html>
+                """;
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(user.getEmail());
+            helper.setSubject("[HealthLens] Xóa tài khoản hoàn tất");
+            helper.setText(htmlContent, true);
+
+            mailSender.send(message);
+            log.info("[EmailService] Deletion completion email sent successfully to: {}", user.getEmail());
+        } catch (MessagingException e) {
+            log.error("[EmailService] Failed to send deletion completion email to {}", user.getEmail(), e);
+            throw new IllegalStateException("Gui email xac nhan xoa tai khoan hoan tat that bai", e);
         }
     }
 
