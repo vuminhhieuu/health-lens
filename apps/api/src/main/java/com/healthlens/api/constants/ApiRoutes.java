@@ -45,14 +45,17 @@ public final class ApiRoutes {
     // =========================================
     // Profile Paths (Frontend: ApiPaths.PROFILES)
     // =========================================
+    public static final String USERS_BASE = API_V1 + "/users";
     public static final String PROFILES_BASE = API_V1 + "/profiles";
     public static final String PROFILE_BY_ID = PROFILES_BASE + "/{id}";
+    public static final String PROFILE_ENSURE_DEFAULT = PROFILES_BASE + "/ensure-default";
     public static final String PROFILE_SET_DEFAULT = PROFILES_BASE + "/{id}/set-default";
 
     // =========================================
     // Health Record Paths (Frontend: ApiPaths.HEALTH_RECORDS)
     // =========================================
     public static final String HEALTH_RECORDS_BASE = API_V1 + "/health-records";
+    public static final String HEALTH_RECORDS_UPLOAD_URL = HEALTH_RECORDS_BASE + "/upload-url";
     public static final String HEALTH_RECORD_BY_ID = HEALTH_RECORDS_BASE + "/{id}";
     public static final String HEALTH_RECORD_IMAGE = HEALTH_RECORDS_BASE + "/{id}/image";
     public static final String HEALTH_RECORD_ANALYZE = HEALTH_RECORDS_BASE + "/{id}/analyze";

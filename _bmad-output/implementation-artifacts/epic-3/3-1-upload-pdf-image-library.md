@@ -1,6 +1,6 @@
 # Story 3.1: Upload file PDF và ảnh từ thư viện
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 
@@ -33,32 +33,42 @@ so that tôi đưa kết quả khám vào hệ thống nhanh chóng.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: Pre-signed URL endpoint (AC: #1, #4)
-  - [ ] `POST /api/v1/health-records/upload-url` với body `{ profileId, fileType: "pdf"|"image" }`
-  - [ ] Tạo pre-signed URL với MinIO SDK (dev) / AWS SDK (prod), TTL 15 phút
-  - [ ] Path pattern: `health-records/{userId}/{profileId}/{uuid}/original.{ext}`
-  - [ ] Trả về: `{ uploadUrl, recordId, fileKey }`
-- [ ] Task 2 — Backend: Confirm upload + trigger OCR (AC: #5)
-  - [ ] `POST /api/v1/health-records/{recordId}/confirm-upload`
-  - [ ] Tạo `health_records` row với status `processing`
-  - [ ] Push job vào Redis Streams: `{ recordId, fileKey, profileId }`
-  - [ ] Flyway migration `V010__create_health_records_table.sql`
-- [ ] Task 3 — Backend: OCR worker (basic) (AC: #5)
-  - [ ] Spring `@EventListener` hoặc Redis Streams consumer
-  - [ ] Gọi OCR API (Google Vision / AWS Textract) với file từ S3
-  - [ ] Timeout 15 giây (NFR-I1), fallback → update record status `ocr_failed`
-- [ ] Task 4 — Web: File upload flow (AC: #1, #2, #3)
-  - [ ] Tạo `apps/web/src/components/features/upload/UploadButton.tsx`
-  - [ ] File picker: accept `application/pdf,image/jpeg,image/png`
-  - [ ] Client-side: validate size ≤20MB, type check trước khi upload
-  - [ ] Flow: get pre-signed URL → PUT to S3 directly (axios upload với progress) → confirm
-  - [ ] Processing screen với pulsing progress bar (UX-DR3)
-- [ ] Task 5 — Mobile (Phase 2): File picker từ thư viện (AC: #1, #2, #3)
-  - [ ] Dùng `expo-document-picker` cho PDF, `expo-image-picker` cho ảnh từ gallery
-  - [ ] Tương tự web: validate → pre-signed URL → upload → confirm
-  - [ ] Progress indicator native
-- [ ] Task 6 — Tests (AC: #1, #2, #4, #5)
-  - [ ] `HealthRecordServiceTest`: generate upload URL, confirm upload, job enqueue
+- [x] Task 1 — Backend: Pre-signed URL endpoint (AC: #1, #4)
+  - [x] `POST /api/v1/health-records/upload-url` với body `{ profileId, fileType: "pdf"|"image" }`
+  - [x] Tạo pre-signed URL với MinIO SDK (dev) / AWS SDK (prod), TTL 15 phút
+  - [x] Path pattern: `health-records/{userId}/{profileId}/{uuid}/original.{ext}`
+  - [x] Trả về: `{ uploadUrl, recordId, fileKey }`
+- [x] Task 2 — Backend: Confirm upload + trigger OCR (AC: #5)
+  - [x] `POST /api/v1/health-records/{recordId}/confirm-upload`
+  - [x] Tạo `health_records` row với status `processing`
+  - [x] Push job vào Redis Streams: `{ recordId, fileKey, profileId }`
+  - [x] Flyway migration `V010__create_health_records_table.sql`
+- [x] Task 3 — Backend: OCR worker (basic) (AC: #5)
+  - [x] Spring `@EventListener` hoặc Redis Streams consumer
+  - [x] Gọi OCR API (Google Vision / AWS Textract) với file từ S3
+  - [x] Timeout 15 giây (NFR-I1), fallback → update record status `ocr_failed`
+- [x] Task 4 — Web: File upload flow (AC: #1, #2, #3)
+  - [x] Tạo `apps/web/src/components/features/upload/UploadButton.tsx`
+  - [x] File picker: accept `application/pdf,image/jpeg,image/png`
+  - [x] Client-side: validate size ≤20MB, type check trước khi upload
+  - [x] Flow: get pre-signed URL → PUT to S3 directly (axios upload với progress) → confirm
+  - [x] Processing screen với pulsing progress bar (UX-DR3)
+- [] Task 5 — Mobile (Phase 2): File picker từ thư viện (AC: #1, #2, #3)
+  - [] Dùng `expo-document-picker` cho PDF, `expo-image-picker` cho ảnh từ gallery (defer theo Execution scope: Phase 2)
+  - [] Tương tự web: validate → pre-signed URL → upload → confirm (defer theo Execution scope: Phase 2)
+  - [] Progress indicator native (defer theo Execution scope: Phase 2)
+- [x] Task 6 — Tests (AC: #1, #2, #4, #5)
+  - [x] `HealthRecordServiceTest`: generate upload URL, confirm upload, job enqueue
+
+### Review Findings
+
+- [x] [Review][Patch] PNG upload ký pre-signed URL sai `Content-Type`/extension [apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java]
+- [x] [Review][Patch] Polling trạng thái coi mọi trạng thái khác `processing` là thành công (bao gồm `ocr_failed`) [apps/web/src/components/features/upload/UploadButton.tsx]
+- [x] [Review][Patch] Polling timeout vẫn set `done`, gây false-success khi backend còn xử lý hoặc treo [apps/web/src/components/features/upload/UploadButton.tsx]
+- [x] [Review][Patch] OCR consumer không `ack` khi xử lý lỗi, có nguy cơ poison message lặp vô hạn [apps/api/src/main/java/com/healthlens/api/service/OcrJobConsumer.java]
+- [x] [Review][Patch] Mặc định OCR URL dùng `localhost:8001` không phù hợp chạy trong Docker network [apps/api/src/main/resources/application.yml]
+- [x] [Review][Patch] Payload enqueue OCR chưa có `job_id` như AC #5 mô tả [apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java]
+- [x] [Review][Defer] Schema `health_records` chưa có một số cột trong phần Dev Notes (exam_date, ocr_confidence) [apps/api/src/main/resources/db/migration/V010__create_health_records_table.sql] — deferred, pre-existing
 
 ## Dev Notes
 
@@ -136,10 +146,40 @@ export const ALLOWED_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png']
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+Codex 5.3
 
 ### Debug Log References
 
+- `./gradlew test --tests com.healthlens.api.service.HealthRecordServiceTest` (pass)
+- `pnpm --filter web lint` (pass, còn warning cũ không thuộc story)
 ### Completion Notes List
 
+- Implement đầy đủ backend flow upload: cấp upload URL, confirm upload, lưu `health_records`, đẩy OCR job qua Redis Stream.
+- Bổ sung OCR job consumer với timeout 15s và fallback trạng thái `ocr_failed`.
+- Triển khai web upload flow gồm validate client-side (type/size), direct upload qua pre-signed URL, confirm upload và màn hình processing/polling trạng thái.
+- Mobile task trong story được đánh dấu defer theo Execution scope (Phase 2), không triển khai code mobile trong sprint Web MVP.
 ### File List
+
+- packages/shared/constants/api.ts
+- packages/shared/constants/index.ts
+- apps/api/src/main/resources/db/migration/V010__create_health_records_table.sql
+- apps/api/src/main/java/com/healthlens/api/common/ApiRoutes.java
+- apps/api/src/main/java/com/healthlens/api/dto/request/CreateUploadUrlRequest.java
+- apps/api/src/main/java/com/healthlens/api/dto/response/UploadUrlResponse.java
+- apps/api/src/main/java/com/healthlens/api/dto/response/ConfirmUploadResponse.java
+- apps/api/src/main/java/com/healthlens/api/dto/response/HealthRecordStatusResponse.java
+- apps/api/src/main/java/com/healthlens/api/entity/HealthRecord.java
+- apps/api/src/main/java/com/healthlens/api/repository/HealthRecordRepository.java
+- apps/api/src/main/java/com/healthlens/api/service/StorageService.java
+- apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java
+- apps/api/src/main/java/com/healthlens/api/service/OcrJobConsumer.java
+- apps/api/src/main/java/com/healthlens/api/controller/HealthRecordController.java
+- apps/api/src/test/java/com/healthlens/api/service/HealthRecordServiceTest.java
+- apps/api/src/main/resources/application.yml
+- apps/web/src/lib/api/routes.ts
+- apps/web/src/components/features/upload/UploadButton.tsx
+- apps/web/src/app/(dashboard)/health-records/page.tsx
+
+### Change Log
+
+- 2026-04-19: Hoàn thành implementation Story 3.1 cho Web MVP (backend upload + OCR trigger + web upload UI + test service).

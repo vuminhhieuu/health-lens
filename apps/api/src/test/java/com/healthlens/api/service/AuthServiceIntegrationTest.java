@@ -1,5 +1,6 @@
 package com.healthlens.api.service;
 
+import com.healthlens.api.support.PostgresTestContainerBase;
 import com.healthlens.api.dto.request.RegisterRequest;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.entity.UserRole;
@@ -26,7 +27,7 @@ import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @Transactional
-class AuthServiceIntegrationTest {
+class AuthServiceIntegrationTest extends PostgresTestContainerBase {
 
     @Autowired
     private AuthService authService;

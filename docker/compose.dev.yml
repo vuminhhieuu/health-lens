@@ -53,6 +53,13 @@ services:
       - "${MAILHOG_UI_PORT:-8025}:8025"
 
   # ==========================================
+  # Redis - Expose for local GUI tools
+  # ==========================================
+  redis:
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+
+  # ==========================================
   # API - Spring Boot Development
   # ==========================================
   api:
@@ -76,6 +83,9 @@ services:
       - DB_URL=jdbc:postgresql://postgres:5432/${DB_NAME:-healthlens_dev}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - OCR_SERVICE_URL=${OCR_SERVICE_URL:-http://ocr:8001}
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_PUBLIC_ENDPOINT=http://localhost:9000
       - MAIL_HOST=${MAIL_HOST:-mailhog}
       - MAIL_PORT=${MAIL_PORT:-1025}
       - MAIL_USERNAME=${MAIL_USERNAME:-}

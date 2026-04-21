@@ -1,6 +1,6 @@
 package com.healthlens.api.controller;
 
-import com.healthlens.api.common.ApiRoutes;
+import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.CreateProfileRequest;
 import com.healthlens.api.dto.response.ProfileResponse;
 import com.healthlens.api.service.ProfileService;
@@ -44,6 +44,17 @@ public class ProfileController {
         UUID userId = extractUserId(authentication);
         ProfileResponse profile = profileService.createProfile(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(buildResponseBody(profile));
+    }
+
+    /**
+     * Đảm bảo user có ít nhất một hồ sơ (tạo từ dữ liệu tài khoản nếu danh sách đang rỗng).
+     * Dùng cho upload kết quả khám: UI "Tôi" trên web không phải bản ghi profiles.
+     */
+    @PostMapping("/ensure-default")
+    public ResponseEntity<Map<String, Object>> ensureDefaultProfile(Authentication authentication) {
+        UUID userId = extractUserId(authentication);
+        ProfileResponse profile = profileService.ensureDefaultProfile(userId);
+        return ResponseEntity.ok(buildResponseBody(profile));
     }
 
     private UUID extractUserId(Authentication authentication) {
