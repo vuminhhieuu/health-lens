@@ -1,112 +1,72 @@
 "use client";
 
-import { useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Users } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
-import { API_ROUTES } from "@/lib/api/routes";
-import { ProfileCard, HealthStatus } from "@/components/features/profiles/ProfileCard";
-import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { UploadButton } from "@/components/features/upload/UploadButton";
 import { apiClient } from "@/lib/api/apiClient";
 
 type Profile = {
   id: string;
   displayName: string;
-  notes?: string;
-  updatedAt?: string;
-  latestStatus?: HealthStatus;
-};
-
-type UserProfile = {
-  id: string;
-  fullName: string;
 };
 
 export default function HealthRecordsPage() {
-  const router = useRouter();
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+
   const { data: profiles = [], isLoading } = useQuery({
-    queryKey: ["profiles-for-health-records-hub"],
+    queryKey: ["profiles-for-upload"],
     queryFn: async () => {
+      // Trang "Hồ sơ gia đình" có thể hiển thị "Tôi" từ /users/me (không có trong bảng profiles).
+      // Upload cần profileId thật → đảm bảo có ít nhất một hồ sơ DB trước khi lấy danh sách.
       await apiClient.post(ApiPaths.PROFILES.ENSURE_DEFAULT);
       const response = await apiClient.get(ApiPaths.PROFILES.BASE);
       return (response.data?.data ?? []) as Profile[];
     },
   });
 
-  const { data: currentUser } = useQuery({
-    queryKey: ["currentUser-for-health-records-hub"],
-    queryFn: async () => {
-      const response = await apiClient.get(API_ROUTES.USERS.ME);
-      return response.data?.data as UserProfile;
-    },
-  });
-
-  const profileItems = useMemo(() => {
-    const normalizedSelfName = currentUser?.fullName?.trim().toLowerCase();
-    const selfProfile = profiles.find((profile) => {
-      if (!normalizedSelfName) return false;
-      return profile.displayName.trim().toLowerCase() === normalizedSelfName;
-    });
-
-    const familyProfiles = profiles
-      .filter((profile) => profile.id !== selfProfile?.id)
-      .map((profile) => ({
-        ...profile,
-        relationship: "Người thân",
-      }));
-
-    const selfItem = currentUser
-      ? [{
-          id: selfProfile?.id ?? "",
-          displayName: currentUser.fullName || "Tôi",
-          notes: selfProfile?.notes,
-          updatedAt: selfProfile?.updatedAt,
-          latestStatus: selfProfile?.latestStatus,
-          relationship: "Chính chủ",
-        }]
-      : [];
-
-    return [...selfItem, ...familyProfiles];
-  }, [currentUser, profiles]);
+  const selectableProfiles = useMemo(() => profiles, [profiles]);
+  const activeProfileId = selectedProfileId || selectableProfiles[0]?.id || "";
 
   return (
-    <DashboardPageShell
-      title="Kết quả khám"
-      subtitle="Chọn hồ sơ để xem lịch sử khám bệnh của từng thành viên."
-    >
-      {isLoading ? (
-        <div className="flex justify-center py-10">
-          <Loader2 className="h-8 w-8 animate-spin text-[#00685f]" />
-        </div>
-      ) : profileItems.length > 0 ? (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {profileItems.map((profile) => {
-            const canOpenHistory = Boolean(profile.id);
-            return (
-              <ProfileCard
-                key={`${profile.relationship}-${profile.displayName}-${profile.id || "no-id"}`}
-                name={profile.displayName}
-                relationship={profile.relationship}
-                notes={profile.notes}
-                latestStatus={profile.latestStatus}
-                lastUpdated={profile.updatedAt}
-                onPress={canOpenHistory ? () => router.push(`/profiles/${profile.id}/history`) : undefined}
-              />
-            );
-          })}
-        </div>
-      ) : (
-        <div className="rounded-[32px] border-2 border-dashed border-[#bcc9c6]/30 bg-white/40 p-16 text-center">
-          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-[#e9f6f3] text-[#00685f]">
-            <Users className="h-10 w-10" />
+    <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-6 bg-[#effcf9] px-6 py-10">
+      <header>
+        <h1 className="text-3xl font-bold text-[#005049]">Tải kết quả xét nghiệm</h1>
+        <p className="mt-2 text-sm text-[#4e6360]">
+          Tải file PDF hoặc ảnh (JPG/PNG, tối đa 20MB). Hệ thống sẽ xử lý OCR tự động.
+        </p>
+      </header>
+
+      <section className="rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm">
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-[#4e6360]">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Đang tải hồ sơ...
           </div>
-          <h3 className="text-2xl font-black text-[#121e1c]">Chưa có hồ sơ nào</h3>
-          <p className="mt-2 text-[#6d7a77]">Vui lòng tạo hồ sơ để theo dõi lịch sử khám bệnh.</p>
-        </div>
-      )}
-    </DashboardPageShell>
+        ) : selectableProfiles.length === 0 ? (
+          <p className="text-sm text-[#ba1a1a]">Bạn chưa có hồ sơ để upload. Vui lòng tạo hồ sơ trước.</p>
+        ) : (
+          <div className="space-y-4">
+            <label className="block text-sm font-medium text-[#3d4947]">Chọn hồ sơ</label>
+            <select
+              className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378]"
+              value={activeProfileId}
+              onChange={(event) => setSelectedProfileId(event.target.value)}
+            >
+              {selectableProfiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.displayName}
+                </option>
+              ))}
+            </select>
+
+            <UploadButton profileId={activeProfileId} />
+          </div>
+        )}
+      </section>
+    </div>
   );
 }

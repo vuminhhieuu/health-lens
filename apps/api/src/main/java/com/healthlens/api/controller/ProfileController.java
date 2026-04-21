@@ -2,22 +2,16 @@ package com.healthlens.api.controller;
 
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.CreateProfileRequest;
-import com.healthlens.api.dto.request.UpdateProfileRequest;
-import com.healthlens.api.dto.response.HealthRecordHistoryPageResponse;
 import com.healthlens.api.dto.response.ProfileResponse;
-import com.healthlens.api.service.HealthRecordService;
 import com.healthlens.api.service.ProfileService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
@@ -30,11 +24,9 @@ import java.util.UUID;
 public class ProfileController {
 
     private final ProfileService profileService;
-    private final HealthRecordService healthRecordService;
 
-    public ProfileController(ProfileService profileService, HealthRecordService healthRecordService) {
+    public ProfileController(ProfileService profileService) {
         this.profileService = profileService;
-        this.healthRecordService = healthRecordService;
     }
 
     @GetMapping
@@ -63,36 +55,6 @@ public class ProfileController {
         UUID userId = extractUserId(authentication);
         ProfileResponse profile = profileService.ensureDefaultProfile(userId);
         return ResponseEntity.ok(buildResponseBody(profile));
-    }
-
-    @PutMapping("/{profileId}")
-    public ResponseEntity<Map<String, Object>> updateProfile(
-            Authentication authentication,
-            @PathVariable UUID profileId,
-            @Valid @RequestBody UpdateProfileRequest request) {
-
-        UUID userId = extractUserId(authentication);
-        ProfileResponse profile = profileService.updateProfile(userId, profileId, request);
-        return ResponseEntity.ok(buildResponseBody(profile));
-    }
-
-    @GetMapping("/{profileId}/health-records")
-    public ResponseEntity<Map<String, Object>> getProfileHealthRecords(
-            Authentication authentication,
-            @PathVariable UUID profileId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int limit
-    ) {
-        UUID userId = extractUserId(authentication);
-        HealthRecordHistoryPageResponse response = healthRecordService.getProfileHistory(userId, profileId, page, limit);
-        return ResponseEntity.ok(Map.of(
-                "data", response.data(),
-                "pagination", response.pagination(),
-                "meta", Map.of(
-                        "timestamp", Instant.now().toString(),
-                        "requestId", UUID.randomUUID().toString()
-                )
-        ));
     }
 
     private UUID extractUserId(Authentication authentication) {

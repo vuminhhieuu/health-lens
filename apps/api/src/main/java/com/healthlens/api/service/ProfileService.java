@@ -1,7 +1,6 @@
 package com.healthlens.api.service;
 
 import com.healthlens.api.dto.request.CreateProfileRequest;
-import com.healthlens.api.dto.request.UpdateProfileRequest;
 import com.healthlens.api.dto.response.ProfileResponse;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
@@ -10,7 +9,6 @@ import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.UserRepository;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -103,53 +101,6 @@ public class ProfileService {
         profile = profileRepository.save(profile);
 
         return mapToResponse(profile);
-    }
-
-    @Transactional
-    public ProfileResponse updateProfile(UUID userId, UUID profileId, UpdateProfileRequest request) {
-        Profile profile = profileRepository.findById(profileId)
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay ho so"));
-
-        // Ownership check: Ensure user can only update their own profile
-        UUID profileOwnerId = profile.getUser().getId();
-        if (!userId.equals(profileOwnerId)) {
-            throw new AccessDeniedException("Không có quyền truy cập hồ sơ này");
-        }
-
-        // Validate displayName with defensive programming:
-        // DTO @NotBlank ensures non-null, but service validates after trimming
-        // (covers case where user submits spaces-only input that passes DTO validation)
-        // Note: String.length() counts Java chars, not grapheme clusters. Vietnamese text is safe.
-        String normalizedDisplayName = request.displayName().trim();
-        if (normalizedDisplayName.isBlank()) {
-            throw new IllegalArgumentException("Tên hiển thị không được để trống");
-        }
-        if (normalizedDisplayName.length() > 100) {
-            throw new IllegalArgumentException("Tên hiển thị tối đa 100 ký tự");
-        }
-
-        // Validate notes: optional field, max 500 chars
-        String normalizedNotes = normalizeOptionalText(request.notes());
-        if (normalizedNotes != null && normalizedNotes.length() > 500) {
-            throw new IllegalArgumentException("Ghi chú tối đa 500 ký tự");
-        }
-
-        profile.setDisplayName(normalizedDisplayName);
-        profile.setBirthDate(request.birthDate());
-        profile.setGender(normalizeOptionalText(request.gender()));
-        profile.setNotes(normalizedNotes);
-
-        Profile updatedProfile = profileRepository.save(profile);
-        return mapToResponse(updatedProfile);
-    }
-
-    private String normalizeOptionalText(String value) {
-        if (value == null) {
-            return null;
-        }
-
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private ProfileResponse mapToResponse(Profile profile) {
