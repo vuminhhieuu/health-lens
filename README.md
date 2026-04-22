@@ -16,15 +16,17 @@ The project is implemented as a production-oriented monorepo with a web app, API
 
 ## Tech Stack
 
-| Layer | Technology |
-|------|------------|
-| Frontend | Next.js 16, TypeScript, pnpm |
-| Backend API | Spring Boot, Java 21, Gradle |
-| OCR Service | FastAPI, EasyOCR |
-| Data | PostgreSQL, Redis, Qdrant |
-| Object Storage | MinIO (dev), S3-compatible storage (staging/prod) |
-| AI | Groq API |
-| Deployment (staging) | Vercel + Render + Neon + Upstash |
+
+| Layer                | Technology                                        |
+| -------------------- | ------------------------------------------------- |
+| Frontend             | Next.js 16, TypeScript, pnpm                      |
+| Backend API          | Spring Boot, Java 21, Gradle                      |
+| OCR Service          | FastAPI, EasyOCR                                  |
+| Data                 | PostgreSQL, Redis, Qdrant                         |
+| Object Storage       | MinIO (dev), S3-compatible storage (staging/prod) |
+| AI                   | Groq API                                          |
+| Deployment (staging) | Vercel + Render + Neon + Upstash                  |
+
 
 ## Architecture At A Glance
 
@@ -39,6 +41,8 @@ flowchart LR
     A --> S[(MinIO / S3)]
     A --> G[Groq API]
 ```
+
+
 
 > Detailed architecture notes: `docs/architecture.md`  
 > Staging deployment details: `docs/STAGING_DEPLOYMENT.md`
@@ -92,7 +96,11 @@ Useful variants:
 ./docker/scripts/up.sh --ocr            # include OCR service (extra RAM)
 ./docker/scripts/up.sh --rebuild-api    # rebuild API image only
 ./docker/scripts/up.sh --rebuild-web    # rebuild Web image only
+./docker/scripts/up.sh --ci             # plain output for CI/non-TTY
 ```
+
+`up.sh` is optimized for fast local loop: by default it starts containers without rebuilding images.
+At the end of each run, it prints build/start/total timing summary.
 
 ### 3) Verify local endpoints
 
@@ -106,9 +114,17 @@ Useful variants:
 
 ```bash
 ./docker/scripts/logs.sh api -f
+./docker/scripts/logs.sh --menu         # interactive selector
+./docker/scripts/logs.sh mailhog --tail 100
 ./docker/scripts/down.sh
 ./docker/scripts/down.sh -v        # remove volumes
+./docker/scripts/down.sh --clean   # remove compose images + volumes
+./docker/scripts/down.sh --clean --yes
+./docker/scripts/cleanup.sh --dry-run
 ```
+
+`logs.sh`, `down.sh`, and `cleanup.sh` also support `--ci` for plain, non-colored output.  
+You can also disable ANSI colors via `NO_COLOR=1` (for all Docker scripts).
 
 ## Configuration Notes
 
@@ -178,3 +194,4 @@ Planned / evolving:
 - Mobile app hardening
 - Admin analytics dashboards
 - Further documentation and architecture artifacts
+

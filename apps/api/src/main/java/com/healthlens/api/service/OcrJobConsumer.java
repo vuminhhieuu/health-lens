@@ -126,12 +126,26 @@ public class OcrJobConsumer {
                 redisTemplate.opsForStream().add(ocrStream, Map.of("_init", "1"));
             }
             redisTemplate.opsForStream().createGroup(ocrStream, ReadOffset.latest(), consumerGroup);
+            log.info("[OcrJobConsumer] Created consumer group={} for stream={}", consumerGroup, ocrStream);
         } catch (Exception ex) {
-            String message = ex.getMessage();
-            if (message == null || !message.contains("BUSYGROUP")) {
-                log.warn("[OcrJobConsumer] ensureConsumerGroup failed for stream={}", ocrStream, ex);
+            if (containsAnyMessage(ex, "BUSYGROUP")) {
+                log.info("[OcrJobConsumer] Consumer group already exists. group={} stream={}", consumerGroup, ocrStream);
+                return;
             }
+            log.warn("[OcrJobConsumer] ensureConsumerGroup failed for stream={}", ocrStream, ex);
         }
+    }
+
+    private boolean containsAnyMessage(Throwable throwable, String keyword) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null && message.contains(keyword)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private String valueAsString(Object value) {

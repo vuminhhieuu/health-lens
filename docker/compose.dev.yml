@@ -42,7 +42,7 @@ services:
   # Mailhog - Local SMTP capture (dev email)
   # ==========================================
   mailhog:
-    image: mailhog/mailhog:latest
+    image: mailhog/mailhog:v1.0.1
     platform: linux/amd64
     container_name: ${COMPOSE_PROJECT_NAME:-healthlens}-mailhog
     restart: unless-stopped
@@ -126,7 +126,7 @@ services:
       - "${WEB_PORT:-3000}:3000"
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
       - WATCHPACK_POLLING=true
     env_file:
       - ../.env

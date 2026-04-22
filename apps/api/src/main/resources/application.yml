@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${PORT:8080}
   address: 0.0.0.0
 
 spring:
@@ -33,6 +33,10 @@ spring:
         collection-name: ${QDRANT_COLLECTION:healthlens}
         timeout: 30s
         vector-dimension: ${QDRANT_VECTOR_DIMENSION:1024}
+  data:
+    redis:
+      repositories:
+        enabled: false
 
 # App-level config
 app:

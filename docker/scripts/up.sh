@@ -23,7 +23,7 @@
 #   - Mailhog:  http://localhost:8025 (captured SMTP mail)
 #   - OCR:      http://localhost:8001 (with --ocr)
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="$(dirname "$SCRIPT_DIR")"
@@ -44,19 +44,52 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-echo_info() { echo -e "${GREEN}✓${NC} $1"; }
-echo_warn() { echo -e "${YELLOW}⚠${NC} $1"; }
-echo_error() { echo -e "${RED}✗${NC} $1"; }
+CI_MODE=false
+
+echo_info() { echo -e "${GREEN}[OK]${NC} $1"; }
+echo_warn() { echo -e "${YELLOW}[WARN]${NC} $1" >&2; }
+echo_error() { echo -e "${RED}[ERR]${NC} $1" >&2; }
 echo_header() { echo -e "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n${BLUE}$1${NC}\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"; }
+preflight_docker() {
+    if ! command -v docker >/dev/null 2>&1; then
+        echo_error "docker command not found"
+        exit 1
+    fi
+    if ! docker info >/dev/null 2>&1; then
+        echo_error "Docker daemon is not running"
+        exit 1
+    fi
+    if ! docker compose version >/dev/null 2>&1; then
+        echo_error "Docker Compose v2 is not available"
+        exit 1
+    fi
+}
+format_duration() {
+    local seconds="${1:-0}"
+    local minutes
+    local remain_seconds
+    if [ "$seconds" -lt 60 ]; then
+        printf "%ss" "$seconds"
+        return
+    fi
+    minutes="$((seconds / 60))"
+    remain_seconds="$((seconds % 60))"
+    printf "%sm %ss" "$minutes" "$remain_seconds"
+}
 
 # Parse arguments
 BUILD=false
 NO_CACHE=false
-PROFILES=""
+ENABLE_OCR=false
 FOREGROUND=false
 REBUILD_SERVICES=()
+START_TS="$(date +%s)"
+BUILD_START_TS=0
+BUILD_END_TS=0
+UP_START_TS=0
+UP_END_TS=0
 
-while [[ $# -gt 0 ]]; do
+while [ "$#" -gt 0 ]; do
     case $1 in
         --build)
             BUILD=true
@@ -67,11 +100,15 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --ocr)
-            PROFILES="$PROFILES --profile ocr"
+            ENABLE_OCR=true
             shift
             ;;
         --foreground)
             FOREGROUND=true
+            shift
+            ;;
+        --ci)
+            CI_MODE=true
             shift
             ;;
         --rebuild-api)
@@ -97,6 +134,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-cache       Force rebuild without cache (slow)"
             echo "  --ocr            Include OCR service (~2GB RAM)"
             echo "  --foreground     Stream logs in foreground"
+            echo "  --ci             Disable ANSI formatting for CI logs"
             echo "  --help           Show this help message"
             echo ""
             echo "Examples:"
@@ -108,21 +146,26 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo_error "Unknown option: $1"
-            exit 1
+            exit 2
             ;;
     esac
 done
+
+if [ "$CI_MODE" = true ] || [ ! -t 1 ] || [ "${NO_COLOR:-}" = "1" ]; then
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    NC=''
+fi
 
 echo_header "HealthLens - Development Environment"
 echo_info "Running from: $(pwd)"
 echo_info "BuildKit: Enabled (faster builds)"
 echo_info "Docker directory: docker/"
 
-# Check Docker is running
-if ! docker info > /dev/null 2>&1; then
-    echo_error "Docker is not running!"
-    exit 1
-fi
+# Preflight checks
+preflight_docker
 
 # Check .env file
 if [ ! -f ".env" ]; then
@@ -142,7 +185,11 @@ fi
 # Build if requested
 if [ ${#REBUILD_SERVICES[@]} -gt 0 ] && [ "$BUILD" = true ]; then
     echo_error "Use either --build or --rebuild-* options, not both."
-    exit 1
+    exit 2
+fi
+if [ "$NO_CACHE" = true ] && [ "$BUILD" = false ] && [ ${#REBUILD_SERVICES[@]} -eq 0 ]; then
+    echo_error "--no-cache requires --build or a --rebuild-* option."
+    exit 2
 fi
 
 # Determine build cache option
@@ -152,36 +199,48 @@ if [ "$NO_CACHE" = true ]; then
     echo_warn "Rebuilding without cache (will be slow)..."
 fi
 
-echo_header "Building Docker Images"
-
-if [ ${#REBUILD_SERVICES[@]} -gt 0 ]; then
-    echo_info "Rebuilding selected service images: ${REBUILD_SERVICES[*]}"
-    docker compose -f docker/compose.yml -f docker/compose.dev.yml build $BUILD_CACHE_FLAG "${REBUILD_SERVICES[@]}"
-elif [ "$BUILD" = true ]; then
-    echo_info "Building all Docker images..."
-    docker compose -f docker/compose.yml -f docker/compose.dev.yml build $BUILD_CACHE_FLAG
+if [ ${#REBUILD_SERVICES[@]} -gt 0 ] || [ "$BUILD" = true ]; then
+    BUILD_START_TS="$(date +%s)"
+    echo_header "Building Docker Images"
+    echo_info "[1/3] Build phase"
+    if [ ${#REBUILD_SERVICES[@]} -gt 0 ]; then
+        echo_info "Rebuilding selected service images: ${REBUILD_SERVICES[*]}"
+        docker compose -f docker/compose.yml -f docker/compose.dev.yml build $BUILD_CACHE_FLAG "${REBUILD_SERVICES[@]}"
+    else
+        echo_info "Building all Docker images..."
+        docker compose -f docker/compose.yml -f docker/compose.dev.yml build $BUILD_CACHE_FLAG
+    fi
+    BUILD_END_TS="$(date +%s)"
 else
-    echo_info "Building all Docker images (with cache)..."
-    docker compose -f docker/compose.yml -f docker/compose.dev.yml build
+    echo_info "Skipping image build (fast start). Use --build to rebuild images."
 fi
 
 # Start services
 echo_header "Starting Services"
+echo_info "[2/3] Startup phase"
 echo_info "Starting HealthLens development environment..."
+UP_START_TS="$(date +%s)"
 
-if [ "$FOREGROUND" = true ]; then
-    docker compose -f docker/compose.yml -f docker/compose.dev.yml $PROFILES up
-else
-    docker compose -f docker/compose.yml -f docker/compose.dev.yml $PROFILES up -d
+compose_up_args=(-f docker/compose.yml -f docker/compose.dev.yml)
+if [ "$ENABLE_OCR" = true ]; then
+    compose_up_args+=(--profile ocr)
 fi
 
+if [ "$FOREGROUND" = true ]; then
+    docker compose "${compose_up_args[@]}" up
+else
+    docker compose "${compose_up_args[@]}" up -d
+fi
+UP_END_TS="$(date +%s)"
+
 echo_header "Services Ready"
+echo_info "[3/3] Summary phase"
 echo "  API:        http://localhost:8080"
 echo "  Web:        http://localhost:3000"
 echo "  MinIO:      http://localhost:9001"
 echo "  Mailhog:    http://localhost:8025"
 echo "  PostgreSQL: localhost:5432"
-[ "$PROFILES" == *"--profile ocr"* ] && echo "  OCR:        http://localhost:8001"
+[ "$ENABLE_OCR" = true ] && echo "  OCR:        http://localhost:8001"
 echo ""
 
 if [ "$FOREGROUND" = true ]; then
@@ -192,4 +251,22 @@ else
 fi
 
 echo ""
-echo_info "All systems go! 🚀"
+echo_info "All systems go!"
+
+TOTAL_END_TS="$(date +%s)"
+if [ "$BUILD_START_TS" -gt 0 ]; then
+    BUILD_DURATION="$((BUILD_END_TS - BUILD_START_TS))"
+else
+    BUILD_DURATION=-1
+fi
+UP_DURATION="$((UP_END_TS - UP_START_TS))"
+TOTAL_DURATION="$((TOTAL_END_TS - START_TS))"
+
+echo_header "Timing Summary"
+if [ "$BUILD_DURATION" -ge 0 ]; then
+    echo_info "Build: $(format_duration "$BUILD_DURATION")"
+else
+    echo_info "Build: skipped"
+fi
+echo_info "Startup: $(format_duration "$UP_DURATION")"
+echo_info "Total: $(format_duration "$TOTAL_DURATION")"

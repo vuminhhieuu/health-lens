@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ============================================================================
 # HealthLens Disk Space Cleanup Script - Enhanced
 # 
@@ -6,13 +6,13 @@
 #          and dependencies to free up disk space
 #
 # Usage:
-#   ./scripts/cleanup.sh                   # Interactive mode (shows what will be deleted)
-#   ./scripts/cleanup.sh --force           # Force delete without confirmation
-#   ./scripts/cleanup.sh --aggressive      # Remove ALL images (including tagged)
-#   ./scripts/cleanup.sh --dry-run         # Show what would be deleted (no actual deletion)
-#   ./scripts/cleanup.sh --docker-only     # Only clean Docker images/containers/volumes
-#   ./scripts/cleanup.sh --buildkit        # Include BuildKit cache cleanup
-#   ./scripts/cleanup.sh --analyze         # Show disk usage analysis
+#   ./docker/scripts/cleanup.sh            # Interactive mode (shows what will be deleted)
+#   ./docker/scripts/cleanup.sh --force    # Force delete without confirmation
+#   ./docker/scripts/cleanup.sh --aggressive # Remove ALL images (including tagged)
+#   ./docker/scripts/cleanup.sh --dry-run  # Show what would be deleted (no actual deletion)
+#   ./docker/scripts/cleanup.sh --docker-only # Only clean Docker images/containers/volumes
+#   ./docker/scripts/cleanup.sh --buildkit # Include BuildKit cache cleanup
+#   ./docker/scripts/cleanup.sh --analyze  # Show disk usage analysis
 #
 # Options:
 #   --dry-run           Show what would be deleted without actually deleting
@@ -25,7 +25,7 @@
 #
 # ============================================================================
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
@@ -48,15 +48,16 @@ DOCKER_ONLY=false
 INCLUDE_BUILDKIT=false
 ANALYZE_ONLY=false
 SHOW_HELP=false
+CI_MODE=false
 
 # Parse arguments
-while [[ $# -gt 0 ]]; do
+while [ "$#" -gt 0 ]; do
   case $1 in
     --dry-run)
       DRY_RUN=true
       shift
       ;;
-    --force)
+    --force|--yes)
       FORCE_DELETE=true
       shift
       ;;
@@ -80,10 +81,14 @@ while [[ $# -gt 0 ]]; do
       SHOW_HELP=true
       shift
       ;;
+    --ci)
+      CI_MODE=true
+      shift
+      ;;
     *)
-      echo "Unknown option: $1"
-      echo "Use --help for usage information"
-      exit 1
+      echo "Unknown option: $1" >&2
+      echo "Use --help for usage information" >&2
+      exit 2
       ;;
   esac
 done
@@ -94,38 +99,39 @@ if [ "$SHOW_HELP" = true ]; then
 HealthLens Disk Space Cleanup Script - Enhanced
 
 USAGE:
-  ./scripts/cleanup.sh [OPTIONS]
+  ./docker/scripts/cleanup.sh [OPTIONS]
 
 OPTIONS:
   --dry-run          Show what would be deleted without actually deleting
-  --force            Force delete without confirmations
+  --force, --yes     Force delete without confirmations
   --aggressive       Remove ALL unused images (including tagged ones)
   --docker-only      Only clean Docker-related items
   --buildkit         Include Docker BuildKit cache cleanup
   --analyze          Show disk usage breakdown and volume analysis
+  --ci               Disable ANSI formatting for CI logs
   --help             Show this help message
 
 EXAMPLES:
   # Interactive mode (with confirmations)
-  ./scripts/cleanup.sh
+  ./docker/scripts/cleanup.sh
 
   # Preview what will be deleted
-  ./scripts/cleanup.sh --dry-run
+  ./docker/scripts/cleanup.sh --dry-run
 
   # Full cleanup without confirmations
-  ./scripts/cleanup.sh --force
+  ./docker/scripts/cleanup.sh --force
 
   # Aggressive cleanup (remove all images)
-  ./scripts/cleanup.sh --aggressive --force
+  ./docker/scripts/cleanup.sh --aggressive --force
 
   # Docker only (keep project files)
-  ./scripts/cleanup.sh --docker-only --force
+  ./docker/scripts/cleanup.sh --docker-only --force
 
   # Show what will be deleted and analyze volumes
-  ./scripts/cleanup.sh --analyze --docker-only
+  ./docker/scripts/cleanup.sh --analyze --docker-only
 
   # Include BuildKit cache
-  ./scripts/cleanup.sh --buildkit --force
+  ./docker/scripts/cleanup.sh --buildkit --force
 
 CLEANUP OPERATIONS:
   1. Docker System Prune
@@ -153,28 +159,72 @@ HELP_TEXT
   exit 0
 fi
 
-# Function to format bytes to human-readable
-format_size() {
-  local bytes=$1
-  if (( bytes < 1024 )); then
-    echo "${bytes}B"
-  elif (( bytes < 1024*1024 )); then
-    echo "$(( bytes / 1024 ))KB"
-  elif (( bytes < 1024*1024*1024 )); then
-    echo "$(( bytes / 1024 / 1024 ))MB"
+if [ "$CI_MODE" = true ] || [ ! -t 1 ] || [ "${NO_COLOR:-}" = "1" ]; then
+  RED=''
+  GREEN=''
+  YELLOW=''
+  BLUE=''
+  MAGENTA=''
+  CYAN=''
+  GRAY=''
+  NC=''
+fi
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "[ERR] docker command not found" >&2
+  exit 1
+fi
+if ! docker info >/dev/null 2>&1; then
+  echo "[ERR] Docker daemon is not running" >&2
+  exit 1
+fi
+if ! docker compose version >/dev/null 2>&1; then
+  echo "[ERR] Docker Compose v2 is not available" >&2
+  exit 1
+fi
+
+hl_format_human_bytes() {
+  hl_bytes="${1:-0}"
+  case "$hl_bytes" in
+    '' | *[!0-9]*) hl_bytes=0 ;;
+  esac
+  if [ "$hl_bytes" -lt 1024 ]; then
+    printf '%sB' "$hl_bytes"
+    return 0
+  fi
+  hl_kb=$((hl_bytes / 1024))
+  if [ "$hl_kb" -lt 1024 ]; then
+    printf '%sKB' "$hl_kb"
+    return 0
+  fi
+  hl_mb=$((hl_kb / 1024))
+  if [ "$hl_mb" -lt 1024 ]; then
+    printf '%sMB' "$hl_mb"
+    return 0
+  fi
+  hl_gb=$((hl_mb / 1024))
+  printf '%sGB' "$hl_gb"
+}
+
+hl_dir_size_bytes() {
+  hl_dir="$1"
+  if [ ! -d "$hl_dir" ]; then
+    printf '%s' "0"
+    return 0
+  fi
+  if du -sb "$hl_dir" >/dev/null 2>&1; then
+    du -sb "$hl_dir" 2>/dev/null | awk '{print $1; exit}'
   else
-    echo "$(( bytes / 1024 / 1024 / 1024 ))GB"
+    du -sk "$hl_dir" 2>/dev/null | awk '{print $1 * 1024; exit}'
   fi
 }
 
-# Function to get size of directory safely
+format_size() {
+  hl_format_human_bytes "$1"
+}
+
 get_dir_size() {
-  local dir=$1
-  if [ -d "$dir" ]; then
-    du -sb "$dir" 2>/dev/null | cut -f1 || echo 0
-  else
-    echo 0
-  fi
+  hl_dir_size_bytes "$1"
 }
 
 # Function to ask for confirmation
@@ -194,19 +244,6 @@ confirm() {
       return 1
       ;;
   esac
-}
-
-# Function to safely execute command with dry-run support
-safe_exec() {
-  local cmd="$1"
-  local description="$2"
-  
-  if [ "$DRY_RUN" = true ]; then
-    echo -e "${GRAY}   [DRY-RUN] $description${NC}"
-    echo -e "${GRAY}   Command: $cmd${NC}"
-  else
-    eval "$cmd"
-  fi
 }
 
 # Header
@@ -234,7 +271,7 @@ if [ "$ANALYZE_ONLY" = true ] || [ "$DRY_RUN" = true ]; then
     # Get volume mount point and size
     vol_path=$(docker volume inspect "$vol" --format '{{.Mountpoint}}' 2>/dev/null)
     if [ -d "$vol_path" ]; then
-      vol_size=$(du -sb "$vol_path" 2>/dev/null | cut -f1)
+      vol_size=$(get_dir_size "$vol_path")
       size_human=$(format_size "$vol_size")
       echo -e "  ${MAGENTA}$vol${NC}: $size_human ($vol_path)"
     fi
@@ -250,7 +287,7 @@ if [ "$ANALYZE_ONLY" = true ] || [ "$DRY_RUN" = true ]; then
   
   # Docker containers
   echo -e "${CYAN}Docker Containers:${NC}"
-  container_count=$(docker ps -a --format "{{.ID}}" 2>/dev/null | wc -l)
+  container_count=$(docker ps -a --format "{{.ID}}" 2>/dev/null | wc -l | tr -d ' ')
   echo -e "  Total containers: $container_count"
   echo ""
   
@@ -267,7 +304,7 @@ if [ "$ANALYZE_ONLY" = true ] || [ "$DRY_RUN" = true ]; then
     echo -e "  Gradle cache: $(format_size "$gradle_size")"
   fi
   
-  node_modules_count=$(find "$PROJECT_ROOT" -name node_modules -type d 2>/dev/null | wc -l)
+  node_modules_count=$(find "$PROJECT_ROOT" -name node_modules -type d 2>/dev/null | wc -l | tr -d ' ')
   if [ "$node_modules_count" -gt 0 ]; then
     echo -e "  Node modules directories: $node_modules_count found"
   fi
@@ -283,36 +320,35 @@ fi
 # ============================================================================
 # 1. Docker Cleanup
 # ============================================================================
-if [ "$DOCKER_ONLY" = false ] || [ "$DOCKER_ONLY" = true ]; then
-  echo -e "${BLUE}1. Docker Cleanup${NC}"
-  echo "   Removing stopped containers, dangling images, unused networks, dangling volumes..."
+echo -e "${BLUE}1. Docker Cleanup${NC}"
+echo "   Removing stopped containers, dangling images, unused networks, dangling volumes..."
 
-  if confirm "   Proceed with Docker cleanup?"; then
-    if [ "$DRY_RUN" = true ]; then
-      echo -e "${GRAY}   [DRY-RUN] Would run: docker system prune -af --volumes${NC}"
-      docker system prune -af --volumes --dry-run 2>&1 | tail -3 || true
-    else
-      RECLAIMED=$(docker system prune -af --volumes 2>&1 | grep "Total reclaimed" || echo "0B")
-      echo -e "${GREEN}   ✓ Docker cleanup complete${NC}"
-      echo "   $RECLAIMED"
-    fi
+if confirm "   Proceed with Docker cleanup?"; then
+  if [ "$DRY_RUN" = true ]; then
+    echo -e "${GRAY}   [DRY-RUN] Would run: docker system prune -af --volumes${NC}"
+    echo -e "${GRAY}   [DRY-RUN] Docker does not support --dry-run for system prune.${NC}"
   else
-    echo -e "${YELLOW}   ⊘ Skipped${NC}"
+    RECLAIMED=$(docker system prune -af --volumes 2>&1 | grep "Total reclaimed" || echo "0B")
+    echo -e "${GREEN}   ✓ Docker cleanup complete${NC}"
+    echo "   $RECLAIMED"
   fi
+else
+  echo -e "${YELLOW}   ⊘ Skipped${NC}"
+fi
 
-  # Docker volume analysis
-  echo -e "\n${BLUE}   Docker Volume Analysis${NC}"
-  docker volume ls --format "{{.Name}}" 2>/dev/null | while read -r vol; do
-    vol_path=$(docker volume inspect "$vol" --format '{{.Mountpoint}}' 2>/dev/null)
-    if [ -d "$vol_path" ]; then
-      vol_size=$(du -sb "$vol_path" 2>/dev/null | cut -f1)
-      size_human=$(format_size "$vol_size")
-      echo -e "   ${MAGENTA}●${NC} $vol: $size_human"
-    fi
-  done
+# Docker volume analysis
+echo -e "\n${BLUE}   Docker Volume Analysis${NC}"
+docker volume ls --format "{{.Name}}" 2>/dev/null | while read -r vol; do
+  vol_path=$(docker volume inspect "$vol" --format '{{.Mountpoint}}' 2>/dev/null)
+  if [ -d "$vol_path" ]; then
+    vol_size=$(get_dir_size "$vol_path")
+    size_human=$(format_size "$vol_size")
+    echo -e "   ${MAGENTA}●${NC} $vol: $size_human"
+  fi
+done
 
-  # Additional aggressive Docker cleanup
-  if [ "$AGGRESSIVE" = true ]; then
+# Additional aggressive Docker cleanup
+if [ "$AGGRESSIVE" = true ]; then
     echo -e "\n${BLUE}   2.1 Aggressive Docker Cleanup${NC}"
     echo "   Removing ALL unused images (including tagged)..."
     if confirm "   Proceed with aggressive cleanup?"; then
@@ -323,10 +359,10 @@ if [ "$DOCKER_ONLY" = false ] || [ "$DOCKER_ONLY" = true ]; then
         echo -e "${GREEN}   ✓ Aggressive cleanup complete${NC}"
       fi
     fi
-  fi
+fi
 
-  # BuildKit cache cleanup
-  if [ "$INCLUDE_BUILDKIT" = true ]; then
+# BuildKit cache cleanup
+if [ "$INCLUDE_BUILDKIT" = true ]; then
     echo -e "\n${BLUE}   2.2 Docker BuildKit Cache Cleanup${NC}"
     echo "   Clearing Docker build cache..."
     if confirm "   Proceed?"; then
@@ -337,10 +373,9 @@ if [ "$DOCKER_ONLY" = false ] || [ "$DOCKER_ONLY" = true ]; then
         echo -e "${GREEN}   ✓ BuildKit cache cleanup complete${NC}"
       fi
     fi
-  fi
-
-  echo ""
 fi
+
+echo ""
 
 # Only continue with other cleanups if not docker-only
 if [ "$DOCKER_ONLY" = false ]; then
@@ -377,7 +412,7 @@ if [ "$DOCKER_ONLY" = false ]; then
   echo -e "${BLUE}3. Node Modules Cleanup${NC}"
   echo "   Finding and removing node_modules directories..."
 
-  NODE_MODULES_COUNT=$(find "$PROJECT_ROOT" -name node_modules -type d 2>/dev/null | wc -l)
+  NODE_MODULES_COUNT=$(find "$PROJECT_ROOT" -name node_modules -type d 2>/dev/null | wc -l | tr -d ' ')
   if [ "$NODE_MODULES_COUNT" -gt 0 ]; then
     echo "   Found ${MAGENTA}$NODE_MODULES_COUNT${NC} node_modules directories"
     
