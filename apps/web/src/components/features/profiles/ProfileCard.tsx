@@ -10,6 +10,7 @@ export type HealthStatus = "normal" | "warning" | "critical";
 interface ProfileCardProps {
   name: string;
   relationship?: string;
+  notes?: string;
   avatarUrl?: string;
   latestStatus?: HealthStatus;
   lastUpdated?: string | Date;
@@ -38,6 +39,7 @@ const statusConfig = {
 export function ProfileCard({
   name,
   relationship,
+  notes,
   avatarUrl,
   latestStatus,
   lastUpdated,
@@ -57,8 +59,8 @@ export function ProfileCard({
         group relative flex flex-col p-6 rounded-3xl transition-all duration-300 cursor-pointer
         border-2 
         ${isSelected 
-          ? "bg-white border-[#00685f] shadow-lg shadow-[#00685f]/10 translate-y-[-4px]" 
-          : "bg-white/60 border-transparent hover:bg-white hover:border-[#bcc9c6]/40 shadow-sm hover:shadow-md hover:translate-y-[-2px]"}
+          ? "bg-white border-[#00685f] shadow-lg shadow-[#00685f]/10 -translate-y-1" 
+          : "bg-white/60 border-transparent hover:bg-white hover:border-[#bcc9c6]/40 shadow-sm hover:shadow-md hover:-translate-y-0.5"}
       `}
     >
       <div className="flex items-start justify-between mb-6">
@@ -90,6 +92,12 @@ export function ProfileCard({
         </div>
         <ChevronRight className="w-5 h-5 text-[#bcc9c6] group-hover:text-[#00685f] group-hover:translate-x-1 transition-all" />
       </div>
+
+      {notes && (
+        <p className="text-sm text-[#3d4947] line-clamp-2 mb-4">
+          {notes}
+        </p>
+      )}
 
       <div className="mt-auto pt-4 border-t border-[#bcc9c6]/20 flex flex-col gap-3">
         {status ? (

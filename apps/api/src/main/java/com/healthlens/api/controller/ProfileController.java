@@ -2,6 +2,7 @@ package com.healthlens.api.controller;
 
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.CreateProfileRequest;
+import com.healthlens.api.dto.request.UpdateProfileRequest;
 import com.healthlens.api.dto.response.ProfileResponse;
 import com.healthlens.api.service.ProfileService;
 import jakarta.validation.Valid;
@@ -9,7 +10,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -54,6 +57,17 @@ public class ProfileController {
     public ResponseEntity<Map<String, Object>> ensureDefaultProfile(Authentication authentication) {
         UUID userId = extractUserId(authentication);
         ProfileResponse profile = profileService.ensureDefaultProfile(userId);
+        return ResponseEntity.ok(buildResponseBody(profile));
+    }
+
+    @PutMapping("/{profileId}")
+    public ResponseEntity<Map<String, Object>> updateProfile(
+            Authentication authentication,
+            @PathVariable UUID profileId,
+            @Valid @RequestBody UpdateProfileRequest request) {
+
+        UUID userId = extractUserId(authentication);
+        ProfileResponse profile = profileService.updateProfile(userId, profileId, request);
         return ResponseEntity.ok(buildResponseBody(profile));
     }
 

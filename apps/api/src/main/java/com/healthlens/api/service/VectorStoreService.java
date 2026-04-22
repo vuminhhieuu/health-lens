@@ -7,6 +7,7 @@ import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -20,10 +21,16 @@ public class VectorStoreService {
 
     public void upsertReferenceData(String id, String content, 
                                     Map<String, Object> metadata) {
+        Map<String, Object> safeMetadata = new HashMap<>();
+        if (metadata != null) {
+            safeMetadata.putAll(metadata);
+        }
+        safeMetadata.putIfAbsent("id", id);
+
         Document document = Document.builder()
             .id(id)
             .text(content)
-            .metadata(metadata)
+            .metadata(safeMetadata)
             .build();
         
         vectorStore.add(List.of(document));
@@ -48,15 +55,29 @@ public class VectorStoreService {
     }
 
     public Optional<Document> findById(String id) {
+        if (id == null || id.isBlank()) {
+            return Optional.empty();
+        }
+
         // Qdrant doesn't support direct ID lookup
-        // Search with exact ID in metadata
+        // Search with exact ID in metadata (safe escaped filter expression)
         SearchRequest request = SearchRequest.builder()
             .query("")
-            .filterExpression("id == '" + id + "'")
+            .filterExpression(buildMetadataIdFilterExpression(id))
             .topK(1)
             .build();
         
         List<Document> results = vectorStore.similaritySearch(request);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+
+    private String buildMetadataIdFilterExpression(String id) {
+        return "id == '" + escapeFilterStringLiteral(id) + "'";
+    }
+
+    private String escapeFilterStringLiteral(String value) {
+        return value
+            .replace("\\", "\\\\")
+            .replace("'", "\\'");
     }
 }
