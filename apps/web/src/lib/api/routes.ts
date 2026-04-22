@@ -35,6 +35,7 @@ export const API_ROUTES = {
   DEV: ApiPaths.DEV,
   OCR: ApiPaths.OCR,
   HEALTH: ApiPaths.HEALTH,
+  HEALTH_RECORDS: ApiPaths.HEALTH_RECORDS,
   USERS: {
     ME: "/api/v1/users/me",
   },

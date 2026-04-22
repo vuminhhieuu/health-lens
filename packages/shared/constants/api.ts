@@ -44,6 +44,8 @@ export const ApiPaths = {
     LIST: `/api/${API_VERSION}/profiles`,
     GET: (id: string) => `/api/${API_VERSION}/profiles/${id}`,
     CREATE: `/api/${API_VERSION}/profiles`,
+    /** Tạo hồ sơ mặc định từ thông tin user nếu chưa có hồ sơ nào (idempotent). */
+    ENSURE_DEFAULT: `/api/${API_VERSION}/profiles/ensure-default`,
     UPDATE: (id: string) => `/api/${API_VERSION}/profiles/${id}`,
     DELETE: (id: string) => `/api/${API_VERSION}/profiles/${id}`,
     SET_DEFAULT: (id: string) => `/api/${API_VERSION}/profiles/${id}/set-default`,
@@ -57,6 +59,9 @@ export const ApiPaths = {
     CREATE: `/api/${API_VERSION}/health-records`,
     UPDATE: (id: string) => `/api/${API_VERSION}/health-records/${id}`,
     DELETE: (id: string) => `/api/${API_VERSION}/health-records/${id}`,
+    UPLOAD_URL: `/api/${API_VERSION}/health-records/upload-url`,
+    CONFIRM_UPLOAD: (id: string) => `/api/${API_VERSION}/health-records/${id}/confirm-upload`,
+    STATUS: (id: string) => `/api/${API_VERSION}/health-records/${id}/status`,
     UPLOAD_IMAGE: (id: string) => `/api/${API_VERSION}/health-records/${id}/image`,
     ANALYZE: (id: string) => `/api/${API_VERSION}/health-records/${id}/analyze`,
     GET_ANALYSIS: (id: string) => `/api/${API_VERSION}/health-records/${id}/analysis`,

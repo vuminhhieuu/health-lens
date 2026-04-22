@@ -24,6 +24,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -126,5 +127,43 @@ class ProfileServiceTest {
         assertThatThrownBy(() -> profileService.createProfile(userId, request))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("User khong ton tai");
+    }
+
+    @Test
+    void ensureDefaultProfile_WhenProfileExists_ShouldReturnExisting() {
+        Profile profile = new Profile();
+        profile.setId(UUID.randomUUID());
+        profile.setDisplayName("Existing");
+        profile.setCreatedAt(Instant.now());
+        profile.setUpdatedAt(Instant.now());
+
+        when(profileRepository.findAllByUserId(userId)).thenReturn(List.of(profile));
+
+        ProfileResponse response = profileService.ensureDefaultProfile(userId);
+
+        assertThat(response.displayName()).isEqualTo("Existing");
+        verify(profileRepository).findAllByUserId(userId);
+    }
+
+    @Test
+    void ensureDefaultProfile_WhenNoProfile_ShouldCreateDefaultProfile() {
+        when(profileRepository.findAllByUserId(userId)).thenReturn(List.of());
+        when(userRepository.findByIdForUpdate(userId)).thenReturn(Optional.of(testUser));
+        when(profileRepository.save(any(Profile.class))).thenAnswer(invocation -> {
+            Profile p = invocation.getArgument(0);
+            p.setId(UUID.randomUUID());
+            p.setCreatedAt(Instant.now());
+            p.setUpdatedAt(Instant.now());
+            return p;
+        });
+
+        testUser.setFullName("  Tôi Là User  ");
+        testUser.setBirthDate(LocalDate.of(1999, 1, 1));
+        testUser.setGender("male");
+
+        ProfileResponse response = profileService.ensureDefaultProfile(userId);
+
+        assertThat(response.displayName()).isEqualTo("Tôi Là User");
+        verify(userRepository).findByIdForUpdate(eq(userId));
     }
 }

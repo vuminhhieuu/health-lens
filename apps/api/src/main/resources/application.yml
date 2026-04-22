@@ -63,8 +63,23 @@ app:
   stream:
     email-events: ${APP_STREAM_EMAIL_EVENTS:email.events}
     email-consumer-group: ${APP_STREAM_EMAIL_CONSUMER_GROUP:email-consumers}
-    email-consumer-name: ${APP_STREAM_EMAIL_CONSUMER_NAME:${HOSTNAME:${random.uuid}}}
+    email-consumer-name: ${APP_STREAM_EMAIL_CONSUMER_NAME:api-email-consumer}
     email-poll-delay-ms: ${APP_STREAM_EMAIL_POLL_DELAY_MS:1000}
+    ocr-events: ${APP_STREAM_OCR_EVENTS:ocr.events}
+    ocr-consumer-group: ${APP_STREAM_OCR_CONSUMER_GROUP:ocr-consumers}
+    ocr-consumer-name: ${APP_STREAM_OCR_CONSUMER_NAME:api-ocr-consumer}
+    ocr-poll-delay-ms: ${APP_STREAM_OCR_POLL_DELAY_MS:1000}
+  storage:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    public-endpoint: ${MINIO_PUBLIC_ENDPOINT:${MINIO_ENDPOINT:http://localhost:9000}}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    bucket: ${MINIO_BUCKET:healthlens-dev}
+    region: ${AWS_REGION:ap-southeast-1}
+    bucket-check-on-startup: ${MINIO_BUCKET_CHECK_ON_STARTUP:true}
+    bucket-auto-create: ${MINIO_BUCKET_AUTO_CREATE:false}
+    cors-configure: ${MINIO_CORS_CONFIGURE:false}
+    cors-allowed-origins: ${MINIO_CORS_ALLOWED_ORIGINS:http://localhost:3000}
 
 jwt:
   secret: ${JWT_SECRET:dev-test-secret-key-min-32-chars-for-local}
@@ -108,8 +123,12 @@ spring:
 app:
   mail:
     from: ${MAIL_FROM:no-reply@healthlens.vn}
+    driver: ${MAIL_DRIVER:smtp}
   frontend:
     verification-url: ${WEB_VERIFY_URL:http://localhost:3000/verify-email}
+  storage:
+    bucket-auto-create: ${MINIO_BUCKET_AUTO_CREATE:true}
+    cors-configure: ${MINIO_CORS_CONFIGURE:false}
 
 jwt:
   secret: ${JWT_SECRET:healthlens-dev-secret-key-must-be-at-least-256-bits-long-for-hs256-algo}
@@ -160,6 +179,7 @@ spring:
 app:
   mail:
     from: ${MAIL_FROM:noreply@healthlens.vn}
+    driver: ${MAIL_DRIVER:smtp}
   frontend:
     verification-url: ${WEB_VERIFY_URL:https://healthlens-staging.vercel.app/verify-email}
     reset-password-url: ${WEB_RESET_PASSWORD_URL:https://healthlens-staging.vercel.app/reset-password}
@@ -221,6 +241,7 @@ spring:
 app:
   mail:
     from: ${MAIL_FROM:noreply@healthlens.vn}
+    driver: smtp
   cookie:
     secure: true
   frontend:

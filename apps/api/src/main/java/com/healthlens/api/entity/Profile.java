@@ -47,6 +47,9 @@ public class Profile {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "is_default", nullable = false)
+    private boolean isDefault;
+
     @PrePersist
     public void prePersist() {
         if (id == null) {

@@ -1,0 +1,152 @@
+package com.healthlens.api.service;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.healthlens.api.dto.OcrResult;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.connection.stream.Consumer;
+import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.connection.stream.ReadOffset;
+import org.springframework.data.redis.connection.stream.StreamOffset;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.StreamOperations;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
+@Slf4j
+@Service
+public class OcrJobConsumer {
+
+    private final StringRedisTemplate redisTemplate;
+    private final StorageService storageService;
+    private final OcrService ocrService;
+    private final HealthRecordService healthRecordService;
+    private final ObjectMapper objectMapper;
+    private final String ocrStream;
+    private final String consumerGroup;
+    private final String consumerName;
+
+    public OcrJobConsumer(
+            StringRedisTemplate redisTemplate,
+            StorageService storageService,
+            OcrService ocrService,
+            HealthRecordService healthRecordService,
+            ObjectMapper objectMapper,
+            @Value("${app.stream.ocr-events:ocr.events}") String ocrStream,
+            @Value("${app.stream.ocr-consumer-group:ocr-consumers}") String consumerGroup,
+            @Value("${app.stream.ocr-consumer-name:api-ocr-consumer}") String consumerName
+    ) {
+        this.redisTemplate = redisTemplate;
+        this.storageService = storageService;
+        this.ocrService = ocrService;
+        this.healthRecordService = healthRecordService;
+        this.objectMapper = objectMapper;
+        this.ocrStream = ocrStream;
+        this.consumerGroup = consumerGroup;
+        this.consumerName = consumerName;
+        ensureConsumerGroup();
+    }
+
+    @Scheduled(fixedDelayString = "${app.stream.ocr-poll-delay-ms:1000}")
+    @SuppressWarnings("unchecked")
+    public void consume() {
+        StreamOperations<String, Object, Object> streamOps = redisTemplate.opsForStream();
+        List<MapRecord<String, Object, Object>> records;
+        try {
+            records = streamOps.read(
+                    Consumer.from(consumerGroup, consumerName),
+                    org.springframework.data.redis.connection.stream.StreamReadOptions.empty()
+                            .count(10)
+                            .block(Duration.ofMillis(500)),
+                    StreamOffset.create(ocrStream, ReadOffset.lastConsumed())
+            );
+        } catch (Exception ex) {
+            if (ex.getMessage() != null && ex.getMessage().contains("NOGROUP")) {
+                ensureConsumerGroup();
+            }
+            return;
+        }
+
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+
+        for (MapRecord<String, Object, Object> record : records) {
+            try {
+                handleRecord(record);
+                streamOps.acknowledge(ocrStream, consumerGroup, record.getId());
+            } catch (Exception ex) {
+                log.error("[OcrJobConsumer] Failed processing record {}", record.getId(), ex);
+                markFailedSafely(record);
+                streamOps.acknowledge(ocrStream, consumerGroup, record.getId());
+            }
+        }
+    }
+
+    private void handleRecord(MapRecord<String, Object, Object> record) {
+        String recordIdRaw = valueAsString(record.getValue().get("recordId"));
+        if (recordIdRaw.isBlank()) {
+            // Ignore bootstrap/legacy stream records without OCR payload.
+            return;
+        }
+        UUID recordId = UUID.fromString(recordIdRaw);
+        String fileKey = valueAsString(record.getValue().get("fileKey"));
+        if (fileKey.isBlank()) {
+            healthRecordService.markOcrFailed(recordId);
+            return;
+        }
+        String downloadUrl = storageService.generateDownloadUrl(fileKey, Duration.ofMinutes(5));
+
+        try {
+            OcrResult result = CompletableFuture.supplyAsync(() -> ocrService.processImage(downloadUrl))
+                    .get(15, TimeUnit.SECONDS);
+            String rawOcrJson = objectMapper.writeValueAsString(Map.of(
+                    "text", result.getText(),
+                    "confidence", result.getConfidence(),
+                    "source", result.getSource(),
+                    "language", result.getLanguage(),
+                    "processingTimeMs", result.getProcessingTimeMs()
+            ));
+            healthRecordService.markOcrCompleted(recordId, rawOcrJson);
+        } catch (Exception ex) {
+            healthRecordService.markOcrFailed(recordId);
+        }
+    }
+
+    private void ensureConsumerGroup() {
+        try {
+            if (Boolean.FALSE.equals(redisTemplate.hasKey(ocrStream))) {
+                redisTemplate.opsForStream().add(ocrStream, Map.of("_init", "1"));
+            }
+            redisTemplate.opsForStream().createGroup(ocrStream, ReadOffset.latest(), consumerGroup);
+        } catch (Exception ex) {
+            String message = ex.getMessage();
+            if (message == null || !message.contains("BUSYGROUP")) {
+                log.warn("[OcrJobConsumer] ensureConsumerGroup failed for stream={}", ocrStream, ex);
+            }
+        }
+    }
+
+    private String valueAsString(Object value) {
+        return value == null ? "" : value.toString();
+    }
+
+    private void markFailedSafely(MapRecord<String, Object, Object> record) {
+        String recordIdRaw = valueAsString(record.getValue().get("recordId"));
+        if (recordIdRaw.isBlank()) {
+            return;
+        }
+        try {
+            healthRecordService.markOcrFailed(UUID.fromString(recordIdRaw));
+        } catch (Exception ex) {
+            log.warn("[OcrJobConsumer] Cannot mark OCR failed for recordId={}", recordIdRaw, ex);
+        }
+    }
+}
