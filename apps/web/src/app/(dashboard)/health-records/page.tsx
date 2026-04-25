@@ -27,6 +27,11 @@ type HealthRecord = {
 export default function HealthRecordsPage() {
   const router = useRouter();
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const isLabRecord = (recordType?: string | null) => {
+    if (!recordType) return false;
+    const normalized = recordType.toUpperCase();
+    return normalized.includes("XET NGHIEM") || normalized.includes("XÉT NGHIỆM");
+  };
 
   const { data: profiles = [], isLoading } = useQuery({
     queryKey: ["profiles-for-upload"],
@@ -55,7 +60,7 @@ export default function HealthRecordsPage() {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-6 bg-[#effcf9] px-6 py-10">
       <header>
-        <h1 className="text-3xl font-bold text-[#005049]">Kết quả khám & Xét nghiệm</h1>
+        <h1 className="text-3xl font-bold text-[#005049]">Kết quả khám và xét nghiệm</h1>
         <p className="mt-2 text-sm text-[#4e6360]">
           Quản lý và theo dõi lịch sử khám bệnh của bạn và người thân.
         </p>
@@ -63,7 +68,7 @@ export default function HealthRecordsPage() {
 
       <section className="rounded-3xl border border-[#b7d8d1] bg-white p-6 shadow-sm overflow-hidden">
         <div className="flex flex-col gap-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5 text-[#00685f]" />
               <h3 className="font-bold text-[#005049]">Chọn hồ sơ thành viên</h3>
@@ -122,17 +127,17 @@ export default function HealthRecordsPage() {
               >
                 <div className="flex gap-4 items-start">
                   <div className={`hidden sm:flex h-12 w-12 items-center justify-center rounded-xl ${
-                    record.recordType === 'XET NGHIÊM' ? 'bg-[#effcf9] text-[#00685f]' : 'bg-[#fff7ed] text-[#c2410c]'
+                    isLabRecord(record.recordType) ? "bg-[#effcf9] text-[#00685f]" : "bg-[#fff7ed] text-[#c2410c]"
                   }`}>
-                    {record.recordType === 'XET NGHIÊM' ? <Activity className="h-6 w-6" /> : <FileText className="h-6 w-6" />}
+                    {isLabRecord(record.recordType) ? <Activity className="h-6 w-6" /> : <FileText className="h-6 w-6" />}
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-lg text-[#005049]">{record.recordType || "Phiếu khám bệnh"}</span>
                       <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                        record.status === 'done' ? 'bg-[#ccfbf1] text-[#0f766e]' : 'bg-[#fef3c7] text-[#92400e]'
+                        record.status === "done" ? "bg-[#ccfbf1] text-[#0f766e]" : "bg-[#fef3c7] text-[#92400e]"
                       }`}>
-                        {record.status === 'done' ? 'Đã xác nhận' : 'Chờ kiểm tra'}
+                        {record.status === "done" ? "Đã xác nhận" : "Đang chờ rà soát"}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-[#4e6360]">

@@ -1,6 +1,7 @@
 package com.healthlens.api.controller;
 
 import com.healthlens.api.dto.ReferenceDataSearchResult;
+import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.entity.ReferenceData;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.service.ReferenceDataService;
@@ -11,7 +12,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/v1/reference-data")
@@ -53,6 +56,21 @@ public class ReferenceDataController {
             .toList();
         
         return ResponseEntity.ok(results);
+    }
+
+    @GetMapping("/ranges")
+    public ResponseEntity<Map<String, Object>> getReferenceRange(
+            @RequestParam String metricName,
+            @RequestParam(required = false) Integer age,
+            @RequestParam(required = false) String gender
+    ) {
+        Optional<ReferenceRangeDto> range = referenceDataService.findReferenceRange(metricName, age, gender);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("metricName", metricName);
+        response.put("age", age);
+        response.put("gender", gender);
+        response.put("referenceRange", range.orElse(null));
+        return ResponseEntity.ok(response);
     }
 
     private String formatForEmbedding(ReferenceData data) {

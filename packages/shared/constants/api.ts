@@ -83,6 +83,7 @@ export const ApiPaths = {
     BASE: `/api/${API_VERSION}/reference-data`,
     INDEX: (id: string) => `/api/${API_VERSION}/reference-data/${id}/index`,
     SEARCH: `/api/${API_VERSION}/reference-data/search`,
+    RANGES: `/api/${API_VERSION}/reference-data/ranges`,
     SYNC: `/api/${API_VERSION}/reference-data/sync`,
   },
 

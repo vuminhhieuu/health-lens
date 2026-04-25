@@ -14,8 +14,14 @@ import org.springframework.ai.chat.client.ChatClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.healthlens.api.dto.MetricDto;
+import com.healthlens.api.dto.ReferenceRangeDto;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.math.BigDecimal;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 
@@ -45,6 +51,10 @@ public class OcrService {
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
     private final String ocrServiceUrl;
+    private final String openRouterApiKey;
+    private final String openRouterBaseUrl;
+    private final String openRouterModel;
+    private final String openRouterReferer;
 
     // =========================================
     // EasyOCR Response DTO (inner class)
@@ -78,12 +88,20 @@ public class OcrService {
             AwsTextractClient textractClient,
             ChatClient chatClient,
             ObjectMapper objectMapper,
-            @Value("${app.ocr.service.url:http://localhost:8001}") String ocrServiceUrl) {
+            @Value("${app.ocr.service.url:http://localhost:8001}") String ocrServiceUrl,
+            @Value("${OPENROUTER_API_KEY:}") String openRouterApiKey,
+            @Value("${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}") String openRouterBaseUrl,
+            @Value("${OPENROUTER_MODEL:meta-llama/llama-3.3-70b-instruct}") String openRouterModel,
+            @Value("${OPENROUTER_HTTP_REFERER:}") String openRouterReferer) {
         this.ocrRestTemplate = ocrRestTemplate;
         this.textractClient = textractClient;
         this.chatClient = chatClient;
         this.objectMapper = objectMapper;
         this.ocrServiceUrl = ocrServiceUrl;
+        this.openRouterApiKey = openRouterApiKey;
+        this.openRouterBaseUrl = openRouterBaseUrl;
+        this.openRouterModel = openRouterModel;
+        this.openRouterReferer = openRouterReferer;
     }
 
     /**
@@ -221,6 +239,9 @@ public class OcrService {
                - "hospitalName": Medical facility name (top left/header).
                - "diagnosis": Doctor's diagnosis or conclusion ("Chẩn đoán", "Kết luận").
                - "metrics": List of laboratory results. Each has "name", "value", "unit".
+                 If available in document, also extract:
+                 - "flag": one of H/L/N/critical
+                 - "referenceRange": {"min": number, "max": number, "attentionMin": number, "attentionMax": number, "unit": "..."}
             
             CRITICAL: 
             - Clean noisy numeric values (e.g., "5.4H" -> "5.4").
@@ -234,7 +255,7 @@ public class OcrService {
               "hospitalName": "...",
               "diagnosis": "...",
               "metrics": [
-                {"name": "...", "value": "...", "unit": "..."}
+                {"name": "...", "value": "...", "unit": "...", "flag": "H|L|N|critical|null", "referenceRange": null}
               ]
             }
             
@@ -244,12 +265,17 @@ public class OcrService {
         String jsonResponse = null;
         try {
             log.info("[LLM] Sending OCR text to LLM (length: {})", ocrText.length());
-            jsonResponse = chatClient.prompt().user(prompt).call().content();
+            jsonResponse = callPrimaryLlm(prompt);
+            if (jsonResponse == null || jsonResponse.isBlank()) {
+                log.warn("[LLM] Primary provider returned empty content. Attempting OpenRouter fallback once.");
+                jsonResponse = callOpenRouterFallback(prompt);
+            }
             log.debug("[LLM] Received response from model (length: {})",
                     jsonResponse != null ? jsonResponse.length() : 0);
 
             if (jsonResponse == null || jsonResponse.isBlank()) {
-                return new OcrExtractionResult(null, null, null, null, new ArrayList<>());
+                log.warn("[LLM] All providers returned empty content. Falling back to regex parser.");
+                return parseMetricsByRegex(ocrText, overallConfidence);
             }
 
             // Clean markdown and any preamble
@@ -289,18 +315,39 @@ public class OcrService {
             if (metricsNode != null && metricsNode.isArray()) {
                 for (JsonNode node : metricsNode) {
                     MetricDto metric = new MetricDto();
-                    metric.setName(node.has("name") ? node.get("name").asText() : "");
+                    String rawName = node.has("name") ? node.get("name").asText() : "";
+                    metric.setName(rawName);
+                    metric.setRawName(rawName);
+                    metric.setNormalizedName(normalizeText(rawName));
                     // Value can be numeric or string, handle gracefully
                     String value = "";
                     if (node.has("value")) {
                         JsonNode vNode = node.get("value");
                         value = vNode.isNull() ? "" : vNode.asText();
                     }
-                    metric.setValue(value);
-                    metric.setUnit(node.has("unit") && !node.get("unit").isNull() ? node.get("unit").asText() : "");
+                    metric.setRawValue(value);
+                    metric.setInterpretation(extractInterpretation(value));
+                    metric.setInterpretationSource("document");
+                    metric.setValue(stripFlagSuffix(value));
+                    metric.setNormalizedValue(normalizeNumeric(value));
+                    String unit = node.has("unit") && !node.get("unit").isNull() ? node.get("unit").asText() : "";
+                    metric.setUnit(unit);
+                    metric.setRawUnit(unit);
+                    metric.setNormalizedUnit(normalizeText(unit));
                     metric.setConfidence(overallConfidence);
                     metric.setSource("ocr");
                     metric.setConfidenceLevel(classifyConfidence(overallConfidence));
+                    metric.setReferenceRangeSource("none");
+                    metric.setStatusSource("none");
+                    metric.setCritical(false);
+                    if (node.has("flag") && !node.get("flag").isNull()) {
+                        String flag = node.get("flag").asText();
+                        applyDocumentFlag(metric, flag);
+                    }
+                    metric.setReferenceRange(parseDocumentReferenceRange(node.get("referenceRange")));
+                    if (metric.getReferenceRange() != null) {
+                        metric.setReferenceRangeSource("document");
+                    }
                     metrics.add(metric);
                 }
             }
@@ -310,8 +357,207 @@ public class OcrService {
         } catch (Exception e) {
             log.error("[LLM] Failed to parse metrics using LLM. responseLength={}",
                     jsonResponse != null ? jsonResponse.length() : 0, e);
-            return new OcrExtractionResult(null, null, null, null, new ArrayList<>());
+            return parseMetricsByRegex(ocrText, overallConfidence);
         }
+    }
+
+    private String callPrimaryLlm(String prompt) {
+        try {
+            return chatClient.prompt().user(prompt).call().content();
+        } catch (Exception ex) {
+            log.warn("[LLM] Primary provider failed: {}", ex.getMessage());
+            return null;
+        }
+    }
+
+    private String callOpenRouterFallback(String prompt) {
+        if (openRouterApiKey == null || openRouterApiKey.isBlank()) {
+            log.warn("[LLM] OpenRouter API key missing. Skip provider fallback.");
+            return null;
+        }
+        try {
+            String url = openRouterBaseUrl + "/chat/completions";
+            Map<String, Object> payload = Map.of(
+                    "model", openRouterModel,
+                    "messages", List.of(
+                            Map.of("role", "system", "content", "You are a medical OCR extraction assistant."),
+                            Map.of("role", "user", "content", prompt)
+                    ),
+                    "temperature", 0.2
+            );
+
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(openRouterApiKey);
+            if (openRouterReferer != null && !openRouterReferer.isBlank()) {
+                headers.set("HTTP-Referer", openRouterReferer);
+            }
+            headers.set("X-Title", "HealthLens");
+
+            org.springframework.http.HttpEntity<Map<String, Object>> requestEntity = new org.springframework.http.HttpEntity<>(payload, headers);
+            org.springframework.http.ResponseEntity<String> response = ocrRestTemplate.exchange(
+                    url,
+                    org.springframework.http.HttpMethod.POST,
+                    requestEntity,
+                    String.class
+            );
+
+            String body = response.getBody();
+            if (body == null || body.isBlank()) {
+                return null;
+            }
+            JsonNode root = objectMapper.readTree(body);
+            JsonNode choices = root.get("choices");
+            if (choices == null || !choices.isArray() || choices.isEmpty()) {
+                return null;
+            }
+            JsonNode content = choices.get(0).path("message").path("content");
+            return content.isMissingNode() || content.isNull() ? null : content.asText();
+        } catch (Exception ex) {
+            log.warn("[LLM] OpenRouter fallback failed: {}", ex.getMessage());
+            return null;
+        }
+    }
+
+    private OcrExtractionResult parseMetricsByRegex(String ocrText, float overallConfidence) {
+        List<MetricDto> metrics = new ArrayList<>();
+        String[] lines = ocrText.split("\\R");
+
+        Pattern metricWithUnitPattern = Pattern.compile(
+                "(?i)^\\s*([\\p{L}A-Za-z0-9\\-\\(\\)\\./%\\s]{2,}?)\\s+([<>]?[0-9]+(?:[\\.,][0-9]+)?\\s*[HL]?)\\s+([%a-zA-Z\\^0-9/]+)\\b.*$"
+        );
+        Pattern metricNoUnitPattern = Pattern.compile(
+                "(?i)^\\s*([\\p{L}A-Za-z0-9\\-\\(\\)\\./%\\s]{2,}?)\\s+([<>]?[0-9]+(?:[\\.,][0-9]+)?\\s*[HL]?)\\s*$"
+        );
+        Pattern datePattern = Pattern.compile("(\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{1,2}[-/]\\d{1,2}[-/]\\d{4})");
+
+        String examDate = null;
+        String recordType = null;
+        String hospitalName = null;
+
+        for (String lineRaw : lines) {
+            String line = lineRaw == null ? "" : lineRaw.trim();
+            if (line.isEmpty()) {
+                continue;
+            }
+            if (examDate == null) {
+                Matcher d = datePattern.matcher(line);
+                if (d.find()) {
+                    examDate = normalizeDate(d.group(1));
+                }
+            }
+            if (recordType == null && line.toLowerCase(Locale.ROOT).contains("xét nghiệm")) {
+                recordType = "Xét nghiệm máu";
+            }
+            if (hospitalName == null && line.length() > 8 && line.equals(line.toUpperCase(Locale.ROOT)) && line.matches(".*[\\p{L}].*")) {
+                hospitalName = line;
+            }
+
+            String[] parsed = parseMetricLine(line, metricWithUnitPattern, metricNoUnitPattern);
+            if (parsed == null) {
+                continue;
+            }
+            String name = parsed[0];
+            String rawValue = parsed[1];
+            String unit = parsed[2];
+            if (name.isBlank() || rawValue.isBlank() || name.matches(".*\\d{3,}.*")) {
+                continue;
+            }
+
+            MetricDto metric = new MetricDto();
+            metric.setName(name);
+            metric.setRawName(name);
+            metric.setNormalizedName(normalizeText(name));
+            metric.setRawValue(rawValue);
+            metric.setValue(stripFlagSuffix(rawValue));
+            metric.setNormalizedValue(normalizeNumeric(rawValue));
+            metric.setInterpretation(extractInterpretation(rawValue));
+            metric.setInterpretationSource("document");
+            metric.setUnit(unit);
+            metric.setRawUnit(unit);
+            metric.setNormalizedUnit(normalizeText(unit));
+            metric.setConfidence(overallConfidence);
+            metric.setConfidenceLevel(classifyConfidence(overallConfidence));
+            metric.setSource("ocr_regex_fallback");
+            metric.setStatusSource("none");
+            metric.setReferenceRangeSource("none");
+            metric.setCritical(false);
+            metrics.add(metric);
+        }
+
+        log.warn("[LLM] Using regex fallback parser. extractedMetrics={}", metrics.size());
+        return new OcrExtractionResult(examDate, recordType, hospitalName, null, metrics);
+    }
+
+    private String[] parseMetricLine(String line, Pattern metricWithUnitPattern, Pattern metricNoUnitPattern) {
+        Matcher withUnit = metricWithUnitPattern.matcher(line);
+        if (withUnit.matches()) {
+            String name = withUnit.group(1) != null ? withUnit.group(1).trim() : "";
+            String value = withUnit.group(2) != null ? withUnit.group(2).trim() : "";
+            String unit = withUnit.group(3) != null ? withUnit.group(3).trim() : "";
+            return new String[] {name, value, unit};
+        }
+
+        Matcher noUnit = metricNoUnitPattern.matcher(line);
+        if (noUnit.matches()) {
+            String name = noUnit.group(1) != null ? noUnit.group(1).trim() : "";
+            String value = noUnit.group(2) != null ? noUnit.group(2).trim() : "";
+            return new String[] {name, value, ""};
+        }
+
+        // Heuristic fallback for noisy OCR rows: pick the first numeric token as value.
+        String[] tokens = line.split("\\s+");
+        if (tokens.length < 2) {
+            return null;
+        }
+        int valueIdx = -1;
+        for (int i = 0; i < tokens.length; i++) {
+            if (tokens[i].matches("(?i)[<>]?[0-9]+(?:[\\.,][0-9]+)?[HL]?")) {
+                valueIdx = i;
+                break;
+            }
+        }
+        if (valueIdx <= 0) {
+            return null;
+        }
+        StringBuilder nameBuilder = new StringBuilder();
+        for (int i = 0; i < valueIdx; i++) {
+            String token = tokens[i];
+            if (token.matches("\\d+")) {
+                continue;
+            }
+            if (!nameBuilder.isEmpty()) {
+                nameBuilder.append(' ');
+            }
+            nameBuilder.append(token);
+        }
+        String name = nameBuilder.toString().trim();
+        String value = tokens[valueIdx];
+        String unit = (valueIdx + 1 < tokens.length && tokens[valueIdx + 1].matches("(?i)[%a-z\\^0-9/]+")) ? tokens[valueIdx + 1] : "";
+        if (name.length() < 2) {
+            return null;
+        }
+        return new String[] {name, value, unit};
+    }
+
+    private String normalizeDate(String rawDate) {
+        if (rawDate == null || rawDate.isBlank()) {
+            return null;
+        }
+        String normalized = rawDate.replace('/', '-');
+        try {
+            if (normalized.matches("\\d{1,2}-\\d{1,2}-\\d{4}")) {
+                String[] parts = normalized.split("-");
+                return "%s-%02d-%02d".formatted(parts[2], Integer.parseInt(parts[1]), Integer.parseInt(parts[0]));
+            }
+            if (normalized.matches("\\d{4}-\\d{1,2}-\\d{1,2}")) {
+                String[] parts = normalized.split("-");
+                return "%s-%02d-%02d".formatted(parts[0], Integer.parseInt(parts[1]), Integer.parseInt(parts[2]));
+            }
+        } catch (Exception ignored) {
+            return null;
+        }
+        return null;
     }
 
     /**
@@ -325,5 +571,94 @@ public class OcrService {
         } else {
             return "low";
         }
+    }
+
+    private String normalizeText(String input) {
+        if (input == null) {
+            return null;
+        }
+        return input.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String stripFlagSuffix(String rawValue) {
+        if (rawValue == null) {
+            return null;
+        }
+        return rawValue.trim().replaceAll("(?i)\\s*[HL]$", "").trim();
+    }
+
+    private String normalizeNumeric(String rawValue) {
+        String stripped = stripFlagSuffix(rawValue);
+        if (stripped == null) {
+            return null;
+        }
+        return stripped.replace(",", ".").replaceAll("\\s+", "");
+    }
+
+    private String extractInterpretation(String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return "unknown";
+        }
+        String normalized = rawValue.trim().toUpperCase(Locale.ROOT);
+        if (normalized.endsWith("H")) {
+            return "high";
+        }
+        if (normalized.endsWith("L")) {
+            return "low";
+        }
+        return "unknown";
+    }
+
+    private void applyDocumentFlag(MetricDto metric, String flagRaw) {
+        if (flagRaw == null || flagRaw.isBlank()) {
+            return;
+        }
+        String flag = flagRaw.trim().toUpperCase(Locale.ROOT);
+        switch (flag) {
+            case "H" -> metric.setInterpretation("high");
+            case "L" -> metric.setInterpretation("low");
+            case "N", "NORMAL" -> metric.setInterpretation("normal");
+            case "CRITICAL", "PANIC" -> {
+                metric.setInterpretation("critical");
+                metric.setCritical(true);
+            }
+            default -> metric.setInterpretation("unknown");
+        }
+    }
+
+    private ReferenceRangeDto parseDocumentReferenceRange(JsonNode rangeNode) {
+        if (rangeNode == null || rangeNode.isNull() || !rangeNode.isObject()) {
+            return null;
+        }
+        try {
+            BigDecimal min = readDecimal(rangeNode.get("min"));
+            BigDecimal max = readDecimal(rangeNode.get("max"));
+            BigDecimal attentionMin = readDecimal(rangeNode.get("attentionMin"));
+            BigDecimal attentionMax = readDecimal(rangeNode.get("attentionMax"));
+            if (min == null || max == null) {
+                return null;
+            }
+            if (attentionMin == null) {
+                attentionMin = min;
+            }
+            if (attentionMax == null) {
+                attentionMax = max;
+            }
+            String unit = rangeNode.has("unit") && !rangeNode.get("unit").isNull() ? rangeNode.get("unit").asText() : null;
+            return new ReferenceRangeDto(min, max, attentionMin, attentionMax, unit);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private BigDecimal readDecimal(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        String raw = node.asText();
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        return new BigDecimal(raw.trim().replace(",", "."));
     }
 }

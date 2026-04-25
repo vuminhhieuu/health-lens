@@ -64,7 +64,17 @@ class OcrServiceTest {
 
     @BeforeEach
     void setUp() {
-        ocrService = new OcrService(ocrRestTemplate, textractClient, chatClient, objectMapper, OCR_SERVICE_URL);
+        ocrService = new OcrService(
+                ocrRestTemplate,
+                textractClient,
+                chatClient,
+                objectMapper,
+                OCR_SERVICE_URL,
+                "",
+                "https://openrouter.ai/api/v1",
+                "meta-llama/llama-3.3-70b-instruct",
+                ""
+        );
     }
 
     // =========================================================
