@@ -1,24 +1,25 @@
 "use client";
 
 import { type ChangeEvent, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import axios from "axios";
 import { ApiPaths, ALLOWED_FILE_TYPES, UPLOAD_MAX_SIZE_BYTES } from "@healthlens/shared/constants";
 import { Upload, Loader2, AlertCircle } from "lucide-react";
 
 import { apiClient } from "@/lib/api/apiClient";
 
-type UploadStatus = "idle" | "uploading" | "processing" | "done" | "error";
+type UploadStatus = "idle" | "uploading" | "done" | "error";
 
 interface UploadButtonProps {
   profileId: string;
 }
 
 export function UploadButton({ profileId }: UploadButtonProps) {
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [phaseMessage, setPhaseMessage] = useState("Đang nhận dạng...");
 
   const validateFile = (file: File) => {
     if (!ALLOWED_FILE_TYPES.includes(file.type as (typeof ALLOWED_FILE_TYPES)[number])) {
@@ -32,31 +33,7 @@ export function UploadButton({ profileId }: UploadButtonProps) {
 
   const handleSelect = () => fileInputRef.current?.click();
 
-  const pollStatus = async (recordId: string) => {
-    const startedAt = Date.now();
-    for (let i = 0; i < 20; i += 1) {
-      const elapsed = Date.now() - startedAt;
-      if (elapsed < 2000) setPhaseMessage("Đang nhận dạng...");
-      else if (elapsed < 5000) setPhaseMessage("Đang đọc chỉ số...");
-      else if (elapsed < 8000) setPhaseMessage("Đang phân tích kết quả...");
-      else setPhaseMessage("Hoàn tất!");
 
-      const response = await apiClient.get(ApiPaths.HEALTH_RECORDS.STATUS(recordId));
-      const currentStatus = response.data?.data?.status;
-      if (currentStatus === "ocr_failed") {
-        setStatus("error");
-        setError("OCR thất bại. Vui lòng tải file rõ nét hơn và thử lại.");
-        return;
-      }
-      if (currentStatus !== "processing") {
-        setStatus("done");
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-    setStatus("error");
-    setError("Hệ thống đang xử lý lâu hơn dự kiến. Vui lòng kiểm tra lại sau.");
-  };
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -87,9 +64,9 @@ export function UploadButton({ profileId }: UploadButtonProps) {
       });
 
       await apiClient.post(ApiPaths.HEALTH_RECORDS.CONFIRM_UPLOAD(uploadInfo.recordId));
-      setStatus("processing");
-      setPhaseMessage("Đang nhận dạng...");
-      await pollStatus(uploadInfo.recordId);
+      setStatus("done");
+      // Redirect to review page
+      router.push(`/health-records/review/${uploadInfo.recordId}`);
     } catch {
       setStatus("error");
       setError("Upload thất bại. Vui lòng thử lại.");
@@ -99,7 +76,7 @@ export function UploadButton({ profileId }: UploadButtonProps) {
   };
 
   return (
-    <div className="w-full space-y-4">
+    <div className="space-y-4">
       <input
         ref={fileInputRef}
         type="file"
@@ -110,10 +87,10 @@ export function UploadButton({ profileId }: UploadButtonProps) {
 
       <button
         onClick={handleSelect}
-        disabled={status === "uploading" || status === "processing"}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00685f] px-6 py-4 font-semibold text-white transition hover:brightness-110 disabled:opacity-70"
+        disabled={status === "uploading"}
+        className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-[#00685f] px-6 py-3 font-semibold text-white transition hover:brightness-110 disabled:opacity-70 shadow-sm"
       >
-        {status === "uploading" || status === "processing" ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
+        {status === "uploading" ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
         Tải lên PDF/JPG/PNG
       </button>
 
@@ -122,15 +99,6 @@ export function UploadButton({ profileId }: UploadButtonProps) {
           <p className="text-sm font-medium text-[#3d4947]">Đang tải lên: {uploadProgress}%</p>
           <div className="h-2 overflow-hidden rounded-full bg-[#d6ebe7]">
             <div className="h-full bg-[#008378] transition-all" style={{ width: `${uploadProgress}%` }} />
-          </div>
-        </div>
-      )}
-
-      {status === "processing" && (
-        <div className="space-y-2 rounded-xl border border-[#b7d8d1] bg-[#effcf9] p-4">
-          <p className="text-sm font-semibold text-[#005049]">{phaseMessage}</p>
-          <div className="h-2 overflow-hidden rounded-full bg-[#d6ebe7]">
-            <div className="h-full w-1/3 animate-pulse bg-[#008378]" />
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 # generated: 2026-04-01
-# last_updated: 2026-04-01 10:15:00
+# last_updated: 2026-04-25 10:15:00
 # project: health-lens
 # project_key: NOKEY
 # tracking_system: file-system
@@ -102,7 +102,7 @@ development_status:
   epic-3: in-progress
   3-1-upload-pdf-image-library: done
   # Story 3.2 is mobile-only (Phase 2)
-  3-3-ocr-extract-and-review-list: sprint-2
+  3-3-ocr-extract-and-review-list: done
   3-4-manual-edit-input-ocr-fallback: sprint-2
   3-5-ocr-failure-recovery-flow: sprint-2
   3-6-metric-source-tag-and-profile-link: sprint-2

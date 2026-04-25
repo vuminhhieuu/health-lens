@@ -101,6 +101,7 @@ export default function DashboardLayout({
             <HelpCircle className="w-5 h-5" />
           </button>
           <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#89f5e7] bg-[#d8e5e2]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img alt="Avatar" className="w-full h-full object-cover" src="https://ui-avatars.com/api/?name=H+L&background=00685f&color=fff&size=256" />
           </div>
         </div>

@@ -12,6 +12,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.ai.chat.client.ChatClient;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.healthlens.api.dto.MetricDto;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -43,6 +48,15 @@ class OcrServiceTest {
     @Mock
     private AwsTextractClient textractClient;
 
+    @Mock
+    private ChatClient chatClient;
+
+    @Mock
+    private ChatClient.Builder chatClientBuilder;
+
+    @Mock
+    private ObjectMapper objectMapper;
+
     private OcrService ocrService;
 
     private static final String TEST_IMAGE_URL = "https://example.com/test-medical-report.jpg";
@@ -50,7 +64,7 @@ class OcrServiceTest {
 
     @BeforeEach
     void setUp() {
-        ocrService = new OcrService(ocrRestTemplate, textractClient, OCR_SERVICE_URL);
+        ocrService = new OcrService(ocrRestTemplate, textractClient, chatClient, objectMapper, OCR_SERVICE_URL);
     }
 
     // =========================================================
@@ -474,6 +488,38 @@ class OcrServiceTest {
             OcrResult result = ocrService.callEasyOcr(TEST_IMAGE_URL);
 
             assertThat(result.getLanguage()).isEqualTo("unknown");
+        }
+    }
+
+    // =========================================================
+    // parseMetrics() — Extraction and Classification Tests
+    // =========================================================
+    @Nested
+    @DisplayName("parseMetrics() — LLM Extraction Tests")
+    class ParseMetricsTests {
+
+        @Test
+        @DisplayName("Phân loại confidence >= 0.85 là high")
+        void parseMetrics_confidenceHigh() throws Exception {
+            // Act
+            String level = ocrService.classifyConfidence(0.85f);
+            assertThat(level).isEqualTo("high");
+        }
+
+        @Test
+        @DisplayName("Phân loại confidence 0.50-0.84 là medium")
+        void parseMetrics_confidenceMedium() throws Exception {
+            // Act
+            String level = ocrService.classifyConfidence(0.50f);
+            assertThat(level).isEqualTo("medium");
+        }
+
+        @Test
+        @DisplayName("Phân loại confidence < 0.50 là low")
+        void parseMetrics_confidenceLow() throws Exception {
+            // Act
+            String level = ocrService.classifyConfidence(0.49f);
+            assertThat(level).isEqualTo("low");
         }
     }
 }

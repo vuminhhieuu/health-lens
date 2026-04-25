@@ -61,6 +61,7 @@ export const ApiPaths = {
     DELETE: (id: string) => `/api/${API_VERSION}/health-records/${id}`,
     UPLOAD_URL: `/api/${API_VERSION}/health-records/upload-url`,
     CONFIRM_UPLOAD: (id: string) => `/api/${API_VERSION}/health-records/${id}/confirm-upload`,
+    CONFIRM_RECORD: (id: string) => `/api/${API_VERSION}/health-records/${id}/confirm`,
     STATUS: (id: string) => `/api/${API_VERSION}/health-records/${id}/status`,
     UPLOAD_IMAGE: (id: string) => `/api/${API_VERSION}/health-records/${id}/image`,
     ANALYZE: (id: string) => `/api/${API_VERSION}/health-records/${id}/analyze`,

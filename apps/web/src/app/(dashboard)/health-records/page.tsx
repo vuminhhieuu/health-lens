@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, User, Users, Check, FileText, Activity, ChevronRight, Calendar, Landmark } from "lucide-react";
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
@@ -14,7 +15,17 @@ type Profile = {
   displayName: string;
 };
 
+type HealthRecord = {
+  id: string;
+  recordType?: string | null;
+  status?: string | null;
+  hospitalName?: string | null;
+  examDate?: string | null;
+  metrics?: Array<unknown> | null;
+};
+
 export default function HealthRecordsPage() {
+  const router = useRouter();
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
 
   const { data: profiles = [], isLoading } = useQuery({
@@ -31,39 +42,128 @@ export default function HealthRecordsPage() {
   const selectableProfiles = useMemo(() => profiles, [profiles]);
   const activeProfileId = selectedProfileId || selectableProfiles[0]?.id || "";
 
+  const { data: records = [], isLoading: isLoadingRecords } = useQuery({
+    queryKey: ["health-records", activeProfileId],
+    queryFn: async () => {
+      if (!activeProfileId) return [];
+      const response = await apiClient.get(`${ApiPaths.HEALTH_RECORDS.BASE}/profiles/${activeProfileId}`);
+      return response.data?.data ?? [];
+    },
+    enabled: !!activeProfileId,
+  });
+
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-6 bg-[#effcf9] px-6 py-10">
       <header>
-        <h1 className="text-3xl font-bold text-[#005049]">Tải kết quả xét nghiệm</h1>
+        <h1 className="text-3xl font-bold text-[#005049]">Kết quả khám & Xét nghiệm</h1>
         <p className="mt-2 text-sm text-[#4e6360]">
-          Tải file PDF hoặc ảnh (JPG/PNG, tối đa 20MB). Hệ thống sẽ xử lý OCR tự động.
+          Quản lý và theo dõi lịch sử khám bệnh của bạn và người thân.
         </p>
       </header>
 
-      <section className="rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm">
-        {isLoading ? (
-          <div className="flex items-center gap-2 text-[#4e6360]">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            Đang tải hồ sơ...
-          </div>
-        ) : selectableProfiles.length === 0 ? (
-          <p className="text-sm text-[#ba1a1a]">Bạn chưa có hồ sơ để upload. Vui lòng tạo hồ sơ trước.</p>
-        ) : (
-          <div className="space-y-4">
-            <label className="block text-sm font-medium text-[#3d4947]">Chọn hồ sơ</label>
-            <select
-              className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378]"
-              value={activeProfileId}
-              onChange={(event) => setSelectedProfileId(event.target.value)}
-            >
-              {selectableProfiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.displayName}
-                </option>
-              ))}
-            </select>
-
+      <section className="rounded-3xl border border-[#b7d8d1] bg-white p-6 shadow-sm overflow-hidden">
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-[#00685f]" />
+              <h3 className="font-bold text-[#005049]">Chọn hồ sơ thành viên</h3>
+            </div>
             <UploadButton profileId={activeProfileId} />
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            {selectableProfiles.map((profile) => {
+              const isActive = activeProfileId === profile.id;
+              return (
+                <button
+                  key={profile.id}
+                  onClick={() => setSelectedProfileId(profile.id)}
+                  className={`relative flex items-center gap-3 rounded-2xl border-2 px-5 py-3 transition-all duration-200 ${
+                    isActive
+                      ? "border-[#00685f] bg-[#effcf9] text-[#00685f] shadow-sm"
+                      : "border-[#e0f0ed] bg-white text-[#4e6360] hover:border-[#b7d8d1]"
+                  }`}
+                >
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                    isActive ? "bg-[#00685f] text-white" : "bg-[#effcf9] text-[#00685f]"
+                  }`}>
+                    <User className="h-4 w-4" />
+                  </div>
+                  <span className="font-bold">{profile.displayName}</span>
+                  {isActive && (
+                    <div className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#00685f] text-white shadow-sm ring-2 ring-white">
+                      <Check className="h-3 w-3" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold text-[#005049]">Lịch sử kết quả</h2>
+        
+        {isLoadingRecords || isLoading ? (
+          <div className="flex justify-center py-10">
+            <Loader2 className="h-8 w-8 animate-spin text-[#00685f]" />
+          </div>
+        ) : records.length === 0 ? (
+          <div className="rounded-2xl border-2 border-dashed border-[#b7d8d1] bg-white/40 p-10 text-center">
+            <p className="text-[#4e6360]">Chưa có kết quả khám nào cho hồ sơ này.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4">
+            {records.map((record: HealthRecord) => (
+              <div 
+                key={record.id} 
+                className="group flex flex-col sm:flex-row sm:items-center justify-between rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm transition-all duration-300 hover:shadow-md hover:border-[#00685f]/30"
+              >
+                <div className="flex gap-4 items-start">
+                  <div className={`hidden sm:flex h-12 w-12 items-center justify-center rounded-xl ${
+                    record.recordType === 'XET NGHIÊM' ? 'bg-[#effcf9] text-[#00685f]' : 'bg-[#fff7ed] text-[#c2410c]'
+                  }`}>
+                    {record.recordType === 'XET NGHIÊM' ? <Activity className="h-6 w-6" /> : <FileText className="h-6 w-6" />}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-lg text-[#005049]">{record.recordType || "Phiếu khám bệnh"}</span>
+                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                        record.status === 'done' ? 'bg-[#ccfbf1] text-[#0f766e]' : 'bg-[#fef3c7] text-[#92400e]'
+                      }`}>
+                        {record.status === 'done' ? 'Đã xác nhận' : 'Chờ kiểm tra'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[#4e6360]">
+                      <Landmark className="h-3.5 w-3.5 opacity-60" />
+                      <p className="text-sm">{record.hospitalName || "Không rõ bệnh viện"}</p>
+                    </div>
+                    <div className="flex items-center gap-4 pt-2">
+                      <div className="flex items-center gap-1.5 text-xs text-[#6d7a77]">
+                        <Calendar className="h-3.5 w-3.5 opacity-60" />
+                        <span>{record.examDate || "Ngày không xác định"}</span>
+                      </div>
+                      {record.metrics && (
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-[#00685f]">
+                          <Check className="h-3.5 w-3.5" />
+                          <span>{record.metrics.length} chỉ số</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-6 sm:mt-0">
+                  <button 
+                    onClick={() => router.push(`/health-records/review/${record.id}`)}
+                    className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-white border-2 border-[#00685f] px-5 py-2.5 text-sm font-bold text-[#00685f] transition-all duration-200 hover:bg-[#00685f] hover:text-white"
+                  >
+                    Xem chi tiết
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </section>

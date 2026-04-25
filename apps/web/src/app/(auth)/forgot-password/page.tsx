@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { forgotPasswordSchema } from "@healthlens/shared/schemas/auth";
-import { CircleHelp, Mail, ShieldCheck, ArrowLeft, CheckCircle2, LockKeyhole, ArrowRight } from "lucide-react";
+import { CircleHelp, Mail, ArrowLeft, CheckCircle2, LockKeyhole, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useForm } from "react-hook-form";

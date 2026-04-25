@@ -4,9 +4,9 @@ import React, { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Box, Button, Callout } from "@radix-ui/themes";
+import { Callout } from "@radix-ui/themes";
 import { 
-  Pencil, Calendar, Cross, Key, Shield, Trash2, CheckCircle2, InfoIcon 
+  Pencil, Calendar, Cross, Key, Shield, Trash2, CheckCircle2
 } from "lucide-react";
 
 import { apiClient } from "@/lib/api/apiClient";
@@ -118,6 +118,7 @@ export default function ProfileSettingsPage() {
             <div className="flex flex-col md:flex-row md:items-center gap-8 mb-10">
               <div className="relative group">
                 <div className="w-24 h-24 rounded-2xl overflow-hidden ring-4 ring-[#e9f6f3] shadow-md bg-[#d8e5e2]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img alt="Avatar" className="w-full h-full object-cover" src="https://ui-avatars.com/api/?name=H+L&background=00685f&color=fff&size=256" />
                 </div>
                 <button className="absolute -bottom-2 -right-2 bg-[#00685f] text-white p-2 rounded-lg shadow-lg active:scale-90 transition-transform">

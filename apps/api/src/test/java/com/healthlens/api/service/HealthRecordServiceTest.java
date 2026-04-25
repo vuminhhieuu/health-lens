@@ -2,6 +2,7 @@ package com.healthlens.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
+import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
 import com.healthlens.api.entity.HealthRecord;
@@ -21,6 +22,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -135,6 +137,67 @@ class HealthRecordServiceTest {
         assertThatThrownBy(() -> healthRecordService.confirmUpload(userId, recordId))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Upload session");
+    }
+
+    @Test
+    @DisplayName("confirmRecord thanh cong - update status thanh done")
+    void confirmRecord_success() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("review_required");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        ConfirmRecordRequest request = ConfirmRecordRequest.builder()
+                .examDate(LocalDate.of(2023, 10, 10))
+                .build();
+
+        healthRecordService.confirmRecord(userId, recordId, request);
+
+        assertThat(record.getStatus()).isEqualTo("done");
+        assertThat(record.getExamDate()).isEqualTo(LocalDate.of(2023, 10, 10));
+        verify(healthRecordRepository).save(record);
+    }
+
+    @Test
+    @DisplayName("confirmRecord fail neu khong phai review_required")
+    void confirmRecord_invalidStatus() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("processing"); // invalid status
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        assertThatThrownBy(() -> healthRecordService.confirmRecord(userId, recordId, new ConfirmRecordRequest()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("khong o trang thai review_required");
+    }
+
+    @Test
+    @DisplayName("confirmRecord fail neu user_id khong khop")
+    void confirmRecord_profileMismatch() {
+        UUID userId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(otherUserId);
+        record.setStatus("review_required");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        assertThatThrownBy(() -> healthRecordService.confirmRecord(userId, recordId, new ConfirmRecordRequest()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("quyen xac nhan");
     }
 
     private Profile buildProfile(UUID userId, UUID profileId) {

@@ -17,8 +17,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -102,11 +100,12 @@ public class OcrJobConsumer {
             healthRecordService.markOcrFailed(recordId);
             return;
         }
-        String downloadUrl = storageService.generateDownloadUrl(fileKey, Duration.ofMinutes(5));
+        String downloadUrl = storageService.generateInternalDownloadUrl(fileKey, Duration.ofMinutes(5));
 
         try {
-            OcrResult result = CompletableFuture.supplyAsync(() -> ocrService.processImage(downloadUrl))
-                    .get(15, TimeUnit.SECONDS);
+            OcrResult result = ocrService.processImage(downloadUrl);
+            OcrService.OcrExtractionResult parsedData = ocrService.parseMetrics(result.getText(), result.getConfidence());
+
             String rawOcrJson = objectMapper.writeValueAsString(Map.of(
                     "text", result.getText(),
                     "confidence", result.getConfidence(),
@@ -114,7 +113,7 @@ public class OcrJobConsumer {
                     "language", result.getLanguage(),
                     "processingTimeMs", result.getProcessingTimeMs()
             ));
-            healthRecordService.markOcrCompleted(recordId, rawOcrJson);
+            healthRecordService.markOcrCompleted(recordId, rawOcrJson, parsedData);
         } catch (Exception ex) {
             healthRecordService.markOcrFailed(recordId);
         }

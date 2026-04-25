@@ -2,6 +2,7 @@ package com.healthlens.api.controller;
 
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
+import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.HealthRecordStatusResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
@@ -57,6 +58,27 @@ public class HealthRecordController {
     ) {
         UUID userId = UUID.fromString(authentication.getName());
         HealthRecordStatusResponse response = healthRecordService.getStatus(userId, recordId);
+        return ResponseEntity.ok(buildResponseBody(response));
+    }
+
+    @PostMapping("/{recordId}/confirm")
+    public ResponseEntity<Map<String, Object>> confirmRecord(
+            Authentication authentication,
+            @PathVariable UUID recordId,
+            @RequestBody(required = false) ConfirmRecordRequest request
+    ) {
+        UUID userId = UUID.fromString(authentication.getName());
+        healthRecordService.confirmRecord(userId, recordId, request);
+        return ResponseEntity.ok(buildResponseBody(Map.of("message", "Confirmed successfully")));
+    }
+
+    @GetMapping("/profiles/{profileId}")
+    public ResponseEntity<Map<String, Object>> getRecordsByProfile(
+            Authentication authentication,
+            @PathVariable UUID profileId
+    ) {
+        UUID userId = UUID.fromString(authentication.getName());
+        java.util.List<HealthRecordStatusResponse> response = healthRecordService.getRecordsByProfile(userId, profileId);
         return ResponseEntity.ok(buildResponseBody(response));
     }
 

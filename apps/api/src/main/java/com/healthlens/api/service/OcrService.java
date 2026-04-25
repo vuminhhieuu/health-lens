@@ -10,6 +10,12 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.ai.chat.client.ChatClient;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.healthlens.api.dto.MetricDto;
+import java.util.ArrayList;
+import java.util.List;
 
 
 
@@ -36,11 +42,21 @@ public class OcrService {
 
     private final RestTemplate ocrRestTemplate;
     private final AwsTextractClient textractClient;
+    private final ChatClient chatClient;
+    private final ObjectMapper objectMapper;
     private final String ocrServiceUrl;
 
     // =========================================
     // EasyOCR Response DTO (inner class)
     // =========================================
+    public record OcrExtractionResult(
+            String examDate,
+            String recordType,
+            String hospitalName,
+            String diagnosis,
+            List<MetricDto> metrics
+    ) {}
+
     /**
      * Response DTO matching the EasyOCR FastAPI /ocr response.
      */
@@ -60,9 +76,13 @@ public class OcrService {
     public OcrService(
             @Qualifier("ocrRestTemplate") RestTemplate ocrRestTemplate,
             AwsTextractClient textractClient,
+            ChatClient chatClient,
+            ObjectMapper objectMapper,
             @Value("${app.ocr.service.url:http://localhost:8001}") String ocrServiceUrl) {
         this.ocrRestTemplate = ocrRestTemplate;
         this.textractClient = textractClient;
+        this.chatClient = chatClient;
+        this.objectMapper = objectMapper;
         this.ocrServiceUrl = ocrServiceUrl;
     }
 
@@ -171,6 +191,139 @@ public class OcrService {
                     .language("unknown")
                     .processingTimeMs(0)
                     .build();
+        }
+    }
+
+    /**
+     * Parse OCR raw text thành danh sách metrics bằng LLM.
+     */
+    public OcrExtractionResult parseMetrics(String ocrText, float overallConfidence) {
+        if (ocrText == null || ocrText.isBlank()) {
+            return new OcrExtractionResult(null, null, null, null, new ArrayList<>());
+        }
+
+        String prompt = """
+            You are a medical data extraction expert. Extract and NORMALIZE information from the following OCR text of a Vietnamese medical record (Phiếu kết quả xét nghiệm/khám bệnh).
+            
+            RULES:
+            1. Language: Vietnamese (Tiếng Việt).
+            2. Normalization: If a metric name is misread or abbreviated, map it to the standard medical term.
+               Standard terms reference:
+               - Blood Sugar: Glucose, HbA1c.
+               - Liver: AST (GOT), ALT (GPT), GGT, Bilirubin (Toàn phần/Trực tiếp/Gián tiếp), Albumin, Protein toàn phần.
+               - Kidney: Urea (Urê), Creatinine (Creatinin), Acid Uric (Gout).
+               - Lipids: Cholesterol toàn phần, Triglyceride, HDL-C, LDL-C.
+               - Blood Count: WBC (Bạch cầu), RBC (Hồng cầu), HGB (Huyết sắc tố), HCT, PLT (Tiểu cầu), Neutrophil, Lymphocyte.
+            
+            3. Fields to extract:
+               - "examDate": Date of examination (YYYY-MM-DD). Look for "Ngày khám", "Ngày chỉ định".
+               - "recordType": Type of document (e.g., "Xét nghiệm máu", "Siêu âm").
+               - "hospitalName": Medical facility name (top left/header).
+               - "diagnosis": Doctor's diagnosis or conclusion ("Chẩn đoán", "Kết luận").
+               - "metrics": List of laboratory results. Each has "name", "value", "unit".
+            
+            CRITICAL: 
+            - Clean noisy numeric values (e.g., "5.4H" -> "5.4").
+            - Ensure "name" is the full standard Vietnamese name if possible.
+            - Return null for missing fields.
+            
+            Return ONLY a raw JSON object. NO markdown, NO preamble.
+            {
+              "examDate": "YYYY-MM-DD",
+              "recordType": "...",
+              "hospitalName": "...",
+              "diagnosis": "...",
+              "metrics": [
+                {"name": "...", "value": "...", "unit": "..."}
+              ]
+            }
+            
+            OCR Text:
+            """ + ocrText;
+
+        String jsonResponse = null;
+        try {
+            log.info("[LLM] Sending OCR text to LLM (length: {})", ocrText.length());
+            jsonResponse = chatClient.prompt().user(prompt).call().content();
+            log.debug("[LLM] Received response from model (length: {})",
+                    jsonResponse != null ? jsonResponse.length() : 0);
+
+            if (jsonResponse == null || jsonResponse.isBlank()) {
+                return new OcrExtractionResult(null, null, null, null, new ArrayList<>());
+            }
+
+            // Clean markdown and any preamble
+            jsonResponse = jsonResponse.trim();
+            if (jsonResponse.contains("```json")) {
+                jsonResponse = jsonResponse.substring(jsonResponse.indexOf("```json") + 7);
+                if (jsonResponse.contains("```")) {
+                    jsonResponse = jsonResponse.substring(0, jsonResponse.indexOf("```"));
+                }
+            } else if (jsonResponse.contains("```")) {
+                jsonResponse = jsonResponse.substring(jsonResponse.indexOf("```") + 3);
+                if (jsonResponse.contains("```")) {
+                    jsonResponse = jsonResponse.substring(0, jsonResponse.indexOf("```"));
+                }
+            }
+            jsonResponse = jsonResponse.trim();
+
+            // Simple attempt to fix truncated JSON if it looks like it ended early in an array
+            if (!jsonResponse.endsWith("}") && !jsonResponse.endsWith("]")) {
+                log.warn("[LLM] Detected truncated JSON, attempting to close blocks");
+                if (jsonResponse.contains("[") && !jsonResponse.contains("]")) {
+                    jsonResponse += "]}";
+                } else {
+                    jsonResponse += "}";
+                }
+            }
+
+            JsonNode rootNode = objectMapper.readTree(jsonResponse);
+            
+            String examDate = rootNode.has("examDate") && !rootNode.get("examDate").isNull() ? rootNode.get("examDate").asText() : null;
+            String recordType = rootNode.has("recordType") && !rootNode.get("recordType").isNull() ? rootNode.get("recordType").asText() : null;
+            String hospitalName = rootNode.has("hospitalName") && !rootNode.get("hospitalName").isNull() ? rootNode.get("hospitalName").asText() : null;
+            String diagnosis = rootNode.has("diagnosis") && !rootNode.get("diagnosis").isNull() ? rootNode.get("diagnosis").asText() : null;
+
+            JsonNode metricsNode = rootNode.get("metrics");
+            List<MetricDto> metrics = new ArrayList<>();
+            if (metricsNode != null && metricsNode.isArray()) {
+                for (JsonNode node : metricsNode) {
+                    MetricDto metric = new MetricDto();
+                    metric.setName(node.has("name") ? node.get("name").asText() : "");
+                    // Value can be numeric or string, handle gracefully
+                    String value = "";
+                    if (node.has("value")) {
+                        JsonNode vNode = node.get("value");
+                        value = vNode.isNull() ? "" : vNode.asText();
+                    }
+                    metric.setValue(value);
+                    metric.setUnit(node.has("unit") && !node.get("unit").isNull() ? node.get("unit").asText() : "");
+                    metric.setConfidence(overallConfidence);
+                    metric.setSource("ocr");
+                    metric.setConfidenceLevel(classifyConfidence(overallConfidence));
+                    metrics.add(metric);
+                }
+            }
+            log.info("[LLM] Parsed: date={}, type={}, hospital={}, diagnosis={}, metricsCount={}", 
+                    examDate, recordType, hospitalName, diagnosis, metrics.size());
+            return new OcrExtractionResult(examDate, recordType, hospitalName, diagnosis, metrics);
+        } catch (Exception e) {
+            log.error("[LLM] Failed to parse metrics using LLM. responseLength={}",
+                    jsonResponse != null ? jsonResponse.length() : 0, e);
+            return new OcrExtractionResult(null, null, null, null, new ArrayList<>());
+        }
+    }
+
+    /**
+     * Phân loại confidence level dựa trên rules từ PRD.
+     */
+    public String classifyConfidence(float confidence) {
+        if (confidence >= 0.85f) {
+            return "high";
+        } else if (confidence >= 0.50f) {
+            return "medium";
+        } else {
+            return "low";
         }
     }
 }
