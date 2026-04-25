@@ -68,6 +68,7 @@ export function ProfileCard({
           <div className="relative">
             <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[#e9f6f3] border-2 border-[#89f5e7]/30 flex items-center justify-center">
               {avatarUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
               ) : (
                 <User className="w-7 h-7 text-[#00685f]" />

@@ -176,13 +176,20 @@ export default function ProfilesPage() {
       });
     }
 
-    // Add others
+    const normalizedSelfName = currentUser?.fullName.trim().toLowerCase();
+
+    // Add others, filtering out default self-profile to avoid duplicate cards
     otherProfiles.forEach(p => {
-      combined.push({
-        ...p,
-        relationship: "Người thân",
-        isSelf: false
-      });
+      const normalizedProfileName = p.displayName.trim().toLowerCase();
+      const isAlreadyAdded = !!normalizedSelfName && normalizedProfileName === normalizedSelfName;
+      
+      if (!isAlreadyAdded) {
+        combined.push({
+          ...p,
+          relationship: "Người thân",
+          isSelf: false
+        });
+      }
     });
 
     return combined.filter(p => 

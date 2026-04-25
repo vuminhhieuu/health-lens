@@ -6,6 +6,9 @@ import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.HealthRecordStatusResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
+import com.healthlens.api.dto.MetricDto;
+import com.healthlens.api.dto.request.ConfirmRecordRequest;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.repository.HealthRecordRepository;
@@ -19,8 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 public class HealthRecordService {
 
     private static final Duration UPLOAD_URL_TTL = Duration.ofMinutes(15);
@@ -101,17 +107,100 @@ public class HealthRecordService {
 
     @Transactional(readOnly = true)
     public HealthRecordStatusResponse getStatus(UUID userId, UUID recordId) {
+        String cacheKey = "health-record-status:" + userId + ":" + recordId;
+        String cachedStatus = redisTemplate.opsForValue().get(cacheKey);
+        
+        if (cachedStatus != null) {
+            try {
+                return objectMapper.readValue(cachedStatus, HealthRecordStatusResponse.class);
+            } catch (Exception e) {
+                log.warn("Failed to parse cached status for {}", recordId);
+            }
+        }
+
         HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
-        return new HealthRecordStatusResponse(record.getId(), record.getStatus());
+        
+        java.util.List<MetricDto> metricsList = null;
+        if ("review_required".equals(record.getStatus()) || "done".equals(record.getStatus())) {
+            try {
+                metricsList = objectMapper.readValue(record.getMetrics(), new TypeReference<java.util.List<MetricDto>>() {});
+            } catch (Exception e) {
+                log.warn("Failed to parse metrics for {}", recordId);
+            }
+        }
+        
+        HealthRecordStatusResponse response = new HealthRecordStatusResponse(
+            record.getId(), 
+            record.getStatus(), 
+            metricsList,
+            record.getExamDate() != null ? record.getExamDate().toString() : null,
+            record.getRecordType(),
+            record.getHospitalName(),
+            record.getDiagnosis(),
+            storageService.generateDownloadUrl(record.getFileKey(), Duration.ofHours(1))
+        );
+        
+        // Cache the result for 5 seconds
+        try {
+            redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(response), Duration.ofSeconds(5));
+        } catch (Exception e) {
+            log.warn("Failed to cache status for {}", recordId);
+        }
+        
+        return response;
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<HealthRecordStatusResponse> getRecordsByProfile(UUID userId, UUID profileId) {
+        return healthRecordRepository.findAllByProfileIdAndUserIdOrderByCreatedAtDesc(profileId, userId)
+                .stream()
+                .map(record -> {
+                    java.util.List<MetricDto> metricsList = null;
+                    if (record.getMetrics() != null) {
+                        try {
+                            metricsList = objectMapper.readValue(record.getMetrics(), new TypeReference<java.util.List<MetricDto>>() {});
+                        } catch (Exception e) {
+                            log.warn("Failed to parse metrics for {}", record.getId());
+                        }
+                    }
+                    return new HealthRecordStatusResponse(
+                        record.getId(),
+                        record.getStatus(),
+                        metricsList,
+                        record.getExamDate() != null ? record.getExamDate().toString() : null,
+                        record.getRecordType(),
+                        record.getHospitalName(),
+                        record.getDiagnosis(),
+                        storageService.generateDownloadUrl(record.getFileKey(), Duration.ofHours(1))
+                    );
+                })
+                .collect(Collectors.toList());
     }
 
     @Transactional
-    public void markOcrCompleted(UUID recordId, String rawOcrJson) {
+    public void markOcrCompleted(UUID recordId, String rawOcrJson, OcrService.OcrExtractionResult parsedData) {
         HealthRecord record = healthRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
         record.setStatus("review_required");
         record.setRawOcrResult(rawOcrJson);
+        
+        if (parsedData.examDate() != null) {
+            try {
+                record.setExamDate(java.time.LocalDate.parse(parsedData.examDate()));
+            } catch (Exception e) {
+                log.warn("Invalid exam date format: {}", parsedData.examDate());
+            }
+        }
+        record.setRecordType(parsedData.recordType());
+        record.setHospitalName(parsedData.hospitalName());
+        record.setDiagnosis(parsedData.diagnosis());
+
+        try {
+            record.setMetrics(objectMapper.writeValueAsString(parsedData.metrics()));
+        } catch (JsonProcessingException e) {
+            record.setMetrics("[]");
+        }
         healthRecordRepository.save(record);
     }
 
@@ -143,6 +232,46 @@ public class HealthRecordService {
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Upload session bi loi du lieu", ex);
         }
+    }
+
+    @Transactional
+    public void confirmRecord(UUID userId, UUID recordId, ConfirmRecordRequest request) {
+        HealthRecord record = healthRecordRepository.findById(recordId)
+                .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+
+        if (!record.getUserId().equals(userId)) {
+            throw new IllegalArgumentException("Ban khong co quyen xac nhan health record nay");
+        }
+
+        if (!"review_required".equals(record.getStatus())) {
+            throw new IllegalStateException("Health record khong o trang thai review_required");
+        }
+
+        record.setStatus("done");
+        if (request != null) {
+            if (request.getExamDate() != null) {
+                record.setExamDate(request.getExamDate());
+            }
+            if (request.getRecordType() != null) {
+                record.setRecordType(request.getRecordType());
+            }
+            if (request.getHospitalName() != null) {
+                record.setHospitalName(request.getHospitalName());
+            }
+            if (request.getDiagnosis() != null) {
+                record.setDiagnosis(request.getDiagnosis());
+            }
+            
+            if (request.getMetrics() != null) {
+                try {
+                    record.setMetrics(objectMapper.writeValueAsString(request.getMetrics()));
+                } catch (Exception e) {
+                    log.warn("Failed to serialize metrics in confirmRecord for {}", recordId);
+                }
+            }
+        }
+
+        healthRecordRepository.save(record);
     }
 
     private String uploadReservationKey(UUID recordId) {

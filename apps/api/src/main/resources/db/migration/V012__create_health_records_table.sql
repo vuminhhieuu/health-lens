@@ -7,6 +7,10 @@ CREATE TABLE health_records (
     file_key VARCHAR(500) NOT NULL,
     raw_ocr_result JSONB,
     metrics JSONB NOT NULL DEFAULT '[]',
+    exam_date DATE,
+    record_type VARCHAR(100),
+    hospital_name VARCHAR(255),
+    diagnosis TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );

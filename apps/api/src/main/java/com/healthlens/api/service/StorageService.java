@@ -35,6 +35,7 @@ public class StorageService {
     private final String bucket;
     private final S3Client s3Client;
     private final S3Presigner presigner;
+    private final S3Presigner internalPresigner;
 
     public StorageService(
             @Value("${app.storage.endpoint:http://localhost:9000}") String endpoint,
@@ -53,6 +54,12 @@ public class StorageService {
                 .build();
         this.presigner = S3Presigner.builder()
                 .endpointOverride(URI.create(publicEndpoint))
+                .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                .region(Region.of(region))
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
+                .build();
+        this.internalPresigner = S3Presigner.builder()
+                .endpointOverride(URI.create(endpoint))
                 .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
                 .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
@@ -140,9 +147,25 @@ public class StorageService {
         return presigned.url().toExternalForm();
     }
 
+    public String generateInternalDownloadUrl(String key, Duration ttl) {
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .build();
+
+        GetObjectPresignRequest request = GetObjectPresignRequest.builder()
+                .signatureDuration(ttl)
+                .getObjectRequest(getObjectRequest)
+                .build();
+
+        PresignedGetObjectRequest presigned = internalPresigner.presignGetObject(request);
+        return presigned.url().toExternalForm();
+    }
+
     @PreDestroy
     public void closeClients() {
         presigner.close();
+        internalPresigner.close();
         s3Client.close();
     }
 }

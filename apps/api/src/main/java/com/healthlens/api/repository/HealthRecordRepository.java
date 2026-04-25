@@ -8,4 +8,5 @@ import java.util.UUID;
 
 public interface HealthRecordRepository extends JpaRepository<HealthRecord, UUID> {
     Optional<HealthRecord> findByIdAndUserId(UUID id, UUID userId);
+    java.util.List<HealthRecord> findAllByProfileIdAndUserIdOrderByCreatedAtDesc(UUID profileId, UUID userId);
 }
