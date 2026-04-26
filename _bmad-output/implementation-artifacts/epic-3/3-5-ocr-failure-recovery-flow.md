@@ -1,6 +1,6 @@
 # Story 3.5: OCR failure recovery flow có hướng dẫn rõ ràng
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 
@@ -11,9 +11,11 @@ Status: ready-for-dev
 - **Dự án:** HealthLens-Web-MVP — `projectId`: `578519912546445367`
 - **Chỉ mục đầy đủ:** [STITCH-SCREEN-LINKS.md](../STITCH-SCREEN-LINKS.md)
 
-| Tiêu đề (Stitch) | Resource | HTML prototype | Screenshot |
-|---|---|---|---|
+
+| Tiêu đề (Stitch)                  | Resource                                                               | HTML prototype                                                                                                                                                                                                                                                              | Screenshot                                                                                                                                                                                                                                                                                                 |
+| --------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | OCR Failure Recovery - HealthLens | `projects/578519912546445367/screens/ace87425151148448083728c199470c7` | [Mở](https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ6Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpZCiVodG1sXzIyYTVmYmUyZDQwNzQ0NmU4ZTIyOTJkYjQ3OWI3ZTY0EgsSBxCr9e3nmh0YAZIBIgoKcHJvamVjdF9pZBIUQhI1Nzg1MTk5MTI1NDY0NDUzNjc&filename=&opi=96797242) | [Xem](https://lh3.googleusercontent.com/aida/ADBb0uhkPWvUwzdykduZ7ucmjcKEFDsPCFSzxEQ9MGlpdbZR5lW8ut4ifGjrA4Ro2rO8PZis9k2MksMIE7llMNDnNZ5EEMGtAWW-hpwB-Q0wtOh7WNGyPHd4d3YEIM9h7A2GL99mCj4vFmGeh25t-md9CcnFHMGwakpieXT74z5Jcma7jRcA0ADtlVbscGkRRT62NkAKXyA6-17xvJfkoGOQyb2C5gEzhYbED8hp_hIedB22Fv_Y1OgmhJ6-) |
+
 
 *Ghi chú:* Link HTML prototype và screenshot tải từ Google Stitch có thể hết hạn. Làm mới snapshot: MCP `list_screens` (project HealthLens-Web-MVP, `projectId` trên) rồi ghi đè `_data/stitch-screens.json`, sau đó chạy lại script này.
 
@@ -34,24 +36,24 @@ so that tôi biết bước tiếp theo thay vì bị kẹt.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: OCR failure states (AC: #1, #2)
-  - [ ] Cập nhật OCR worker: khi confidence < 50% → update record status `ocr_failed`
-  - [ ] Khi confidence 50-84% → status `review_required` với flag `hasLowConfidenceMetrics: true`
-  - [ ] OCR timeout (>15s) → status `ocr_failed`, reason `timeout`
-- [ ] Task 2 — Web: OCR failure recovery screen (AC: #1, #3, #4, #5)
-  - [ ] Tạo `apps/web/src/components/features/upload/OcrFailureScreen.tsx`
-  - [ ] 3 option cards: "Chụp lại", "Nhập thủ công", "Giữ những gì có" (nếu có partial)
-  - [ ] Option "Giữ những gì có" chỉ hiện khi có partial metrics
-- [ ] Task 3 — Mobile (Phase 2): OCR failure recovery screen (AC: #1, #3, #4, #5)
-  - [ ] Tạo `apps/mobile/app/upload/ocr-failure.tsx`
-  - [ ] 3 nút action với icon và mô tả ngắn
-  - [ ] Navigate tương ứng theo lựa chọn
-- [ ] Task 4 — Mobile (Phase 2): Camera retry screen với tips (AC: #3, #6)
-  - [ ] Tạo `apps/mobile/app/upload/camera-retry.tsx`
-  - [ ] Hiển thị 4 tips với icon ở đầu màn hình trước khi mở camera
-  - [ ] Nút "Chụp lại" → camera screen (Story 3.2)
-- [ ] Task 5 — Tests (AC: #1, #2)
-  - [ ] `OcrServiceTest`: timeout handling, partial confidence classification
+- Task 1 — Backend: OCR failure states (AC: #1, #2)
+  - Cập nhật OCR worker: khi confidence < 50% → update record status `ocr_failed`
+  - Khi confidence 50-84% → status `review_required` với flag `hasLowConfidenceMetrics: true`
+  - OCR timeout (>15s) → status `ocr_failed`, reason `timeout`
+- Task 2 — Web: OCR failure recovery screen (AC: #1, #3, #4, #5)
+  - Tạo `apps/web/src/components/features/upload/OcrFailureScreen.tsx`
+  - 3 option cards: "Chụp lại", "Nhập thủ công", "Giữ những gì có" (nếu có partial)
+  - Option "Giữ những gì có" chỉ hiện khi có partial metrics
+- Task 3 — Mobile (Phase 2): OCR failure recovery screen (AC: #1, #3, #4, #5)
+  - Tạo `apps/mobile/app/upload/ocr-failure.tsx`
+  - 3 nút action với icon và mô tả ngắn
+  - Navigate tương ứng theo lựa chọn
+- Task 4 — Mobile (Phase 2): Camera retry screen với tips (AC: #3, #6)
+  - Tạo `apps/mobile/app/upload/camera-retry.tsx`
+  - Hiển thị 4 tips với icon ở đầu màn hình trước khi mở camera
+  - Nút "Chụp lại" → camera screen (Story 3.2)
+- Task 5 — Tests (AC: #1, #2)
+  - `OcrServiceTest`: timeout handling, partial confidence classification
 
 ## Dev Notes
 
@@ -126,11 +128,13 @@ const CAMERA_TIPS = [
 ```
 
 **EasyOCR Details:**
+
 - Vietnamese accuracy: ~90%
 - Processing time: 3-8s on CPU
 - Timeout: 10 seconds (configurable)
 
 **Fallback Chain:**
+
 1. EasyOCR Service (local Python microservice)
 2. AWS Textract (cloud, $1.50/1K pages)
 3. Recovery Screen (Story 3.5) - Manual input option
@@ -146,10 +150,40 @@ const CAMERA_TIPS = [
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+- Codex 5.3
 
 ### Debug Log References
 
+- `apps/api`: `./gradlew test --tests "com.healthlens.api.service.OcrServiceTest" --tests "com.healthlens.api.service.HealthRecordServiceTest"` (pass)
+- `apps/web`: `pnpm test` (pass)
+
 ### Completion Notes List
 
+- Task 1: Cập nhật OCR pipeline để phân nhánh `ocr_failed` khi timeout/low confidence (<50%), giữ `review_required` khi partial confidence và trả thêm cờ `hasLowConfidenceMetrics` + `ocrFailureReason` qua status API.
+- Task 2: Tạo màn hình recovery `OcrFailureScreen` với 3 lựa chọn; nối flow retry (kèm tips), manual input (vào review manual mode), keep partial (xác nhận lưu partial).
+- Task 5: Cập nhật và bổ sung test cho timeout handling + confidence boundary + source_type khi xác nhận partial metrics.
+
 ### File List
+
+- `apps/api/src/main/java/com/healthlens/api/dto/response/HealthRecordStatusResponse.java`
+- `apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java`
+- `apps/api/src/main/java/com/healthlens/api/service/OcrJobConsumer.java`
+- `apps/api/src/main/java/com/healthlens/api/service/OcrService.java`
+- `apps/api/src/test/java/com/healthlens/api/service/OcrServiceTest.java`
+- `apps/api/src/test/java/com/healthlens/api/service/HealthRecordServiceTest.java`
+- `apps/web/src/components/features/upload/OcrFailureScreen.tsx`
+- `apps/web/src/app/(dashboard)/health-records/review/[recordId]/page.tsx`
+- `apps/web/src/app/(dashboard)/health-records/page.tsx`
+
+### Review Findings
+
+- [Review][Decision] Timeout OCR fallback chain — đã chốt hướng: timeout vẫn fallback Textract; chỉ fail khi toàn bộ provider thất bại.
+- [Review][Patch] Flow "Nhập thủ công" bị kẹt vì `ocr_failed` luôn render `OcrFailureScreen`, nên `?mode=manual` không mở được màn nhập tay [apps/web/src/app/(dashboard)/health-records/review/[recordId]/page.tsx]
+- [Review][Patch] Flow "Giữ những gì có" không lưu được từ trạng thái `ocr_failed` vì `confirmRecord` chặn status khác `review_required|done` [apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java]
+- [Review][Patch] `handleKeepPartial` luôn redirect về danh sách kể cả khi API save lỗi, gây false-success UX [apps/web/src/app/(dashboard)/health-records/review/[recordId]/page.tsx]
+- [Review][Patch] Keep-partial đang tự nâng mọi metric lên `confidence=1.0/high`, làm sai provenance và có thể ghi `sourceType="ocr"` thay vì partial [apps/web/src/app/(dashboard)/health-records/review/[recordId]/page.tsx]
+- [Review][Patch] `sourceType` đang suy từ payload client trong `confirmRecord`, cho phép client tác động phân loại dữ liệu lưu trữ [apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java]
+- [Review][Patch] Option "Giữ những gì có" phụ thuộc `data.metrics` nhưng `getStatus` không trả metrics cho `ocr_failed`, khiến nhánh recovery này thực tế bị ẩn [apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java]
+- [Review][Patch] Nút "Chụp lại rõ hơn" chỉ điều hướng về `/health-records?retry=1` (banner tips), chưa vào flow camera/capture như AC #3 mong đợi [apps/web/src/app/(dashboard)/health-records/review/[recordId]/page.tsx]
+- [Review][Patch] Thiếu test cho branching tại `OcrJobConsumer` ở ngưỡng 0.49/0.50/0.84/0.85 và reason propagation (`timeout`, `low_confidence`) [apps/api/src/main/java/com/healthlens/api/service/OcrJobConsumer.java]
+

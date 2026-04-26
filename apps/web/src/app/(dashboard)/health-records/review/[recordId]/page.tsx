@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, AlertTriangle, CheckCircle, Edit2, Save, X, AlertCircle, FileText, Maximize2, AlertOctagon } from "lucide-react";
 
 import { apiClient } from "@/lib/api/apiClient";
 import { ApiPaths } from "@healthlens/shared/constants";
 import { HealthMetricCard } from "@/components/ui/HealthMetricCard";
+import { OcrFailureScreen } from "@/components/features/upload/OcrFailureScreen";
 
 type MetricDto = {
   name: string;
@@ -45,6 +46,8 @@ type ReviewRecordData = {
   status: ReviewRecordStatus;
   fileUrl?: string;
   metrics?: MetricDto[];
+  hasLowConfidenceMetrics?: boolean;
+  ocrFailureReason?: string | null;
   examDate?: string | null;
   recordType?: string | null;
   hospitalName?: string | null;
@@ -57,7 +60,9 @@ type ReviewRecordData = {
 export default function ReviewRecordPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const recordId = params.recordId as string;
+  const manualMode = searchParams.get("mode") === "manual";
 
   const [metrics, setMetrics] = useState<MetricDto[]>([]);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -71,6 +76,7 @@ export default function ReviewRecordPage() {
   const [showFullDoc, setShowFullDoc] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [isKeepingPartial, setIsKeepingPartial] = useState(false);
 
   const { data, refetch, isLoading, isError } = useQuery<ReviewRecordData>({
     queryKey: ["record-status", recordId],
@@ -121,9 +127,9 @@ export default function ReviewRecordPage() {
         diagnosis: data.diagnosis ?? "",
       });
       initialized.current = true;
-      setEditMode(data.status === "review_required");
+      setEditMode(data.status === "review_required" || manualMode);
     }
-  }, [data]);
+  }, [data, manualMode]);
 
   const isDirty = useMemo(() => {
     if (!initialized.current) {
@@ -178,27 +184,21 @@ export default function ReviewRecordPage() {
     setEditForm(null);
   };
 
-  const executeSave = async (autoApproveAll = false) => {
+  const executeSave = async (keepPartial = false) => {
     try {
       setIsSaving(true);
       setSaveError(null);
       setShowConfirmModal(false);
 
-      const finalMetrics: MetricDto[] = autoApproveAll
-        ? metrics.map(
-            (m): MetricDto => ({
-              ...m,
-              confidenceLevel: "high" as const,
-              confidence: 1.0,
-            }),
-          )
-        : metrics;
+      const resolvedKeepPartial = keepPartial || (data?.status === "ocr_failed" && manualMode);
+      const finalMetrics: MetricDto[] = metrics;
 
       await apiClient.post(ApiPaths.HEALTH_RECORDS.CONFIRM_RECORD(recordId), {
         examDate: examDate || null,
         recordType: recordType || null,
         hospitalName: hospitalName || null,
         diagnosis: diagnosis || null,
+        keepPartial: resolvedKeepPartial,
         metrics: finalMetrics,
       });
       setEditMode(false);
@@ -211,10 +211,24 @@ export default function ReviewRecordPage() {
       });
       await refetch();
       alert("Lưu kết quả khám thành công!");
+      return true;
     } catch {
       setSaveError("Đã có lỗi xảy ra khi lưu. Vui lòng thử lại.");
+      return false;
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleKeepPartial = async () => {
+    try {
+      setIsKeepingPartial(true);
+      const isSaved = await executeSave(true);
+      if (isSaved) {
+        router.push("/health-records");
+      }
+    } finally {
+      setIsKeepingPartial(false);
     }
   };
 
@@ -240,29 +254,16 @@ export default function ReviewRecordPage() {
     );
   }
 
-  if (data?.status === "ocr_failed") {
+  if (data?.status === "ocr_failed" && !manualMode) {
+    const hasPartialMetrics = (data.metrics?.length ?? 0) > 0 || Boolean(data.hasLowConfidenceMetrics);
     return (
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col items-center justify-center gap-6 bg-[#effcf9] px-6 py-10 text-center">
-        <AlertTriangle className="h-10 w-10 text-[#ba1a1a]" />
-        <h2 className="text-xl font-bold text-[#ba1a1a]">Không thể xử lý OCR cho hồ sơ này</h2>
-        <p className="max-w-xl text-[#4e6360]">
-          Hệ thống không trích xuất được dữ liệu từ tệp đã tải lên. Vui lòng quay lại danh sách hồ sơ và tải lại tệp rõ nét hơn.
-        </p>
-        <div className="flex gap-3">
-          <button
-            onClick={() => refetch()}
-            className="rounded-xl border border-[#00685f] px-6 py-2 font-semibold text-[#00685f] hover:bg-[#effcf9]"
-          >
-            Thử lại
-          </button>
-          <button
-            onClick={() => router.push("/health-records")}
-            className="rounded-xl bg-[#00685f] px-6 py-2 font-semibold text-white hover:brightness-110"
-          >
-            Quay lại danh sách
-          </button>
-        </div>
-      </div>
+      <OcrFailureScreen
+        hasPartialMetrics={hasPartialMetrics}
+        isKeepingPartial={isKeepingPartial}
+        onRetry={() => router.push("/health-records?retry=1&openUpload=1")}
+        onManualInput={() => router.push(`/health-records/review/${recordId}?mode=manual`)}
+        onKeepPartial={handleKeepPartial}
+      />
     );
   }
 
@@ -281,7 +282,7 @@ export default function ReviewRecordPage() {
     );
   }
 
-  const canConfirm = data?.status === "review_required";
+  const canConfirm = data?.status === "review_required" || (data?.status === "ocr_failed" && manualMode);
   const canEditAfterConfirm = data?.status === "done";
   const showMetricCards = !editMode;
   const showEditableTable = editMode;
@@ -441,6 +442,11 @@ export default function ReviewRecordPage() {
                 ) : null}
               </div>
               <div className="overflow-x-auto">
+                {data.hasLowConfidenceMetrics ? (
+                  <div className="mx-6 mt-4 rounded-xl border border-[#e6b144] bg-[#fff4dd] px-4 py-3 text-sm font-medium text-[#825500]">
+                    Có chỉ số OCR độ tin cậy thấp. Vui lòng kiểm tra lại trước khi lưu.
+                  </div>
+                ) : null}
                 <table className="w-full text-left text-sm text-[#4e6360]">
                 <thead className="bg-[#effcf9] text-[#005049]">
                   <tr>
@@ -456,7 +462,12 @@ export default function ReviewRecordPage() {
                     const isEditing = editingIndex === idx;
 
                     return (
-                      <tr key={idx} className={`hover:bg-gray-50 transition ${metric.confidenceLevel === 'low' ? 'bg-red-50/30' : ''}`}>
+                      <tr
+                        key={idx}
+                        className={`hover:bg-gray-50 transition ${
+                          metric.confidenceLevel !== "high" ? "bg-[#fff8e8]" : ""
+                        }`}
+                      >
                         <td className="px-6 py-4">
                           {isEditing ? (
                             <input
@@ -508,7 +519,11 @@ export default function ReviewRecordPage() {
                                 {metric.confidenceLevel === "high" && <CheckCircle className="h-3 w-3" />}
                                 {metric.confidenceLevel === "medium" && <AlertTriangle className="h-3 w-3" />}
                                 {metric.confidenceLevel === "low" && <AlertCircle className="h-3 w-3" />}
-                                {metric.confidenceLevel === "high" ? "Cao" : metric.confidenceLevel === "medium" ? "TB" : "Thấp"}
+                                {metric.confidenceLevel === "high"
+                                  ? "Cao"
+                                  : metric.confidenceLevel === "medium"
+                                  ? "Trung bình"
+                                  : "Vui lòng kiểm tra"}
                               </span>
                             )}
                           </td>

@@ -10,6 +10,8 @@ public record HealthRecordStatusResponse(
         UUID id,
         String status,
         List<MetricDto> metrics,
+        Boolean hasLowConfidenceMetrics,
+        String ocrFailureReason,
         String examDate,
         String recordType,
         String hospitalName,

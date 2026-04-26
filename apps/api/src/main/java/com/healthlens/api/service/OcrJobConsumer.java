@@ -30,6 +30,10 @@ public class OcrJobConsumer {
     private final String ocrStream;
     private final String consumerGroup;
     private final String consumerName;
+    @Value("${app.ocr.confidence.medium-threshold:0.50}")
+    private float ocrFailureThreshold = 0.50f;
+    @Value("${app.ocr.confidence.high-threshold:0.85}")
+    private float ocrReviewRequiredThreshold = 0.85f;
 
     public OcrJobConsumer(
             StringRedisTemplate redisTemplate,
@@ -104,16 +108,25 @@ public class OcrJobConsumer {
 
         try {
             OcrResult result = ocrService.processImage(downloadUrl);
+            float failureThreshold = normalizedFailureThreshold();
+            float reviewThreshold = normalizedReviewThreshold();
+            if ("all-providers-failed".equals(result.getSource()) || result.getConfidence() < failureThreshold) {
+                String reason = "all-providers-failed".equals(result.getSource()) ? "timeout" : "low_confidence";
+                healthRecordService.markOcrFailed(recordId, reason);
+                return;
+            }
             OcrService.OcrExtractionResult parsedData = ocrService.parseMetrics(result.getText(), result.getConfidence());
+            boolean hasLowConfidenceMetrics = result.getConfidence() < reviewThreshold;
 
             String rawOcrJson = objectMapper.writeValueAsString(Map.of(
                     "text", result.getText(),
                     "confidence", result.getConfidence(),
                     "source", result.getSource(),
                     "language", result.getLanguage(),
-                    "processingTimeMs", result.getProcessingTimeMs()
+                    "processingTimeMs", result.getProcessingTimeMs(),
+                    "hasLowConfidenceMetrics", hasLowConfidenceMetrics
             ));
-            healthRecordService.markOcrCompleted(recordId, rawOcrJson, parsedData);
+            healthRecordService.markOcrCompleted(recordId, rawOcrJson, parsedData, hasLowConfidenceMetrics);
         } catch (Exception ex) {
             healthRecordService.markOcrFailed(recordId);
         }
@@ -149,6 +162,14 @@ public class OcrJobConsumer {
 
     private String valueAsString(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private float normalizedFailureThreshold() {
+        return Math.min(ocrFailureThreshold, ocrReviewRequiredThreshold);
+    }
+
+    private float normalizedReviewThreshold() {
+        return Math.max(ocrFailureThreshold, ocrReviewRequiredThreshold);
     }
 
     private void markFailedSafely(MapRecord<String, Object, Object> record) {

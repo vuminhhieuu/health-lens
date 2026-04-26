@@ -53,6 +53,10 @@ app:
     explanation:
       prompt-version: v2
   ocr:
+    confidence:
+      # Ngưỡng phân loại confidence OCR (0.0-1.0), có thể override bằng env vars.
+      high-threshold: ${OCR_CONFIDENCE_HIGH_THRESHOLD:0.85}
+      medium-threshold: ${OCR_CONFIDENCE_MEDIUM_THRESHOLD:0.50}
     service:
       url: ${OCR_SERVICE_URL:http://localhost:8001}
       timeout-ms: ${OCR_TIMEOUT_MS:60000}

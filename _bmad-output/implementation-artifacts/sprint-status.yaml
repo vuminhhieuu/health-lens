@@ -104,7 +104,7 @@ development_status:
   # Story 3.2 is mobile-only (Phase 2)
   3-3-ocr-extract-and-review-list: done
   3-4-manual-edit-input-ocr-fallback: sprint-2
-  3-5-ocr-failure-recovery-flow: sprint-2
+  3-5-ocr-failure-recovery-flow: done
   3-6-metric-source-tag-and-profile-link: sprint-2
   epic-3-retrospective: optional
 
