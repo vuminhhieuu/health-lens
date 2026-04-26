@@ -18,5 +18,8 @@ public class ConfirmRecordRequest {
     private String recordType;
     private String hospitalName;
     private String diagnosis;
+    private String analyzerModel;
+    private String testMethod;
+    private String labSite;
     private List<MetricDto> metrics;
 }

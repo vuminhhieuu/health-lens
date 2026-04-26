@@ -7,14 +7,36 @@ import { Loader2, AlertTriangle, CheckCircle, Edit2, Save, X, AlertCircle, FileT
 
 import { apiClient } from "@/lib/api/apiClient";
 import { ApiPaths } from "@healthlens/shared/constants";
+import { HealthMetricCard } from "@/components/ui/HealthMetricCard";
 
 type MetricDto = {
   name: string;
   value: string;
   unit: string;
+  rawName?: string;
+  rawValue?: string;
+  rawUnit?: string;
+  normalizedName?: string;
+  normalizedValue?: string;
+  normalizedUnit?: string;
   confidence: number;
   confidenceLevel: "high" | "medium" | "low";
   source: string;
+  displayNameVi?: string;
+  status?: "normal" | "attention" | "abnormal" | "no_data";
+  statusSource?: "document" | "system" | "none";
+  interpretation?: "high" | "low" | "normal" | "critical" | "unknown";
+  interpretationSource?: "document" | "computed" | "system";
+  critical?: boolean;
+  referenceRange?: {
+    min: number;
+    max: number;
+    attentionMin: number;
+    attentionMax: number;
+    unit?: string;
+  } | null;
+  referenceRangeSource?: "document" | "system" | "none";
+  explanation?: string;
 };
 
 type ReviewRecordStatus = "processing" | "review_required" | "done" | "ocr_failed";
@@ -27,6 +49,9 @@ type ReviewRecordData = {
   recordType?: string | null;
   hospitalName?: string | null;
   diagnosis?: string | null;
+  analyzerModel?: string | null;
+  testMethod?: string | null;
+  labSite?: string | null;
 };
 
 export default function ReviewRecordPage() {
@@ -45,11 +70,12 @@ export default function ReviewRecordPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showFullDoc, setShowFullDoc] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [editMode, setEditMode] = useState(false);
 
   const { data, refetch, isLoading, isError } = useQuery<ReviewRecordData>({
     queryKey: ["record-status", recordId],
     queryFn: async () => {
-      const res = await apiClient.get(ApiPaths.HEALTH_RECORDS.STATUS(recordId));
+      const res = await apiClient.get(ApiPaths.HEALTH_RECORDS.GET(recordId));
       return res.data?.data;
     },
     refetchInterval: (query) => {
@@ -95,6 +121,7 @@ export default function ReviewRecordPage() {
         diagnosis: data.diagnosis ?? "",
       });
       initialized.current = true;
+      setEditMode(data.status === "review_required");
     }
   }, [data]);
 
@@ -174,6 +201,7 @@ export default function ReviewRecordPage() {
         diagnosis: diagnosis || null,
         metrics: finalMetrics,
       });
+      setEditMode(false);
       initialSnapshotRef.current = buildSnapshot({
         metrics: finalMetrics,
         examDate,
@@ -181,8 +209,8 @@ export default function ReviewRecordPage() {
         hospitalName,
         diagnosis,
       });
+      await refetch();
       alert("Lưu kết quả khám thành công!");
-      router.push("/health-records");
     } catch {
       setSaveError("Đã có lỗi xảy ra khi lưu. Vui lòng thử lại.");
     } finally {
@@ -254,15 +282,24 @@ export default function ReviewRecordPage() {
   }
 
   const canConfirm = data?.status === "review_required";
+  const canEditAfterConfirm = data?.status === "done";
+  const showMetricCards = !editMode;
+  const showEditableTable = editMode;
+  const showConfidenceColumn = canConfirm;
   const fileUrl = data.fileUrl ?? "";
   const isPdf = fileUrl.toLowerCase().includes(".pdf");
+  const isDoneView = data.status === "done" && showMetricCards;
 
   return (
     <div className="mx-auto min-h-screen w-full max-w-[1600px] bg-[#effcf9] px-6 py-10">
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-[#005049]">Kiểm tra kết quả trích xuất</h1>
+        <h1 className="text-3xl font-bold text-[#005049]">
+          {isDoneView ? "Chi tiết kết quả đã xác nhận" : "Kiểm tra kết quả trích xuất"}
+        </h1>
         <p className="mt-2 text-sm text-[#4e6360]">
-          Vui lòng so sánh với hồ sơ gốc và điều chỉnh các chỉ số nếu cần thiết trước khi lưu.
+          {isDoneView
+            ? "Bạn có thể xem ngưỡng tham chiếu cho từng chỉ số hoặc mở chế độ chỉnh sửa khi cần cập nhật."
+            : "Vui lòng so sánh với hồ sơ gốc và điều chỉnh các chỉ số nếu cần thiết trước khi lưu."}
         </p>
       </header>
 
@@ -320,7 +357,7 @@ export default function ReviewRecordPage() {
               />
             </div>
             <div className="rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm">
-              <label className="block text-sm font-medium text-[#3d4947]">Loại phiếu (Vd: Xét nghiệm máu...)</label>
+              <label className="block text-sm font-medium text-[#3d4947]">Loại phiếu (VD: Xét nghiệm máu...)</label>
               <input
                 type="text"
                 placeholder="Loại phiếu khám..."
@@ -353,15 +390,64 @@ export default function ReviewRecordPage() {
             />
           </div>
 
-          <div className="rounded-2xl border border-[#b7d8d1] bg-white shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-[#4e6360]">
+          {showMetricCards && (
+            <div className="rounded-2xl border border-[#b7d8d1] bg-white shadow-sm overflow-hidden">
+              <div className="border-b border-[#c5dfd9] bg-[#effcf9] px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-[#005049]">Danh sách chỉ số và ngưỡng tham chiếu</h3>
+                  {canEditAfterConfirm ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditMode(true)}
+                      className="rounded-lg border border-[#00685f] px-3 py-1.5 text-xs font-semibold text-[#00685f] hover:bg-[#effcf9]"
+                    >
+                      Chỉnh sửa kết quả
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="space-y-3 p-4">
+                {metrics.map((metric, idx) => (
+                  <HealthMetricCard
+                    key={`${metric.name}-${idx}`}
+                    metricName={metric.name}
+                    displayNameVi={metric.displayNameVi}
+                    value={metric.value}
+                    unit={metric.unit}
+                    referenceRange={metric.referenceRange}
+                    referenceRangeSource={metric.referenceRangeSource}
+                    status={metric.status ?? "no_data"}
+                    interpretation={metric.interpretation}
+                    critical={metric.critical}
+                    explanation={metric.explanation}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {showEditableTable && (
+            <div className="rounded-2xl border border-[#b7d8d1] bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between border-b border-[#c5dfd9] bg-[#effcf9] px-6 py-4">
+                <h3 className="text-sm font-semibold text-[#005049]">Chỉnh sửa danh sách chỉ số</h3>
+                {canEditAfterConfirm ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditMode(false)}
+                    className="rounded-lg border border-[#c5dfd9] px-3 py-1.5 text-xs font-semibold text-[#4e6360] hover:bg-white"
+                  >
+                    Quay lại thẻ chỉ số
+                  </button>
+                ) : null}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-[#4e6360]">
                 <thead className="bg-[#effcf9] text-[#005049]">
                   <tr>
                     <th className="px-6 py-4 font-semibold">Chỉ số</th>
                     <th className="px-6 py-4 font-semibold">Giá trị</th>
                     <th className="px-6 py-4 font-semibold">Đơn vị</th>
-                    <th className="px-6 py-4 font-semibold">Độ tin cậy</th>
+                    {showConfidenceColumn ? <th className="px-6 py-4 font-semibold">Độ tin cậy</th> : null}
                     <th className="px-6 py-4 font-semibold text-right">Thao tác</th>
                   </tr>
                 </thead>
@@ -407,24 +493,26 @@ export default function ReviewRecordPage() {
                             metric.unit || "-"
                           )}
                         </td>
-                        <td className="px-6 py-4">
-                          {!isEditing && (
-                            <span
-                              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                                metric.confidenceLevel === "high"
-                                  ? "bg-[#ccfbf1] text-[#0f766e]"
-                                  : metric.confidenceLevel === "medium"
-                                  ? "bg-[#ffddb3] text-[#825500]"
-                                  : "bg-[#ffdad6] text-[#ba1a1a]"
-                              }`}
-                            >
-                              {metric.confidenceLevel === "high" && <CheckCircle className="h-3 w-3" />}
-                              {metric.confidenceLevel === "medium" && <AlertTriangle className="h-3 w-3" />}
-                              {metric.confidenceLevel === "low" && <AlertCircle className="h-3 w-3" />}
-                              {metric.confidenceLevel === "high" ? "Cao" : metric.confidenceLevel === "medium" ? "TB" : "Thấp"}
-                            </span>
-                          )}
-                        </td>
+                        {showConfidenceColumn ? (
+                          <td className="px-6 py-4">
+                            {!isEditing && (
+                              <span
+                                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                                  metric.confidenceLevel === "high"
+                                    ? "bg-[#ccfbf1] text-[#0f766e]"
+                                    : metric.confidenceLevel === "medium"
+                                    ? "bg-[#ffddb3] text-[#825500]"
+                                    : "bg-[#ffdad6] text-[#ba1a1a]"
+                                }`}
+                              >
+                                {metric.confidenceLevel === "high" && <CheckCircle className="h-3 w-3" />}
+                                {metric.confidenceLevel === "medium" && <AlertTriangle className="h-3 w-3" />}
+                                {metric.confidenceLevel === "low" && <AlertCircle className="h-3 w-3" />}
+                                {metric.confidenceLevel === "high" ? "Cao" : metric.confidenceLevel === "medium" ? "TB" : "Thấp"}
+                              </span>
+                            )}
+                          </td>
+                        ) : null}
                         <td className="px-6 py-4 text-right">
                           {isEditing ? (
                             <div className="flex justify-end gap-2">
@@ -446,15 +534,16 @@ export default function ReviewRecordPage() {
                   })}
                   {metrics.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-[#4e6360]">
+                      <td colSpan={showConfidenceColumn ? 5 : 4} className="px-6 py-8 text-center text-[#4e6360]">
                         Không tìm thấy chỉ số nào từ kết quả OCR.
                       </td>
                     </tr>
                   )}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
 
           {saveError && (
             <div className="rounded-xl bg-[#ffdad6] p-4 text-sm text-[#ba1a1a] flex items-center gap-2">
@@ -465,17 +554,17 @@ export default function ReviewRecordPage() {
 
           <div className="flex justify-end pt-4 pb-12">
             <button
-              onClick={() => setShowConfirmModal(true)}
-              disabled={isSaving || !canConfirm}
+              onClick={() => (canConfirm ? setShowConfirmModal(true) : executeSave(false))}
+              disabled={isSaving || !showEditableTable}
               className="inline-flex items-center gap-2 rounded-xl bg-[#00685f] px-10 py-4 font-bold text-white shadow-lg transition hover:brightness-110 hover:translate-y-[-2px] disabled:opacity-70 disabled:transform-none"
             >
               {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
-              XÁC NHẬN VÀ LƯU HỒ SƠ
+              {canConfirm ? "XÁC NHẬN VÀ LƯU HỒ SƠ" : "LƯU CHỈNH SỬA"}
             </button>
           </div>
-          {!canConfirm && (
+          {!canConfirm && !showEditableTable && (
             <p className="text-right text-sm text-[#6d7a77]">
-              Hồ sơ hiện không ở trạng thái có thể xác nhận.
+              Hồ sơ đã xác nhận. Bấm &quot;Chỉnh sửa kết quả&quot; nếu bạn muốn cập nhật lại.
             </p>
           )}
         </div>
@@ -500,7 +589,7 @@ export default function ReviewRecordPage() {
                   className="w-full bg-[#00685f] text-white py-4 rounded-2xl font-bold hover:brightness-110 transition flex items-center justify-center gap-2 shadow-lg shadow-[#00685f]/20"
                 >
                   <Save className="h-5 w-5" />
-                  Xác nhận và Lưu kết quả
+                  Xác nhận và lưu kết quả
                 </button>
                 <button
                   onClick={() => setShowConfirmModal(false)}

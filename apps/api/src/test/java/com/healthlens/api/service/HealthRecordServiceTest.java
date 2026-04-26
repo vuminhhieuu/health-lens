@@ -40,6 +40,7 @@ class HealthRecordServiceTest {
     @Mock private StorageService storageService;
     @Mock private ProfileRepository profileRepository;
     @Mock private HealthRecordRepository healthRecordRepository;
+    @Mock private ReferenceDataService referenceDataService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private StreamOperations<String, Object, Object> streamOperations;
@@ -52,6 +53,7 @@ class HealthRecordServiceTest {
                 storageService,
                 profileRepository,
                 healthRecordRepository,
+                referenceDataService,
                 redisTemplate,
                 new ObjectMapper(),
                 "ocr.events"
@@ -178,7 +180,31 @@ class HealthRecordServiceTest {
 
         assertThatThrownBy(() -> healthRecordService.confirmRecord(userId, recordId, new ConfirmRecordRequest()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("khong o trang thai review_required");
+                .hasMessageContaining("khong o trang thai cho phep cap nhat");
+    }
+
+    @Test
+    @DisplayName("confirmRecord cho phep cap nhat khi da o trang thai done")
+    void confirmRecord_updateWhenDone() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("done");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        ConfirmRecordRequest request = ConfirmRecordRequest.builder()
+                .hospitalName("BV Moi")
+                .build();
+
+        healthRecordService.confirmRecord(userId, recordId, request);
+
+        assertThat(record.getStatus()).isEqualTo("done");
+        assertThat(record.getHospitalName()).isEqualTo("BV Moi");
+        verify(healthRecordRepository).save(record);
     }
 
     @Test

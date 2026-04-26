@@ -75,6 +75,7 @@ public final class ApiRoutes {
     public static final String REFERENCE_DATA_BASE = API_V1 + "/reference-data";
     public static final String REFERENCE_DATA_INDEX = REFERENCE_DATA_BASE + "/{id}/index";
     public static final String REFERENCE_DATA_SEARCH = REFERENCE_DATA_BASE + "/search";
+    public static final String REFERENCE_DATA_RANGES = REFERENCE_DATA_BASE + "/ranges";
     public static final String REFERENCE_DATA_SYNC = REFERENCE_DATA_BASE + "/sync";
 
     // =========================================

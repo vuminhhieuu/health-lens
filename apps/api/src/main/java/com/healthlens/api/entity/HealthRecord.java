@@ -59,6 +59,15 @@ public class HealthRecord {
     @Column(columnDefinition = "text")
     private String diagnosis;
 
+    @Column(name = "analyzer_model", length = 120)
+    private String analyzerModel;
+
+    @Column(name = "test_method", length = 120)
+    private String testMethod;
+
+    @Column(name = "lab_site", length = 255)
+    private String labSite;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 

@@ -4,6 +4,7 @@ import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
+import com.healthlens.api.dto.response.HealthRecordDetailResponse;
 import com.healthlens.api.dto.response.HealthRecordStatusResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
 import com.healthlens.api.service.HealthRecordService;
@@ -58,6 +59,16 @@ public class HealthRecordController {
     ) {
         UUID userId = UUID.fromString(authentication.getName());
         HealthRecordStatusResponse response = healthRecordService.getStatus(userId, recordId);
+        return ResponseEntity.ok(buildResponseBody(response));
+    }
+
+    @GetMapping("/{recordId}")
+    public ResponseEntity<Map<String, Object>> getDetail(
+            Authentication authentication,
+            @PathVariable UUID recordId
+    ) {
+        UUID userId = UUID.fromString(authentication.getName());
+        HealthRecordDetailResponse response = healthRecordService.getDetail(userId, recordId);
         return ResponseEntity.ok(buildResponseBody(response));
     }
 

@@ -76,7 +76,7 @@ export function UploadButton({ profileId }: UploadButtonProps) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="flex w-full flex-col items-start sm:w-auto">
       <input
         ref={fileInputRef}
         type="file"
@@ -91,11 +91,11 @@ export function UploadButton({ profileId }: UploadButtonProps) {
         className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-[#00685f] px-6 py-3 font-semibold text-white transition hover:brightness-110 disabled:opacity-70 shadow-sm"
       >
         {status === "uploading" ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
-        Tải lên PDF/JPG/PNG
+        Tải tệp PDF/JPG/PNG
       </button>
 
       {status === "uploading" && (
-        <div className="space-y-2">
+        <div className="mt-3 w-full space-y-2">
           <p className="text-sm font-medium text-[#3d4947]">Đang tải lên: {uploadProgress}%</p>
           <div className="h-2 overflow-hidden rounded-full bg-[#d6ebe7]">
             <div className="h-full bg-[#008378] transition-all" style={{ width: `${uploadProgress}%` }} />
@@ -103,10 +103,10 @@ export function UploadButton({ profileId }: UploadButtonProps) {
         </div>
       )}
 
-      {status === "done" && <p className="text-sm font-medium text-[#0f766e]">Upload thành công, hệ thống đang xử lý kết quả.</p>}
+      {status === "done" && <p className="mt-3 text-sm font-medium text-[#0f766e]">Tải lên thành công, hệ thống đang xử lý kết quả.</p>}
 
       {status === "error" && (
-        <p className="inline-flex items-center gap-2 text-sm font-medium text-[#ba1a1a]">
+        <p className="mt-3 flex items-center gap-2 text-sm font-medium text-[#ba1a1a]">
           <AlertCircle className="h-4 w-4" />
           {error}
         </p>

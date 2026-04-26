@@ -1,6 +1,6 @@
 # Story 4.1: Hiển thị metric card với trạng thái và ngưỡng tham chiếu
 
-Status: ready-for-dev
+Status: review
 
 ## Execution scope
 
@@ -11,9 +11,11 @@ Status: ready-for-dev
 - **Dự án:** HealthLens-Web-MVP — `projectId`: `578519912546445367`
 - **Chỉ mục đầy đủ:** [STITCH-SCREEN-LINKS.md](../STITCH-SCREEN-LINKS.md)
 
-| Tiêu đề (Stitch) | Resource | HTML prototype | Screenshot |
-|---|---|---|---|
+
+| Tiêu đề (Stitch)          | Resource                                                               | HTML prototype                                                                                                                                                                                                                                                              | Screenshot                                                                                                                                                                                                                                                                                                   |
+| ------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Health Record Detail Page | `projects/578519912546445367/screens/3c9f3f9c951b4e45aa713c6da552be29` | [Mở](https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ6Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpZCiVodG1sXzc2ZDgwMGI2MWVjZjRjZjBhNjZlYmFhMGM1MThjMTQyEgsSBxCr9e3nmh0YAZIBIgoKcHJvamVjdF9pZBIUQhI1Nzg1MTk5MTI1NDY0NDUzNjc&filename=&opi=96797242) | [Xem](https://lh3.googleusercontent.com/aida/ADBb0uhzldktcjBvfyA80T-sCTf9VYf7EEA0b8kZJqSNh2gb2l2nyuCMywxSBNQM_QjkdzH-eQvQMehBqSForVsETegaE_zrHY-5HTDbo7tHtOdGCCrnJPfo84-vpSeeO6ecq8xYdwkq5DqHc-zEg0abPd7o_U2M9-LTR7Coxv_9sKGYfag9-O6z0u1vdbo67DJ8abgHQa-7OSDXTdrfLdy-vcamk0AbOBtN-HT_uxCGuCfTJsUkiJ8HqlJRSQ) |
+
 
 *Ghi chú:* Link HTML prototype và screenshot tải từ Google Stitch có thể hết hạn. Làm mới snapshot: MCP `list_screens` (project HealthLens-Web-MVP, `projectId` trên) rồi ghi đè `_data/stitch-screens.json`, sau đó chạy lại script này.
 
@@ -33,29 +35,30 @@ so that tôi hiểu ngay chỉ số nào cần chú ý.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: Reference data tables (AC: #1, #4)
-  - [ ] Flyway migration `V011__create_reference_data_tables.sql`
-  - [ ] Bảng `reference_metrics`: id, name, display_name_vi, unit, created_at
-  - [ ] Bảng `reference_ranges`: id, metric_id, min_value, max_value, attention_min, attention_max, gender (nullable), min_age (nullable), max_age (nullable), status (active/draft)
-  - [ ] Seed data cơ bản: Glucose, HbA1c, Cholesterol, Triglycerides, HDL, LDL, Hemoglobin, WBC
-  - [ ] `GET /api/v1/reference-data/ranges?metricName={name}&age={age}&gender={gender}`
-- [ ] Task 2 — Backend: Classify metric status (AC: #2, #4)
-  - [ ] `ReferenceDataService.classifyMetric(name, value, age, gender)` → `{ status, referenceRange }`
-  - [ ] Logic: value < attention_min hoặc value > attention_max → `abnormal`; value gần ngưỡng → `attention`; trong range → `normal`
-  - [ ] Khi không tìm thấy reference → `no_data`
-- [ ] Task 3 — Backend: Health record detail endpoint (AC: #1)
-  - [ ] `GET /api/v1/health-records/{recordId}` → trả về metrics kèm reference ranges và status classification
-  - [ ] Enrich metrics với reference data ở backend trước khi trả về
-- [ ] Task 4 — Web: HealthMetricCard component (AC: #1, #2, #3, #5)
-  - [ ] Tạo `apps/web/src/components/ui/HealthMetricCard.tsx`
-  - [ ] Props: metricName, value, unit, referenceRange, status, explanation (optional)
-  - [ ] HealthStatusBadge: màu (#10B981 normal, #F59E0B attention, #EF4444 abnormal), icon (✅⚠️❌), text label
-  - [ ] Expandable: collapsed → chỉ tên + value + badge; expanded → thêm reference range, explanation
-  - [ ] CSS transition cho expand/collapse (200ms — UX-DR10)
+- [x] Task 1 — Backend: Reference data tables (AC: #1, #4)
+  - [x] Flyway migration tạo bảng reference data (triển khai bằng `V013` do `V011` đã tồn tại trong repo)
+  - [x] Bảng `reference_metrics`: id, name, display_name_vi, unit, created_at
+  - [x] Bảng `reference_ranges`: id, metric_id, min_value, max_value, attention_min, attention_max, gender (nullable), min_age (nullable), max_age (nullable), status (active/draft)
+  - [x] Seed data cơ bản: Glucose, HbA1c, Cholesterol, Triglycerides, HDL, LDL, Hemoglobin, WBC
+  - [x] `GET /api/v1/reference-data/ranges?metricName={name}&age={age}&gender={gender}`
+- [x] Task 2 — Backend: Classify metric status (AC: #2, #4)
+  - [x] `ReferenceDataService.classifyMetric(name, value, age, gender)` → `{ status, referenceRange }`
+  - [x] Logic: value < attention_min hoặc value > attention_max → `abnormal`; value gần ngưỡng → `attention`; trong range → `normal`
+  - [x] Khi không tìm thấy reference → `no_data`
+- [x] Task 3 — Backend: Health record detail endpoint (AC: #1)
+  - [x] `GET /api/v1/health-records/{recordId}` → trả về metrics kèm reference ranges và status classification
+  - [x] Enrich metrics với reference data ở backend trước khi trả về
+- [x] Task 4 — Web: HealthMetricCard component (AC: #1, #2, #3, #5)
+  - [x] Tạo `apps/web/src/components/ui/HealthMetricCard.tsx`
+  - [x] Props: metricName, value, unit, referenceRange, status, explanation (optional)
+  - [x] HealthStatusBadge: màu + icon + text label
+  - [x] Expandable: collapsed → chỉ tên + value + badge; expanded → thêm reference range, explanation
+  - [x] CSS transition cho expand/collapse (200ms — UX-DR10)
 - [ ] Task 5 — Mobile (Phase 2): HealthMetricCard component (AC: #1, #2, #3, #5)
   - [ ] React Native tương đương với Animated API cho expand
-- [ ] Task 6 — Tests (AC: #2, #4)
-  - [ ] `ReferenceDataServiceTest`: classify normal, attention, abnormal, no data
+  - [ ] Deferred theo Execution scope (Phase 2)
+- [x] Task 6 — Tests (AC: #2, #4)
+  - [x] `ReferenceDataServiceTest`: classify normal, attention, abnormal, no data
 
 ## Dev Notes
 
@@ -118,10 +121,46 @@ interface HealthMetricCardProps {
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+gpt-5.3-codex
 
 ### Debug Log References
 
+- `./gradlew test --tests "com.healthlens.api.service.ReferenceDataServiceTest" --tests "com.healthlens.api.service.HealthRecordServiceTest"`
+- `./gradlew test`
+
 ### Completion Notes List
 
+- Hoàn thành migration + seed reference data (Task 1), bổ sung entity/repository và endpoint `/api/v1/reference-data/ranges`.
+- Hoàn thành classify rule-based trong `ReferenceDataService` và enrich metric status/referenceRange cho detail endpoint `/api/v1/health-records/{recordId}`.
+- Tạo `HealthMetricCard` (expand/collapse, status badge triple redundancy) và tích hợp render vào trang review detail.
+- Bổ sung `ReferenceDataServiceTest` với 4 case normal/attention/abnormal/no_data; toàn bộ test backend pass.
+- Task mobile Phase 2 được giữ deferred theo Execution scope của story.
+- Follow-up CR: bổ sung alias/normalization layer để resolve metric name thực tế từ OCR/manual trước khi classify.
+- Follow-up CR: cập nhật màu badge theo đúng mã hex AC (`#10B981`, `#F59E0B`, `#EF4444`, `#6B7280`).
+
 ### File List
+
+- apps/api/src/main/resources/db/migration/V013__create_reference_data_tables.sql
+- apps/api/src/main/resources/db/migration/V014__seed_reference_data.sql
+- apps/api/src/main/resources/db/migration/V015__create_reference_metric_aliases.sql
+- apps/api/src/main/resources/db/migration/V016__seed_reference_metric_aliases.sql
+- apps/api/src/main/java/com/healthlens/api/entity/ReferenceMetric.java
+- apps/api/src/main/java/com/healthlens/api/entity/ReferenceMetricAlias.java
+- apps/api/src/main/java/com/healthlens/api/entity/ReferenceRange.java
+- apps/api/src/main/java/com/healthlens/api/repository/ReferenceMetricAliasRepository.java
+- apps/api/src/main/java/com/healthlens/api/repository/ReferenceMetricRepository.java
+- apps/api/src/main/java/com/healthlens/api/repository/ReferenceRangeRepository.java
+- apps/api/src/main/java/com/healthlens/api/dto/ReferenceRangeDto.java
+- apps/api/src/main/java/com/healthlens/api/dto/MetricClassificationDto.java
+- apps/api/src/main/java/com/healthlens/api/dto/MetricDto.java
+- apps/api/src/main/java/com/healthlens/api/dto/response/HealthRecordDetailResponse.java
+- apps/api/src/main/java/com/healthlens/api/service/ReferenceDataService.java
+- apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java
+- apps/api/src/main/java/com/healthlens/api/controller/ReferenceDataController.java
+- apps/api/src/main/java/com/healthlens/api/controller/HealthRecordController.java
+- apps/api/src/main/java/com/healthlens/api/constants/ApiRoutes.java
+- apps/api/src/test/java/com/healthlens/api/service/ReferenceDataServiceTest.java
+- apps/api/src/test/java/com/healthlens/api/service/HealthRecordServiceTest.java
+- packages/shared/constants/api.ts
+- apps/web/src/components/ui/HealthMetricCard.tsx
+- apps/web/src/app/(dashboard)/health-records/review/[recordId]/page.tsx
