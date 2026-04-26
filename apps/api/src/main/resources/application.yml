@@ -49,6 +49,9 @@ app:
       max-attempts: 3
       initial-delay-ms: 1000
       multiplier: 2.0
+      max-total-delay-ms: 4500
+    explanation:
+      prompt-version: v2
   ocr:
     service:
       url: ${OCR_SERVICE_URL:http://localhost:8001}

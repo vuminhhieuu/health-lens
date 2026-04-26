@@ -63,6 +63,16 @@ export const ApiPaths = {
     CONFIRM_UPLOAD: (id: string) => `/api/${API_VERSION}/health-records/${id}/confirm-upload`,
     CONFIRM_RECORD: (id: string) => `/api/${API_VERSION}/health-records/${id}/confirm`,
     STATUS: (id: string) => `/api/${API_VERSION}/health-records/${id}/status`,
+    /**
+     * @deprecated Prefer `EXPLANATION`, which sends `metricName` as a query parameter.
+     * Path-segment routing may fail for metric names containing `/` on some server configs.
+     * Kept for backward compatibility with older callers.
+     */
+    EXPLANATION_PATH: (id: string, metricName: string) =>
+      `/api/${API_VERSION}/health-records/${id}/metrics/${encodeURIComponent(metricName)}/explanation`,
+    /** Preferred route: pass `metricName` as query parameter to avoid encoded-slash path issues. */
+    EXPLANATION: (id: string, metricName: string) =>
+      `/api/${API_VERSION}/health-records/${id}/metrics/explanation?metricName=${encodeURIComponent(metricName)}`,
     UPLOAD_IMAGE: (id: string) => `/api/${API_VERSION}/health-records/${id}/image`,
     ANALYZE: (id: string) => `/api/${API_VERSION}/health-records/${id}/analyze`,
     GET_ANALYSIS: (id: string) => `/api/${API_VERSION}/health-records/${id}/analysis`,

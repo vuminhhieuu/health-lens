@@ -1,5 +1,6 @@
 package com.healthlens.api.service;
 
+import com.healthlens.api.dto.ReferenceRangeDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -7,7 +8,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
+
+import java.math.BigDecimal;
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -27,6 +33,10 @@ class LlmServiceTest {
 
     @Mock
     private ChatClient groqChatClient;
+    @Mock
+    private StringRedisTemplate redisTemplate;
+    @Mock
+    private ValueOperations<String, String> valueOperations;
 
     @Mock
     private ChatClient.ChatClientRequestSpec requestSpec;
@@ -38,13 +48,14 @@ class LlmServiceTest {
 
     @BeforeEach
     void setUp() {
-        llmService = new LlmService(groqChatClient);
+        llmService = new LlmService(groqChatClient, redisTemplate);
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         ReflectionTestUtils.setField(llmService, "defaultFallbackExplanation",
                 "Kết quả cần được bác sĩ chuyên khoa giải thích thêm.");
-        // Tắt retry delay để unit tests chạy nhanh
         ReflectionTestUtils.setField(llmService, "maxRetryAttempts", 1);
         ReflectionTestUtils.setField(llmService, "initialDelayMs", 0L);
         ReflectionTestUtils.setField(llmService, "retryMultiplier", 1.0);
+        ReflectionTestUtils.setField(llmService, "maxTotalDelayMs", 4500L);
     }
 
     // =========================================================
@@ -54,16 +65,14 @@ class LlmServiceTest {
     @Test
     @DisplayName("Thành công: Groq API trả về giải thích cho chỉ số Glucose")
     void generateExplanation_whenGroqAvailable_returnsApiResponse() {
-        // Arrange
         String expectedExplanation = "Chỉ số đường huyết của bạn ở mức bình thường (5.4 mmol/L). "
                 + "Duy trì chế độ ăn lành mạnh và tập thể dục thường xuyên để giữ mức này. "
                 + "Hãy kiểm tra định kỳ theo khuyến nghị của bác sĩ.";
         mockGroqApiSuccess(expectedExplanation);
+        when(valueOperations.get(anyString())).thenReturn(null);
 
-        // Act
-        String result = llmService.generateExplanation("Glucose", "5.4", "mmol/L", "normal");
+        String result = llmService.generateExplanation("Glucose", "5.4", "normal", referenceRange(), "vi");
 
-        // Assert
         assertThat(result).isNotNull();
         assertThat(result).isEqualTo(expectedExplanation);
         verify(groqChatClient).prompt();
@@ -72,40 +81,37 @@ class LlmServiceTest {
     @Test
     @DisplayName("Fallback: Groq API thất bại → trả về fallback explanation cho Glucose")
     void generateExplanation_whenGroqFails_returnsKnownFallback() {
-        // Arrange: Mock Groq API ném exception (1 attempt vì maxRetryAttempts=1)
+        when(valueOperations.get(anyString())).thenReturn(null);
         when(groqChatClient.prompt()).thenThrow(new RuntimeException("Connection timeout"));
 
-        // Act
-        String result = llmService.generateExplanation("Glucose", "8.9", "mmol/L", "high");
+        String result = llmService.generateExplanation("Glucose", "8.9", "abnormal", referenceRange(), "vi");
 
-        // Assert
         assertThat(result).isNotNull();
-        assertThat(result).contains("đường huyết");
-        assertThat(result).contains("bác sĩ");
+        assertThat(result).contains("Chỉ số này là gì:");
+        assertThat(result).contains("Chỉ số này liên quan đến:");
+        assertThat(result).contains("Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng:");
     }
 
     @Test
     @DisplayName("Fallback: Groq API thất bại với metric không biết → trả về default message")
     void generateExplanation_whenGroqFailsUnknownMetric_returnsDefaultFallback() {
-        // Arrange
+        when(valueOperations.get(anyString())).thenReturn(null);
         when(groqChatClient.prompt()).thenThrow(new RuntimeException("Rate limit exceeded"));
 
-        // Act
-        String result = llmService.generateExplanation("UnknownMetric999", "42", "unit", "unknown");
+        String result = llmService.generateExplanation("UnknownMetric999", "42", "unknown", null, "vi");
 
-        // Assert
         assertThat(result).isNotNull();
-        assertThat(result).isEqualTo("Kết quả cần được bác sĩ chuyên khoa giải thích thêm.");
+        assertThat(result).contains("Chỉ số này là gì:");
+        assertThat(result).contains("Kết quả cần được bác sĩ chuyên khoa giải thích thêm.");
     }
 
     @Test
     @DisplayName("Retry: Thất bại lần 1, thành công lần 2")
     void generateExplanation_failsThenSucceeds_returnsApiResponse() {
-        // Arrange: 3 attempts cho test này
+        when(valueOperations.get(anyString())).thenReturn(null);
         ReflectionTestUtils.setField(llmService, "maxRetryAttempts", 3);
         String expectedExplanation = "HbA1c bình thường, tốt lắm!";
 
-        // Lần 1 thất bại, lần 2 thành công
         when(groqChatClient.prompt())
                 .thenThrow(new RuntimeException("Transient error"))
                 .thenReturn(requestSpec);
@@ -113,144 +119,122 @@ class LlmServiceTest {
         when(requestSpec.call()).thenReturn(callResponseSpec);
         when(callResponseSpec.content()).thenReturn(expectedExplanation);
 
-        // Act
-        String result = llmService.generateExplanation("HbA1c", "6.2", "%", "normal");
+        String result = llmService.generateExplanation("HbA1c", "6.2", "normal", referenceRange(), "vi");
 
-        // Assert
         assertThat(result).isEqualTo(expectedExplanation);
-        verify(groqChatClient, times(2)).prompt(); // 1 fail + 1 success
+        verify(groqChatClient, times(2)).prompt();
     }
 
     @Test
-    @DisplayName("Thành công: Generate explanation cho HbA1c - metric quan trọng")
-    void generateExplanation_HbA1c_callsGroqWithCorrectMetric() {
-        // Arrange
-        String expectedExplanation = "Chỉ số HbA1c của bạn là 6.2%, ở mức bình thường.";
-        mockGroqApiSuccess(expectedExplanation);
+    @DisplayName("Cache hit: không gọi LLM API khi explanation đã có trong Redis")
+    void generateExplanation_whenCacheHit_doesNotCallLlm() {
+        when(valueOperations.get(anyString())).thenReturn("llm||cached explanation");
 
-        // Act
-        String result = llmService.generateExplanation("HbA1c", "6.2", "%", "normal");
+        LlmService.ExplanationResult result = llmService.generateExplanationResult(
+                "HbA1c", "6.2", "normal", referenceRange(), "vi");
 
-        // Assert
-        assertThat(result).isEqualTo(expectedExplanation);
-    }
-
-    // =========================================================
-    // buildMedicalPrompt() Tests
-    // =========================================================
-
-    @Test
-    @DisplayName("Prompt builder: Chứa tên chỉ số, giá trị, đơn vị")
-    void buildMedicalPrompt_containsMetricInfo() {
-        // Act
-        String prompt = llmService.buildMedicalPrompt("Glucose", "5.4", "mmol/L", "normal");
-
-        // Assert
-        assertThat(prompt).contains("Glucose");
-        assertThat(prompt).contains("5.4");
-        assertThat(prompt).contains("mmol/L");
-        assertThat(prompt).contains("Bình thường");
+        assertThat(result.explanation()).isEqualTo("cached explanation");
+        assertThat(result.source()).isEqualTo("llm");
+        verify(groqChatClient, never()).prompt();
     }
 
     @Test
-    @DisplayName("Prompt builder: Status 'high' → tiếng Việt 'Cao hơn mức bình thường'")
-    void buildMedicalPrompt_highStatus_translatedToVietnamese() {
-        // Act
-        String prompt = llmService.buildMedicalPrompt("Cholesterol", "6.5", "mmol/L", "high");
+    @DisplayName("Cache hit legacy value: fallback để tránh gắn nhãn sai source")
+    void generateExplanation_whenCacheHitLegacyFormat_marksAsFallback() {
+        when(valueOperations.get(anyString())).thenReturn("legacy cached explanation");
 
-        // Assert
-        assertThat(prompt).contains("Cao hơn mức bình thường");
+        LlmService.ExplanationResult result = llmService.generateExplanationResult(
+                "HbA1c", "6.2", "normal", referenceRange(), "vi");
+
+        assertThat(result.explanation()).isEqualTo("legacy cached explanation");
+        assertThat(result.source()).isEqualTo("fallback");
+        verify(groqChatClient, never()).prompt();
     }
 
     @Test
-    @DisplayName("Prompt builder: Status 'low' → tiếng Việt 'Thấp hơn mức bình thường'")
-    void buildMedicalPrompt_lowStatus_translatedToVietnamese() {
-        // Act
-        String prompt = llmService.buildMedicalPrompt("Hemoglobin", "9.5", "g/dL", "low");
+    @DisplayName("Cache miss: lưu explanation vào Redis với TTL 7 ngày")
+    void generateExplanation_whenCacheMiss_storesWithSevenDaysTtl() {
+        when(valueOperations.get(anyString())).thenReturn(null);
+        mockGroqApiSuccess("llm explanation");
 
-        // Assert
-        assertThat(prompt).contains("Thấp hơn mức bình thường");
+        llmService.generateExplanation("Glucose", "5.6", "normal", referenceRange(), "vi");
+
+        verify(valueOperations).set(anyString(), eq("llm||llm explanation"), eq(Duration.ofDays(7)));
     }
 
     @Test
-    @DisplayName("Prompt builder: Status 'critical' → tiếng Việt 'Cần chú ý đặc biệt'")
-    void buildMedicalPrompt_criticalStatus_translatedToVietnamese() {
-        // Act
-        String prompt = llmService.buildMedicalPrompt("Potassium", "6.8", "mEq/L", "critical");
-
-        // Assert
-        assertThat(prompt).contains("Cần chú ý đặc biệt");
-    }
-
-    @Test
-    @DisplayName("F4 fix: Prompt builder null-safe khi status = null → không NullPointerException")
-    void buildMedicalPrompt_nullStatus_doesNotThrowNPE() {
-        // Act — không nên NPE
-        String prompt = llmService.buildMedicalPrompt("Glucose", "5.4", "mmol/L", null);
-
-        // Assert
-        assertThat(prompt).isNotNull();
-        assertThat(prompt).contains("Glucose");
-        assertThat(prompt).contains("5.4");
-    }
-
-    @Test
-    @DisplayName("F4 fix: generateExplanation null-safe khi status = null → trả về kết quả hoặc fallback")
-    void generateExplanation_nullStatus_returnsWithoutNPE() {
-        // Arrange
+    @DisplayName("Fallback sau 3 retries: source phải là fallback")
+    void generateExplanation_afterMaxRetries_returnsFallbackSource() {
+        ReflectionTestUtils.setField(llmService, "maxRetryAttempts", 3);
+        when(valueOperations.get(anyString())).thenReturn(null);
         when(groqChatClient.prompt()).thenThrow(new RuntimeException("API error"));
 
-        // Act — không nên NPE
-        String result = llmService.generateExplanation("Glucose", "5.4", "mmol/L", null);
+        LlmService.ExplanationResult result = llmService.generateExplanationResult(
+                "Glucose", "5.4", "abnormal", referenceRange(), "vi");
 
-        // Assert
-        assertThat(result).isNotNull();
-    }
-
-    // =========================================================
-    // getFallbackExplanation() Tests
-    // =========================================================
-
-    @Test
-    @DisplayName("Fallback: Glucose → có explanation cụ thể")
-    void getFallbackExplanation_glucose_returnsSpecificMessage() {
-        // Act
-        String result = llmService.getFallbackExplanation("Glucose");
-
-        // Assert
-        assertThat(result).isNotNull();
-        assertThat(result).contains("đường huyết");
+        assertThat(result.source()).isEqualTo("fallback");
+        verify(groqChatClient, times(3)).prompt();
     }
 
     @Test
-    @DisplayName("Fallback: HbA1c → có explanation cụ thể")
-    void getFallbackExplanation_hba1c_returnsSpecificMessage() {
-        // Act
-        String result = llmService.getFallbackExplanation("HbA1c");
+    @DisplayName("Prompt builder: tiếng Anh nhưng yêu cầu output tiếng Việt đơn giản")
+    void buildMedicalPrompt_containsVietnameseSimpleInstruction() {
+        String prompt = llmService.buildMedicalPrompt("Glucose", "5.4", "normal", referenceRange(), "vi", "knowledge");
 
-        // Assert
-        assertThat(result).isNotNull();
-        assertThat(result).contains("3 tháng");
+        assertThat(prompt).contains("Explain this health metric result in simple Vietnamese");
+        assertThat(prompt).contains("Do not use complex medical terms without explanation.");
+        assertThat(prompt).contains("Required output format (exactly 3 short lines in Vietnamese):");
+        assertThat(prompt).contains("Chỉ số này liên quan đến:");
+        assertThat(prompt).contains("Metric context:");
+        assertThat(prompt).contains("Metric relation:");
+        assertThat(prompt).contains("Knowledge snippet:");
+        assertThat(prompt).contains("Reference range: 3.9 - 6.4 mmol/L");
     }
 
     @Test
-    @DisplayName("Fallback: Metric không biết → trả về default explanation")
-    void getFallbackExplanation_unknownMetric_returnsDefault() {
-        // Act
-        String result = llmService.getFallbackExplanation("XYZ_Unknown_Metric");
+    @DisplayName("Fallback EO%: phải có ngữ cảnh chỉ số và ảnh hưởng")
+    void getFallbackExplanation_eosinophil_containsContext() {
+        String result = llmService.getFallbackExplanation("EO%");
 
-        // Assert
-        assertThat(result).isEqualTo("Kết quả cần được bác sĩ chuyên khoa giải thích thêm.");
+        assertThat(result).contains("bạch cầu ái toan");
+        assertThat(result).contains("Chỉ số này là gì:");
+        assertThat(result).contains("Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng:");
     }
 
-    // =========================================================
-    // Helper Methods
-    // =========================================================
+    @Test
+    @DisplayName("Fallback HDL-C: dùng đúng ngữ cảnh cholesterol tốt")
+    void getFallbackExplanation_hdlc_containsLipidContext() {
+        String result = llmService.getFallbackExplanation("HDL-C");
+
+        assertThat(result).contains("HDL-C");
+        assertThat(result).contains("cholesterol tốt");
+        assertThat(result).contains("Chỉ số này liên quan đến:");
+    }
+
+    @Test
+    @DisplayName("Fallback chỉ số lạ: vẫn trả đủ 3 ý theo format")
+    void getFallbackExplanation_unknownMetric_hasThreeSections() {
+        String result = llmService.getFallbackExplanation("Ferritin");
+
+        assertThat(result).contains("Chỉ số này là gì:");
+        assertThat(result).contains("Chỉ số này liên quan đến:");
+        assertThat(result).contains("Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng:");
+    }
 
     private void mockGroqApiSuccess(String responseContent) {
         when(groqChatClient.prompt()).thenReturn(requestSpec);
         when(requestSpec.user(anyString())).thenReturn(requestSpec);
         when(requestSpec.call()).thenReturn(callResponseSpec);
         when(callResponseSpec.content()).thenReturn(responseContent);
+    }
+
+    private ReferenceRangeDto referenceRange() {
+        return new ReferenceRangeDto(
+                BigDecimal.valueOf(3.9),
+                BigDecimal.valueOf(6.4),
+                BigDecimal.valueOf(3.2),
+                BigDecimal.valueOf(7.1),
+                "mmol/L"
+        );
     }
 }

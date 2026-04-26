@@ -563,6 +563,19 @@ So that tôi không bỏ sót rủi ro quan trọng.
 **Then** key metrics bất thường hiển thị expanded mặc định và có cảnh báo nổi bật
 **And** giữ cấu trúc summary-first, details-expand theo UX-DR5.
 
+### Story 4.6: RAG-backed giải thích chỉ số với Qdrant
+
+As a người dùng không chuyên y khoa,
+I want phần giải thích chỉ số bám sát ngữ cảnh y khoa của từng chỉ số,
+So that tôi hiểu rõ chỉ số là gì, liên quan gì và ảnh hưởng gì khi lệch ngưỡng.
+
+**Acceptance Criteria:**
+
+**Given** người dùng mở phần giải thích chỉ số  
+**When** backend xử lý explanation  
+**Then** hệ thống retrieve knowledge snippet từ Qdrant trước khi gọi LLM  
+**And** nếu Qdrant miss thì fallback an toàn sang reference snippet/generic fallback mà không lỗi UI.
+
 ## Epic 5: Lịch Sử Khám (Web)
 Goal: Cho phép xem timeline, chi tiết và xóa bản ghi trên web.
 

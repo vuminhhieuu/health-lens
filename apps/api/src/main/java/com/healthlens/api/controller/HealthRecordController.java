@@ -6,6 +6,7 @@ import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.HealthRecordDetailResponse;
 import com.healthlens.api.dto.response.HealthRecordStatusResponse;
+import com.healthlens.api.dto.response.MetricExplanationResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
 import com.healthlens.api.service.HealthRecordService;
 import jakarta.validation.Valid;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
@@ -69,6 +71,33 @@ public class HealthRecordController {
     ) {
         UUID userId = UUID.fromString(authentication.getName());
         HealthRecordDetailResponse response = healthRecordService.getDetail(userId, recordId);
+        return ResponseEntity.ok(buildResponseBody(response));
+    }
+
+    /**
+     * @deprecated Prefer query-param route ({@code /metrics/explanation?metricName=...}).
+     * Path-parameter route can fail for metric names containing "/" depending on encoded slash handling.
+     */
+    @Deprecated(since = "4.3", forRemoval = false)
+    @GetMapping("/{recordId}/metrics/{metricName}/explanation")
+    public ResponseEntity<Map<String, Object>> getMetricExplanation(
+            Authentication authentication,
+            @PathVariable UUID recordId,
+            @PathVariable String metricName
+    ) {
+        UUID userId = UUID.fromString(authentication.getName());
+        MetricExplanationResponse response = healthRecordService.getMetricExplanation(userId, recordId, metricName);
+        return ResponseEntity.ok(buildResponseBody(response));
+    }
+
+    @GetMapping("/{recordId}/metrics/explanation")
+    public ResponseEntity<Map<String, Object>> getMetricExplanationByQuery(
+            Authentication authentication,
+            @PathVariable UUID recordId,
+            @RequestParam String metricName
+    ) {
+        UUID userId = UUID.fromString(authentication.getName());
+        MetricExplanationResponse response = healthRecordService.getMetricExplanation(userId, recordId, metricName);
         return ResponseEntity.ok(buildResponseBody(response));
     }
 

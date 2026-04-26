@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-04-22T12:10:00+07:00
+last_updated: 2026-04-26T09:46:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -112,9 +112,10 @@ development_status:
   epic-4: in-progress
   4-1-metric-card-status-reference-range: sprint-2
   4-2-age-gender-context-reference-range: sprint-2
-  4-3-simple-vietnamese-metric-explanations: sprint-2
+  4-3-simple-vietnamese-metric-explanations: done
   4-4-lifestyle-recommendations-with-disclaimer: sprint-2
   4-5-highlight-alerts-progressive-disclosure: sprint-2
+  4-6-rag-backed-metric-explanations: sprint-3
   epic-4-retrospective: optional
 
 # =====================================================
