@@ -1,6 +1,6 @@
 # Story 3.4: Chỉnh sửa thủ công khi OCR thiếu hoặc sai
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 
@@ -33,24 +33,23 @@ so that bản ghi cuối cùng phản ánh đúng kết quả khám.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: Update metrics endpoint (AC: #1, #2, #5)
-  - [ ] `PUT /api/v1/health-records/{recordId}/metrics` với body `{ metrics: [...] }`
-  - [ ] Mỗi metric: `{ name, value, unit, source: "ocr"|"manual" }`
-  - [ ] Tính toán lại `source_type`: tất cả ocr → `ocr`, tất cả manual → `manual`, mixed → `mixed`
-  - [ ] Lưu updated metrics vào JSONB
-- [ ] Task 2 — Backend: Reference metric names API (AC: #3)
-  - [ ] `GET /api/v1/reference-data/metrics` → danh sách metric names chuẩn (từ bảng reference_metrics)
-  - [ ] Có thể triển khai đơn giản với hardcoded list trước khi có Admin panel (Epic 7)
-- [ ] Task 3 — Web: Inline edit + add metric form (AC: #1, #2, #3, #4)
-  - [ ] MetricEditRow component: click để edit, input number, confirm/cancel
-  - [ ] "Thêm chỉ số" button → Dialog với: dropdown metric name (từ reference API), text input value, text input unit
-  - [ ] Zod validation: value phải là số hợp lệ, name không được trống
-  - [ ] Source badge: "OCR" vs "Nhập tay" icon
+- [x] Task 1 — Backend: Update metrics endpoint (AC: #1, #2, #5)
+  - [x] `PUT /api/v1/health-records/{recordId}/metrics` với body `{ metrics: [...] }`
+  - [x] Mỗi metric: `{ name, value, unit, source: "ocr"|"manual" }`
+  - [x] Tính toán lại `source_type`: tất cả ocr → `ocr`, tất cả manual → `manual`, mixed → `mixed`
+  - [x] Lưu updated metrics vào JSONB
+- [x] Task 2 — Backend: Reference metric names API (AC: #3)
+  - [x] `GET /api/v1/reference-data/metrics` → danh sách metric names chuẩn (từ bảng reference_metrics)
+- [x] Task 3 — Web: Inline edit + add metric form (AC: #1, #2, #3, #4)
+  - [x] MetricEditRow component: click để edit, input number, confirm/cancel
+  - [x] "Thêm chỉ số" button → Dialog với: dropdown metric name (từ reference API), text input value, text input unit
+  - [x] Zod validation: value phải là số hợp lệ, name không được trống
+  - [x] Source badge: "OCR" vs "Nhập tay" icon
 - [ ] Task 4 — Mobile (Phase 2): Edit metric (AC: #1, #2, #3)
   - [ ] Tương tự web, dùng Modal thay Dialog
   - [ ] Keyboard type: `numeric` cho value field
-- [ ] Task 5 — Tests (AC: #2, #5)
-  - [ ] `HealthRecordServiceTest`: update metrics, source_type calculation
+- [x] Task 5 — Tests (AC: #2, #5)
+  - [x] `HealthRecordServiceTest`: update metrics, source_type calculation
 
 ## Dev Notes
 
@@ -103,10 +102,26 @@ const metricSchema = z.object({
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+claude-sonnet-4-5
 
 ### Debug Log References
 
 ### Completion Notes List
 
+- Task 4 (Mobile Phase 2) deferred per story scope — web MVP only.
+- `confirmRecord` now also computes `source_type` when metrics are provided, ensuring AC5 is met via the confirm flow.
+- `GET /reference-data/metrics` queries `reference_metrics` table sorted by name; falls back to free-text input in the Add Metric dialog when the table is empty.
+- `METRIC_SOURCE` and `RECORD_SOURCE_TYPE` constants added to `packages/shared/constants`.
+
 ### File List
+
+- `apps/api/src/main/java/com/healthlens/api/dto/request/UpdateMetricsRequest.java` (new)
+- `apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java` (modified)
+- `apps/api/src/main/java/com/healthlens/api/controller/HealthRecordController.java` (modified)
+- `apps/api/src/main/java/com/healthlens/api/service/ReferenceDataService.java` (modified)
+- `apps/api/src/main/java/com/healthlens/api/controller/ReferenceDataController.java` (modified)
+- `apps/api/src/main/java/com/healthlens/api/constants/ApiRoutes.java` (modified)
+- `apps/api/src/test/java/com/healthlens/api/service/HealthRecordServiceTest.java` (modified)
+- `packages/shared/constants/api.ts` (modified)
+- `packages/shared/constants/index.ts` (modified)
+- `apps/web/src/app/(dashboard)/health-records/review/[recordId]/page.tsx` (modified)

@@ -1,6 +1,7 @@
 package com.healthlens.api.controller;
 
 import com.healthlens.api.dto.ReferenceDataSearchResult;
+import com.healthlens.api.dto.MetricNameDto;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.entity.ReferenceData;
 import com.healthlens.api.exception.ResourceNotFoundException;
@@ -71,6 +72,11 @@ public class ReferenceDataController {
         response.put("gender", gender);
         response.put("referenceRange", range.orElse(null));
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/metrics")
+    public ResponseEntity<List<MetricNameDto>> getMetricNames() {
+        return ResponseEntity.ok(referenceDataService.getAllMetricNames());
     }
 
     private String formatForEmbedding(ReferenceData data) {

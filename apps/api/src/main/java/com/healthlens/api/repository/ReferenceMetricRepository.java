@@ -8,4 +8,5 @@ import java.util.UUID;
 
 public interface ReferenceMetricRepository extends JpaRepository<ReferenceMetric, UUID> {
     Optional<ReferenceMetric> findByNameIgnoreCase(String name);
+    java.util.List<ReferenceMetric> findAllByOrderByNameAsc();
 }

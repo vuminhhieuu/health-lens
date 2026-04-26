@@ -3,6 +3,7 @@ package com.healthlens.api.controller;
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.request.ConfirmRecordRequest;
+import com.healthlens.api.dto.request.UpdateMetricsRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.HealthRecordDetailResponse;
 import com.healthlens.api.dto.response.HealthRecordStatusResponse;
@@ -15,6 +16,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -110,6 +112,17 @@ public class HealthRecordController {
         UUID userId = UUID.fromString(authentication.getName());
         healthRecordService.confirmRecord(userId, recordId, request);
         return ResponseEntity.ok(buildResponseBody(Map.of("message", "Confirmed successfully")));
+    }
+
+    @PutMapping("/{recordId}/metrics")
+    public ResponseEntity<Map<String, Object>> updateMetrics(
+            Authentication authentication,
+            @PathVariable UUID recordId,
+            @Valid @RequestBody UpdateMetricsRequest request
+    ) {
+        UUID userId = UUID.fromString(authentication.getName());
+        healthRecordService.updateMetrics(userId, recordId, request);
+        return ResponseEntity.ok(buildResponseBody(Map.of("message", "Metrics updated successfully")));
     }
 
     @GetMapping("/profiles/{profileId}")

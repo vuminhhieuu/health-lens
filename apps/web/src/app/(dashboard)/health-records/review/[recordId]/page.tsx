@@ -3,7 +3,23 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, AlertTriangle, CheckCircle, Edit2, Save, X, AlertCircle, FileText, Maximize2, AlertOctagon } from "lucide-react";
+import {
+  Loader2,
+  AlertTriangle,
+  CheckCircle,
+  Edit2,
+  Save,
+  X,
+  AlertCircle,
+  FileText,
+  Maximize2,
+  AlertOctagon,
+  Plus,
+  ScanLine,
+  PenLine,
+  Trash2,
+} from "lucide-react";
+import { z } from "zod";
 
 import { apiClient } from "@/lib/api/apiClient";
 import { ApiPaths } from "@healthlens/shared/constants";
@@ -20,7 +36,7 @@ type MetricDto = {
   normalizedName?: string;
   normalizedValue?: string;
   normalizedUnit?: string;
-  confidence: number;
+  confidence: number | null;
   confidenceLevel: "high" | "medium" | "low";
   source: string;
   displayNameVi?: string;
@@ -40,6 +56,21 @@ type MetricDto = {
   explanation?: string;
 };
 
+type ConfirmMetricPayload = {
+  name: string;
+  value: string;
+  unit: string;
+  source: string;
+  confidence: number | null;
+  confidenceLevel: "high" | "medium" | "low";
+};
+
+type ReferenceMetricOption = {
+  name: string;
+  displayNameVi: string;
+  unit: string;
+};
+
 type ReviewRecordStatus = "processing" | "review_required" | "done" | "ocr_failed";
 
 type ReviewRecordData = {
@@ -56,6 +87,16 @@ type ReviewRecordData = {
   testMethod?: string | null;
   labSite?: string | null;
 };
+
+const metricSchema = z.object({
+  name: z.string().min(1, "Tên chỉ số không được để trống"),
+  value: z
+    .string()
+    .min(1, "Giá trị không được để trống")
+    .regex(/^-?\d+(?:[.,]\d+)?$/, "Giá trị phải là số hợp lệ"),
+  unit: z.string().min(1, "Đơn vị không được để trống"),
+  source: z.enum(["ocr", "manual"]),
+});
 
 export default function ReviewRecordPage() {
   const params = useParams();
@@ -78,6 +119,10 @@ export default function ReviewRecordPage() {
   const [editMode, setEditMode] = useState(false);
   const [isKeepingPartial, setIsKeepingPartial] = useState(false);
 
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [addForm, setAddForm] = useState({ name: "", value: "", unit: "" });
+  const [addError, setAddError] = useState<string | null>(null);
+
   const { data, refetch, isLoading, isError } = useQuery<ReviewRecordData>({
     queryKey: ["record-status", recordId],
     queryFn: async () => {
@@ -88,6 +133,16 @@ export default function ReviewRecordPage() {
       if (query.state.data?.status === "processing") return 3000;
       return false;
     },
+  });
+
+  const { data: referenceMetrics = [] } = useQuery<ReferenceMetricOption[]>({
+    queryKey: ["reference-metrics"],
+    queryFn: async () => {
+      const res = await apiClient.get(ApiPaths.REFERENCE_DATA.METRICS);
+      return res.data ?? [];
+    },
+    enabled: showAddDialog,
+    staleTime: 5 * 60 * 1000,
   });
 
   const initialized = useRef(false);
@@ -105,6 +160,7 @@ export default function ReviewRecordPage() {
         name: metric.name,
         value: metric.value,
         unit: metric.unit,
+        source: metric.source,
       })),
       examDate: payload.examDate,
       recordType: payload.recordType,
@@ -166,22 +222,80 @@ export default function ReviewRecordPage() {
   };
 
   const handleSaveEdit = () => {
-    if (editingIndex !== null && editForm) {
-      const updatedMetrics: MetricDto[] = [...metrics];
-      updatedMetrics[editingIndex] = {
-        ...editForm,
-        confidenceLevel: "high" as const,
-        confidence: 1.0,
-      };
-      setMetrics(updatedMetrics);
-      setEditingIndex(null);
-      setEditForm(null);
+    if (editingIndex === null || !editForm) return;
+
+    const validation = metricSchema.safeParse({
+      name: editForm.name,
+      value: editForm.value,
+      unit: editForm.unit,
+      source: "manual",
+    });
+
+    if (!validation.success) {
+      setSaveError(validation.error.issues[0]?.message ?? "Dữ liệu chỉ số không hợp lệ");
+      return;
     }
+
+    setSaveError(null);
+    const updatedMetrics: MetricDto[] = [...metrics];
+    updatedMetrics[editingIndex] = {
+      ...editForm,
+      source: "manual",
+      confidenceLevel: "high" as const,
+      confidence: 1.0,
+    };
+    setMetrics(updatedMetrics);
+    setEditingIndex(null);
+    setEditForm(null);
   };
 
   const handleCancelEdit = () => {
     setEditingIndex(null);
     setEditForm(null);
+  };
+
+  const handleDeleteMetric = (index: number) => {
+    setMetrics((prev) => prev.filter((_, i) => i !== index));
+    if (editingIndex === index) {
+      setEditingIndex(null);
+      setEditForm(null);
+    }
+  };
+
+  const handleAddMetric = () => {
+    const validation = metricSchema.safeParse({
+      name: addForm.name,
+      value: addForm.value,
+      unit: addForm.unit,
+      source: "manual",
+    });
+
+    if (!validation.success) {
+      setAddError(validation.error.issues[0]?.message ?? "Dữ liệu không hợp lệ");
+      return;
+    }
+
+    setAddError(null);
+    const newMetric: MetricDto = {
+      name: addForm.name,
+      value: addForm.value,
+      unit: addForm.unit,
+      confidence: 1.0,
+      confidenceLevel: "high",
+      source: "manual",
+    };
+    setMetrics((prev) => [...prev, newMetric]);
+    setShowAddDialog(false);
+    setAddForm({ name: "", value: "", unit: "" });
+  };
+
+  const handleAddNameChange = (name: string) => {
+    const ref = referenceMetrics.find((m) => m.name === name);
+    setAddForm((prev) => ({
+      ...prev,
+      name,
+      unit: ref?.unit ?? prev.unit,
+    }));
   };
 
   const executeSave = async (keepPartial = false) => {
@@ -193,13 +307,24 @@ export default function ReviewRecordPage() {
       const resolvedKeepPartial = keepPartial || (data?.status === "ocr_failed" && manualMode);
       const finalMetrics: MetricDto[] = metrics;
 
+      // Send only contract-required fields to avoid deserialization failures
+      // from optional/null legacy OCR fields.
+      const payloadMetrics: ConfirmMetricPayload[] = finalMetrics.map((m) => ({
+        name: m.name ?? "",
+        value: m.value ?? "",
+        unit: m.unit ?? "",
+        source: m.source ?? "manual",
+        confidence: typeof m.confidence === "number" ? m.confidence : null,
+        confidenceLevel: m.confidenceLevel ?? "high",
+      }));
+
       await apiClient.post(ApiPaths.HEALTH_RECORDS.CONFIRM_RECORD(recordId), {
         examDate: examDate || null,
         recordType: recordType || null,
         hospitalName: hospitalName || null,
         diagnosis: diagnosis || null,
         keepPartial: resolvedKeepPartial,
-        metrics: finalMetrics,
+        metrics: payloadMetrics,
       });
       setEditMode(false);
       initialSnapshotRef.current = buildSnapshot({
@@ -212,8 +337,15 @@ export default function ReviewRecordPage() {
       await refetch();
       alert("Lưu kết quả khám thành công!");
       return true;
-    } catch {
-      setSaveError("Đã có lỗi xảy ra khi lưu. Vui lòng thử lại.");
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { detail?: string; title?: string }; status?: number } };
+      const serverMsg = axiosErr?.response?.data?.detail ?? axiosErr?.response?.data?.title;
+      const statusCode = axiosErr?.response?.status;
+      if (serverMsg) {
+        setSaveError(`Lỗi ${statusCode ?? ""}: ${serverMsg}`);
+      } else {
+        setSaveError("Đã có lỗi xảy ra khi lưu. Vui lòng thử lại.");
+      }
       return false;
     } finally {
       setIsSaving(false);
@@ -431,15 +563,29 @@ export default function ReviewRecordPage() {
             <div className="rounded-2xl border border-[#b7d8d1] bg-white shadow-sm overflow-hidden">
               <div className="flex items-center justify-between border-b border-[#c5dfd9] bg-[#effcf9] px-6 py-4">
                 <h3 className="text-sm font-semibold text-[#005049]">Chỉnh sửa danh sách chỉ số</h3>
-                {canEditAfterConfirm ? (
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setEditMode(false)}
-                    className="rounded-lg border border-[#c5dfd9] px-3 py-1.5 text-xs font-semibold text-[#4e6360] hover:bg-white"
+                    onClick={() => {
+                      setAddForm({ name: "", value: "", unit: "" });
+                      setAddError(null);
+                      setShowAddDialog(true);
+                    }}
+                    className="flex items-center gap-1.5 rounded-lg bg-[#00685f] px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110"
                   >
-                    Quay lại thẻ chỉ số
+                    <Plus className="h-3.5 w-3.5" />
+                    Thêm chỉ số
                   </button>
-                ) : null}
+                  {canEditAfterConfirm ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditMode(false)}
+                      className="rounded-lg border border-[#c5dfd9] px-3 py-1.5 text-xs font-semibold text-[#4e6360] hover:bg-white"
+                    >
+                      Quay lại thẻ chỉ số
+                    </button>
+                  ) : null}
+                </div>
               </div>
               <div className="overflow-x-auto">
                 {data.hasLowConfidenceMetrics ? (
@@ -448,108 +594,125 @@ export default function ReviewRecordPage() {
                   </div>
                 ) : null}
                 <table className="w-full text-left text-sm text-[#4e6360]">
-                <thead className="bg-[#effcf9] text-[#005049]">
-                  <tr>
-                    <th className="px-6 py-4 font-semibold">Chỉ số</th>
-                    <th className="px-6 py-4 font-semibold">Giá trị</th>
-                    <th className="px-6 py-4 font-semibold">Đơn vị</th>
-                    {showConfidenceColumn ? <th className="px-6 py-4 font-semibold">Độ tin cậy</th> : null}
-                    <th className="px-6 py-4 font-semibold text-right">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#c5dfd9]">
-                  {metrics.map((metric, idx) => {
-                    const isEditing = editingIndex === idx;
+                  <thead className="bg-[#effcf9] text-[#005049]">
+                    <tr>
+                      <th className="px-6 py-4 font-semibold">Chỉ số</th>
+                      <th className="px-6 py-4 font-semibold">Giá trị</th>
+                      <th className="px-6 py-4 font-semibold">Đơn vị</th>
+                      <th className="px-6 py-4 font-semibold">Nguồn</th>
+                      {showConfidenceColumn ? <th className="px-6 py-4 font-semibold">Độ tin cậy</th> : null}
+                      <th className="px-6 py-4 font-semibold text-right">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#c5dfd9]">
+                    {metrics.map((metric, idx) => {
+                      const isEditing = editingIndex === idx;
 
-                    return (
-                      <tr
-                        key={idx}
-                        className={`hover:bg-gray-50 transition ${
-                          metric.confidenceLevel !== "high" ? "bg-[#fff8e8]" : ""
-                        }`}
-                      >
-                        <td className="px-6 py-4">
-                          {isEditing ? (
-                            <input
-                              className="w-full rounded border border-[#00685f] px-2 py-1"
-                              value={editForm?.name || ""}
-                              onChange={(e) => setEditForm({ ...editForm!, name: e.target.value })}
-                              autoFocus
-                            />
-                          ) : (
-                            <span className="font-medium text-[#005049]">{metric.name}</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          {isEditing ? (
-                            <input
-                              className="w-full rounded border border-[#00685f] px-2 py-1"
-                              value={editForm?.value || ""}
-                              onChange={(e) => setEditForm({ ...editForm!, value: e.target.value })}
-                            />
-                          ) : (
-                            <span className={metric.value ? "" : "text-gray-400 italic"}>
-                              {metric.value || "Trống"}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          {isEditing ? (
-                            <input
-                              className="w-full rounded border border-[#00685f] px-2 py-1"
-                              value={editForm?.unit || ""}
-                              onChange={(e) => setEditForm({ ...editForm!, unit: e.target.value })}
-                            />
-                          ) : (
-                            metric.unit || "-"
-                          )}
-                        </td>
-                        {showConfidenceColumn ? (
+                      return (
+                        <tr
+                          key={idx}
+                          className={`hover:bg-gray-50 transition ${
+                            metric.confidenceLevel !== "high" ? "bg-[#fff8e8]" : ""
+                          }`}
+                        >
                           <td className="px-6 py-4">
-                            {!isEditing && (
-                              <span
-                                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                                  metric.confidenceLevel === "high"
-                                    ? "bg-[#ccfbf1] text-[#0f766e]"
-                                    : metric.confidenceLevel === "medium"
-                                    ? "bg-[#ffddb3] text-[#825500]"
-                                    : "bg-[#ffdad6] text-[#ba1a1a]"
-                                }`}
-                              >
-                                {metric.confidenceLevel === "high" && <CheckCircle className="h-3 w-3" />}
-                                {metric.confidenceLevel === "medium" && <AlertTriangle className="h-3 w-3" />}
-                                {metric.confidenceLevel === "low" && <AlertCircle className="h-3 w-3" />}
-                                {metric.confidenceLevel === "high"
-                                  ? "Cao"
-                                  : metric.confidenceLevel === "medium"
-                                  ? "Trung bình"
-                                  : "Vui lòng kiểm tra"}
+                            {isEditing ? (
+                              <input
+                                className="w-full rounded border border-[#00685f] px-2 py-1"
+                                value={editForm?.name || ""}
+                                onChange={(e) => setEditForm({ ...editForm!, name: e.target.value })}
+                                autoFocus
+                              />
+                            ) : (
+                              <span className="font-medium text-[#005049]">{metric.name}</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            {isEditing ? (
+                              <input
+                                className="w-full rounded border border-[#00685f] px-2 py-1"
+                                value={editForm?.value || ""}
+                                onChange={(e) => setEditForm({ ...editForm!, value: e.target.value })}
+                              />
+                            ) : (
+                              <span className={metric.value ? "" : "text-gray-400 italic"}>
+                                {metric.value || "Trống"}
                               </span>
                             )}
                           </td>
-                        ) : null}
-                        <td className="px-6 py-4 text-right">
-                          {isEditing ? (
-                            <div className="flex justify-end gap-2">
-                              <button onClick={handleSaveEdit} className="text-[#00685f] hover:brightness-110">
-                                <Save className="h-5 w-5" />
-                              </button>
-                              <button onClick={handleCancelEdit} className="text-[#ba1a1a] hover:brightness-110">
-                                <X className="h-5 w-5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <button onClick={() => handleEditClick(idx)} className="text-[#4e6360] hover:text-[#005049]">
-                              <Edit2 className="h-5 w-5" />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          <td className="px-6 py-4">
+                            {isEditing ? (
+                              <input
+                                className="w-full rounded border border-[#00685f] px-2 py-1"
+                                value={editForm?.unit || ""}
+                                onChange={(e) => setEditForm({ ...editForm!, unit: e.target.value })}
+                              />
+                            ) : (
+                              metric.unit || "-"
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            {!isEditing && <SourceBadge source={metric.source} />}
+                          </td>
+                          {showConfidenceColumn ? (
+                            <td className="px-6 py-4">
+                              {!isEditing && (
+                                <span
+                                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                                    metric.confidenceLevel === "high"
+                                      ? "bg-[#ccfbf1] text-[#0f766e]"
+                                      : metric.confidenceLevel === "medium"
+                                      ? "bg-[#ffddb3] text-[#825500]"
+                                      : "bg-[#ffdad6] text-[#ba1a1a]"
+                                  }`}
+                                >
+                                  {metric.confidenceLevel === "high" && <CheckCircle className="h-3 w-3" />}
+                                  {metric.confidenceLevel === "medium" && <AlertTriangle className="h-3 w-3" />}
+                                  {metric.confidenceLevel === "low" && <AlertCircle className="h-3 w-3" />}
+                                  {metric.confidenceLevel === "high"
+                                    ? "Cao"
+                                    : metric.confidenceLevel === "medium"
+                                    ? "Trung bình"
+                                    : "Vui lòng kiểm tra"}
+                                </span>
+                              )}
+                            </td>
+                          ) : null}
+                          <td className="px-6 py-4 text-right">
+                            {isEditing ? (
+                              <div className="flex justify-end gap-2">
+                                <button onClick={handleSaveEdit} className="text-[#00685f] hover:brightness-110">
+                                  <Save className="h-5 w-5" />
+                                </button>
+                                <button onClick={handleCancelEdit} className="text-[#ba1a1a] hover:brightness-110">
+                                  <X className="h-5 w-5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  onClick={() => handleEditClick(idx)}
+                                  className="text-[#4e6360] hover:text-[#005049]"
+                                  title="Chỉnh sửa"
+                                >
+                                  <Edit2 className="h-5 w-5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteMetric(idx)}
+                                  className="text-[#4e6360] hover:text-[#ba1a1a]"
+                                  title="Xóa chỉ số"
+                                >
+                                  <Trash2 className="h-5 w-5" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   {metrics.length === 0 && (
                     <tr>
-                      <td colSpan={showConfidenceColumn ? 5 : 4} className="px-6 py-8 text-center text-[#4e6360]">
+                      <td colSpan={showConfidenceColumn ? 6 : 5} className="px-6 py-8 text-center text-[#4e6360]">
                         Không tìm thấy chỉ số nào từ kết quả OCR.
                       </td>
                     </tr>
@@ -597,7 +760,7 @@ export default function ReviewRecordPage() {
               <p className="text-[#4e6360] mb-8">
                 Bạn đã đối chiếu các thông tin với hồ sơ gốc chưa? Kết quả sau khi lưu sẽ được cập nhật vào hồ sơ sức khỏe.
               </p>
-              
+
               <div className="flex flex-col w-full gap-3">
                 <button
                   onClick={() => executeSave(false)}
@@ -618,13 +781,112 @@ export default function ReviewRecordPage() {
         </div>
       )}
 
+      {/* Add Metric Dialog */}
+      {showAddDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden p-8 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-[#005049]">Thêm chỉ số</h3>
+              <button
+                onClick={() => setShowAddDialog(false)}
+                className="p-2 hover:bg-gray-100 rounded-full transition"
+              >
+                <X className="h-5 w-5 text-[#4e6360]" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#3d4947] mb-1.5">
+                  Tên chỉ số <span className="text-[#ba1a1a]">*</span>
+                </label>
+                {referenceMetrics.length > 0 ? (
+                  <select
+                    className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378] bg-white"
+                    value={addForm.name}
+                    onChange={(e) => handleAddNameChange(e.target.value)}
+                  >
+                    <option value="">-- Chọn chỉ số --</option>
+                    {referenceMetrics.map((m) => (
+                      <option key={m.name} value={m.name}>
+                        {m.displayNameVi} ({m.name})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    placeholder="Nhập tên chỉ số..."
+                    className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378]"
+                    value={addForm.name}
+                    onChange={(e) => setAddForm((prev) => ({ ...prev, name: e.target.value }))}
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#3d4947] mb-1.5">
+                  Giá trị <span className="text-[#ba1a1a]">*</span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="VD: 5.4"
+                  className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378]"
+                  value={addForm.value}
+                  onChange={(e) => {
+                    setAddForm((prev) => ({ ...prev, value: e.target.value }));
+                    setAddError(null);
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#3d4947] mb-1.5">
+                  Đơn vị <span className="text-[#ba1a1a]">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="VD: mmol/L"
+                  className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378]"
+                  value={addForm.unit}
+                  onChange={(e) => setAddForm((prev) => ({ ...prev, unit: e.target.value }))}
+                />
+              </div>
+
+              {addError && (
+                <div className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a] flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  {addError}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => setShowAddDialog(false)}
+                className="flex-1 rounded-2xl border border-[#c5dfd9] py-3 font-semibold text-[#4e6360] hover:bg-gray-50 transition"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleAddMetric}
+                className="flex-1 rounded-2xl bg-[#00685f] py-3 font-semibold text-white hover:brightness-110 transition"
+              >
+                Thêm chỉ số
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Fullscreen Document Modal */}
       {showFullDoc && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
           <div className="relative w-full max-w-[95vw] h-[95vh] bg-white rounded-2xl overflow-hidden flex flex-col">
             <div className="flex justify-between items-center px-6 py-4 border-b">
               <h3 className="font-bold text-lg text-[#005049]">Hồ sơ gốc (Chi tiết)</h3>
-              <button 
+              <button
                 onClick={() => setShowFullDoc(false)}
                 className="p-2 hover:bg-gray-100 rounded-full transition"
               >
@@ -643,5 +905,21 @@ export default function ReviewRecordPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function SourceBadge({ source }: { source: string }) {
+  const isManual = source === "manual";
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+        isManual
+          ? "bg-[#e8f4ff] text-[#0055aa]"
+          : "bg-[#f0fdf4] text-[#166534]"
+      }`}
+    >
+      {isManual ? <PenLine className="h-3 w-3" /> : <ScanLine className="h-3 w-3" />}
+      {isManual ? "Nhập tay" : "OCR"}
+    </span>
   );
 }
