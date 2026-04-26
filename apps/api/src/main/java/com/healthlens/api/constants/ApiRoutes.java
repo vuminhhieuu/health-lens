@@ -60,6 +60,8 @@ public final class ApiRoutes {
     public static final String HEALTH_RECORD_IMAGE = HEALTH_RECORDS_BASE + "/{id}/image";
     public static final String HEALTH_RECORD_ANALYZE = HEALTH_RECORDS_BASE + "/{id}/analyze";
     public static final String HEALTH_RECORD_ANALYSIS = HEALTH_RECORDS_BASE + "/{id}/analysis";
+    public static final String HEALTH_RECORD_METRIC_EXPLANATION =
+            HEALTH_RECORDS_BASE + "/{recordId}/metrics/{metricName}/explanation";
 
     // =========================================
     // Document Paths (Frontend: ApiPaths.DOCUMENTS)

@@ -3,8 +3,11 @@ package com.healthlens.api.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.request.ConfirmRecordRequest;
+import com.healthlens.api.dto.response.MetricExplanationResponse;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
+import com.healthlens.api.dto.MetricDto;
+import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
@@ -23,6 +26,8 @@ import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.Duration;
 import java.time.LocalDate;
+import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,7 +35,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -41,6 +48,7 @@ class HealthRecordServiceTest {
     @Mock private ProfileRepository profileRepository;
     @Mock private HealthRecordRepository healthRecordRepository;
     @Mock private ReferenceDataService referenceDataService;
+    @Mock private LlmService llmService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private StreamOperations<String, Object, Object> streamOperations;
@@ -54,6 +62,7 @@ class HealthRecordServiceTest {
                 profileRepository,
                 healthRecordRepository,
                 referenceDataService,
+                llmService,
                 redisTemplate,
                 new ObjectMapper(),
                 "ocr.events"
@@ -224,6 +233,78 @@ class HealthRecordServiceTest {
         assertThatThrownBy(() -> healthRecordService.confirmRecord(userId, recordId, new ConfirmRecordRequest()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("quyen xac nhan");
+    }
+
+    @Test
+    @DisplayName("getMetricExplanation tra ve explanation va source tu LLM service")
+    void getMetricExplanation_success() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        MetricDto metric = MetricDto.builder()
+                .name("Glucose")
+                .value("5.6")
+                .normalizedValue("5.6")
+                .status("normal")
+                .referenceRange(new ReferenceRangeDto(
+                        BigDecimal.valueOf(3.9),
+                        BigDecimal.valueOf(6.4),
+                        BigDecimal.valueOf(3.2),
+                        BigDecimal.valueOf(7.1),
+                        "mmol/L"
+                ))
+                .build();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
+
+        when(healthRecordRepository.findByIdAndUserId(recordId, userId)).thenReturn(Optional.of(record));
+        when(llmService.generateExplanationResult(
+                nullable(String.class),
+                nullable(String.class),
+                nullable(String.class),
+                any(ReferenceRangeDto.class),
+                nullable(String.class),
+                nullable(String.class)))
+                .thenReturn(new LlmService.ExplanationResult("Giải thích đơn giản", "llm"));
+
+        MetricExplanationResponse response = healthRecordService.getMetricExplanation(userId, recordId, "Glucose");
+
+        assertThat(response.explanation()).isEqualTo("Giải thích đơn giản");
+        assertThat(response.source()).isEqualTo("llm");
+    }
+
+    @Test
+    @DisplayName("getMetricExplanation fail khi record không tồn tại")
+    void getMetricExplanation_recordNotFound() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        when(healthRecordRepository.findByIdAndUserId(recordId, userId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> healthRecordService.getMetricExplanation(userId, recordId, "Glucose"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Health record khong ton tai");
+    }
+
+    @Test
+    @DisplayName("getMetricExplanation fail khi metric không tồn tại trong record")
+    void getMetricExplanation_metricNotFound() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        MetricDto metric = MetricDto.builder().name("HbA1c").build();
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
+        when(healthRecordRepository.findByIdAndUserId(recordId, userId)).thenReturn(Optional.of(record));
+
+        assertThatThrownBy(() -> healthRecordService.getMetricExplanation(userId, recordId, "Glucose"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Khong tim thay chi so");
     }
 
     private Profile buildProfile(UUID userId, UUID profileId) {

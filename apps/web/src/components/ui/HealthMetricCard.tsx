@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Info, XCircle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "@/lib/api/apiClient";
+import { ApiPaths } from "@healthlens/shared/constants";
 
 type MetricStatus = "normal" | "attention" | "abnormal" | "no_data";
 
@@ -14,6 +17,7 @@ type ReferenceRange = {
 };
 
 type HealthMetricCardProps = {
+  recordId?: string;
   metricName: string;
   displayNameVi?: string;
   value: string;
@@ -21,7 +25,6 @@ type HealthMetricCardProps = {
   referenceRange?: ReferenceRange | null;
   referenceRangeSource?: "document" | "system" | "none";
   status: MetricStatus;
-  interpretation?: "high" | "low" | "normal" | "critical" | "unknown";
   critical?: boolean;
   explanation?: string;
 };
@@ -49,7 +52,11 @@ const STATUS_META: Record<MetricStatus, { label: string; color: string; icon: ty
   },
 };
 
+const UI_FALLBACK_EXPLANATION =
+  "Chỉ số này cần được bác sĩ giải thích thêm để đánh giá chính xác.";
+
 export function HealthMetricCard({
+  recordId,
   metricName,
   displayNameVi,
   value,
@@ -57,13 +64,34 @@ export function HealthMetricCard({
   referenceRange,
   referenceRangeSource,
   status,
-  interpretation,
   critical,
   explanation,
 }: HealthMetricCardProps) {
   const [expanded, setExpanded] = useState(false);
   const meta = STATUS_META[status];
   const StatusIcon = meta.icon;
+  const staticExplanation = explanation?.trim() ? explanation.trim() : "";
+
+  const explanationQuery = useQuery({
+    queryKey: ["metric-explanation", recordId, metricName, value, status],
+    queryFn: async () => {
+      if (!recordId) {
+        return { explanation: "", source: "fallback" };
+      }
+      const res = await apiClient.get(ApiPaths.HEALTH_RECORDS.EXPLANATION(recordId, metricName));
+      const payload = res.data?.data;
+      return {
+        explanation: (payload?.explanation as string | undefined) ?? "",
+        source: (payload?.source as string | undefined) ?? "fallback",
+      };
+    },
+    enabled: expanded && !staticExplanation && Boolean(recordId),
+    staleTime: 7 * 24 * 60 * 60 * 1000,
+  });
+
+  const explanationText = staticExplanation || explanationQuery.data?.explanation || "";
+  const showExplanationSkeleton = expanded && !staticExplanation && explanationQuery.isLoading;
+  const showQueryFallback = expanded && !staticExplanation && explanationQuery.isError;
 
   const displayReference = referenceRange
     ? `${referenceRange.min} - ${referenceRange.max} ${referenceRange.unit ?? unit}`
@@ -111,21 +139,27 @@ export function HealthMetricCard({
                 {referenceRangeSource === "document" ? "Theo phiếu xét nghiệm" : "Theo hệ thống tham chiếu"}
               </p>
             ) : null}
-            {interpretation && interpretation !== "unknown" ? (
-              <p className="mt-2">
-                <span className="font-semibold">Diễn giải: </span>
-                {interpretation === "high" ? "Cao" : interpretation === "low" ? "Thấp" : interpretation === "critical" ? "Nguy cấp" : "Bình thường"}
-              </p>
-            ) : null}
             {critical ? (
               <p className="mt-2 rounded-lg bg-[#fff2f2] px-2 py-1 text-[#ba1a1a]">
                 Chỉ số có dấu hiệu vượt ngưỡng nguy cấp, nên liên hệ bác sĩ để được tư vấn sớm.
               </p>
             ) : null}
-            {explanation ? (
+            {showExplanationSkeleton ? (
+              <div className="mt-2 space-y-2" data-testid="explanation-skeleton">
+                <div className="h-3 w-full animate-pulse rounded bg-[#d4e7e3]" />
+                <div className="h-3 w-4/5 animate-pulse rounded bg-[#d4e7e3]" />
+              </div>
+            ) : null}
+            {showQueryFallback ? (
               <p className="mt-2">
                 <span className="font-semibold">Giải thích: </span>
-                {explanation}
+                {UI_FALLBACK_EXPLANATION}
+              </p>
+            ) : null}
+            {explanationText ? (
+              <p className="mt-2 whitespace-pre-line">
+                <span className="font-semibold">Giải thích: </span>
+                {explanationText}
               </p>
             ) : null}
           </div>

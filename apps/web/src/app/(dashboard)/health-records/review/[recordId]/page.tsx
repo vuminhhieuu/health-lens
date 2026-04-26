@@ -410,6 +410,7 @@ export default function ReviewRecordPage() {
                 {metrics.map((metric, idx) => (
                   <HealthMetricCard
                     key={`${metric.name}-${idx}`}
+                    recordId={recordId}
                     metricName={metric.name}
                     displayNameVi={metric.displayNameVi}
                     value={metric.value}
@@ -417,7 +418,6 @@ export default function ReviewRecordPage() {
                     referenceRange={metric.referenceRange}
                     referenceRangeSource={metric.referenceRangeSource}
                     status={metric.status ?? "no_data"}
-                    interpretation={metric.interpretation}
                     critical={metric.critical}
                     explanation={metric.explanation}
                   />

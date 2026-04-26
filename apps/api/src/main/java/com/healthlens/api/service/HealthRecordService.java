@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.HealthRecordDetailResponse;
+import com.healthlens.api.dto.response.MetricExplanationResponse;
 import com.healthlens.api.dto.response.HealthRecordStatusResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
 import com.healthlens.api.dto.MetricClassificationDto;
@@ -44,6 +45,7 @@ public class HealthRecordService {
     private final ProfileRepository profileRepository;
     private final HealthRecordRepository healthRecordRepository;
     private final ReferenceDataService referenceDataService;
+    private final LlmService llmService;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final String ocrStreamName;
@@ -53,6 +55,7 @@ public class HealthRecordService {
             ProfileRepository profileRepository,
             HealthRecordRepository healthRecordRepository,
             ReferenceDataService referenceDataService,
+            LlmService llmService,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper,
             @Value("${app.stream.ocr-events:ocr.events}") String ocrStreamName
@@ -61,6 +64,7 @@ public class HealthRecordService {
         this.profileRepository = profileRepository;
         this.healthRecordRepository = healthRecordRepository;
         this.referenceDataService = referenceDataService;
+        this.llmService = llmService;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.ocrStreamName = ocrStreamName;
@@ -190,6 +194,28 @@ public class HealthRecordService {
                 record.getLabSite(),
                 storageService.generateDownloadUrl(record.getFileKey(), Duration.ofHours(1))
         );
+    }
+
+    @Transactional(readOnly = true)
+    public MetricExplanationResponse getMetricExplanation(UUID userId, UUID recordId, String metricName) {
+        HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+
+        MetricDto metric = parseMetrics(record.getMetrics()).stream()
+                .filter(item -> item.getName() != null && item.getName().equalsIgnoreCase(metricName))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Khong tim thay chi so trong health record"));
+
+        LlmService.ExplanationResult result = llmService.generateExplanationResult(
+                metric.getName(),
+                metric.getNormalizedValue() != null ? metric.getNormalizedValue() : metric.getValue(),
+                metric.getStatus(),
+                metric.getReferenceRange(),
+                "vi",
+                referenceDataService.buildMetricKnowledgeSnippet(metric.getName(), metric.getStatus(), metric.getReferenceRange())
+        );
+
+        return new MetricExplanationResponse(result.explanation(), result.source());
     }
 
     @Transactional(readOnly = true)

@@ -13,12 +13,34 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.text.Normalizer;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Locale;
 import java.util.UUID;
 
 @Service
 public class ReferenceDataService {
+    private static final Map<String, String> RELATION_HINTS = Map.ofEntries(
+            Map.entry("ALT", "gan và nguy cơ tổn thương tế bào gan"),
+            Map.entry("AST", "gan, cơ và đánh giá tổn thương mô"),
+            Map.entry("GPT", "gan và nguy cơ tổn thương tế bào gan"),
+            Map.entry("GOT", "gan, cơ và đánh giá tổn thương mô"),
+            Map.entry("GLUCOSE", "đường huyết và nguy cơ rối loạn chuyển hóa"),
+            Map.entry("HBA1C", "kiểm soát đường huyết dài hạn"),
+            Map.entry("HDL", "mức bảo vệ tim mạch"),
+            Map.entry("LDL", "nguy cơ xơ vữa mạch và tim mạch"),
+            Map.entry("TRIGLYCERIDE", "rối loạn mỡ máu và tim mạch"),
+            Map.entry("CHOL", "mỡ máu tổng và tim mạch"),
+            Map.entry("EO", "dị ứng, miễn dịch và ký sinh trùng"),
+            Map.entry("EOS", "dị ứng, miễn dịch và ký sinh trùng"),
+            Map.entry("BASO", "viêm, dị ứng và miễn dịch"),
+            Map.entry("BAS", "viêm, dị ứng và miễn dịch"),
+            Map.entry("WBC", "hệ miễn dịch và nhiễm trùng"),
+            Map.entry("RBC", "vận chuyển oxy và tình trạng thiếu máu"),
+            Map.entry("HGB", "vận chuyển oxy và thiếu máu"),
+            Map.entry("PLT", "đông máu và nguy cơ chảy máu"),
+            Map.entry("HBSAG", "sàng lọc nhiễm virus viêm gan B")
+    );
 
     private final ReferenceMetricRepository referenceMetricRepository;
     private final ReferenceMetricAliasRepository referenceMetricAliasRepository;
@@ -97,6 +119,38 @@ public class ReferenceDataService {
                         data.range().getAttentionMax(),
                         data.metric().getUnit()
                 ));
+    }
+
+    public String buildMetricKnowledgeSnippet(String metricName, String status, ReferenceRangeDto referenceRange) {
+        String safeMetricName = metricName == null || metricName.isBlank() ? "chỉ số xét nghiệm" : metricName.trim();
+        String normalizedKey = normalizeMetricName(safeMetricName).toUpperCase(Locale.ROOT);
+
+        String displayName = resolveMetric(safeMetricName)
+                .map(metric -> metric.getDisplayNameVi() != null ? metric.getDisplayNameVi() : metric.getName())
+                .orElse(safeMetricName);
+
+        String relation = RELATION_HINTS.getOrDefault(normalizedKey,
+                "cân bằng miễn dịch, chuyển hóa và chức năng cơ quan tùy loại xét nghiệm");
+
+        String rangeText = "không có";
+        if (referenceRange != null && referenceRange.min() != null && referenceRange.max() != null) {
+            String unit = referenceRange.unit() != null ? " " + referenceRange.unit() : "";
+            rangeText = referenceRange.min().toPlainString() + " - " + referenceRange.max().toPlainString() + unit;
+        }
+
+        String impact = switch (status == null ? "unknown" : status.toLowerCase(Locale.ROOT)) {
+            case "normal" -> "Khi trong ngưỡng, chỉ số này thường chưa gợi ý bất thường rõ.";
+            case "attention" -> "Khi hơi lệch ngưỡng, nên theo dõi thêm cùng các chỉ số liên quan.";
+            case "abnormal" -> "Khi lệch rõ ngưỡng, nguy cơ vấn đề sức khỏe liên quan có thể tăng.";
+            default -> "Cần đối chiếu thêm với bối cảnh sức khỏe và các chỉ số liên quan.";
+        };
+
+        return """
+                Metric identity: %s (%s).
+                Clinical relation: chỉ số này thường liên quan đến %s.
+                Out-of-range impact: %s
+                Reference range context: %s.
+                """.formatted(displayName, safeMetricName, relation, impact, rangeText);
     }
 
     private Optional<ReferenceRangeWithMeta> findMatchingRange(String metricName, Integer age, String gender) {
