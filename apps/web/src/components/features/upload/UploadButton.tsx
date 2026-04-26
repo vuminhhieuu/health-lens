@@ -1,7 +1,7 @@
 "use client";
 
-import { type ChangeEvent, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { ApiPaths, ALLOWED_FILE_TYPES, UPLOAD_MAX_SIZE_BYTES } from "@healthlens/shared/constants";
 import { Upload, Loader2, AlertCircle } from "lucide-react";
@@ -16,7 +16,9 @@ interface UploadButtonProps {
 
 export function UploadButton({ profileId }: UploadButtonProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const autoOpenDoneRef = useRef(false);
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -32,6 +34,15 @@ export function UploadButton({ profileId }: UploadButtonProps) {
   };
 
   const handleSelect = () => fileInputRef.current?.click();
+
+  useEffect(() => {
+    if (autoOpenDoneRef.current) return;
+    if (!profileId) return;
+    if (searchParams.get("openUpload") !== "1") return;
+
+    autoOpenDoneRef.current = true;
+    fileInputRef.current?.click();
+  }, [profileId, searchParams]);
 
 
 

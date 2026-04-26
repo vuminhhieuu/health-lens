@@ -55,6 +55,10 @@ public class OcrService {
     private final String openRouterBaseUrl;
     private final String openRouterModel;
     private final String openRouterReferer;
+    @Value("${app.ocr.confidence.high-threshold:0.85}")
+    private float highConfidenceThreshold = 0.85f;
+    @Value("${app.ocr.confidence.medium-threshold:0.50}")
+    private float mediumConfidenceThreshold = 0.50f;
 
     // =========================================
     // EasyOCR Response DTO (inner class)
@@ -564,9 +568,11 @@ public class OcrService {
      * Phân loại confidence level dựa trên rules từ PRD.
      */
     public String classifyConfidence(float confidence) {
-        if (confidence >= 0.85f) {
+        float highThreshold = Math.max(highConfidenceThreshold, mediumConfidenceThreshold);
+        float mediumThreshold = Math.min(highConfidenceThreshold, mediumConfidenceThreshold);
+        if (confidence >= highThreshold) {
             return "high";
-        } else if (confidence >= 0.50f) {
+        } else if (confidence >= mediumThreshold) {
             return "medium";
         } else {
             return "low";
@@ -661,4 +667,5 @@ public class OcrService {
         }
         return new BigDecimal(raw.trim().replace(",", "."));
     }
+
 }

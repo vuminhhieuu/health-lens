@@ -1,6 +1,7 @@
 package com.healthlens.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.healthlens.api.dto.MetricDto;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
@@ -26,8 +27,8 @@ import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.Duration;
 import java.time.LocalDate;
-import java.math.BigDecimal;
 import java.util.List;
+import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -193,6 +194,51 @@ class HealthRecordServiceTest {
     }
 
     @Test
+    @DisplayName("confirmRecord cho phep ocr_failed khi keepPartial=true")
+    void confirmRecord_allowOcrFailedWhenKeepPartial() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("ocr_failed");
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        ConfirmRecordRequest request = ConfirmRecordRequest.builder()
+                .keepPartial(true)
+                .metrics(List.of(MetricDto.builder().name("Glucose").value("5.6").unit("mmol/L").build()))
+                .build();
+
+        healthRecordService.confirmRecord(userId, recordId, request);
+
+        assertThat(record.getStatus()).isEqualTo("done");
+        assertThat(record.getSourceType()).isEqualTo("ocr_partial");
+    }
+
+    @Test
+    @DisplayName("confirmRecord cho phep ocr_failed manual va set source_type=manual")
+    void confirmRecord_allowOcrFailedManualRecovery() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("ocr_failed");
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        ConfirmRecordRequest request = ConfirmRecordRequest.builder()
+                .keepPartial(false)
+                .metrics(List.of(MetricDto.builder().name("Glucose").value("5.6").unit("mmol/L").build()))
+                .build();
+
+        healthRecordService.confirmRecord(userId, recordId, request);
+
+        assertThat(record.getStatus()).isEqualTo("done");
+        assertThat(record.getSourceType()).isEqualTo("manual");
+        verify(healthRecordRepository).save(record);
+    }
+
+    @Test
     @DisplayName("confirmRecord cho phep cap nhat khi da o trang thai done")
     void confirmRecord_updateWhenDone() {
         UUID userId = UUID.randomUUID();
@@ -213,6 +259,62 @@ class HealthRecordServiceTest {
 
         assertThat(record.getStatus()).isEqualTo("done");
         assertThat(record.getHospitalName()).isEqualTo("BV Moi");
+        verify(healthRecordRepository).save(record);
+    }
+
+    @Test
+    @DisplayName("confirmRecord set source_type ocr_partial khi keepPartial=true")
+    void confirmRecord_setsSourceTypePartialWhenKeepPartialRequested() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("review_required");
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        MetricDto mediumMetric = MetricDto.builder()
+                .name("Glucose")
+                .value("6.1")
+                .unit("mmol/L")
+                .confidenceLevel("medium")
+                .build();
+        ConfirmRecordRequest request = ConfirmRecordRequest.builder()
+                .keepPartial(true)
+                .metrics(List.of(mediumMetric))
+                .build();
+
+        healthRecordService.confirmRecord(userId, recordId, request);
+
+        assertThat(record.getSourceType()).isEqualTo("ocr_partial");
+        verify(healthRecordRepository).save(record);
+    }
+
+    @Test
+    @DisplayName("confirmRecord khong doi source_type khi khong yeu cau keepPartial")
+    void confirmRecord_keepsSourceTypeWhenNotKeepPartial() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("review_required");
+        record.setSourceType("ocr_partial");
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        MetricDto highMetric = MetricDto.builder()
+                .name("Glucose")
+                .value("6.1")
+                .unit("mmol/L")
+                .confidenceLevel("high")
+                .build();
+        ConfirmRecordRequest request = ConfirmRecordRequest.builder()
+                .metrics(List.of(highMetric))
+                .build();
+
+        healthRecordService.confirmRecord(userId, recordId, request);
+
+        assertThat(record.getSourceType()).isEqualTo("ocr_partial");
         verify(healthRecordRepository).save(record);
     }
 

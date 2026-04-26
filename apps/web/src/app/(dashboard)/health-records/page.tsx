@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, User, Users, Check, FileText, Activity, ChevronRight, Calendar, Landmark } from "lucide-react";
 
@@ -26,7 +26,9 @@ type HealthRecord = {
 
 export default function HealthRecordsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const showRetryTips = searchParams.get("retry") === "1";
   const isLabRecord = (recordType?: string | null) => {
     if (!recordType) return false;
     const normalized = recordType.toUpperCase();
@@ -68,6 +70,12 @@ export default function HealthRecordsPage() {
 
       <section className="rounded-3xl border border-[#b7d8d1] bg-white p-6 shadow-sm overflow-hidden">
         <div className="flex flex-col gap-6">
+          {showRetryTips ? (
+            <div className="rounded-2xl border border-[#e6b144] bg-[#fff4dd] px-4 py-3 text-sm text-[#825500]">
+              <p className="font-semibold">Tips chup lai de OCR on dinh:</p>
+              <p>- Dat giay phang, anh sang deu, tranh bong do, xoay ngang neu can.</p>
+            </div>
+          ) : null}
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5 text-[#00685f]" />

@@ -21,5 +21,6 @@ public class ConfirmRecordRequest {
     private String analyzerModel;
     private String testMethod;
     private String labSite;
+    private Boolean keepPartial;
     private List<MetricDto> metrics;
 }

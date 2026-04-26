@@ -525,6 +525,13 @@ class OcrServiceTest {
         }
 
         @Test
+        @DisplayName("Phan loai confidence 0.84 la medium (partial)")
+        void parseMetrics_confidenceUpperMediumBoundary() {
+            String level = ocrService.classifyConfidence(0.84f);
+            assertThat(level).isEqualTo("medium");
+        }
+
+        @Test
         @DisplayName("Phân loại confidence < 0.50 là low")
         void parseMetrics_confidenceLow() throws Exception {
             // Act

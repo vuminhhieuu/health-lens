@@ -1,6 +1,7 @@
 package com.healthlens.api.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
@@ -136,18 +137,26 @@ public class HealthRecordService {
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
         
         java.util.List<MetricDto> metricsList = null;
-        if ("review_required".equals(record.getStatus()) || "done".equals(record.getStatus())) {
-            try {
-                metricsList = objectMapper.readValue(record.getMetrics(), new TypeReference<java.util.List<MetricDto>>() {});
-            } catch (Exception e) {
-                log.warn("Failed to parse metrics for {}", recordId);
+        boolean hasLowConfidenceMetrics = false;
+        if ("review_required".equals(record.getStatus()) || "done".equals(record.getStatus()) || "ocr_failed".equals(record.getStatus())) {
+            String metrics = record.getMetrics();
+            if (metrics != null && !metrics.isBlank()) {
+                try {
+                    metricsList = objectMapper.readValue(metrics, new TypeReference<java.util.List<MetricDto>>() {});
+                    hasLowConfidenceMetrics = containsLowConfidenceMetrics(metricsList);
+                } catch (Exception e) {
+                    log.warn("Failed to parse metrics for {}", recordId);
+                }
             }
         }
+        String ocrFailureReason = resolveOcrFailureReason(record);
         
         HealthRecordStatusResponse response = new HealthRecordStatusResponse(
             record.getId(), 
             record.getStatus(), 
             metricsList,
+            hasLowConfidenceMetrics,
+            ocrFailureReason,
             record.getExamDate() != null ? record.getExamDate().toString() : null,
             record.getRecordType(),
             record.getHospitalName(),
@@ -235,6 +244,8 @@ public class HealthRecordService {
                         record.getId(),
                         record.getStatus(),
                         metricsList,
+                        containsLowConfidenceMetrics(metricsList),
+                        resolveOcrFailureReason(record),
                         record.getExamDate() != null ? record.getExamDate().toString() : null,
                         record.getRecordType(),
                         record.getHospitalName(),
@@ -250,6 +261,11 @@ public class HealthRecordService {
 
     @Transactional
     public void markOcrCompleted(UUID recordId, String rawOcrJson, OcrService.OcrExtractionResult parsedData) {
+        markOcrCompleted(recordId, rawOcrJson, parsedData, false);
+    }
+
+    @Transactional
+    public void markOcrCompleted(UUID recordId, String rawOcrJson, OcrService.OcrExtractionResult parsedData, boolean hasLowConfidenceMetrics) {
         HealthRecord record = healthRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
         record.setStatus("review_required");
@@ -271,14 +287,25 @@ public class HealthRecordService {
         } catch (JsonProcessingException e) {
             record.setMetrics("[]");
         }
+        if (hasLowConfidenceMetrics) {
+            record.setSourceType("ocr_partial");
+        } else if (record.getSourceType() == null || record.getSourceType().isBlank()) {
+            record.setSourceType("ocr");
+        }
         healthRecordRepository.save(record);
     }
 
     @Transactional
     public void markOcrFailed(UUID recordId) {
+        markOcrFailed(recordId, "processing_error");
+    }
+
+    @Transactional
+    public void markOcrFailed(UUID recordId, String reason) {
         HealthRecord record = healthRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
         record.setStatus("ocr_failed");
+        record.setRawOcrResult(buildFailurePayload(reason));
         healthRecordRepository.save(record);
     }
 
@@ -313,7 +340,12 @@ public class HealthRecordService {
             throw new IllegalArgumentException("Ban khong co quyen xac nhan health record nay");
         }
 
-        if (!"review_required".equals(record.getStatus()) && !"done".equals(record.getStatus())) {
+        String previousStatus = record.getStatus();
+        boolean keepPartialRequested = request != null && Boolean.TRUE.equals(request.getKeepPartial());
+        boolean canUpdateFromStatus = "review_required".equals(record.getStatus())
+                || "done".equals(record.getStatus())
+                || "ocr_failed".equals(record.getStatus());
+        if (!canUpdateFromStatus) {
             throw new IllegalStateException("Health record khong o trang thai cho phep cap nhat");
         }
 
@@ -344,6 +376,13 @@ public class HealthRecordService {
             if (request.getMetrics() != null) {
                 try {
                     record.setMetrics(objectMapper.writeValueAsString(request.getMetrics()));
+                    if (keepPartialRequested) {
+                        record.setSourceType("ocr_partial");
+                    } else if ("ocr_failed".equals(previousStatus)) {
+                        record.setSourceType("manual");
+                    } else if (record.getSourceType() == null || record.getSourceType().isBlank()) {
+                        record.setSourceType("ocr");
+                    }
                 } catch (Exception e) {
                     log.warn("Failed to serialize metrics in confirmRecord for {}", recordId);
                 }
@@ -508,6 +547,38 @@ public class HealthRecordService {
                     "fileType chi chap nhan 'pdf', 'image/jpeg', hoac 'image/png'"
             );
         };
+    }
+
+    private boolean containsLowConfidenceMetrics(List<MetricDto> metrics) {
+        if (metrics == null || metrics.isEmpty()) {
+            return false;
+        }
+        return metrics.stream()
+                .map(MetricDto::getConfidenceLevel)
+                .anyMatch(level -> level != null && !"high".equals(level));
+    }
+
+    private String resolveOcrFailureReason(HealthRecord record) {
+        if (record == null || record.getRawOcrResult() == null || record.getRawOcrResult().isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(record.getRawOcrResult());
+            if (!node.has("failureReason") || node.get("failureReason").isNull()) {
+                return null;
+            }
+            return node.get("failureReason").asText();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private String buildFailurePayload(String reason) {
+        try {
+            return objectMapper.writeValueAsString(Map.of("failureReason", reason == null ? "processing_error" : reason));
+        } catch (JsonProcessingException ex) {
+            return "{\"failureReason\":\"processing_error\"}";
+        }
     }
 
     private record UploadFormat(String extension, String contentType) {}
