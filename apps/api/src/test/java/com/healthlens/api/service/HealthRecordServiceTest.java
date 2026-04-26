@@ -5,9 +5,9 @@ import com.healthlens.api.dto.MetricDto;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
+import com.healthlens.api.dto.request.UpdateMetricsRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
-import com.healthlens.api.dto.MetricDto;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.Profile;
@@ -27,8 +27,9 @@ import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.Duration;
 import java.time.LocalDate;
-import java.util.List;
 import java.math.BigDecimal;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,6 +40,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -291,8 +293,8 @@ class HealthRecordServiceTest {
     }
 
     @Test
-    @DisplayName("confirmRecord khong doi source_type khi khong yeu cau keepPartial")
-    void confirmRecord_keepsSourceTypeWhenNotKeepPartial() {
+    @DisplayName("confirmRecord tinh lai source_type khi khong yeu cau keepPartial")
+    void confirmRecord_recomputesSourceTypeWhenNotKeepPartial() {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
         HealthRecord record = new HealthRecord();
@@ -307,6 +309,7 @@ class HealthRecordServiceTest {
                 .value("6.1")
                 .unit("mmol/L")
                 .confidenceLevel("high")
+                .source("manual")
                 .build();
         ConfirmRecordRequest request = ConfirmRecordRequest.builder()
                 .metrics(List.of(highMetric))
@@ -314,7 +317,7 @@ class HealthRecordServiceTest {
 
         healthRecordService.confirmRecord(userId, recordId, request);
 
-        assertThat(record.getSourceType()).isEqualTo("ocr_partial");
+        assertThat(record.getSourceType()).isEqualTo("manual");
         verify(healthRecordRepository).save(record);
     }
 
@@ -407,6 +410,283 @@ class HealthRecordServiceTest {
         assertThatThrownBy(() -> healthRecordService.getMetricExplanation(userId, recordId, "Glucose"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Khong tim thay chi so");
+    }
+
+    @Test
+    @DisplayName("updateMetrics cap nhat metrics va dat source_type = ocr khi tat ca la ocr")
+    void updateMetrics_allOcr_sourceTypeOcr() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("review_required");
+        record.setSourceType("ocr");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        MetricDto m1 = new MetricDto();
+        m1.setName("Glucose");
+        m1.setValue("5.4");
+        m1.setUnit("mmol/L");
+        m1.setSource("ocr");
+
+        MetricDto m2 = new MetricDto();
+        m2.setName("HbA1c");
+        m2.setValue("6.1");
+        m2.setUnit("%");
+        m2.setSource("ocr");
+
+        UpdateMetricsRequest request = new UpdateMetricsRequest(List.of(m1, m2));
+        healthRecordService.updateMetrics(userId, recordId, request);
+
+        assertThat(record.getSourceType()).isEqualTo("ocr");
+        assertThat(record.getMetrics()).contains("Glucose");
+        verify(healthRecordRepository).save(record);
+    }
+
+    @Test
+    @DisplayName("updateMetrics coi ocr_regex_fallback la OCR khi tinh source_type")
+    void updateMetrics_ocrRegexFallback_sourceTypeOcr() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("review_required");
+        record.setSourceType("manual");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        MetricDto metric = new MetricDto();
+        metric.setName("Glucose");
+        metric.setValue("5.4");
+        metric.setUnit("mmol/L");
+        metric.setSource("ocr_regex_fallback");
+
+        healthRecordService.updateMetrics(userId, recordId, new UpdateMetricsRequest(List.of(metric)));
+
+        assertThat(record.getSourceType()).isEqualTo("ocr");
+        verify(healthRecordRepository).save(record);
+    }
+
+    @Test
+    @DisplayName("updateMetrics dat source_type = manual khi tat ca metrics la manual")
+    void updateMetrics_allManual_sourceTypeManual() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("done");
+        record.setSourceType("ocr");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        MetricDto m1 = new MetricDto();
+        m1.setName("Glucose");
+        m1.setValue("5.4");
+        m1.setUnit("mmol/L");
+        m1.setSource("manual");
+
+        UpdateMetricsRequest request = new UpdateMetricsRequest(List.of(m1));
+        healthRecordService.updateMetrics(userId, recordId, request);
+
+        assertThat(record.getSourceType()).isEqualTo("manual");
+        verify(healthRecordRepository).save(record);
+    }
+
+    @Test
+    @DisplayName("updateMetrics dat source_type = mixed khi co ca ocr va manual")
+    void updateMetrics_mixed_sourceTypeMixed() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("review_required");
+        record.setSourceType("ocr");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        MetricDto ocrMetric = new MetricDto();
+        ocrMetric.setName("Glucose");
+        ocrMetric.setValue("5.4");
+        ocrMetric.setUnit("mmol/L");
+        ocrMetric.setSource("ocr");
+
+        MetricDto manualMetric = new MetricDto();
+        manualMetric.setName("HbA1c");
+        manualMetric.setValue("6.1");
+        manualMetric.setUnit("%");
+        manualMetric.setSource("manual");
+
+        UpdateMetricsRequest request = new UpdateMetricsRequest(List.of(ocrMetric, manualMetric));
+        healthRecordService.updateMetrics(userId, recordId, request);
+
+        assertThat(record.getSourceType()).isEqualTo("mixed");
+        verify(healthRecordRepository).save(record);
+    }
+
+    @Test
+    @DisplayName("updateMetrics that bai khi user khong phai chu so huu record")
+    void updateMetrics_wrongUser_throwsException() {
+        UUID userId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(otherUserId);
+        record.setStatus("review_required");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        UpdateMetricsRequest request = new UpdateMetricsRequest(List.of());
+
+        assertThatThrownBy(() -> healthRecordService.updateMetrics(userId, recordId, request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("quyen cap nhat");
+    }
+
+    @Test
+    @DisplayName("updateMetrics that bai khi status khong hop le")
+    void updateMetrics_invalidStatus_throwsException() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("processing");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        UpdateMetricsRequest request = new UpdateMetricsRequest(List.of());
+
+        assertThatThrownBy(() -> healthRecordService.updateMetrics(userId, recordId, request))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("khong o trang thai cho phep cap nhat");
+    }
+
+    @Test
+    @DisplayName("confirmRecord tinh toan source_type = mixed khi co ca ocr va manual metrics")
+    void confirmRecord_withMixedMetrics_sourceTypeMixed() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("review_required");
+        record.setSourceType("ocr");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        MetricDto ocrMetric = new MetricDto();
+        ocrMetric.setName("Glucose");
+        ocrMetric.setValue("5.4");
+        ocrMetric.setUnit("mmol/L");
+        ocrMetric.setSource("ocr");
+
+        MetricDto manualMetric = new MetricDto();
+        manualMetric.setName("HbA1c");
+        manualMetric.setValue("6.1");
+        manualMetric.setUnit("%");
+        manualMetric.setSource("manual");
+
+        ConfirmRecordRequest request = ConfirmRecordRequest.builder()
+                .metrics(List.of(ocrMetric, manualMetric))
+                .build();
+
+        healthRecordService.confirmRecord(userId, recordId, request);
+
+        assertThat(record.getStatus()).isEqualTo("done");
+        assertThat(record.getSourceType()).isEqualTo("mixed");
+        verify(healthRecordRepository).save(record);
+    }
+
+    @Test
+    @DisplayName("confirmRecord that bai khi metrics co phan tu null")
+    void confirmRecord_nullMetric_throwsException() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("review_required");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        ConfirmRecordRequest request = ConfirmRecordRequest.builder()
+                .metrics(Arrays.asList((MetricDto) null))
+                .build();
+
+        assertThatThrownBy(() -> healthRecordService.confirmRecord(userId, recordId, request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("không được null");
+        verify(healthRecordRepository, never()).save(record);
+    }
+
+    @Test
+    @DisplayName("updateMetrics giu nguyen source_type hien tai khi danh sach metrics rong")
+    void updateMetrics_emptyList_preservesCurrentSourceType() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("done");
+        record.setSourceType("ocr");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+        when(redisTemplate.delete(any(String.class))).thenReturn(true);
+
+        UpdateMetricsRequest request = new UpdateMetricsRequest(java.util.Collections.emptyList());
+        healthRecordService.updateMetrics(userId, recordId, request);
+
+        assertThat(record.getSourceType()).isEqualTo("ocr");
+        verify(healthRecordRepository).save(record);
+    }
+
+    @Test
+    @DisplayName("updateMetrics dat source_type = mixed khi co metric voi source = null (khong xac dinh)")
+    void updateMetrics_nullSource_treatedAsNonOcr() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("review_required");
+        record.setSourceType("ocr");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+        when(redisTemplate.delete(any(String.class))).thenReturn(true);
+
+        MetricDto ocrMetric = new MetricDto();
+        ocrMetric.setName("Glucose");
+        ocrMetric.setValue("5.4");
+        ocrMetric.setUnit("mmol/L");
+        ocrMetric.setSource("ocr");
+
+        MetricDto nullSourceMetric = new MetricDto();
+        nullSourceMetric.setName("HbA1c");
+        nullSourceMetric.setValue("6.1");
+        nullSourceMetric.setUnit("%");
+        nullSourceMetric.setSource(null);
+
+        UpdateMetricsRequest request = new UpdateMetricsRequest(List.of(ocrMetric, nullSourceMetric));
+        healthRecordService.updateMetrics(userId, recordId, request);
+
+        assertThat(record.getSourceType()).isEqualTo("mixed");
+        verify(healthRecordRepository).save(record);
     }
 
     private Profile buildProfile(UUID userId, UUID profileId) {

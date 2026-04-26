@@ -1,6 +1,7 @@
 package com.healthlens.api.service;
 
 import com.healthlens.api.dto.MetricClassificationDto;
+import com.healthlens.api.dto.MetricNameDto;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.entity.ReferenceData;
 import com.healthlens.api.entity.ReferenceMetricAlias;
@@ -215,6 +216,12 @@ public class ReferenceDataService {
             return "female";
         }
         return null;
+    }
+
+    public java.util.List<MetricNameDto> getAllMetricNames() {
+        return referenceMetricRepository.findAllByOrderByNameAsc().stream()
+                .map(m -> new MetricNameDto(m.getName(), m.getDisplayNameVi(), m.getUnit()))
+                .collect(java.util.stream.Collectors.toList());
     }
 
     private record ReferenceRangeWithMeta(ReferenceMetric metric, ReferenceRange range) {

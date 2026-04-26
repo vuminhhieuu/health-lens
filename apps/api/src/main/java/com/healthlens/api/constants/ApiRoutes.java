@@ -79,6 +79,12 @@ public final class ApiRoutes {
     public static final String REFERENCE_DATA_SEARCH = REFERENCE_DATA_BASE + "/search";
     public static final String REFERENCE_DATA_RANGES = REFERENCE_DATA_BASE + "/ranges";
     public static final String REFERENCE_DATA_SYNC = REFERENCE_DATA_BASE + "/sync";
+    public static final String REFERENCE_DATA_METRICS = REFERENCE_DATA_BASE + "/metrics";
+
+    // =========================================
+    // Health Record Metric Paths (Story 3.4)
+    // =========================================
+    public static final String HEALTH_RECORD_METRICS = HEALTH_RECORDS_BASE + "/{recordId}/metrics";
 
     // =========================================
     // OCR Paths (Frontend: ApiPaths.OCR)

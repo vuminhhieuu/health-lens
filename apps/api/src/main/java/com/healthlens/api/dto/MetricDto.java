@@ -27,7 +27,7 @@ public class MetricDto {
     private String statusSource; // "document", "system", "none"
     private String interpretation; // "high", "low", "normal", "critical", "unknown"
     private String interpretationSource; // "document", "computed", "system"
-    private boolean critical;
+    private Boolean critical;
     private ReferenceRangeDto referenceRange;
     private String referenceRangeSource; // "document", "system", "none"
     private String explanation;

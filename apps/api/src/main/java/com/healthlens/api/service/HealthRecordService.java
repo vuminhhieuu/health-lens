@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
+import com.healthlens.api.dto.request.UpdateMetricsRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.HealthRecordDetailResponse;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
@@ -30,6 +31,8 @@ import java.time.Period;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
@@ -374,22 +377,109 @@ public class HealthRecordService {
             }
             
             if (request.getMetrics() != null) {
+                List<MetricDto> metrics = request.getMetrics();
+                validateMetrics(metrics);
+                String computedSourceType = computeSourceType(metrics, record.getSourceType());
                 try {
-                    record.setMetrics(objectMapper.writeValueAsString(request.getMetrics()));
-                    if (keepPartialRequested) {
-                        record.setSourceType("ocr_partial");
-                    } else if ("ocr_failed".equals(previousStatus)) {
-                        record.setSourceType("manual");
-                    } else if (record.getSourceType() == null || record.getSourceType().isBlank()) {
-                        record.setSourceType("ocr");
-                    }
-                } catch (Exception e) {
-                    log.warn("Failed to serialize metrics in confirmRecord for {}", recordId);
+                    record.setMetrics(objectMapper.writeValueAsString(metrics));
+                } catch (JsonProcessingException e) {
+                    throw new IllegalStateException("Failed to serialize metrics for " + recordId, e);
+                }
+
+                if (keepPartialRequested) {
+                    record.setSourceType("ocr_partial");
+                } else if ("ocr_failed".equals(previousStatus)) {
+                    record.setSourceType("manual");
+                } else {
+                    record.setSourceType(computedSourceType);
                 }
             }
         }
 
         healthRecordRepository.save(record);
+    }
+
+    @Transactional
+    public void updateMetrics(UUID userId, UUID recordId, UpdateMetricsRequest request) {
+        HealthRecord record = healthRecordRepository.findById(recordId)
+                .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+
+        if (!record.getUserId().equals(userId)) {
+            throw new IllegalArgumentException("Ban khong co quyen cap nhat health record nay");
+        }
+
+        if (!"review_required".equals(record.getStatus())
+                && !"done".equals(record.getStatus())
+                && !"ocr_failed".equals(record.getStatus())) {
+            throw new IllegalStateException("Health record khong o trang thai cho phep cap nhat");
+        }
+
+        List<MetricDto> metrics = request.getMetrics();
+        validateMetrics(metrics);
+        record.setSourceType(computeSourceType(metrics, record.getSourceType()));
+        try {
+            record.setMetrics(objectMapper.writeValueAsString(metrics));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize metrics for " + recordId);
+        }
+        healthRecordRepository.save(record);
+
+        String cacheKey = "health-record-status:" + userId + ":" + recordId;
+        redisTemplate.delete(cacheKey);
+    }
+
+    private static final Set<String> VALID_SOURCES = Set.of(
+            "ocr", "manual", "ocr_regex_fallback"
+    );
+    private static final Set<String> OCR_SOURCES = Set.of("ocr", "ocr_regex_fallback");
+
+    private void validateMetrics(List<MetricDto> metrics) {
+        for (int i = 0; i < metrics.size(); i++) {
+            MetricDto m = metrics.get(i);
+            if (m == null) {
+                throw new IllegalArgumentException("Metric[" + i + "]: không được null");
+            }
+            if (m.getName() == null || m.getName().isBlank()) {
+                throw new IllegalArgumentException("Metric[" + i + "]: tên chỉ số không được để trống");
+            }
+            if (m.getValue() == null || m.getValue().isBlank()) {
+                throw new IllegalArgumentException("Metric[" + i + "]: giá trị không được để trống");
+            }
+            if (m.getUnit() == null || m.getUnit().isBlank()) {
+                throw new IllegalArgumentException("Metric[" + i + "]: đơn vị không được để trống");
+            }
+            if (m.getSource() != null && !VALID_SOURCES.contains(m.getSource())) {
+                throw new IllegalArgumentException(
+                        "Metric[" + i + "]: source '" + m.getSource() + "' không hợp lệ"
+                );
+            }
+        }
+    }
+
+    /**
+     * Tính toán source_type từ danh sách metrics.
+     * - Nếu danh sách rỗng/null: giữ nguyên sourceType hiện tại của record.
+     * - Nếu tất cả là "ocr": trả về "ocr".
+     * - Nếu không có metric nào là "ocr" (kể cả null source): trả về "manual".
+     * - Còn lại (có cả ocr lẫn non-ocr): trả về "mixed".
+     */
+    private String computeSourceType(List<MetricDto> metrics, String currentSourceType) {
+        if (metrics == null || metrics.isEmpty()) {
+            return currentSourceType != null ? currentSourceType : "manual";
+        }
+        boolean anyOcr = metrics.stream()
+                .filter(Objects::nonNull)
+                .map(MetricDto::getSource)
+                .anyMatch(this::isOcrSource);
+        boolean anyNonOcr = metrics.stream()
+                .anyMatch(m -> m == null || !isOcrSource(m.getSource()));
+        if (anyOcr && anyNonOcr) return "mixed";
+        if (anyOcr) return "ocr";
+        return "manual";
+    }
+
+    private boolean isOcrSource(String source) {
+        return source != null && OCR_SOURCES.contains(source);
     }
 
     private String uploadReservationKey(UUID recordId) {
