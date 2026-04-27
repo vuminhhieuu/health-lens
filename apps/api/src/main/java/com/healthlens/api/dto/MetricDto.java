@@ -30,5 +30,6 @@ public class MetricDto {
     private Boolean critical;
     private ReferenceRangeDto referenceRange;
     private String referenceRangeSource; // "document", "system", "none"
+    private RangeContextDto rangeContext;
     private String explanation;
 }

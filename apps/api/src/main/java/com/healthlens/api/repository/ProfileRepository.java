@@ -13,6 +13,8 @@ public interface ProfileRepository extends JpaRepository<Profile, UUID> {
     
     List<Profile> findAllByUserId(UUID userId);
 
+    Optional<Profile> findByIdAndUserId(UUID id, UUID userId);
+
     Optional<Profile> findFirstByUserIdAndIsDefaultTrue(UUID userId);
 
     Optional<Profile> findTopByUserIdOrderByCreatedAtAsc(UUID userId);

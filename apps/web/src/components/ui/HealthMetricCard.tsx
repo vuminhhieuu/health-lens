@@ -16,6 +16,11 @@ type ReferenceRange = {
   unit?: string;
 };
 
+type RangeContext = {
+  gender?: string | null;
+  ageRange?: string | null;
+};
+
 type HealthMetricCardProps = {
   recordId?: string;
   metricName: string;
@@ -23,6 +28,7 @@ type HealthMetricCardProps = {
   value: string;
   unit: string;
   referenceRange?: ReferenceRange | null;
+  rangeContext?: RangeContext | null;
   referenceRangeSource?: "document" | "system" | "none";
   status: MetricStatus;
   critical?: boolean;
@@ -62,6 +68,7 @@ export function HealthMetricCard({
   value,
   unit,
   referenceRange,
+  rangeContext,
   referenceRangeSource,
   status,
   critical,
@@ -96,6 +103,7 @@ export function HealthMetricCard({
   const displayReference = referenceRange
     ? `${referenceRange.min} - ${referenceRange.max} ${referenceRange.unit ?? unit}`
     : "Không có dữ liệu tham chiếu";
+  const contextNote = buildRangeContextNote(rangeContext);
 
   return (
     <button
@@ -139,6 +147,19 @@ export function HealthMetricCard({
                 {referenceRangeSource === "document" ? "Theo phiếu xét nghiệm" : "Theo hệ thống tham chiếu"}
               </p>
             ) : null}
+            {referenceRangeSource === "system" ? (
+              contextNote ? (
+                <p className="mt-2">
+                  <span className="font-semibold">Ngữ cảnh ngưỡng: </span>
+                  {contextNote}
+                </p>
+              ) : (
+                <p className="mt-2">
+                  <span className="font-semibold">Ngữ cảnh ngưỡng: </span>
+                  Ngưỡng tham chiếu chung
+                </p>
+              )
+            ) : null}
             {critical ? (
               <p className="mt-2 rounded-lg bg-[#fff2f2] px-2 py-1 text-[#ba1a1a]">
                 Chỉ số có dấu hiệu vượt ngưỡng nguy cấp, nên liên hệ bác sĩ để được tư vấn sớm.
@@ -167,4 +188,19 @@ export function HealthMetricCard({
       </div>
     </button>
   );
+}
+
+function buildRangeContextNote(rangeContext?: RangeContext | null): string | null {
+  if (!rangeContext || (!rangeContext.gender && !rangeContext.ageRange)) {
+    return null;
+  }
+  const genderLabel =
+    rangeContext.gender === "female"
+      ? "Nữ"
+      : rangeContext.gender === "male"
+      ? "Nam"
+      : null;
+  const ageLabel = rangeContext.ageRange ? `${rangeContext.ageRange} tuổi` : null;
+  const parts = [genderLabel, ageLabel].filter(Boolean);
+  return parts.length > 0 ? `Ngưỡng áp dụng cho: ${parts.join(", ")}` : null;
 }

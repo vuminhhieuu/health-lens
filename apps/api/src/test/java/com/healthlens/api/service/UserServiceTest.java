@@ -2,8 +2,10 @@ package com.healthlens.api.service;
 
 import com.healthlens.api.dto.request.UpdateUserRequest;
 import com.healthlens.api.dto.response.UserResponse;
+import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ResourceNotFoundException;
+import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +29,9 @@ class UserServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private ProfileRepository profileRepository;
 
     @InjectMocks
     private UserService userService;
@@ -71,6 +76,7 @@ class UserServiceTest {
     void updateCurrentUser_Success() {
         when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
         when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)).thenReturn(Optional.empty());
 
         UpdateUserRequest request = new UpdateUserRequest(
                 "New Name  ",
@@ -90,6 +96,7 @@ class UserServiceTest {
     void updateCurrentUser_PartialUpdate_Success() {
         when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
         when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)).thenReturn(Optional.empty());
 
         // Update only full name
         UpdateUserRequest request = new UpdateUserRequest("Just Name", null, null);

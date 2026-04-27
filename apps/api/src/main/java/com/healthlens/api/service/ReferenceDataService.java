@@ -2,18 +2,28 @@ package com.healthlens.api.service;
 
 import com.healthlens.api.dto.MetricClassificationDto;
 import com.healthlens.api.dto.MetricNameDto;
+import com.healthlens.api.dto.RangeContextDto;
 import com.healthlens.api.dto.ReferenceRangeDto;
+import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.ReferenceData;
 import com.healthlens.api.entity.ReferenceMetricAlias;
 import com.healthlens.api.entity.ReferenceMetric;
 import com.healthlens.api.entity.ReferenceRange;
+import com.healthlens.api.entity.ReferenceRangeAuditLog;
 import com.healthlens.api.repository.ReferenceMetricAliasRepository;
 import com.healthlens.api.repository.ReferenceMetricRepository;
+import com.healthlens.api.repository.ReferenceRangeAuditLogRepository;
 import com.healthlens.api.repository.ReferenceRangeRepository;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.text.Normalizer;
+import java.time.LocalDate;
+import java.time.Period;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Locale;
@@ -21,6 +31,7 @@ import java.util.UUID;
 
 @Service
 public class ReferenceDataService {
+    private static final Logger log = LoggerFactory.getLogger(ReferenceDataService.class);
     private static final Map<String, String> RELATION_HINTS = Map.ofEntries(
             Map.entry("ALT", "gan và nguy cơ tổn thương tế bào gan"),
             Map.entry("AST", "gan, cơ và đánh giá tổn thương mô"),
@@ -46,15 +57,18 @@ public class ReferenceDataService {
     private final ReferenceMetricRepository referenceMetricRepository;
     private final ReferenceMetricAliasRepository referenceMetricAliasRepository;
     private final ReferenceRangeRepository referenceRangeRepository;
+    private final ReferenceRangeAuditLogRepository referenceRangeAuditLogRepository;
 
     public ReferenceDataService(
             ReferenceMetricRepository referenceMetricRepository,
             ReferenceMetricAliasRepository referenceMetricAliasRepository,
-            ReferenceRangeRepository referenceRangeRepository
+            ReferenceRangeRepository referenceRangeRepository,
+            ReferenceRangeAuditLogRepository referenceRangeAuditLogRepository
     ) {
         this.referenceMetricRepository = referenceMetricRepository;
         this.referenceMetricAliasRepository = referenceMetricAliasRepository;
         this.referenceRangeRepository = referenceRangeRepository;
+        this.referenceRangeAuditLogRepository = referenceRangeAuditLogRepository;
     }
 
     public Optional<ReferenceData> findById(String id) {
@@ -80,14 +94,15 @@ public class ReferenceDataService {
         }
     }
 
-    public MetricClassificationDto classifyMetric(String metricName, String rawValue, Integer age, String gender) {
-        Optional<ReferenceRangeWithMeta> matched = findMatchingRange(metricName, age, gender);
+    public MetricClassificationDto classifyMetric(String metricName, String rawValue, Profile profile, LocalDate examDate) {
+        Optional<ReferenceRangeWithMeta> matched = findMatchingRange(metricName, profile, examDate);
         if (matched.isEmpty()) {
-            return new MetricClassificationDto("no_data", null, null);
+            return new MetricClassificationDto("no_data", null, null, null);
         }
 
         ReferenceRangeWithMeta data = matched.get();
         ReferenceRange range = data.range();
+        persistAuditLog(data.metric().getId(), range.getId(), profile != null ? profile.getId() : null);
         ReferenceRangeDto rangeDto = new ReferenceRangeDto(
                 range.getMinValue(),
                 range.getMaxValue(),
@@ -98,21 +113,26 @@ public class ReferenceDataService {
 
         Optional<BigDecimal> valueOpt = parseValue(rawValue);
         if (valueOpt.isEmpty()) {
-            return new MetricClassificationDto("no_data", null, data.metric().getDisplayNameVi());
+            return new MetricClassificationDto("no_data", null, data.metric().getDisplayNameVi(), data.rangeContext());
         }
 
         BigDecimal value = valueOpt.get();
         if (value.compareTo(range.getAttentionMin()) < 0 || value.compareTo(range.getAttentionMax()) > 0) {
-            return new MetricClassificationDto("abnormal", rangeDto, data.metric().getDisplayNameVi());
+            return new MetricClassificationDto("abnormal", rangeDto, data.metric().getDisplayNameVi(), data.rangeContext());
         }
         if (value.compareTo(range.getMinValue()) < 0 || value.compareTo(range.getMaxValue()) > 0) {
-            return new MetricClassificationDto("attention", rangeDto, data.metric().getDisplayNameVi());
+            return new MetricClassificationDto("attention", rangeDto, data.metric().getDisplayNameVi(), data.rangeContext());
         }
-        return new MetricClassificationDto("normal", rangeDto, data.metric().getDisplayNameVi());
+        return new MetricClassificationDto("normal", rangeDto, data.metric().getDisplayNameVi(), data.rangeContext());
     }
 
     public Optional<ReferenceRangeDto> findReferenceRange(String metricName, Integer age, String gender) {
-        return findMatchingRange(metricName, age, gender)
+        Profile profile = new Profile();
+        profile.setGender(gender);
+        if (age != null) {
+            profile.setBirthDate(LocalDate.now().minusYears(age));
+        }
+        return findMatchingRange(metricName, profile, LocalDate.now())
                 .map(data -> new ReferenceRangeDto(
                         data.range().getMinValue(),
                         data.range().getMaxValue(),
@@ -154,7 +174,7 @@ public class ReferenceDataService {
                 """.formatted(displayName, safeMetricName, relation, impact, rangeText);
     }
 
-    private Optional<ReferenceRangeWithMeta> findMatchingRange(String metricName, Integer age, String gender) {
+    private Optional<ReferenceRangeWithMeta> findMatchingRange(String metricName, Profile profile, LocalDate examDate) {
         if (metricName == null || metricName.isBlank()) {
             return Optional.empty();
         }
@@ -164,10 +184,103 @@ public class ReferenceDataService {
         }
 
         ReferenceMetric metric = metricOpt.get();
-        return referenceRangeRepository.findMatchingRanges(metric.getId(), age, normalizeGender(gender))
-                .stream()
-                .findFirst()
-                .map(range -> new ReferenceRangeWithMeta(metric, range));
+        Integer age = resolveAge(profile, examDate);
+        String normalizedGender = normalizeGender(profile != null ? profile.getGender() : null);
+        List<ReferenceRange> candidates = referenceRangeRepository.findActiveRangesByMetricId(metric.getId());
+        List<ReferenceRange> genderMatched = candidates.stream()
+                .filter(range -> matchesGender(range, normalizedGender))
+                .toList();
+        if (genderMatched.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Optional<ReferenceRange> strictAgeMatch = genderMatched.stream()
+                .filter(range -> matchesAge(range, age))
+                .max(Comparator.comparingInt(range -> priority(range, normalizedGender, age)));
+
+        Optional<ReferenceRange> selectedRange = strictAgeMatch;
+        if (selectedRange.isEmpty()) {
+            // Fallback only to non-age-specific rules to avoid applying
+            // a range that explicitly does not match profile age.
+            selectedRange = genderMatched.stream()
+                    .filter(range -> range.getMinAge() == null && range.getMaxAge() == null)
+                    .max(Comparator.comparingInt(range -> priority(range, normalizedGender, null)));
+        }
+
+        return selectedRange.map(range -> {
+                    log.info(
+                            "Applied reference rule metric_id={} reference_range_id={} gender={} age={}",
+                            metric.getId(),
+                            range.getId(),
+                            normalizedGender,
+                            age
+                    );
+                    return new ReferenceRangeWithMeta(metric, range, buildRangeContext(range));
+                });
+    }
+
+    private void persistAuditLog(UUID metricId, UUID referenceRangeId, UUID profileId) {
+        ReferenceRangeAuditLog auditLog = new ReferenceRangeAuditLog();
+        auditLog.setMetricId(metricId);
+        auditLog.setReferenceRangeId(referenceRangeId);
+        auditLog.setProfileId(profileId);
+        referenceRangeAuditLogRepository.save(auditLog);
+    }
+
+    private RangeContextDto buildRangeContext(ReferenceRange range) {
+        String gender = normalizeGender(range.getGender());
+        String ageRange = null;
+        if (range.getMinAge() != null || range.getMaxAge() != null) {
+            Integer minAge = range.getMinAge() != null ? range.getMinAge() : 0;
+            Integer maxAge = range.getMaxAge() != null ? range.getMaxAge() : 120;
+            ageRange = minAge + "-" + maxAge;
+        }
+        return new RangeContextDto(gender, ageRange);
+    }
+
+    private boolean matchesGender(ReferenceRange range, String normalizedGender) {
+        if (normalizedGender == null) {
+            return range.getGender() == null;
+        }
+        String rangeGender = normalizeGender(range.getGender());
+        return rangeGender == null || normalizedGender.equals(rangeGender);
+    }
+
+    private boolean matchesAge(ReferenceRange range, Integer age) {
+        if (age == null) {
+            return range.getMinAge() == null && range.getMaxAge() == null;
+        }
+        if (range.getMinAge() != null && range.getMinAge() > age) {
+            return false;
+        }
+        return range.getMaxAge() == null || range.getMaxAge() >= age;
+    }
+
+    private int priority(ReferenceRange range, String normalizedGender, Integer age) {
+        boolean genderSpecific = normalizedGender != null && normalizeGender(range.getGender()) != null;
+        boolean ageSpecific = age != null && (range.getMinAge() != null || range.getMaxAge() != null);
+        if (genderSpecific && ageSpecific) {
+            return 4;
+        }
+        if (genderSpecific) {
+            return 3;
+        }
+        if (ageSpecific) {
+            return 2;
+        }
+        return 1;
+    }
+
+    private Integer resolveAge(Profile profile, LocalDate examDate) {
+        if (profile == null || profile.getBirthDate() == null) {
+            return null;
+        }
+        LocalDate birthDate = profile.getBirthDate();
+        LocalDate referenceDate = examDate != null ? examDate : LocalDate.now();
+        if (birthDate.isAfter(referenceDate)) {
+            return null;
+        }
+        return Period.between(birthDate, referenceDate).getYears();
     }
 
     private Optional<ReferenceMetric> resolveMetric(String metricName) {
@@ -184,6 +297,8 @@ public class ReferenceDataService {
     private String normalizeMetricName(String input) {
         String normalized = Normalizer.normalize(input, Normalizer.Form.NFD)
                 .replaceAll("\\p{M}", "")
+                .replace("đ", "d")
+                .replace("Đ", "d")
                 .toLowerCase(Locale.ROOT);
         return normalized.replaceAll("[^a-z0-9]", "");
     }
@@ -224,6 +339,6 @@ public class ReferenceDataService {
                 .collect(java.util.stream.Collectors.toList());
     }
 
-    private record ReferenceRangeWithMeta(ReferenceMetric metric, ReferenceRange range) {
+    private record ReferenceRangeWithMeta(ReferenceMetric metric, ReferenceRange range, RangeContextDto rangeContext) {
     }
 }

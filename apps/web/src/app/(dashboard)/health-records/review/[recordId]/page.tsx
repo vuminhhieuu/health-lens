@@ -53,6 +53,10 @@ type MetricDto = {
     unit?: string;
   } | null;
   referenceRangeSource?: "document" | "system" | "none";
+  rangeContext?: {
+    gender?: "male" | "female" | null;
+    ageRange?: string | null;
+  } | null;
   explanation?: string;
 };
 
@@ -549,6 +553,7 @@ export default function ReviewRecordPage() {
                     value={metric.value}
                     unit={metric.unit}
                     referenceRange={metric.referenceRange}
+                    rangeContext={metric.rangeContext}
                     referenceRangeSource={metric.referenceRangeSource}
                     status={metric.status ?? "no_data"}
                     critical={metric.critical}

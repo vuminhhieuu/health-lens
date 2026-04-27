@@ -111,7 +111,7 @@ development_status:
   # Epic 4: Display (5 stories) - SPRINT 2
   epic-4: in-progress
   4-1-metric-card-status-reference-range: sprint-2
-  4-2-age-gender-context-reference-range: sprint-2
+  4-2-age-gender-context-reference-range: review
   4-3-simple-vietnamese-metric-explanations: done
   4-4-lifestyle-recommendations-with-disclaimer: sprint-2
   4-5-highlight-alerts-progressive-disclosure: sprint-2

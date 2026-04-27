@@ -14,6 +14,13 @@ public interface ReferenceRangeRepository extends JpaRepository<ReferenceRange, 
         SELECT rr FROM ReferenceRange rr
         WHERE rr.metric.id = :metricId
           AND rr.status = 'active'
+        """)
+    List<ReferenceRange> findActiveRangesByMetricId(@Param("metricId") UUID metricId);
+
+    @Query("""
+        SELECT rr FROM ReferenceRange rr
+        WHERE rr.metric.id = :metricId
+          AND rr.status = 'active'
           AND (:gender IS NULL OR rr.gender IS NULL OR LOWER(rr.gender) = :gender)
           AND (:age IS NULL OR rr.minAge IS NULL OR rr.minAge <= :age)
           AND (:age IS NULL OR rr.maxAge IS NULL OR rr.maxAge >= :age)

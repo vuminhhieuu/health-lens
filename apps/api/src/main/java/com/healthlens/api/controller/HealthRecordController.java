@@ -69,10 +69,11 @@ public class HealthRecordController {
     @GetMapping("/{recordId}")
     public ResponseEntity<Map<String, Object>> getDetail(
             Authentication authentication,
-            @PathVariable UUID recordId
+            @PathVariable UUID recordId,
+            @RequestParam(required = false) UUID profileId
     ) {
         UUID userId = UUID.fromString(authentication.getName());
-        HealthRecordDetailResponse response = healthRecordService.getDetail(userId, recordId);
+        HealthRecordDetailResponse response = healthRecordService.getDetail(userId, recordId, profileId);
         return ResponseEntity.ok(buildResponseBody(response));
     }
 
