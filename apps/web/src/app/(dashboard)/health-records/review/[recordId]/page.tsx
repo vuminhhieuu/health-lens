@@ -151,6 +151,7 @@ export default function ReviewRecordPage() {
 
   const initialized = useRef(false);
   const initialSnapshotRef = useRef<string>("");
+  const skipUnloadWarningRef = useRef(false);
 
   const buildSnapshot = (payload: {
     metrics: MetricDto[];
@@ -213,6 +214,9 @@ export default function ReviewRecordPage() {
     }
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (skipUnloadWarningRef.current) {
+        return;
+      }
       e.preventDefault();
       e.returnValue = "";
     };
@@ -340,6 +344,10 @@ export default function ReviewRecordPage() {
       });
       await refetch();
       alert("Lưu kết quả khám thành công!");
+      if (!resolvedKeepPartial) {
+        skipUnloadWarningRef.current = true;
+        window.location.reload();
+      }
       return true;
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string; title?: string }; status?: number } };
@@ -738,16 +746,16 @@ export default function ReviewRecordPage() {
           <div className="flex justify-end pt-4 pb-12">
             <button
               onClick={() => (canConfirm ? setShowConfirmModal(true) : executeSave(false))}
-              disabled={isSaving || !showEditableTable}
+              disabled={isSaving || (!canConfirm && !isDirty)}
               className="inline-flex items-center gap-2 rounded-xl bg-[#00685f] px-10 py-4 font-bold text-white shadow-lg transition hover:brightness-110 hover:translate-y-[-2px] disabled:opacity-70 disabled:transform-none"
             >
               {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
               {canConfirm ? "XÁC NHẬN VÀ LƯU HỒ SƠ" : "LƯU CHỈNH SỬA"}
             </button>
           </div>
-          {!canConfirm && !showEditableTable && (
+          {!canConfirm && !isDirty && !showEditableTable && (
             <p className="text-right text-sm text-[#6d7a77]">
-              Hồ sơ đã xác nhận. Bấm &quot;Chỉnh sửa kết quả&quot; nếu bạn muốn cập nhật lại.
+              Hồ sơ đã xác nhận. Chỉnh sửa thông tin hành chính ở trên hoặc bấm &quot;Chỉnh sửa kết quả&quot; để cập nhật các chỉ số.
             </p>
           )}
         </div>
