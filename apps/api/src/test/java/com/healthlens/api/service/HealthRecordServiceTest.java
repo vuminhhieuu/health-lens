@@ -83,7 +83,10 @@ class HealthRecordServiceTest {
                 .thenReturn("https://signed-upload-url");
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
-        UploadUrlResponse response = healthRecordService.createUploadUrl(userId, new CreateUploadUrlRequest(profileId, "pdf"));
+        UploadUrlResponse response = healthRecordService.createUploadUrl(
+                userId,
+                new CreateUploadUrlRequest(profileId, "pdf", null)
+        );
 
         assertThat(response.uploadUrl()).isEqualTo("https://signed-upload-url");
         assertThat(response.fileKey()).contains("health-records/" + userId + "/" + profileId + "/");
@@ -102,11 +105,68 @@ class HealthRecordServiceTest {
                 .thenReturn("https://signed-upload-url-png");
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
-        UploadUrlResponse response = healthRecordService.createUploadUrl(userId, new CreateUploadUrlRequest(profileId, "image/png"));
+        UploadUrlResponse response = healthRecordService.createUploadUrl(
+                userId,
+                new CreateUploadUrlRequest(profileId, "image/png", null)
+        );
 
         assertThat(response.uploadUrl()).isEqualTo("https://signed-upload-url-png");
         assertThat(response.fileKey()).endsWith("/original.png");
         verify(valueOperations).set(any(), any(), any(Duration.class));
+    }
+
+    @Test
+    @DisplayName("createUploadUrl retry dung lai recordId va profileId cu khi OCR failed")
+    void createUploadUrl_retryReuseExistingRecord() {
+        UUID userId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID ignoredProfileId = UUID.randomUUID();
+        UUID retryRecordId = UUID.randomUUID();
+
+        HealthRecord existing = new HealthRecord();
+        existing.setId(retryRecordId);
+        existing.setUserId(userId);
+        existing.setProfileId(profileId);
+        existing.setStatus("ocr_failed");
+
+        Profile profile = buildProfile(userId, profileId);
+        when(healthRecordRepository.findByIdAndUserId(retryRecordId, userId)).thenReturn(Optional.of(existing));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+        when(storageService.generateUploadUrl(any(), any(Duration.class), eq("application/pdf")))
+                .thenReturn("https://signed-upload-url-retry");
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        UploadUrlResponse response = healthRecordService.createUploadUrl(
+                userId,
+                new CreateUploadUrlRequest(ignoredProfileId, "pdf", retryRecordId)
+        );
+
+        assertThat(response.recordId()).isEqualTo(retryRecordId);
+        assertThat(response.fileKey()).contains("health-records/" + userId + "/" + profileId + "/" + retryRecordId + "/");
+        verify(valueOperations).set(any(), any(), any(Duration.class));
+    }
+
+    @Test
+    @DisplayName("createUploadUrl retry that bai neu record khong o trang thai ocr_failed")
+    void createUploadUrl_retryInvalidStatus() {
+        UUID userId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID retryRecordId = UUID.randomUUID();
+
+        HealthRecord existing = new HealthRecord();
+        existing.setId(retryRecordId);
+        existing.setUserId(userId);
+        existing.setProfileId(profileId);
+        existing.setStatus("done");
+
+        when(healthRecordRepository.findByIdAndUserId(retryRecordId, userId)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> healthRecordService.createUploadUrl(
+                userId,
+                new CreateUploadUrlRequest(profileId, "pdf", retryRecordId)
+        ))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("retry upload");
     }
 
     @Test
@@ -151,6 +211,34 @@ class HealthRecordServiceTest {
         assertThatThrownBy(() -> healthRecordService.confirmUpload(userId, recordId))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Upload session");
+    }
+
+    @Test
+    @DisplayName("confirmUpload fail neu record ton tai nhung khong o trang thai ocr_failed")
+    void confirmUpload_existingRecordInvalidStatus() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        String fileKey = "health-records/%s/%s/%s/original.jpg".formatted(userId, profileId, recordId);
+        String reservationJson = new ObjectMapper().writeValueAsString(Map.of(
+                "userId", userId,
+                "profileId", profileId,
+                "fileKey", fileKey
+        ));
+
+        HealthRecord existing = new HealthRecord();
+        existing.setId(recordId);
+        existing.setUserId(userId);
+        existing.setProfileId(profileId);
+        existing.setStatus("done");
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("health-record-upload:" + recordId)).thenReturn(reservationJson);
+        when(healthRecordRepository.findByIdAndUserId(recordId, userId)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> healthRecordService.confirmUpload(userId, recordId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("retry OCR that bai");
     }
 
     @Test
