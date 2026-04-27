@@ -51,6 +51,7 @@ public class HealthRecordService {
     private final ProfileRepository profileRepository;
     private final HealthRecordRepository healthRecordRepository;
     private final ReferenceDataService referenceDataService;
+    private final MetricExplanationRetrievalService metricExplanationRetrievalService;
     private final LlmService llmService;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -61,6 +62,7 @@ public class HealthRecordService {
             ProfileRepository profileRepository,
             HealthRecordRepository healthRecordRepository,
             ReferenceDataService referenceDataService,
+            MetricExplanationRetrievalService metricExplanationRetrievalService,
             LlmService llmService,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper,
@@ -70,6 +72,7 @@ public class HealthRecordService {
         this.profileRepository = profileRepository;
         this.healthRecordRepository = healthRecordRepository;
         this.referenceDataService = referenceDataService;
+        this.metricExplanationRetrievalService = metricExplanationRetrievalService;
         this.llmService = llmService;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
@@ -249,13 +252,20 @@ public class HealthRecordService {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Khong tim thay chi so trong health record"));
 
+        MetricExplanationRetrievalService.RetrievalResult retrievalResult = metricExplanationRetrievalService.retrieve(
+                metric.getName(),
+                metric.getStatus(),
+                metric.getReferenceRange(),
+                "vi"
+        );
+
         LlmService.ExplanationResult result = llmService.generateExplanationResult(
                 metric.getName(),
                 metric.getNormalizedValue() != null ? metric.getNormalizedValue() : metric.getValue(),
                 metric.getStatus(),
                 metric.getReferenceRange(),
                 "vi",
-                referenceDataService.buildMetricKnowledgeSnippet(metric.getName(), metric.getStatus(), metric.getReferenceRange())
+                retrievalResult.knowledgeSnippet()
         );
 
         return new MetricExplanationResponse(result.explanation(), result.source());

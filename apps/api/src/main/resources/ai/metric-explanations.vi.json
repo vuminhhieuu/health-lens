@@ -1,0 +1,98 @@
+[
+  {
+    "metricKey": "ALT",
+    "aliases": ["GPT", "SGPT"],
+    "language": "vi",
+    "whatIsIt": "ALT là men gan phản ánh mức độ tổn thương tế bào gan.",
+    "relatedTo": "chức năng gan, viêm gan, gan nhiễm mỡ và tác động của rượu hoặc thuốc.",
+    "impactWhenOutOfRange": "ALT tăng kéo dài có thể gợi ý tổn thương gan; ALT thấp thường ít ý nghĩa lâm sàng."
+  },
+  {
+    "metricKey": "AST",
+    "aliases": ["GOT", "SGOT"],
+    "language": "vi",
+    "whatIsIt": "AST là men có ở gan, cơ tim và cơ vân.",
+    "relatedTo": "tổn thương gan, cơ và một số tình trạng viêm.",
+    "impactWhenOutOfRange": "AST tăng có thể đi kèm tổn thương gan hoặc cơ; nên đọc cùng ALT để tăng độ chính xác."
+  },
+  {
+    "metricKey": "GLUCOSE",
+    "aliases": ["GLU"],
+    "language": "vi",
+    "whatIsIt": "Glucose là nồng độ đường trong máu tại thời điểm xét nghiệm.",
+    "relatedTo": "chuyển hóa đường và nguy cơ đái tháo đường.",
+    "impactWhenOutOfRange": "Glucose cao kéo dài làm tăng nguy cơ biến chứng chuyển hóa; quá thấp có thể gây chóng mặt, vã mồ hôi."
+  },
+  {
+    "metricKey": "HBA1C",
+    "aliases": ["A1C"],
+    "language": "vi",
+    "whatIsIt": "HbA1c phản ánh đường huyết trung bình khoảng 3 tháng gần đây.",
+    "relatedTo": "kiểm soát đường huyết dài hạn.",
+    "impactWhenOutOfRange": "HbA1c cao cho thấy kiểm soát đường huyết chưa tốt; giảm về ngưỡng mục tiêu giúp giảm biến chứng."
+  },
+  {
+    "metricKey": "HDL",
+    "aliases": ["HDL-C", "HDLC"],
+    "language": "vi",
+    "whatIsIt": "HDL là cholesterol tốt giúp vận chuyển cholesterol dư thừa khỏi mạch máu.",
+    "relatedTo": "bảo vệ tim mạch.",
+    "impactWhenOutOfRange": "HDL thấp liên quan nguy cơ tim mạch cao hơn; HDL cao vừa phải thường có lợi."
+  },
+  {
+    "metricKey": "LDL",
+    "aliases": ["LDL-C", "LDLC"],
+    "language": "vi",
+    "whatIsIt": "LDL là cholesterol xấu có thể lắng đọng trong thành mạch.",
+    "relatedTo": "xơ vữa động mạch và bệnh tim mạch.",
+    "impactWhenOutOfRange": "LDL cao kéo dài làm tăng nguy cơ nhồi máu cơ tim và đột quỵ."
+  },
+  {
+    "metricKey": "TRIGLYCERIDE",
+    "aliases": ["TRIG", "TG"],
+    "language": "vi",
+    "whatIsIt": "Triglyceride là dạng mỡ máu dự trữ năng lượng.",
+    "relatedTo": "rối loạn chuyển hóa mỡ và nguy cơ tim mạch.",
+    "impactWhenOutOfRange": "Triglyceride rất cao có thể liên quan nguy cơ viêm tụy cấp và biến cố tim mạch."
+  },
+  {
+    "metricKey": "CHOL",
+    "aliases": ["CHOLESTEROL", "TC"],
+    "language": "vi",
+    "whatIsIt": "Cholesterol toàn phần là tổng lượng cholesterol trong máu.",
+    "relatedTo": "hồ sơ mỡ máu và nguy cơ tim mạch.",
+    "impactWhenOutOfRange": "Cholesterol toàn phần cao cần đọc cùng LDL, HDL và triglyceride để đánh giá nguy cơ."
+  },
+  {
+    "metricKey": "WBC",
+    "aliases": ["LEUKOCYTE"],
+    "language": "vi",
+    "whatIsIt": "WBC là số lượng bạch cầu, phản ánh hoạt động miễn dịch.",
+    "relatedTo": "nhiễm trùng, viêm và đáp ứng miễn dịch.",
+    "impactWhenOutOfRange": "WBC cao có thể gợi ý nhiễm trùng/viêm; WBC thấp có thể tăng nguy cơ nhiễm trùng."
+  },
+  {
+    "metricKey": "RBC",
+    "aliases": ["ERYTHROCYTE"],
+    "language": "vi",
+    "whatIsIt": "RBC là số lượng hồng cầu mang oxy đi nuôi cơ thể.",
+    "relatedTo": "thiếu máu hoặc cô đặc máu.",
+    "impactWhenOutOfRange": "RBC thấp có thể gây mệt mỏi do thiếu oxy mô; RBC cao có thể tăng độ nhớt máu."
+  },
+  {
+    "metricKey": "HGB",
+    "aliases": ["HEMOGLOBIN"],
+    "language": "vi",
+    "whatIsIt": "HGB là nồng độ huyết sắc tố trong hồng cầu.",
+    "relatedTo": "khả năng vận chuyển oxy và tình trạng thiếu máu.",
+    "impactWhenOutOfRange": "HGB thấp thường liên quan thiếu máu; HGB cao có thể liên quan cô đặc máu."
+  },
+  {
+    "metricKey": "PLT",
+    "aliases": ["PLATELET"],
+    "language": "vi",
+    "whatIsIt": "PLT là số lượng tiểu cầu tham gia quá trình đông máu.",
+    "relatedTo": "nguy cơ chảy máu hoặc huyết khối.",
+    "impactWhenOutOfRange": "PLT thấp tăng nguy cơ chảy máu; PLT cao có thể liên quan tăng nguy cơ huyết khối."
+  }
+]
