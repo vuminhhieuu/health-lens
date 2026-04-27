@@ -78,7 +78,20 @@ public class HealthRecordService {
 
     @Transactional(readOnly = true)
     public UploadUrlResponse createUploadUrl(UUID userId, CreateUploadUrlRequest request) {
-        Profile profile = profileRepository.findById(request.profileId())
+        UUID targetProfileId = request.profileId();
+        UUID recordId = UUID.randomUUID();
+
+        if (request.retryRecordId() != null) {
+            HealthRecord existingRecord = healthRecordRepository.findByIdAndUserId(request.retryRecordId(), userId)
+                    .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+            if (!"ocr_failed".equals(existingRecord.getStatus())) {
+                throw new IllegalStateException("Chi duoc retry upload khi OCR that bai");
+            }
+            targetProfileId = existingRecord.getProfileId();
+            recordId = existingRecord.getId();
+        }
+
+        Profile profile = profileRepository.findById(targetProfileId)
                 .orElseThrow(() -> new IllegalArgumentException("Profile khong ton tai"));
         if (!profile.getUser().getId().equals(userId)) {
             throw new IllegalArgumentException("Profile khong thuoc ve nguoi dung hien tai");
@@ -86,12 +99,11 @@ public class HealthRecordService {
 
         UploadFormat uploadFormat = resolveUploadFormat(request.fileType());
 
-        UUID recordId = UUID.randomUUID();
         String fileKey = "health-records/%s/%s/%s/original.%s"
-                .formatted(userId, request.profileId(), recordId, uploadFormat.extension());
+                .formatted(userId, targetProfileId, recordId, uploadFormat.extension());
         String uploadUrl = storageService.generateUploadUrl(fileKey, UPLOAD_URL_TTL, uploadFormat.contentType());
 
-        persistUploadReservation(recordId, userId, request.profileId(), fileKey);
+        persistUploadReservation(recordId, userId, targetProfileId, fileKey);
 
         return new UploadUrlResponse(uploadUrl, recordId, fileKey);
     }
@@ -103,13 +115,27 @@ public class HealthRecordService {
             throw new IllegalArgumentException("Record khong thuoc ve nguoi dung hien tai");
         }
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
-        record.setProfileId(reservation.profileId());
+        HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId).orElseGet(HealthRecord::new);
+        boolean isNewRecord = record.getId() == null;
+        if (isNewRecord) {
+            record.setId(recordId);
+            record.setUserId(userId);
+            record.setProfileId(reservation.profileId());
+        } else if (!"ocr_failed".equals(record.getStatus())) {
+            throw new IllegalStateException("Chi duoc xac nhan upload cho record moi hoac retry OCR that bai");
+        }
         record.setFileKey(reservation.fileKey());
         record.setStatus(STATUS_PROCESSING);
         record.setSourceType("ocr");
+        record.setRawOcrResult(null);
+        record.setMetrics("[]");
+        record.setExamDate(null);
+        record.setRecordType(null);
+        record.setHospitalName(null);
+        record.setDiagnosis(null);
+        record.setAnalyzerModel(null);
+        record.setTestMethod(null);
+        record.setLabSite(null);
         healthRecordRepository.save(record);
 
         StreamOperations<String, Object, Object> streamOps = redisTemplate.opsForStream();
@@ -199,6 +225,7 @@ public class HealthRecordService {
 
         return new HealthRecordDetailResponse(
                 record.getId(),
+                record.getProfileId(),
                 record.getStatus(),
                 metricsList,
                 record.getExamDate() != null ? record.getExamDate().toString() : null,

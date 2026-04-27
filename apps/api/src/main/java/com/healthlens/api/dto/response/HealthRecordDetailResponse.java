@@ -9,6 +9,7 @@ import java.util.UUID;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record HealthRecordDetailResponse(
         UUID id,
+        UUID profileId,
         String status,
         List<MetricDto> metrics,
         String examDate,

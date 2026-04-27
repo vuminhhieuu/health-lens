@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { type ChangeEvent, useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
 import {
   Loader2,
   AlertTriangle,
@@ -22,7 +23,7 @@ import {
 import { z } from "zod";
 
 import { apiClient } from "@/lib/api/apiClient";
-import { ApiPaths } from "@healthlens/shared/constants";
+import { ALLOWED_FILE_TYPES, ApiPaths, UPLOAD_MAX_SIZE_BYTES } from "@healthlens/shared/constants";
 import { HealthMetricCard } from "@/components/ui/HealthMetricCard";
 import { OcrFailureScreen } from "@/components/features/upload/OcrFailureScreen";
 
@@ -78,6 +79,7 @@ type ReferenceMetricOption = {
 type ReviewRecordStatus = "processing" | "review_required" | "done" | "ocr_failed";
 
 type ReviewRecordData = {
+  profileId?: string;
   status: ReviewRecordStatus;
   fileUrl?: string;
   metrics?: MetricDto[];
@@ -122,6 +124,9 @@ export default function ReviewRecordPage() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [isKeepingPartial, setIsKeepingPartial] = useState(false);
+  const [isRetryUploading, setIsRetryUploading] = useState(false);
+  const [retryUploadError, setRetryUploadError] = useState<string | null>(null);
+  const retryFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", value: "", unit: "" });
@@ -188,7 +193,7 @@ export default function ReviewRecordPage() {
         diagnosis: data.diagnosis ?? "",
       });
       initialized.current = true;
-      setEditMode(data.status === "review_required" || manualMode);
+      setEditMode(data.status === "review_required" || (data.status === "ocr_failed" && manualMode));
     }
   }, [data, manualMode]);
 
@@ -346,7 +351,10 @@ export default function ReviewRecordPage() {
       alert("Lưu kết quả khám thành công!");
       if (!resolvedKeepPartial) {
         skipUnloadWarningRef.current = true;
-        window.location.reload();
+      }
+      if (manualMode) {
+        skipUnloadWarningRef.current = true;
+        router.replace(`/health-records/review/${recordId}`);
       }
       return true;
     } catch (err: unknown) {
@@ -376,6 +384,60 @@ export default function ReviewRecordPage() {
     }
   };
 
+  const validateRetryFile = (file: File) => {
+    if (!ALLOWED_FILE_TYPES.includes(file.type as (typeof ALLOWED_FILE_TYPES)[number])) {
+      return "Chỉ chấp nhận file PDF/JPG/PNG.";
+    }
+    if (file.size > UPLOAD_MAX_SIZE_BYTES) {
+      return "File vượt quá giới hạn 20MB.";
+    }
+    return null;
+  };
+
+  const handleRetryUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setRetryUploadError(null);
+    const validationError = validateRetryFile(file);
+    if (validationError) {
+      setRetryUploadError(validationError);
+      event.target.value = "";
+      return;
+    }
+
+    if (!data?.profileId) {
+      setRetryUploadError("Không xác định được hồ sơ người dùng để tải tệp mới.");
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      setIsRetryUploading(true);
+      const fileType = file.type === "application/pdf" ? "pdf" : file.type;
+      const uploadInfoResp = await apiClient.post(ApiPaths.HEALTH_RECORDS.UPLOAD_URL, {
+        profileId: data.profileId,
+        fileType,
+        retryRecordId: recordId,
+      });
+      const uploadInfo = uploadInfoResp.data?.data as { uploadUrl: string; recordId: string };
+
+      await axios.put(uploadInfo.uploadUrl, file, {
+        headers: { "Content-Type": file.type },
+      });
+
+      await apiClient.post(ApiPaths.HEALTH_RECORDS.CONFIRM_UPLOAD(uploadInfo.recordId));
+      initialized.current = false;
+      await refetch();
+      router.replace(`/health-records/review/${uploadInfo.recordId}`);
+    } catch {
+      setRetryUploadError("Tải tệp mới thất bại. Vui lòng thử lại.");
+    } finally {
+      setIsRetryUploading(false);
+      event.target.value = "";
+    }
+  };
+
   if (isLoading || data?.status === "processing") {
     return (
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col items-center justify-center gap-6 bg-[#effcf9] px-6 py-10">
@@ -401,13 +463,25 @@ export default function ReviewRecordPage() {
   if (data?.status === "ocr_failed" && !manualMode) {
     const hasPartialMetrics = (data.metrics?.length ?? 0) > 0 || Boolean(data.hasLowConfidenceMetrics);
     return (
-      <OcrFailureScreen
-        hasPartialMetrics={hasPartialMetrics}
-        isKeepingPartial={isKeepingPartial}
-        onRetry={() => router.push("/health-records?retry=1&openUpload=1")}
-        onManualInput={() => router.push(`/health-records/review/${recordId}?mode=manual`)}
-        onKeepPartial={handleKeepPartial}
-      />
+      <>
+        <input
+          ref={retryFileInputRef}
+          type="file"
+          className="hidden"
+          accept="application/pdf,image/jpeg,image/png"
+          onChange={handleRetryUpload}
+        />
+        <OcrFailureScreen
+          hasPartialMetrics={hasPartialMetrics}
+          ocrFailureReason={data.ocrFailureReason}
+          isKeepingPartial={isKeepingPartial}
+          isRetryUploading={isRetryUploading}
+          retryUploadError={retryUploadError}
+          onRetry={() => retryFileInputRef.current?.click()}
+          onManualInput={() => router.push(`/health-records/review/${recordId}?mode=manual`)}
+          onKeepPartial={handleKeepPartial}
+        />
+      </>
     );
   }
 
@@ -427,7 +501,7 @@ export default function ReviewRecordPage() {
   }
 
   const canConfirm = data?.status === "review_required" || (data?.status === "ocr_failed" && manualMode);
-  const canEditAfterConfirm = data?.status === "done";
+  const canToggleEditResults = data?.status === "done" || (data?.status === "ocr_failed" && manualMode);
   const showMetricCards = !editMode;
   const showEditableTable = editMode;
   const showConfidenceColumn = canConfirm;
@@ -540,7 +614,7 @@ export default function ReviewRecordPage() {
               <div className="border-b border-[#c5dfd9] bg-[#effcf9] px-6 py-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-[#005049]">Danh sách chỉ số và ngưỡng tham chiếu</h3>
-                  {canEditAfterConfirm ? (
+                  {canToggleEditResults ? (
                     <button
                       type="button"
                       onClick={() => setEditMode(true)}
@@ -589,7 +663,7 @@ export default function ReviewRecordPage() {
                     <Plus className="h-3.5 w-3.5" />
                     Thêm chỉ số
                   </button>
-                  {canEditAfterConfirm ? (
+                  {canToggleEditResults ? (
                     <button
                       type="button"
                       onClick={() => setEditMode(false)}
