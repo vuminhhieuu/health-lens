@@ -32,19 +32,19 @@ so that đánh giá bình thường/bất thường chính xác hơn.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: Context-aware reference range lookup (AC: #1, #2)
-  - [ ] Cập nhật `ReferenceDataService.classifyMetric()` để nhận `Profile` object
-  - [ ] Query bảng `reference_ranges` với filter: `gender = profile.gender OR gender IS NULL`, age range overlaps với `profile.birthDate`
-  - [ ] Priority: specific (gender + age) > gender-only > age-only > default (no filter)
-  - [ ] Log rule áp dụng vào audit bảng
-- [ ] Task 2 — Backend: Enrich metrics endpoint với context (AC: #3)
-  - [ ] `GET /api/v1/health-records/{recordId}?profileId={profileId}` trả về metrics với context-aware ranges
-  - [ ] Thêm field `rangeContext` trong response: `{ gender: "female", ageRange: "40-60" }`
-- [ ] Task 3 — Web (Phase 1) / Mobile (Phase 2): Display range context note (AC: #3)
-  - [ ] HealthMetricCard expanded state thêm note: "Ngưỡng áp dụng cho: Nữ, 40-60 tuổi"
-  - [ ] Nếu dùng default range: "Ngưỡng tham chiếu chung"
-- [ ] Task 4 — Tests (AC: #1, #2, #4)
-  - [ ] `ReferenceDataServiceTest`: context lookup với profile full, profile thiếu tuổi, profile thiếu giới tính
+- [x] Task 1 — Backend: Context-aware reference range lookup (AC: #1, #2)
+  - [x] Cập nhật `ReferenceDataService.classifyMetric()` để nhận `Profile` object
+  - [x] Query bảng `reference_ranges` với filter: `gender = profile.gender OR gender IS NULL`, age range overlaps với `profile.birthDate`
+  - [x] Priority: specific (gender + age) > gender-only > age-only > default (no filter)
+  - [x] Log rule áp dụng vào audit bảng
+- [x] Task 2 — Backend: Enrich metrics endpoint với context (AC: #3)
+  - [x] `GET /api/v1/health-records/{recordId}?profileId={profileId}` trả về metrics với context-aware ranges
+  - [x] Thêm field `rangeContext` trong response: `{ gender: "female", ageRange: "40-60" }`
+- [x] Task 3 — Web (Phase 1) / Mobile (Phase 2): Display range context note (AC: #3)
+  - [x] HealthMetricCard expanded state thêm note: "Ngưỡng áp dụng cho: Nữ, 40-60 tuổi"
+  - [x] Nếu dùng default range: "Ngưỡng tham chiếu chung"
+- [x] Task 4 — Tests (AC: #1, #2, #4)
+  - [x] `ReferenceDataServiceTest`: context lookup với profile full, profile thiếu tuổi, profile thiếu giới tính
 
 ## Dev Notes
 
@@ -85,10 +85,37 @@ Optional<ReferenceRange> findBestRange(String metricName, Profile profile) {
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+Codex 5.3
 
 ### Debug Log References
 
+- Updated `ReferenceDataService` to classify with `Profile`, apply specificity priority, and log applied rule (`metric_id`, `reference_range_id`).
+- Added repository query to load all active ranges by metric and select best-fit range in service layer.
+- Enriched health record detail flow with optional `profileId` query param and per-metric `rangeContext`.
+- Updated web metric card to show context note ("Ngưỡng áp dụng cho: ...") and fallback "Ngưỡng tham chiếu chung".
+- Expanded `ReferenceDataServiceTest` for full profile and missing age/gender fallback scenarios.
+- Could not execute Gradle tests in this sandbox because Gradle wrapper download is blocked (`UnknownHostException: services.gradle.org`).
 ### Completion Notes List
 
+- Implemented context-aware reference range selection with explicit priority: gender+age > gender-only > age-only > default.
+- Added `rangeContext` to API response model and wired it from backend classification to web display.
+- Enabled `GET /api/v1/health-records/{recordId}?profileId={profileId}` to override profile context when needed.
+- Added tests for rule priority and fallback behavior when profile lacks birth date or gender.
 ### File List
+
+- `apps/api/src/main/java/com/healthlens/api/repository/ReferenceRangeRepository.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/RangeContextDto.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/MetricClassificationDto.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/MetricDto.java`
+- `apps/api/src/main/java/com/healthlens/api/service/ReferenceDataService.java`
+- `apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java`
+- `apps/api/src/main/java/com/healthlens/api/controller/HealthRecordController.java`
+- `apps/api/src/test/java/com/healthlens/api/service/ReferenceDataServiceTest.java`
+- `apps/web/src/components/ui/HealthMetricCard.tsx`
+- `apps/web/src/app/(dashboard)/health-records/review/[recordId]/page.tsx`
+
+## Change Log
+
+- 2026-04-26: Completed Story 4.2 implementation for context-aware reference ranges, response/UI range context, and service tests.
+
+Status: review

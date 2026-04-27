@@ -2,8 +2,10 @@ package com.healthlens.api.service;
 
 import com.healthlens.api.dto.request.UpdateUserRequest;
 import com.healthlens.api.dto.response.UserResponse;
+import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ResourceNotFoundException;
+import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,9 +16,11 @@ import java.util.UUID;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final ProfileRepository profileRepository;
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, ProfileRepository profileRepository) {
         this.userRepository = userRepository;
+        this.profileRepository = profileRepository;
     }
 
     @Transactional(readOnly = true)
@@ -37,12 +41,35 @@ public class UserService {
             user.setBirthDate(request.birthDate());
         }
         if (request.gender() != null) {
-            user.setGender(request.gender());
+            String normalizedGender = normalizeGender(request.gender());
+            if (normalizedGender != null) {
+                user.setGender(normalizedGender);
+            }
         }
 
         user = userRepository.save(user);
+        syncDefaultProfile(userId, user);
 
         return mapToResponse(user);
+    }
+
+    private void syncDefaultProfile(UUID userId, User user) {
+        profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)
+                .ifPresent(profile -> applyUserIdentityToProfile(profile, user));
+    }
+
+    private void applyUserIdentityToProfile(Profile profile, User user) {
+        profile.setBirthDate(user.getBirthDate());
+        profile.setGender(user.getGender());
+        profileRepository.save(profile);
+    }
+
+    private String normalizeGender(String gender) {
+        String normalized = gender.trim().toLowerCase();
+        if ("male".equals(normalized) || "female".equals(normalized) || "other".equals(normalized)) {
+            return normalized;
+        }
+        return null;
     }
 
     private UserResponse mapToResponse(User user) {

@@ -17,11 +17,13 @@ import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.Profile;
+import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.StreamOperations;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -181,16 +183,18 @@ public class HealthRecordService {
     }
 
     @Transactional(readOnly = true)
-    public HealthRecordDetailResponse getDetail(UUID userId, UUID recordId) {
+    public HealthRecordDetailResponse getDetail(UUID userId, UUID recordId, UUID profileId) {
         HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId)
-                .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Health record khong ton tai"));
 
-        Profile profile = profileRepository.findById(record.getProfileId()).orElse(null);
-        Integer age = resolveAge(profile, record.getExamDate());
-        String gender = profile != null ? profile.getGender() : null;
-
+        UUID resolvedProfileId = profileId != null ? profileId : record.getProfileId();
+        Profile profile = profileRepository.findById(resolvedProfileId)
+                .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
+        if (!profile.getUser().getId().equals(userId)) {
+            throw new AccessDeniedException("Profile khong thuoc ve nguoi dung");
+        }
         List<MetricDto> metricsList = parseMetrics(record.getMetrics()).stream()
-                .map(metric -> enrichMetric(metric, age, gender))
+                .map(metric -> enrichMetric(metric, profile, record.getExamDate()))
                 .collect(Collectors.toList());
 
         return new HealthRecordDetailResponse(
@@ -499,7 +503,7 @@ public class HealthRecordService {
         }
     }
 
-    private MetricDto enrichMetric(MetricDto metric, Integer age, String gender) {
+    private MetricDto enrichMetric(MetricDto metric, Profile profile, LocalDate examDate) {
         hydrateRawAndNormalizedFields(metric);
 
         if (metric.getReferenceRange() != null) {
@@ -514,11 +518,17 @@ public class HealthRecordService {
             return metric;
         }
 
-        MetricClassificationDto classification = referenceDataService.classifyMetric(metric.getName(), metric.getNormalizedValue(), age, gender);
+        MetricClassificationDto classification = referenceDataService.classifyMetric(
+                metric.getName(),
+                metric.getNormalizedValue(),
+                profile,
+                examDate
+        );
         metric.setStatus(classification.status());
         metric.setStatusSource("no_data".equals(classification.status()) ? "none" : "system");
         metric.setReferenceRange(classification.referenceRange());
         metric.setReferenceRangeSource(classification.referenceRange() == null ? "none" : "system");
+        metric.setRangeContext(classification.rangeContext());
         metric.setDisplayNameVi(classification.displayNameVi() != null ? classification.displayNameVi() : metric.getDisplayNameVi());
         metric.setInterpretation(resolveInterpretation(metric, classification.status()));
         metric.setInterpretationSource(metric.getInterpretationSource() != null ? metric.getInterpretationSource() : "computed");
