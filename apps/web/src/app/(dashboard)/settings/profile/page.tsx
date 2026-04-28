@@ -11,6 +11,7 @@ import {
 
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { updateUserProfileSchema, UpdateUserProfileInput } from "@healthlens/shared";
 
 type UserProfile = {
@@ -84,17 +85,10 @@ export default function ProfileSettingsPage() {
   if (isError) return <div className="p-8 text-center text-[#ba1a1a]">Không thể tải thông tin hồ sơ.</div>;
 
   return (
-    <div className="flex-grow p-6 md:p-12 lg:p-16 max-w-7xl mx-auto bg-[#effcf9] min-h-screen text-[#121e1c]">
-      
-      {/* Breadcrumbs & Header */}
-      <div className="mb-10">
-        <nav className="flex text-sm text-[#6d7a77] mb-2">
-          <span className="hover:text-[#00685f] cursor-pointer transition-colors">Dashboard</span>
-          <span className="mx-2">/</span>
-          <span className="text-[#121e1c] font-medium">Hồ sơ của tôi</span>
-        </nav>
-        <h1 className="text-4xl font-extrabold tracking-tight text-[#121e1c]">Hồ sơ của tôi</h1>
-      </div>
+    <DashboardPageShell
+      title="Hồ sơ của tôi"
+      subtitle="Quản lý thông tin cá nhân và cài đặt tài khoản tại một giao diện thống nhất."
+    >
 
       {successMessage && (
         <Callout.Root color="green" mb="6" className="bg-[#e4f1ee] border border-[#00685f]/20 shadow-sm rounded-xl py-3 px-4 flex items-center gap-3">
@@ -334,6 +328,6 @@ export default function ProfileSettingsPage() {
 
         </div>
       </div>
-    </div>
+    </DashboardPageShell>
   );
 }

@@ -1,6 +1,6 @@
 # Story 4.2: Áp dụng ngưỡng tham chiếu theo tuổi và giới tính
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 

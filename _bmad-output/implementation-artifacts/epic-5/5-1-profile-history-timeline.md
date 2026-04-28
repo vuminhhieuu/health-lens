@@ -1,6 +1,6 @@
 # Story 5.1: Timeline lịch sử theo từng hồ sơ
 
-Status: ready-for-dev
+Status: review
 
 ## Execution scope
 
@@ -34,21 +34,21 @@ so that tôi theo dõi diễn tiến sức khỏe theo thời gian.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: History endpoint với pagination (AC: #1, #2, #4)
-  - [ ] `GET /api/v1/profiles/{profileId}/health-records?page=0&limit=20&sort=examDate,desc`
-  - [ ] Response mỗi item: id, examDate, testType (từ metrics hoặc manual), overallStatus, abnormalCount, sourceType, createdAt
-  - [ ] Ownership check hoặc family share check
-- [ ] Task 2 — Web: History tab/page (AC: #1, #2, #3, #4)
-  - [ ] Tạo `apps/web/src/app/(dashboard)/profiles/[profileId]/history/page.tsx`
-  - [ ] HealthResultSummary cards (UX-DR2) — tên test, ngày, overall status badge, abnormalCount
-  - [ ] Empty state component với "Upload kết quả đầu tiên" button
-  - [ ] Infinite scroll với TanStack Query `useInfiniteQuery`
+- [x] Task 1 — Backend: History endpoint với pagination (AC: #1, #2, #4)
+  - [x] `GET /api/v1/profiles/{profileId}/health-records?page=0&limit=20&sort=examDate,desc`
+  - [x] Response mỗi item: id, examDate, testType (từ metrics hoặc manual), overallStatus, abnormalCount, sourceType, createdAt
+  - [x] Ownership check hoặc family share check
+- [x] Task 2 — Web: History tab/page (AC: #1, #2, #3, #4)
+  - [x] Tạo `apps/web/src/app/(dashboard)/profiles/[profileId]/history/page.tsx`
+  - [x] HealthResultSummary cards (UX-DR2) — tên test, ngày, overall status badge, abnormalCount
+  - [x] Empty state component với "Upload kết quả đầu tiên" button
+  - [x] Infinite scroll với TanStack Query `useInfiniteQuery`
 - [ ] Task 3 — Mobile (Phase 2): History screen trong profile tab (AC: #1, #2, #3)
   - [ ] `apps/mobile/app/profiles/[profileId]/history.tsx`
   - [ ] FlatList với `onEndReached` cho pagination
   - [ ] Empty state với FAB redirect
-- [ ] Task 4 — Tests (AC: #1, #4, #5)
-  - [ ] `HealthRecordServiceTest`: pagination, ownership check, share access check
+- [x] Task 4 — Tests (AC: #1, #4, #5)
+  - [x] `HealthRecordServiceTest`: pagination, ownership check, share access check
 
 ## Dev Notes
 
@@ -103,10 +103,42 @@ const { data, fetchNextPage, hasNextPage } = useInfiniteQuery({
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+Codex 5.3
 
 ### Debug Log References
 
+- `./gradlew test --tests com.healthlens.api.service.HealthRecordServiceTest` không chạy được trong sandbox do không tải được Gradle distribution từ `services.gradle.org` (UnknownHost).
+
 ### Completion Notes List
 
+- ✅ Task 1: Bổ sung endpoint timeline theo profile với pagination 20 items/page, sort mới nhất trước, trả về summary fields đúng AC.
+- ✅ Task 2: Tạo trang `profiles/[profileId]/history` với card summary, empty state CTA "Thêm kết quả đầu tiên", và infinite scroll bằng `useInfiniteQuery`.
+- ⏭️ Task 3 (Mobile Phase 2): Deferred theo Execution scope của story (Web MVP Phase 1).
+- ✅ Task 4: Thêm test cho `HealthRecordService` gồm pagination summary và ownership guard.
+- ✅ Follow-up review fix: hỗ trợ share-access check qua `profile_shares` để viewer được cấp quyền có thể xem timeline read-only.
+- ✅ Follow-up review fix: timeline sort `examDate desc nulls last, createdAt desc` để tránh record không có ngày khám nổi lên đầu danh sách.
+- ✅ Follow-up review fix: giới hạn page size tối đa 20 items đúng AC.
+- ⚠️ Chưa verify runtime test trong môi trường local vì giới hạn network sandbox khi tải Gradle wrapper.
+
 ### File List
+
+**New files:**
+- `apps/api/src/main/java/com/healthlens/api/dto/response/HealthRecordHistoryItemResponse.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/response/HealthRecordHistoryPageResponse.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/response/PaginationResponse.java`
+- `apps/api/src/main/java/com/healthlens/api/entity/ProfileShare.java`
+- `apps/api/src/main/java/com/healthlens/api/repository/ProfileShareRepository.java`
+- `apps/web/src/app/(dashboard)/profiles/[profileId]/history/page.tsx`
+- `apps/api/src/main/resources/db/migration/V015__create_profile_shares_table.sql`
+
+**Modified files:**
+- `apps/api/src/main/java/com/healthlens/api/controller/HealthRecordController.java`
+- `apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java`
+- `apps/api/src/main/java/com/healthlens/api/repository/HealthRecordRepository.java`
+- `apps/api/src/test/java/com/healthlens/api/service/HealthRecordServiceTest.java`
+- `packages/shared/constants/api.ts`
+
+### Change Log
+
+- 2026-04-27: Implement Story 5.1 (Web MVP scope) — profile history timeline API + web page + service tests; mobile task deferred to Phase 2.
+- 2026-04-27: Address code review findings — add share-access guard for history endpoint, clamp page size to 20, and sort null examDate last.
