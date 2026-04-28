@@ -202,22 +202,4 @@ public class GlobalExceptionHandler {
         problem.setInstance(URI.create(request.getRequestURI()));
         return problem;
     }
-
-    @ExceptionHandler(IllegalStateException.class)
-    public ProblemDetail handleIllegalState(IllegalStateException ex, HttpServletRequest request) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problem.setType(URI.create("https://healthlens.vn/errors/invalid-state"));
-        problem.setTitle("Invalid Operation");
-        problem.setInstance(URI.create(request.getRequestURI()));
-        return problem;
-    }
-
-    @ExceptionHandler(AccessDeniedException.class)
-    public ProblemDetail handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
-        problem.setType(URI.create("https://healthlens.vn/errors/forbidden"));
-        problem.setTitle("Không có quyền truy cập hồ sơ này");
-        problem.setInstance(URI.create(request.getRequestURI()));
-        return problem;
-    }
 }

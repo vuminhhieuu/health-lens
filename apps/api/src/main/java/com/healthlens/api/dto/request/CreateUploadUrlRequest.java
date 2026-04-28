@@ -9,6 +9,7 @@ public record CreateUploadUrlRequest(
         @NotNull(message = "profileId khong duoc de trong")
         UUID profileId,
         @NotBlank(message = "fileType khong duoc de trong")
-        String fileType
+        String fileType,
+        UUID retryRecordId
 ) {
 }

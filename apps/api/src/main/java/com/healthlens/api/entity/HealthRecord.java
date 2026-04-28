@@ -12,6 +12,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Getter
@@ -45,6 +46,27 @@ public class HealthRecord {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String metrics;
+
+    @Column(name = "exam_date")
+    private LocalDate examDate;
+
+    @Column(name = "record_type", length = 100)
+    private String recordType;
+
+    @Column(name = "hospital_name", length = 255)
+    private String hospitalName;
+
+    @Column(columnDefinition = "text")
+    private String diagnosis;
+
+    @Column(name = "analyzer_model", length = 120)
+    private String analyzerModel;
+
+    @Column(name = "test_method", length = 120)
+    private String testMethod;
+
+    @Column(name = "lab_site", length = 255)
+    private String labSite;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;

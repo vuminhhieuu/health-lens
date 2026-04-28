@@ -61,7 +61,19 @@ export const ApiPaths = {
     DELETE: (id: string) => `/api/${API_VERSION}/health-records/${id}`,
     UPLOAD_URL: `/api/${API_VERSION}/health-records/upload-url`,
     CONFIRM_UPLOAD: (id: string) => `/api/${API_VERSION}/health-records/${id}/confirm-upload`,
+    CONFIRM_RECORD: (id: string) => `/api/${API_VERSION}/health-records/${id}/confirm`,
+    UPDATE_METRICS: (id: string) => `/api/${API_VERSION}/health-records/${id}/metrics`,
     STATUS: (id: string) => `/api/${API_VERSION}/health-records/${id}/status`,
+    /**
+     * @deprecated Prefer `EXPLANATION`, which sends `metricName` as a query parameter.
+     * Path-segment routing may fail for metric names containing `/` on some server configs.
+     * Kept for backward compatibility with older callers.
+     */
+    EXPLANATION_PATH: (id: string, metricName: string) =>
+      `/api/${API_VERSION}/health-records/${id}/metrics/${encodeURIComponent(metricName)}/explanation`,
+    /** Preferred route: pass `metricName` as query parameter to avoid encoded-slash path issues. */
+    EXPLANATION: (id: string, metricName: string) =>
+      `/api/${API_VERSION}/health-records/${id}/metrics/explanation?metricName=${encodeURIComponent(metricName)}`,
     UPLOAD_IMAGE: (id: string) => `/api/${API_VERSION}/health-records/${id}/image`,
     ANALYZE: (id: string) => `/api/${API_VERSION}/health-records/${id}/analyze`,
     GET_ANALYSIS: (id: string) => `/api/${API_VERSION}/health-records/${id}/analysis`,
@@ -82,7 +94,9 @@ export const ApiPaths = {
     BASE: `/api/${API_VERSION}/reference-data`,
     INDEX: (id: string) => `/api/${API_VERSION}/reference-data/${id}/index`,
     SEARCH: `/api/${API_VERSION}/reference-data/search`,
+    RANGES: `/api/${API_VERSION}/reference-data/ranges`,
     SYNC: `/api/${API_VERSION}/reference-data/sync`,
+    METRICS: `/api/${API_VERSION}/reference-data/metrics`,
   },
 
   /** OCR service endpoints */
