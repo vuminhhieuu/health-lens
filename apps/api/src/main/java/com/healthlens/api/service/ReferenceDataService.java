@@ -95,6 +95,14 @@ public class ReferenceDataService {
     }
 
     public MetricClassificationDto classifyMetric(String metricName, String rawValue, Profile profile, LocalDate examDate) {
+        return classifyMetric(metricName, rawValue, profile, examDate, true);
+    }
+
+    public MetricClassificationDto classifyMetricWithoutAudit(String metricName, String rawValue, Profile profile, LocalDate examDate) {
+        return classifyMetric(metricName, rawValue, profile, examDate, false);
+    }
+
+    private MetricClassificationDto classifyMetric(String metricName, String rawValue, Profile profile, LocalDate examDate, boolean persistAudit) {
         Optional<ReferenceRangeWithMeta> matched = findMatchingRange(metricName, profile, examDate);
         if (matched.isEmpty()) {
             return new MetricClassificationDto("no_data", null, null, null);
@@ -102,7 +110,9 @@ public class ReferenceDataService {
 
         ReferenceRangeWithMeta data = matched.get();
         ReferenceRange range = data.range();
-        persistAuditLog(data.metric().getId(), range.getId(), profile != null ? profile.getId() : null);
+        if (persistAudit) {
+            persistAuditLog(data.metric().getId(), range.getId(), profile != null ? profile.getId() : null);
+        }
         ReferenceRangeDto rangeDto = new ReferenceRangeDto(
                 range.getMinValue(),
                 range.getMaxValue(),

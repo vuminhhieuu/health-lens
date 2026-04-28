@@ -14,6 +14,7 @@ import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.ProfileRepository;
+import com.healthlens.api.repository.ProfileShareRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,9 +22,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -50,6 +54,7 @@ class HealthRecordServiceTest {
     @Mock private StorageService storageService;
     @Mock private ProfileRepository profileRepository;
     @Mock private HealthRecordRepository healthRecordRepository;
+    @Mock private ProfileShareRepository profileShareRepository;
     @Mock private ReferenceDataService referenceDataService;
     @Mock private MetricExplanationRetrievalService metricExplanationRetrievalService;
     @Mock private LlmService llmService;
@@ -65,6 +70,7 @@ class HealthRecordServiceTest {
                 storageService,
                 profileRepository,
                 healthRecordRepository,
+                profileShareRepository,
                 referenceDataService,
                 metricExplanationRetrievalService,
                 llmService,
@@ -517,6 +523,106 @@ class HealthRecordServiceTest {
         assertThatThrownBy(() -> healthRecordService.getMetricExplanation(userId, recordId, "Glucose"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Khong tim thay chi so");
+    }
+
+    @Test
+    @DisplayName("getProfileHistory tra ve du lieu phan trang va summary fields")
+    void getProfileHistory_returnsPaginatedSummary() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+
+        Profile profile = buildProfile(userId, profileId);
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+
+        MetricDto abnormalMetric = MetricDto.builder()
+                .name("Glucose")
+                .value("8.1")
+                .normalizedValue("8.1")
+                .unit("mmol/L")
+                .status("abnormal")
+                .referenceRange(new ReferenceRangeDto(
+                        BigDecimal.valueOf(3.9),
+                        BigDecimal.valueOf(6.4),
+                        BigDecimal.valueOf(3.2),
+                        BigDecimal.valueOf(7.1),
+                        "mmol/L"
+                ))
+                .build();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(UUID.randomUUID());
+        record.setUserId(userId);
+        record.setProfileId(profileId);
+        record.setRecordType("Xét nghiệm máu");
+        record.setSourceType("ocr");
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(abnormalMetric)));
+        record.setCreatedAt(java.time.Instant.now());
+        record.setExamDate(LocalDate.of(2026, 4, 1));
+
+        when(healthRecordRepository.findAllByProfileIdAndUserId(eq(profileId), eq(userId), any(PageRequest.class)))
+                .thenReturn(new PageImpl<>(List.of(record), PageRequest.of(0, 20), 1));
+
+        var result = healthRecordService.getProfileHistory(userId, profileId, 0, 20);
+
+        assertThat(result.data()).hasSize(1);
+        assertThat(result.data().getFirst().overallStatus()).isEqualTo("abnormal");
+        assertThat(result.data().getFirst().abnormalCount()).isEqualTo(1);
+        assertThat(result.pagination().page()).isEqualTo(0);
+        assertThat(result.pagination().limit()).isEqualTo(20);
+        assertThat(result.pagination().total()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("getProfileHistory chan truy cap profile khong thuoc user")
+    void getProfileHistory_forbiddenWhenNotOwner() {
+        UUID userId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+
+        Profile profile = buildProfile(otherUserId, profileId);
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+        when(profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, userId))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> healthRecordService.getProfileHistory(userId, profileId, 0, 20))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("khong thuoc ve nguoi dung");
+    }
+
+    @Test
+    @DisplayName("getProfileHistory cho phep viewer duoc share profile")
+    void getProfileHistory_allowsSharedViewer() {
+        UUID ownerId = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        Profile profile = buildProfile(ownerId, profileId);
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+        when(profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId))
+                .thenReturn(true);
+        when(healthRecordRepository.findAllByProfileIdAndUserId(eq(profileId), eq(ownerId), any(PageRequest.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        var result = healthRecordService.getProfileHistory(viewerId, profileId, 0, 20);
+
+        assertThat(result.data()).isEmpty();
+        verify(healthRecordRepository).findAllByProfileIdAndUserId(eq(profileId), eq(ownerId), any(PageRequest.class));
+    }
+
+    @Test
+    @DisplayName("getProfileHistory gioi han page size toi da 20")
+    void getProfileHistory_clampsLimitToTwenty() {
+        UUID userId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        Profile profile = buildProfile(userId, profileId);
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+        when(healthRecordRepository.findAllByProfileIdAndUserId(eq(profileId), eq(userId), any(PageRequest.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        healthRecordService.getProfileHistory(userId, profileId, 0, 200);
+
+        ArgumentCaptor<PageRequest> pageRequestCaptor = ArgumentCaptor.forClass(PageRequest.class);
+        verify(healthRecordRepository).findAllByProfileIdAndUserId(eq(profileId), eq(userId), pageRequestCaptor.capture());
+        assertThat(pageRequestCaptor.getValue().getPageSize()).isEqualTo(20);
     }
 
     @Test

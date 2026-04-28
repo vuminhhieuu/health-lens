@@ -43,7 +43,7 @@ export default function DashboardLayout({
   }
 
   const navItems = [
-    { name: "Trang chủ", href: "/", icon: Home, exact: true },
+    { name: "Trang chủ", href: "/home", icon: Home, exact: true },
     { name: "Kết quả khám", href: "/health-records", icon: FileText, exact: false },
     { name: "Hồ sơ của tôi", href: "/settings/profile", icon: User, exact: true },
     { name: "Hồ sơ gia đình", href: "/profiles", icon: Users, exact: false },
@@ -167,7 +167,7 @@ export default function DashboardLayout({
 
       {/* Mobile Navigation Shell */}
       <nav className="md:hidden fixed bottom-0 w-full bg-white/95 backdrop-blur-lg px-6 py-4 flex justify-between items-center shadow-[0_-8px_32px_rgba(18,30,28,0.06)] z-50 border-t border-[#bcc9c6]/20">
-        <Link href="/" className="flex flex-col items-center gap-1 text-[#6d7a77]">
+        <Link href="/home" className="flex flex-col items-center gap-1 text-[#6d7a77]">
           <Home className="w-5 h-5" />
           <span className="text-[10px] font-bold">Trang chủ</span>
         </Link>

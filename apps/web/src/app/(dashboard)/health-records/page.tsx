@@ -8,6 +8,7 @@ import { Loader2, User, Users, Check, FileText, Activity, ChevronRight, Calendar
 import { ApiPaths } from "@healthlens/shared/constants";
 
 import { UploadButton } from "@/components/features/upload/UploadButton";
+import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { apiClient } from "@/lib/api/apiClient";
 
 type Profile = {
@@ -27,8 +28,9 @@ type HealthRecord = {
 export default function HealthRecordsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const [selectedProfileId, setSelectedProfileId] = useState<string>(() => searchParams.get("profileId") ?? "");
   const showRetryTips = searchParams.get("retry") === "1";
+  const preselectedProfileId = searchParams.get("profileId");
   const isLabRecord = (recordType?: string | null) => {
     if (!recordType) return false;
     const normalized = recordType.toUpperCase();
@@ -47,7 +49,15 @@ export default function HealthRecordsPage() {
   });
 
   const selectableProfiles = useMemo(() => profiles, [profiles]);
-  const activeProfileId = selectedProfileId || selectableProfiles[0]?.id || "";
+  const activeProfileId = useMemo(() => {
+    if (selectedProfileId && selectableProfiles.some((profile) => profile.id === selectedProfileId)) {
+      return selectedProfileId;
+    }
+    if (preselectedProfileId && selectableProfiles.some((profile) => profile.id === preselectedProfileId)) {
+      return preselectedProfileId;
+    }
+    return selectableProfiles[0]?.id || "";
+  }, [preselectedProfileId, selectableProfiles, selectedProfileId]);
 
   const { data: records = [], isLoading: isLoadingRecords } = useQuery({
     queryKey: ["health-records", activeProfileId],
@@ -60,13 +70,10 @@ export default function HealthRecordsPage() {
   });
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-6 bg-[#effcf9] px-6 py-10">
-      <header>
-        <h1 className="text-3xl font-bold text-[#005049]">Kết quả khám và xét nghiệm</h1>
-        <p className="mt-2 text-sm text-[#4e6360]">
-          Quản lý và theo dõi lịch sử khám bệnh của bạn và người thân.
-        </p>
-      </header>
+    <DashboardPageShell
+      title="Kết quả khám và xét nghiệm"
+      subtitle="Quản lý và theo dõi lịch sử khám bệnh của bạn và người thân."
+    >
 
       <section className="rounded-3xl border border-[#b7d8d1] bg-white p-6 shadow-sm overflow-hidden">
         <div className="flex flex-col gap-6">
@@ -115,7 +122,7 @@ export default function HealthRecordsPage() {
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="mt-4 space-y-6">
         <h2 className="text-xl font-bold text-[#005049]">Lịch sử kết quả</h2>
         
         {isLoadingRecords || isLoading ? (
@@ -127,11 +134,11 @@ export default function HealthRecordsPage() {
             <p className="text-[#4e6360]">Chưa có kết quả khám nào cho hồ sơ này.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 gap-5">
             {records.map((record: HealthRecord) => (
               <div 
                 key={record.id} 
-                className="group flex flex-col sm:flex-row sm:items-center justify-between rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm transition-all duration-300 hover:shadow-md hover:border-[#00685f]/30"
+                className="group flex flex-col justify-between rounded-2xl border border-[#b7d8d1] bg-white p-7 shadow-sm transition-all duration-300 hover:border-[#00685f]/30 hover:shadow-md sm:flex-row sm:items-center"
               >
                 <div className="flex gap-4 items-start">
                   <div className={`hidden sm:flex h-12 w-12 items-center justify-center rounded-xl ${
@@ -180,6 +187,6 @@ export default function HealthRecordsPage() {
           </div>
         )}
       </section>
-    </div>
+    </DashboardPageShell>
   );
 }

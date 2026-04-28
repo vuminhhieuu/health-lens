@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Users, Search, Filter, Loader2, AlertCircle } from "lucide-react";
 import { apiClient } from "@/lib/api/apiClient";
@@ -8,6 +9,7 @@ import { API_ROUTES } from "@/lib/api/routes";
 import { ProfileCard, HealthStatus } from "@/components/features/profiles/ProfileCard";
 import { CreateProfileModal } from "@/components/features/profiles/CreateProfileModal";
 import { EditProfileModal } from "@/components/features/profiles/EditProfileModal";
+import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { CreateProfileInput, UpdateProfileInput } from "@healthlens/shared";
 
 type Profile = {
@@ -30,6 +32,7 @@ type UserProfile = {
 };
 
 export default function ProfilesPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -153,48 +156,22 @@ export default function ProfilesPage() {
     },
   });
 
-  // Combine profiles for display
+  // Family profiles only. Self profile is managed in "Hồ sơ cá nhân".
   const allProfiles = useMemo(() => {
-    const combined: (Partial<Profile> & { 
-      displayName: string; 
-      relationship: string; 
-      isSelf: boolean;
-      id: string;
-    })[] = [];
-    
-    // Add Self if available
-    if (currentUser) {
-      combined.push({
-        id: "self",
-        displayName: currentUser.fullName + " (Tôi)",
-        relationship: "Chính chủ",
-        birthDate: currentUser.birthDate,
-        gender: currentUser.gender,
-        latestStatus: "normal" as HealthStatus, // Mocked
-        updatedAt: new Date().toISOString(), // Unified with others
-        isSelf: true
-      });
-    }
-
     const normalizedSelfName = currentUser?.fullName.trim().toLowerCase();
 
-    // Add others, filtering out default self-profile to avoid duplicate cards
-    otherProfiles.forEach(p => {
-      const normalizedProfileName = p.displayName.trim().toLowerCase();
-      const isAlreadyAdded = !!normalizedSelfName && normalizedProfileName === normalizedSelfName;
-      
-      if (!isAlreadyAdded) {
-        combined.push({
-          ...p,
-          relationship: "Người thân",
-          isSelf: false
-        });
-      }
-    });
-
-    return combined.filter(p => 
-      p.displayName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    return otherProfiles
+      .filter((profile) => {
+        const normalizedProfileName = profile.displayName.trim().toLowerCase();
+        const isSelfProfile = !!normalizedSelfName && normalizedProfileName === normalizedSelfName;
+        return !isSelfProfile;
+      })
+      .map((profile) => ({
+        ...profile,
+        relationship: "Người thân",
+        isSelf: false,
+      }))
+      .filter((profile) => profile.displayName.toLowerCase().includes(searchQuery.toLowerCase()));
   }, [currentUser, otherProfiles, searchQuery]);
 
   const editingProfile = useMemo(
@@ -218,33 +195,20 @@ export default function ProfilesPage() {
   }
 
   return (
-    <div className="grow p-6 md:p-12 lg:p-16 max-w-7xl mx-auto bg-[#effcf9] min-h-screen text-[#121e1c]">
-      
-      {/* Header & Stats */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-        <div>
-          <nav className="flex text-sm text-[#6d7a77] mb-2 font-medium">
-            <span>Dashboard</span>
-            <span className="mx-2">/</span>
-            <span className="text-[#121e1c]">Hồ sơ gia đình</span>
-          </nav>
-          <h1 className="text-4xl font-black tracking-tight text-[#121e1c] flex items-center gap-3">
-            Hồ sơ sức khỏe
-            <span className="text-sm font-bold px-3 py-1 bg-[#00685f]/10 text-[#00685f] rounded-full">
-              {allProfiles.length}
-            </span>
-          </h1>
-        </div>
-
-        <button 
+    <DashboardPageShell
+      title="Hồ sơ sức khỏe"
+      subtitle="Quản lý hồ sơ của bạn và các thành viên trong gia đình ở một nơi thống nhất."
+      actions={
+        <button
           onClick={() => setIsModalOpen(true)}
           disabled={isLimitReached}
-          className="flex items-center gap-2 px-8 py-3 bg-linear-to-r from-[#00685f] to-[#008378] text-white rounded-2xl font-bold shadow-lg shadow-[#00685f]/20 active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none"
+          className="flex items-center gap-2 rounded-2xl bg-linear-to-r from-[#00685f] to-[#008378] px-8 py-3 font-bold text-white shadow-lg shadow-[#00685f]/20 transition-all active:scale-95 disabled:pointer-events-none disabled:opacity-50"
         >
           <Plus size={20} />
           {isLimitReached ? "Đã đạt giới hạn" : "Tạo hồ sơ mới"}
         </button>
-      </div>
+      }
+    >
 
       {/* Search & Filters */}
       <div className="flex flex-col sm:flex-row gap-4 mb-8">
@@ -276,6 +240,16 @@ export default function ProfilesPage() {
               latestStatus={profile.latestStatus}
               lastUpdated={profile.updatedAt}
               onPress={
+                profile.isSelf
+                  ? undefined
+                  : () => router.push(`/profiles/${profile.id}/history`)
+              }
+              onViewTimeline={
+                profile.isSelf
+                  ? undefined
+                  : () => router.push(`/profiles/${profile.id}/history`)
+              }
+              onEditProfile={
                 profile.isSelf
                   ? undefined
                   : () => {
@@ -337,6 +311,6 @@ export default function ProfilesPage() {
         onSubmit={(profileId, data) => updateProfileMutation.mutate({ profileId, data })}
         isLoading={updateProfileMutation.isPending}
       />
-    </div>
+    </DashboardPageShell>
   );
 }
