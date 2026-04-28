@@ -43,18 +43,17 @@ public final class ApiRoutes {
     public static final String DEV_VERIFY_EMAIL = DEV_BASE + "/verify-email/{email}";
 
     // =========================================
-    // Profile Paths (Frontend: ApiPaths.PROFILES)
+    // User Paths (Frontend: ApiPaths.USERS)
     // =========================================
     public static final String USERS_BASE = API_V1 + "/users";
+
+    // =========================================
+    // Profile Paths (Frontend: ApiPaths.PROFILES)
+    // =========================================
     public static final String PROFILES_BASE = API_V1 + "/profiles";
     public static final String PROFILE_BY_ID = PROFILES_BASE + "/{id}";
     public static final String PROFILE_ENSURE_DEFAULT = PROFILES_BASE + "/ensure-default";
     public static final String PROFILE_SET_DEFAULT = PROFILES_BASE + "/{id}/set-default";
-
-    // =========================================
-    // User Paths
-    // =========================================
-    public static final String USERS_BASE = API_V1 + "/users";
 
     // =========================================
     // Health Record Paths (Frontend: ApiPaths.HEALTH_RECORDS)
@@ -102,15 +101,10 @@ public final class ApiRoutes {
 
     // =========================================
     // User Deletion Paths (Story 1.6 - AC #5)
-    // Public endpoint - no authentication required
+    // Cancel endpoint is public (no auth) — token from email is the credential
     // =========================================
     public static final String USERS_DELETION_BASE = API_V1 + "/users/deletion-requests";
     public static final String USERS_DELETION_CANCEL = USERS_DELETION_BASE + "/cancel";
-
-    // =========================================
-    // Deletion (Public - link email)
-    // =========================================
-    public static final String DELETION_CANCELLATION_BASE = API_V1 + "/deletion-cancellation";
 
     // =========================================
     // Patterns (for SecurityConfig permitAll)
@@ -118,7 +112,6 @@ public final class ApiRoutes {
     public static final String AUTH_PATTERN = AUTH_BASE + "/**";
     public static final String DEV_PATTERN = DEV_BASE + "/**";
     public static final String USERS_DELETION_PATTERN = USERS_DELETION_BASE + "/**";
-    public static final String DELETION_CANCELLATION_PATTERN = DELETION_CANCELLATION_BASE + "/**";
     public static final String SWAGGER_UI_PATTERN = "/swagger-ui/**";
     public static final String SWAGGER_HTML = "/swagger-ui.html";
     public static final String API_DOCS_PATTERN = "/v3/api-docs/**";

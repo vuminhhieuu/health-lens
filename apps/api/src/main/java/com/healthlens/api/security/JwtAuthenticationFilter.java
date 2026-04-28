@@ -1,5 +1,6 @@
 package com.healthlens.api.security;
 
+import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.entity.AccountStatus;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.repository.UserRepository;
@@ -13,11 +14,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UrlPathHelper;
 
 import java.io.IOException;
 import java.util.List;
@@ -35,6 +38,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final StringRedisTemplate redisTemplate;
     private final UserRepository userRepository;
     private final boolean securityFailClosed;
+    private final UrlPathHelper urlPathHelper = new UrlPathHelper();
 
     public JwtAuthenticationFilter(
             JwtUtil jwtUtil,
@@ -51,15 +55,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        String path = request.getRequestURI();
-
-        log.info("Incoming request: {}", path);
-
-        if (path.contains("/deletion-requests/cancel")) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
         String authHeader = request.getHeader(AUTHORIZATION_HEADER);
 
         if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
@@ -74,43 +69,43 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Check if token has been blacklisted (logout)
         String jti = jwtUtil.extractJti(token);
         if (isTokenBlacklisted(jti)) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // Extract user info from token
         String userId = jwtUtil.extractSubject(token);
         String role = jwtUtil.extractClaims(token).get("role", String.class);
 
-        // AC #3: Check if account is pending deletion or deleted
+        // AC #3: Block authenticated requests for accounts in PENDING_DELETION or DELETED state.
+        // The cancel endpoint is permitAll'd via SecurityConfig and never reaches here with a token.
         try {
             User user = userRepository.findById(UUID.fromString(userId)).orElse(null);
             if (user == null) {
-                log.warn("User not found: {}", userId);
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            if (user.getAccountStatus() == AccountStatus.PENDING_DELETION) {
-                log.warn("User pending deletion: {}", userId);
+            AccountStatus status = user.getAccountStatus();
+            if (status == AccountStatus.PENDING_DELETION || status == AccountStatus.DELETED) {
+                log.warn("Blocking request for {} account: userId={}, path={}",
+                        status, userId, urlPathHelper.getRequestUri(request));
+                writeAccountPendingDeletionResponse(response, status);
+                return;
             }
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid userId in JWT subject: {}", userId);
+            filterChain.doFilter(request, response);
+            return;
         } catch (Exception e) {
             log.error("Error checking account status for user: {}", userId, e);
             response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
-            try {
-                response.setContentType("application/json");
-                response.getWriter().write("{\"error\":\"Lỗi hệ thống\"}");
-                response.getWriter().flush();
-            } catch (IOException ioe) {
-                log.error("Failed to write error response: {}", ioe.getMessage());
-            }
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.getWriter().write("{\"detail\":\"Lỗi hệ thống khi xác thực phiên đăng nhập\"}");
             return;
         }
 
-        // Set SecurityContext with authenticated user
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(
                         userId,
@@ -121,6 +116,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
         filterChain.doFilter(request, response);
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        // Public deletion-cancellation endpoint (token-based, no JWT). Avoid touching SecurityContext entirely.
+        String path = urlPathHelper.getRequestUri(request);
+        return path != null && path.startsWith(ApiRoutes.USERS_DELETION_BASE);
+    }
+
+    private void writeAccountPendingDeletionResponse(HttpServletResponse response, AccountStatus status) throws IOException {
+        response.setStatus(HttpStatus.FORBIDDEN.value());
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        String detail = status == AccountStatus.DELETED
+                ? "Tài khoản đã bị xóa"
+                : "Tài khoản đang chờ xóa";
+        String body = "{\"type\":\"https://healthlens.vn/errors/account-pending-deletion\","
+                + "\"title\":\"Account Pending Deletion\","
+                + "\"status\":403,"
+                + "\"detail\":\"" + detail + "\"}";
+        response.getWriter().write(body);
     }
 
     private boolean isTokenBlacklisted(String jti) {

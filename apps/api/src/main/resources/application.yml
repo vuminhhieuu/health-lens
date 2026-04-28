@@ -155,7 +155,9 @@ app:
     from: ${MAIL_FROM:no-reply@healthlens.vn}
     driver: ${MAIL_DRIVER:smtp}
   frontend:
+    base-url: ${WEB_BASE_URL:http://localhost:3000}
     verification-url: ${WEB_VERIFY_URL:http://localhost:3000/verify-email}
+    cancellation-url: ${WEB_CANCELLATION_URL:http://localhost:3000/cancel-deletion}
   storage:
     bucket-auto-create: ${MINIO_BUCKET_AUTO_CREATE:true}
     cors-configure: ${MINIO_CORS_CONFIGURE:false}
@@ -215,9 +217,11 @@ app:
     from: ${MAIL_FROM:noreply@healthlens.vn}
     driver: ${MAIL_DRIVER:smtp}
   frontend:
+    base-url: ${WEB_BASE_URL:https://healthlens-staging.vercel.app}
     verification-url: ${WEB_VERIFY_URL:https://healthlens-staging.vercel.app/verify-email}
     reset-password-url: ${WEB_RESET_PASSWORD_URL:https://healthlens-staging.vercel.app/reset-password}
     login-url: ${WEB_LOGIN_URL:https://healthlens-staging.vercel.app/login}
+    cancellation-url: ${WEB_CANCELLATION_URL:https://healthlens-staging.vercel.app/cancel-deletion}
   storage:
     endpoint: ${MINIO_ENDPOINT:}
     access-key: ${MINIO_ACCESS_KEY:}
@@ -283,9 +287,11 @@ app:
   cookie:
     secure: true
   frontend:
+    base-url: ${WEB_BASE_URL:https://healthlens.vn}
     verification-url: ${WEB_VERIFY_URL:https://healthlens.vn/verify-email}
     reset-password-url: ${WEB_RESET_PASSWORD_URL:https://healthlens.vn/reset-password}
     login-url: ${WEB_LOGIN_URL:https://healthlens.vn/login}
+    cancellation-url: ${WEB_CANCELLATION_URL:https://healthlens.vn/cancel-deletion}
   storage:
     endpoint: ${MINIO_ENDPOINT:}
     access-key: ${MINIO_ACCESS_KEY:}

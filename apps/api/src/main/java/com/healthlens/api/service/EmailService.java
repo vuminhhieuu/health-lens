@@ -109,11 +109,19 @@ public class EmailService {
                   <body style="font-family: Arial, sans-serif; color: #111827;">
                     <h2>HealthLens - Xác nhận yêu cầu xóa tài khoản</h2>
                     <p>Chào %s,</p>
-                    <p>Chúng tôi đã nhận được yêu cầu xóa tài khoản của bạn. Tài khoản của bạn sẽ bị xóa vĩnh viễn sau 72 giờ từ thời điểm này.</p>
+                    <p>Chúng tôi đã nhận được yêu cầu xóa tài khoản của bạn theo Nghị định 13/2023/NĐ-CP. Tài khoản và toàn bộ dữ liệu sẽ bị xóa vĩnh viễn sau 72 giờ.</p>
                     <p><strong>Thời gian xóa dự kiến:</strong> %s</p>
-                    <p>Nếu bạn muốn hủy yêu cầu này, vui lòng bấm vào liên kết bên dưới trong vòng 72 giờ:</p>
+                    <p><strong>Dữ liệu sẽ bị xóa vĩnh viễn:</strong></p>
+                    <ul>
+                      <li>Thông tin cá nhân (họ tên, ngày sinh, giới tính, email)</li>
+                      <li>Tất cả hồ sơ sức khỏe và kết quả xét nghiệm</li>
+                      <li>Tất cả tệp PDF, ảnh kết quả khám đã tải lên</li>
+                      <li>Lịch sử đồng ý xử lý dữ liệu (consent logs)</li>
+                      <li>Phiên đăng nhập, token làm mới và token đặt lại mật khẩu</li>
+                    </ul>
+                    <p>Trong vòng 72 giờ tới bạn có thể hủy yêu cầu này bằng cách bấm vào liên kết bên dưới:</p>
                     <p><a href="%s" style="background-color: #00685f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Hủy yêu cầu xóa tài khoản</a></p>
-                    <p>Nếu bạn không thực hiện yêu cầu này, vui lòng liên hệ với đội hỗ trợ của chúng tôi.</p>
+                    <p>Nếu bạn không thực hiện yêu cầu này, vui lòng bấm vào liên kết hủy phía trên ngay lập tức và liên hệ đội hỗ trợ.</p>
                     <p>Xin cảm ơn,<br>Đội HealthLens</p>
                   </body>
                 </html>

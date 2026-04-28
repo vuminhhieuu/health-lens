@@ -1,5 +1,6 @@
 package com.healthlens.api.service;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import jakarta.annotation.PreDestroy;
@@ -11,12 +12,19 @@ import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.BucketAlreadyExistsException;
 import software.amazon.awssdk.services.s3.model.BucketAlreadyOwnedByYouException;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
+import software.amazon.awssdk.services.s3.model.Delete;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutBucketCorsRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.model.CORSConfiguration;
 import software.amazon.awssdk.services.s3.model.CORSRule;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -27,14 +35,17 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 @Service
 public class StorageService {
 
     private final String bucket;
     private final S3Client s3Client;
     private final S3Presigner presigner;
+    private final S3Presigner internalPresigner;
 
     public StorageService(
             @Value("${app.storage.endpoint:http://localhost:9000}") String endpoint,
@@ -53,6 +64,12 @@ public class StorageService {
                 .build();
         this.presigner = S3Presigner.builder()
                 .endpointOverride(URI.create(publicEndpoint))
+                .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                .region(Region.of(region))
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
+                .build();
+        this.internalPresigner = S3Presigner.builder()
+                .endpointOverride(URI.create(endpoint))
                 .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
                 .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
@@ -140,9 +157,84 @@ public class StorageService {
         return presigned.url().toExternalForm();
     }
 
+    public String generateInternalDownloadUrl(String key, Duration ttl) {
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .build();
+
+        GetObjectPresignRequest request = GetObjectPresignRequest.builder()
+                .signatureDuration(ttl)
+                .getObjectRequest(getObjectRequest)
+                .build();
+
+        PresignedGetObjectRequest presigned = internalPresigner.presignGetObject(request);
+        return presigned.url().toExternalForm();
+    }
+
+    /**
+     * Delete every object whose key starts with the given prefix.
+     * Used by Story 1.6 right-to-delete to wipe a user's uploaded files.
+     *
+     * Returns the number of objects deleted (best-effort; logs but does not
+     * throw when MinIO/S3 is unavailable so the rest of the deletion sequence
+     * can still complete).
+     */
+    public int deleteObjectsByPrefix(String prefix) {
+        if (prefix == null || prefix.isBlank()) {
+            return 0;
+        }
+
+        int totalDeleted = 0;
+        String continuationToken = null;
+        try {
+            do {
+                ListObjectsV2Request.Builder listBuilder = ListObjectsV2Request.builder()
+                        .bucket(bucket)
+                        .prefix(prefix);
+                if (continuationToken != null) {
+                    listBuilder.continuationToken(continuationToken);
+                }
+
+                ListObjectsV2Response listResponse = s3Client.listObjectsV2(listBuilder.build());
+                List<S3Object> contents = listResponse.contents();
+                if (contents == null || contents.isEmpty()) {
+                    break;
+                }
+
+                List<ObjectIdentifier> identifiers = new ArrayList<>(contents.size());
+                for (S3Object obj : contents) {
+                    identifiers.add(ObjectIdentifier.builder().key(obj.key()).build());
+                }
+
+                DeleteObjectsResponse deleteResponse = s3Client.deleteObjects(DeleteObjectsRequest.builder()
+                        .bucket(bucket)
+                        .delete(Delete.builder().objects(identifiers).quiet(true).build())
+                        .build());
+
+                totalDeleted += identifiers.size();
+                if (deleteResponse.hasErrors() && !deleteResponse.errors().isEmpty()) {
+                    log.warn("Some objects failed to delete for prefix {}: {} errors",
+                            prefix, deleteResponse.errors().size());
+                }
+
+                continuationToken = Boolean.TRUE.equals(listResponse.isTruncated())
+                        ? listResponse.nextContinuationToken()
+                        : null;
+            } while (continuationToken != null);
+
+            log.info("Deleted {} object(s) under prefix '{}'", totalDeleted, prefix);
+            return totalDeleted;
+        } catch (S3Exception ex) {
+            log.error("S3 error while deleting objects under prefix '{}': {}", prefix, ex.getMessage(), ex);
+            return totalDeleted;
+        }
+    }
+
     @PreDestroy
     public void closeClients() {
         presigner.close();
+        internalPresigner.close();
         s3Client.close();
     }
 }
