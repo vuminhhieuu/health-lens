@@ -4,7 +4,8 @@ import com.healthlens.api.annotation.RequiresConsent;
 import com.healthlens.api.dto.OcrResult;
 import com.healthlens.api.exception.OcrProcessingException;
 import com.healthlens.api.service.OcrService;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,10 +25,10 @@ import java.util.regex.Pattern;
  *   <li>{@code POST /api/ocr/extract} — Extract text từ image URL</li>
  * </ul>
  */
-@Slf4j
 @RestController
 @RequestMapping("/api/ocr")
 public class OcrController {
+    private static final Logger log = LoggerFactory.getLogger(OcrController.class);
 
     private final OcrService ocrService;
 

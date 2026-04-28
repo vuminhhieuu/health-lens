@@ -16,4 +16,6 @@ public interface HealthRecordRepository extends JpaRepository<HealthRecord, UUID
     Page<HealthRecord> findAllByProfileIdAndUserIdAndDeletedAtIsNull(UUID profileId, UUID userId, Pageable pageable);
     java.util.List<HealthRecord> findAllByDeletedAtBefore(Instant threshold);
     Page<HealthRecord> findAllByDeletedAtBefore(Instant threshold, Pageable pageable);
+    Optional<HealthRecord> findByIdAndUserId(UUID id, UUID userId);
+    java.util.List<HealthRecord> findAllByProfileIdAndUserIdOrderByCreatedAtDesc(UUID profileId, UUID userId);
 }

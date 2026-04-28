@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { User, ChevronRight, Calendar } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
@@ -55,9 +56,8 @@ export function ProfileCard({
     <div
       onClick={onPress}
       className={`
-        group relative flex flex-col p-6 rounded-3xl transition-all duration-300
+        group relative flex flex-col p-6 rounded-3xl transition-all duration-300 cursor-pointer
         border-2 
-        ${onPress ? "cursor-pointer" : ""}
         ${isSelected 
           ? "bg-white border-[#00685f] shadow-lg shadow-[#00685f]/10 -translate-y-1" 
           : "bg-white/60 border-transparent hover:bg-white hover:border-[#bcc9c6]/40 shadow-sm hover:shadow-md hover:-translate-y-0.5"}

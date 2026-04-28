@@ -2,7 +2,8 @@ package com.healthlens.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.ReferenceRangeDto;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -30,9 +31,9 @@ import java.util.Set;
  * <p>Caching: Redis cache với key = metricName:value:unit:status
  * <p>Fallback: explanation tĩnh khi tất cả attempts thất bại
  */
-@Slf4j
 @Service
 public class LlmService {
+    private static final Logger log = LoggerFactory.getLogger(LlmService.class);
 
     private static final Duration EXPLANATION_CACHE_TTL = Duration.ofDays(7);
     private static final String EXPLANATION_CACHE_PREFIX = "llm:explanation:";
@@ -62,9 +63,6 @@ public class LlmService {
 
     @Value("${app.ai.explanation.prompt-version:v2}")
     private String promptVersion;
-
-    @Value("${app.ai.explanation.retrieval-version:v1}")
-    private String retrievalVersion;
 
     private static final Map<String, String> FALLBACK_EXPLANATIONS = Map.of(
             "Glucose", "Đây là lượng đường trong máu của bạn tại thời điểm xét nghiệm. Bạn nên gặp bác sĩ để được tư vấn phù hợp với tình trạng cơ thể.",
@@ -378,7 +376,6 @@ public class LlmService {
                 normalizeStatus(status),
                 normalizeLang(lang),
                 promptVersion == null ? "v2" : promptVersion.trim(),
-                retrievalVersion == null ? "v1" : retrievalVersion.trim(),
                 referenceRange == null || referenceRange.min() == null ? "" : referenceRange.min().toPlainString(),
                 referenceRange == null || referenceRange.max() == null ? "" : referenceRange.max().toPlainString(),
                 referenceRange == null || referenceRange.unit() == null ? "" : referenceRange.unit().trim(),

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.MetricDto;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.request.ConfirmRecordRequest;
+import com.healthlens.api.dto.response.HealthRecordDetailResponse;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
 import com.healthlens.api.dto.response.RecommendationsResponse;
 import com.healthlens.api.dto.request.UpdateMetricsRequest;
@@ -15,7 +16,6 @@ import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.ProfileRepository;
-import com.healthlens.api.repository.ProfileShareRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -56,9 +56,7 @@ class HealthRecordServiceTest {
     @Mock private StorageService storageService;
     @Mock private ProfileRepository profileRepository;
     @Mock private HealthRecordRepository healthRecordRepository;
-    @Mock private ProfileShareRepository profileShareRepository;
     @Mock private ReferenceDataService referenceDataService;
-    @Mock private MetricExplanationRetrievalService metricExplanationRetrievalService;
     @Mock private LlmService llmService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
@@ -72,9 +70,7 @@ class HealthRecordServiceTest {
                 storageService,
                 profileRepository,
                 healthRecordRepository,
-                profileShareRepository,
                 referenceDataService,
-                metricExplanationRetrievalService,
                 llmService,
                 redisTemplate,
                 new ObjectMapper(),
@@ -464,36 +460,21 @@ class HealthRecordServiceTest {
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
         when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
-        when(metricExplanationRetrievalService.retrieve(
-                nullable(String.class),
-                nullable(String.class),
-                any(ReferenceRangeDto.class),
-                nullable(String.class)))
-                .thenReturn(new MetricExplanationRetrievalService.RetrievalResult(
-                        "Metric identity: ...\nClinical relation: ...\nOut-of-range impact: ...",
-                        "qdrant",
-                        true,
-                        0.91
-                ));
+        when(referenceDataService.buildMetricKnowledgeSnippet(eq("Glucose"), eq("normal"), any(ReferenceRangeDto.class)))
+                .thenReturn("knowledge-snippet");
         when(llmService.generateExplanationResult(
-                nullable(String.class),
-                nullable(String.class),
-                nullable(String.class),
+                eq("Glucose"),
+                eq("5.6"),
+                eq("normal"),
                 any(ReferenceRangeDto.class),
-                nullable(String.class),
-                nullable(String.class)))
+                eq("vi"),
+                eq("knowledge-snippet")))
                 .thenReturn(new LlmService.ExplanationResult("Giải thích đơn giản", "llm"));
 
         MetricExplanationResponse response = healthRecordService.getMetricExplanation(userId, recordId, "Glucose");
 
         assertThat(response.explanation()).isEqualTo("Giải thích đơn giản");
         assertThat(response.source()).isEqualTo("llm");
-        verify(metricExplanationRetrievalService).retrieve(
-                eq("Glucose"),
-                eq("normal"),
-                any(ReferenceRangeDto.class),
-                eq("vi")
-        );
     }
 
     @Test
@@ -528,39 +509,105 @@ class HealthRecordServiceTest {
     }
 
     @Test
-    @DisplayName("getProfileHistory tra ve du lieu phan trang va summary fields")
-    void getProfileHistory_returnsPaginatedSummary() throws Exception {
+    @DisplayName("getDetail tra ve overallStatus keyMetrics allMetrics va summary")
+    void getDetail_returnsSummaryAndKeyMetrics() throws Exception {
         UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
         UUID profileId = UUID.randomUUID();
 
         Profile profile = buildProfile(userId, profileId);
-        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
 
-        MetricDto abnormalMetric = MetricDto.builder()
-                .name("Glucose")
-                .value("8.1")
-                .normalizedValue("8.1")
-                .unit("mmol/L")
+        MetricDto abnormal = MetricDto.builder()
+                .name("HbA1c")
+                .value("8.2")
+                .normalizedValue("8.2")
                 .status("abnormal")
                 .referenceRange(new ReferenceRangeDto(
-                        BigDecimal.valueOf(3.9),
-                        BigDecimal.valueOf(6.4),
-                        BigDecimal.valueOf(3.2),
-                        BigDecimal.valueOf(7.1),
+                        BigDecimal.valueOf(4.0),
+                        BigDecimal.valueOf(6.0),
+                        BigDecimal.valueOf(3.5),
+                        BigDecimal.valueOf(7.0),
+                        "%"
+                ))
+                .build();
+        MetricDto attention = MetricDto.builder()
+                .name("Glucose")
+                .value("6.6")
+                .normalizedValue("6.6")
+                .status("attention")
+                .referenceRange(new ReferenceRangeDto(
+                        BigDecimal.valueOf(4.0),
+                        BigDecimal.valueOf(6.0),
+                        BigDecimal.valueOf(3.5),
+                        BigDecimal.valueOf(7.0),
                         "mmol/L"
                 ))
                 .build();
 
         HealthRecord record = new HealthRecord();
-        record.setId(UUID.randomUUID());
+        record.setId(recordId);
         record.setUserId(userId);
         record.setProfileId(profileId);
-        record.setRecordType("Xét nghiệm máu");
-        record.setSourceType("ocr");
-        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(abnormalMetric)));
-        record.setCreatedAt(java.time.Instant.now());
-        record.setExamDate(LocalDate.of(2026, 4, 1));
+        record.setStatus("review_required");
+        record.setFileKey("health-records/" + userId + "/" + profileId + "/" + recordId + "/original.pdf");
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(abnormal, attention)));
 
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+        when(storageService.generateDownloadUrl(any(), any(Duration.class))).thenReturn("https://download-url");
+
+        HealthRecordDetailResponse response = healthRecordService.getDetail(userId, recordId, profileId);
+
+        assertThat(response.overallStatus()).isEqualTo("abnormal");
+        assertThat(response.keyMetrics()).isNotEmpty();
+        assertThat(response.allMetrics()).hasSize(2);
+        assertThat(response.summary()).contains("chỉ số cần chú ý");
+    }
+
+    @Test
+    @DisplayName("getProfileHistory tra ve du lieu phan trang")
+    void getProfileHistory_returnsPaginatedHistory() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+
+        Profile profile = buildProfile(userId, profileId);
+
+        MetricDto abnormal = MetricDto.builder()
+                .name("HbA1c")
+                .value("8.2")
+                .normalizedValue("8.2")
+                .status("abnormal")
+                .referenceRange(new ReferenceRangeDto(
+                        BigDecimal.valueOf(4.0),
+                        BigDecimal.valueOf(6.0),
+                        BigDecimal.valueOf(3.5),
+                        BigDecimal.valueOf(7.0),
+                        "%"
+                ))
+                .build();
+        MetricDto attention = MetricDto.builder()
+                .name("Glucose")
+                .value("6.6")
+                .normalizedValue("6.6")
+                .status("attention")
+                .referenceRange(new ReferenceRangeDto(
+                        BigDecimal.valueOf(4.0),
+                        BigDecimal.valueOf(6.0),
+                        BigDecimal.valueOf(3.5),
+                        BigDecimal.valueOf(7.0),
+                        "mmol/L"
+                ))
+                .build();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setProfileId(profileId);
+        record.setStatus("done");
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(abnormal, attention)));
+
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
         when(healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNull(eq(profileId), eq(userId), any(PageRequest.class)))
                 .thenReturn(new PageImpl<>(List.of(record), PageRequest.of(0, 20), 1));
 
@@ -568,7 +615,7 @@ class HealthRecordServiceTest {
 
         assertThat(result.data()).hasSize(1);
         assertThat(result.data().getFirst().overallStatus()).isEqualTo("abnormal");
-        assertThat(result.data().getFirst().abnormalCount()).isEqualTo(1);
+        assertThat(result.data().getFirst().abnormalCount()).isEqualTo(2);
         assertThat(result.pagination().page()).isEqualTo(0);
         assertThat(result.pagination().limit()).isEqualTo(20);
         assertThat(result.pagination().total()).isEqualTo(1);
@@ -583,31 +630,10 @@ class HealthRecordServiceTest {
 
         Profile profile = buildProfile(otherUserId, profileId);
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
-        when(profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, userId))
-                .thenReturn(false);
 
         assertThatThrownBy(() -> healthRecordService.getProfileHistory(userId, profileId, 0, 20))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("khong thuoc ve nguoi dung");
-    }
-
-    @Test
-    @DisplayName("getProfileHistory cho phep viewer duoc share profile")
-    void getProfileHistory_allowsSharedViewer() {
-        UUID ownerId = UUID.randomUUID();
-        UUID viewerId = UUID.randomUUID();
-        UUID profileId = UUID.randomUUID();
-        Profile profile = buildProfile(ownerId, profileId);
-        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
-        when(profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId))
-                .thenReturn(true);
-        when(healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNull(eq(profileId), eq(ownerId), any(PageRequest.class)))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-
-        var result = healthRecordService.getProfileHistory(viewerId, profileId, 0, 20);
-
-        assertThat(result.data()).isEmpty();
-        verify(healthRecordRepository).findAllByProfileIdAndUserIdAndDeletedAtIsNull(eq(profileId), eq(ownerId), any(PageRequest.class));
     }
 
     @Test

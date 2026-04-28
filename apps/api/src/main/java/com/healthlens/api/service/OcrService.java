@@ -2,9 +2,8 @@ package com.healthlens.api.service;
 
 import com.healthlens.api.dto.OcrResult;
 import com.healthlens.api.exception.OcrProcessingException;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -18,7 +17,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.healthlens.api.dto.MetricDto;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.math.BigDecimal;
@@ -45,19 +43,15 @@ import java.util.regex.Pattern;
  *
  * @see com.healthlens.api.config.OcrServiceConfig
  */
-@Slf4j
 @Service
 public class OcrService {
+    private static final Logger log = LoggerFactory.getLogger(OcrService.class);
 
     private final RestTemplate ocrRestTemplate;
     private final AwsTextractClient textractClient;
-    private final GoogleCloudVisionClient googleCloudVisionClient;
-    private final MeterRegistry meterRegistry;
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
     private final String ocrServiceUrl;
-    private final String primaryProvider;
-    private final String fallbackProviders;
     private final String openRouterApiKey;
     private final String openRouterBaseUrl;
     private final String openRouterModel;
@@ -97,26 +91,18 @@ public class OcrService {
     public OcrService(
             @Qualifier("ocrRestTemplate") RestTemplate ocrRestTemplate,
             AwsTextractClient textractClient,
-            GoogleCloudVisionClient googleCloudVisionClient,
-            MeterRegistry meterRegistry,
             ChatClient chatClient,
             ObjectMapper objectMapper,
             @Value("${app.ocr.service.url:http://localhost:8001}") String ocrServiceUrl,
-            @Value("${app.ocr.providers.primary:easyocr}") String primaryProvider,
-            @Value("${app.ocr.providers.fallback-order:textract}") String fallbackProviders,
             @Value("${OPENROUTER_API_KEY:}") String openRouterApiKey,
             @Value("${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}") String openRouterBaseUrl,
             @Value("${OPENROUTER_MODEL:meta-llama/llama-3.3-70b-instruct}") String openRouterModel,
             @Value("${OPENROUTER_HTTP_REFERER:}") String openRouterReferer) {
         this.ocrRestTemplate = ocrRestTemplate;
         this.textractClient = textractClient;
-        this.googleCloudVisionClient = googleCloudVisionClient;
-        this.meterRegistry = meterRegistry;
         this.chatClient = chatClient;
         this.objectMapper = objectMapper;
         this.ocrServiceUrl = ocrServiceUrl;
-        this.primaryProvider = primaryProvider;
-        this.fallbackProviders = fallbackProviders;
         this.openRouterApiKey = openRouterApiKey;
         this.openRouterBaseUrl = openRouterBaseUrl;
         this.openRouterModel = openRouterModel;
@@ -128,53 +114,24 @@ public class OcrService {
      *
      * <p>Flow:
      * <ol>
-     *   <li>Chọn provider theo thứ tự cấu hình (`primary` rồi `fallback-order`)</li>
-     *   <li>Nếu provider hiện tại fail → log warning rồi thử provider tiếp theo</li>
-     *   <li>Nếu tất cả provider fail → trả về fallback result `source=all-providers-failed`</li>
+     *   <li>Gọi EasyOCR service (primary)</li>
+     *   <li>Nếu fail → log warning và fallback sang AwsTextractClient</li>
+     *   <li>Nếu cả 2 fail → throw {@link OcrProcessingException}</li>
      * </ol>
      *
      * @param imageUrl URL của image cần OCR (http/https hoặc presigned S3/MinIO URL)
      * @return {@link OcrResult} chứa extracted text, confidence, source, language
+     * @throws OcrProcessingException nếu tất cả OCR providers đều fail
      */
     public OcrResult processImage(String imageUrl) {
-        long pipelineStarted = System.nanoTime();
-        log.info("Processing OCR for image: {}",
-                imageUrl.length() > 80 ? imageUrl.substring(0, 80) + "..." : imageUrl);
-
-        List<String> providerOrder = resolveProviderOrder();
-        if (providerOrder.isEmpty()) {
-            log.error("OCR provider order is empty. Check OCR_PROVIDER_PRIMARY/OCR_PROVIDER_FALLBACK_ORDER");
-            return buildAllProvidersFailedResult();
+        try {
+            log.info("Processing OCR for image: {}",
+                    imageUrl.length() > 80 ? imageUrl.substring(0, 80) + "..." : imageUrl);
+            return callEasyOcr(imageUrl);
+        } catch (OcrProcessingException e) {
+            log.warn("EasyOCR failed, attempting fallback: {}", e.getMessage());
+            return callTextractFallback(imageUrl);
         }
-        for (String provider : providerOrder) {
-            long attemptStarted = System.nanoTime();
-            try {
-                OcrResult result = switch (provider) {
-                    case "easyocr" -> callEasyOcr(imageUrl);
-                    case "gcv" -> callGoogleCloudVision(imageUrl);
-                    case "textract" -> textractClient.extract(imageUrl);
-                    default -> throw new OcrProcessingException("Unsupported OCR provider: " + provider);
-                };
-                recordProviderMetrics(provider, true, attemptStarted);
-                log.info("ocr_provider_selected provider={} success=true source={} providerLatencyMs={} totalLatencyMs={}",
-                        provider,
-                        result.getSource(),
-                        elapsedMs(attemptStarted),
-                        elapsedMs(pipelineStarted));
-                return result;
-            } catch (OcrProcessingException ex) {
-                recordProviderMetrics(provider, false, attemptStarted);
-                log.warn("OCR provider '{}' failed: {}", provider, ex.getMessage());
-            } catch (Exception ex) {
-                recordProviderMetrics(provider, false, attemptStarted);
-                log.warn("OCR provider '{}' failed with unexpected error: {}", provider, ex.getMessage());
-            }
-        }
-
-        recordProviderMetrics("all-providers-failed", false, pipelineStarted);
-        log.warn("ocr_provider_selected provider=all-providers-failed success=false source=all-providers-failed totalLatencyMs={}",
-                elapsedMs(pipelineStarted));
-        return buildAllProvidersFailedResult();
     }
 
     /**
@@ -250,81 +207,14 @@ public class OcrService {
             return result;
         } catch (Exception e) {
             log.error("Textract fallback failed: {}. All OCR providers exhausted.", e.getMessage());
-            return buildAllProvidersFailedResult();
+            return OcrResult.builder()
+                    .text("")
+                    .confidence(0.0f)
+                    .source("all-providers-failed")
+                    .language("unknown")
+                    .processingTimeMs(0)
+                    .build();
         }
-    }
-
-    OcrResult callGoogleCloudVision(String imageUrl) {
-        try {
-            return googleCloudVisionClient.extract(imageUrl);
-        } catch (Exception ex) {
-            throw new OcrProcessingException("Google Cloud Vision failed", ex);
-        }
-    }
-
-    private List<String> resolveProviderOrder() {
-        List<String> providers = new ArrayList<>();
-        addProviderIfValid(providers, normalizeProvider(primaryProvider), "primary");
-        Arrays.stream(fallbackProviders.split(","))
-                .map(this::normalizeProvider)
-                .forEach(provider -> addProviderIfValid(providers, provider, "fallback"));
-        return providers;
-    }
-
-    private void addProviderIfValid(List<String> providers, String provider, String source) {
-        if (provider.isBlank()) {
-            return;
-        }
-        if (!isSupportedProvider(provider)) {
-            log.warn("Ignoring unsupported OCR provider '{}' from {}", provider, source);
-            return;
-        }
-        if (!providers.contains(provider)) {
-            providers.add(provider);
-        }
-    }
-
-    private boolean isSupportedProvider(String provider) {
-        return "easyocr".equals(provider) || "gcv".equals(provider) || "textract".equals(provider);
-    }
-
-    private String normalizeProvider(String provider) {
-        if (provider == null) {
-            return "";
-        }
-        return provider.trim().toLowerCase(Locale.ROOT);
-    }
-
-    private OcrResult buildAllProvidersFailedResult() {
-        return OcrResult.builder()
-                .text("")
-                .confidence(0.0f)
-                .source("all-providers-failed")
-                .language("unknown")
-                .processingTimeMs(0)
-                .build();
-    }
-
-    private void recordProviderMetrics(String provider, boolean success, long startedNanos) {
-        if (meterRegistry == null) {
-            return;
-        }
-        try {
-            meterRegistry.counter("ocr.provider.selection.count",
-                    "provider", provider,
-                    "success", Boolean.toString(success))
-                    .increment();
-            Timer.builder("ocr.provider.selection.latency")
-                    .tag("provider", provider)
-                    .register(meterRegistry)
-                    .record(System.nanoTime() - startedNanos, java.util.concurrent.TimeUnit.NANOSECONDS);
-        } catch (Exception ex) {
-            log.debug("Failed to record OCR provider metrics: {}", ex.getMessage());
-        }
-    }
-
-    private long elapsedMs(long startedNanos) {
-        return (System.nanoTime() - startedNanos) / 1_000_000;
     }
 
     /**

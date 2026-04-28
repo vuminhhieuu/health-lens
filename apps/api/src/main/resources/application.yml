@@ -22,9 +22,6 @@ spring:
           temperature: 0.7
           max-tokens: 4096
       embedding:
-        # Embedding provider tách riêng khỏi chat provider (Groq không hỗ trợ embeddings API).
-        base-url: ${EMBEDDING_BASE_URL:https://api.openai.com}
-        api-key: ${EMBEDDING_API_KEY:}
         options:
           model: ${EMBEDDING_MODEL:text-embedding-3-small}
     vectorstore:
@@ -55,16 +52,7 @@ app:
       max-total-delay-ms: 4500
     explanation:
       prompt-version: v2
-      retrieval-version: v1
-      retrieval:
-        top-k: ${APP_AI_EXPLANATION_RETRIEVAL_TOP_K:3}
-      ingestion:
-        enabled: ${APP_AI_EXPLANATION_INGESTION_ENABLED:false}
-        resource: ${APP_AI_EXPLANATION_INGESTION_RESOURCE:classpath:ai/metric-explanations.vi.json}
   ocr:
-    providers:
-      primary: ${OCR_PROVIDER_PRIMARY:easyocr}
-      fallback-order: ${OCR_PROVIDER_FALLBACK_ORDER:textract}
     confidence:
       # Ngưỡng phân loại confidence OCR (0.0-1.0), có thể override bằng env vars.
       high-threshold: ${OCR_CONFIDENCE_HIGH_THRESHOLD:0.85}
@@ -74,11 +62,8 @@ app:
       timeout-ms: ${OCR_TIMEOUT_MS:60000}
       connect-timeout-ms: 10000
     textract:
-      enabled: ${OCR_TEXTRACT_ENABLED:false}
-      region: ${OCR_TEXTRACT_REGION:${AWS_REGION:ap-southeast-1}}
-    gcv:
-      enabled: ${OCR_GCV_ENABLED:false}
-      project-id: ${OCR_GCV_PROJECT_ID:}
+      enabled: false
+      region: ${AWS_REGION:ap-southeast-1}
   cookie:
     secure: ${APP_COOKIE_SECURE:true}
   security:
@@ -147,10 +132,6 @@ spring:
             enable: ${MAIL_SMTP_STARTTLS:true}
 
 app:
-  ocr:
-    providers:
-      primary: ${OCR_PROVIDER_PRIMARY:easyocr}
-      fallback-order: ${OCR_PROVIDER_FALLBACK_ORDER:textract}
   mail:
     from: ${MAIL_FROM:no-reply@healthlens.vn}
     driver: ${MAIL_DRIVER:smtp}
@@ -207,10 +188,6 @@ spring:
     locations: classpath:db/migration
 
 app:
-  ocr:
-    providers:
-      primary: ${OCR_PROVIDER_PRIMARY:gcv}
-      fallback-order: ${OCR_PROVIDER_FALLBACK_ORDER:textract}
   mail:
     from: ${MAIL_FROM:noreply@healthlens.vn}
     driver: ${MAIL_DRIVER:smtp}
@@ -273,10 +250,6 @@ spring:
     locations: classpath:db/migration
 
 app:
-  ocr:
-    providers:
-      primary: ${OCR_PROVIDER_PRIMARY:gcv}
-      fallback-order: ${OCR_PROVIDER_FALLBACK_ORDER:textract}
   mail:
     from: ${MAIL_FROM:noreply@healthlens.vn}
     driver: smtp

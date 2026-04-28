@@ -1,6 +1,6 @@
-# Story 4.6: RAG-backed giải thích chỉ số + OCR routing theo môi trường
+# Story 4.6: RAG-backed giải thích chỉ số với Qdrant
 
-Status: done
+Status: ready-for-dev
 
 ## Execution scope
 
@@ -25,38 +25,26 @@ so that tôi hiểu rõ chỉ số là gì, liên quan gì, và ảnh hưởng g
 
 ## Tasks / Subtasks
 
-- [x] Task 1 — Backend: Qdrant knowledge ingestion & indexing (AC: #1, #5)
-  - [x] Thiết kế chunk schema cho metric explanation (metric key, aliases, whatIsIt, relatedTo, impact)
-  - [x] Tạo job ingest từ curated source vào Qdrant collection hiện có
-  - [x] Embed + upsert points với metadata filter theo metric/alias/language
-- [x] Task 2 — Backend: Runtime retrieval pipeline (AC: #1, #3, #4)
-  - [x] Tạo service `MetricExplanationRetrievalService` gọi Qdrant top-k
-  - [x] Compose `knowledgeSnippet` từ retrieval results
-  - [x] Fallback chain: Qdrant miss -> `ReferenceDataService.buildMetricKnowledgeSnippet` -> generic
-  - [x] Emit structured logs/metrics: source, hit/miss, score, latency
-- [x] Task 3 — Backend: LLM integration tightening (AC: #2, #3)
-  - [x] Cập nhật `LlmService` dùng `knowledgeSnippet` từ retrieval service
-  - [x] Giữ output contract 3 dòng cố định, plain Vietnamese, no diagnosis
-  - [x] Cập nhật cache key strategy để có thể invalidate theo prompt/retrieval version
-- [x] Task 4 — Web (Phase 1): UX safety & quality indicators (AC: #3, #4)
-  - [x] Đảm bảo UI không hiển thị lỗi kỹ thuật khi retrieval miss
-  - [x] Giữ fallback explanation user-friendly và đúng format 3 ý
-- [x] Task 5 — Tests & Evaluation (AC: #5)
-  - [x] Unit test retrieval service: hit, miss, timeout
-  - [x] Integration test explanation endpoint với Qdrant mocked/real test container
-  - [x] Chạy benchmark quality set 12 case và lưu kết quả chấm
-- [x] Task 6 — OCR provider routing theo môi trường (Dev/Staging/Prod)
-  - [x] Dev: giữ `EasyOCR` làm provider mặc định cho OCR service
-  - [x] Staging: cấu hình OCR fallback/flow dùng `Google Cloud Vision` (free tier) + `AWS Textract` (free tier)
-  - [x] Production: cấu hình OCR fallback/flow dùng `Google Cloud Vision` (free tier) + `AWS Textract` (free tier)
-  - [x] Bổ sung env vars theo môi trường cho GCV/Textract credentials, region, timeout và feature flags bật/tắt provider
-  - [x] Viết test xác nhận route OCR theo profile (`dev`, `staging`, `production`) và fallback an toàn khi provider lỗi
-
-### Review Findings
-
-- [x] [Review][Patch] Retrieval chưa filter theo metric/alias metadata, có thể lệch AC #1 [apps/api/src/main/java/com/healthlens/api/service/MetricExplanationRetrievalService.java:49]
-- [x] [Review][Patch] Config key retrieval version bị lệch giữa ingestion job và runtime cache/retrieval [apps/api/src/main/java/com/healthlens/api/service/MetricExplanationIngestionJob.java:25]
-- [x] [Review][Patch] UI fallback explanation chưa xử lý trường hợp API trả chuỗi rỗng thành format 3 ý [apps/web/src/components/ui/HealthMetricCard.tsx:61]
+- Task 1 — Backend: Qdrant knowledge ingestion & indexing (AC: #1, #5)
+  - Thiết kế chunk schema cho metric explanation (metric key, aliases, whatIsIt, relatedTo, impact)
+  - Tạo job ingest từ curated source vào Qdrant collection hiện có
+  - Embed + upsert points với metadata filter theo metric/alias/language
+- Task 2 — Backend: Runtime retrieval pipeline (AC: #1, #3, #4)
+  - Tạo service `MetricExplanationRetrievalService` gọi Qdrant top-k
+  - Compose `knowledgeSnippet` từ retrieval results
+  - Fallback chain: Qdrant miss -> `ReferenceDataService.buildMetricKnowledgeSnippet` -> generic
+  - Emit structured logs/metrics: source, hit/miss, score, latency
+- Task 3 — Backend: LLM integration tightening (AC: #2, #3)
+  - Cập nhật `LlmService` dùng `knowledgeSnippet` từ retrieval service
+  - Giữ output contract 3 dòng cố định, plain Vietnamese, no diagnosis
+  - Cập nhật cache key strategy để có thể invalidate theo prompt/retrieval version
+- Task 4 — Web (Phase 1): UX safety & quality indicators (AC: #3, #4)
+  - Đảm bảo UI không hiển thị lỗi kỹ thuật khi retrieval miss
+  - Giữ fallback explanation user-friendly và đúng format 3 ý
+- Task 5 — Tests & Evaluation (AC: #5)
+  - Unit test retrieval service: hit, miss, timeout
+  - Integration test explanation endpoint với Qdrant mocked/real test container
+  - Chạy benchmark quality set 12 case và lưu kết quả chấm
 
 ### Dev Order Checklist (Execution Sequence)
 
@@ -82,13 +70,13 @@ so that tôi hiểu rõ chỉ số là gì, liên quan gì, và ảnh hưởng g
 
 ### Pre-dev Audit (Reuse from existing stories)
 
-- Qdrant cloud + vector infra đã có từ Story 1.8 (`VectorStoreService`, endpoint index/search, cấu hình Qdrant).
-- Prompt contract 3 ý + fallback base đã có từ Story 4.3.
-- Explanation endpoint đã có sẵn để nối retrieval runtime.
-- Cache versioning prompt đã có (`prompt-version` trong cache key).
-- Chưa có ingestion pipeline curated cho metric explanation chunks (phần mới của 4.6).
-- Chưa có retrieval service chuyên biệt cho metric explanation top-k từ Qdrant.
-- Chưa có benchmark quality gate 12-case tự động trong CI.
+- [x] Qdrant cloud + vector infra đã có từ Story 1.8 (`VectorStoreService`, endpoint index/search, cấu hình Qdrant).
+- [x] Prompt contract 3 ý + fallback base đã có từ Story 4.3.
+- [x] Explanation endpoint đã có sẵn để nối retrieval runtime.
+- [x] Cache versioning prompt đã có (`prompt-version` trong cache key).
+- [ ] Chưa có ingestion pipeline curated cho metric explanation chunks (phần mới của 4.6).
+- [ ] Chưa có retrieval service chuyên biệt cho metric explanation top-k từ Qdrant.
+- [ ] Chưa có benchmark quality gate 12-case tự động trong CI.
 
 ## Dev Notes
 
@@ -144,46 +132,11 @@ Output:
 
 ### Agent Model Used
 
-- Codex 5.3 (Cursor)
+*[To be filled by dev agent]*
 
 ### Debug Log References
 
-- `./gradlew test --tests "com.healthlens.api.service.MetricExplanationRetrievalServiceTest" --tests "com.healthlens.api.service.HealthRecordServiceTest" --tests "com.healthlens.api.service.LlmServiceTest"`
-- `./gradlew test --tests "com.healthlens.api.controller.HealthRecordControllerTest" --tests "com.healthlens.api.service.MetricExplanationRetrievalServiceTest" --tests "com.healthlens.api.service.HealthRecordServiceTest" --tests "com.healthlens.api.service.LlmServiceTest"`
-- `./gradlew test`
-
 ### Completion Notes List
 
-- Implemented curated metric explanation ingestion pipeline via `MetricExplanationIngestionService` + startup job `MetricExplanationIngestionJob` (config-gated), with JSON curated dataset and metadata schema (`metricKey`, `aliases`, `language`, `whatIsIt`, `relatedTo`, `impactWhenOutOfRange`, `sourceVersion`).
-- Implemented runtime RAG retrieval via `MetricExplanationRetrievalService` with fallback chain `Qdrant -> ReferenceDataService -> generic`, structured logs, and Micrometer metrics (source, hit/miss, top score, latency).
-- Integrated retrieval flow into `HealthRecordService.getMetricExplanation` so LLM prompt now uses retrieval snippet.
-- Updated `LlmService` cache key to include `retrieval-version` for cache invalidation by retrieval evolution.
-- Added unit tests for retrieval hit/miss/timeout and updated service tests; full `apps/api` test suite currently passing.
-- Web UX fallback đã được chuẩn hóa để luôn hiển thị định dạng 3 ý và không lộ lỗi kỹ thuật nếu retrieval thất bại.
-- Added endpoint integration test cho route explanation (`HealthRecordControllerTest`) với fallback payload.
-- Added benchmark report 12-case tại `_bmad-output/implementation-artifacts/epic-4/4-6-quality-benchmark-report.md` và đạt gate pass.
-- Resolved 3 review patch findings: metric/alias metadata filtering in retrieval, unified retrieval-version config key for ingestion/runtime, and UI empty-explanation fallback to safe 3-line format.
-- Implemented OCR provider routing by environment: dev defaults to `easyocr -> textract`, staging/prod defaults to `gcv -> textract`, with environment-driven toggles and fallback order.
-- Added OCR routing tests to validate `gcv` primary path and `gcv -> textract` fallback path.
-
 ### File List
-
-- apps/api/src/main/java/com/healthlens/api/service/VectorStoreService.java
-- apps/api/src/main/java/com/healthlens/api/service/MetricExplanationRetrievalService.java
-- apps/api/src/main/java/com/healthlens/api/service/MetricExplanationIngestionService.java
-- apps/api/src/main/java/com/healthlens/api/service/MetricExplanationIngestionJob.java
-- apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java
-- apps/api/src/main/java/com/healthlens/api/service/LlmService.java
-- apps/api/src/main/resources/application.yml
-- apps/api/src/main/resources/ai/metric-explanations.vi.json
-- apps/api/src/test/java/com/healthlens/api/service/HealthRecordServiceTest.java
-- apps/api/src/test/java/com/healthlens/api/service/LlmServiceTest.java
-- apps/api/src/test/java/com/healthlens/api/service/MetricExplanationRetrievalServiceTest.java
-- apps/api/src/test/java/com/healthlens/api/service/OcrServiceTest.java
-- apps/api/src/test/java/com/healthlens/api/controller/HealthRecordControllerTest.java
-- apps/web/src/components/ui/HealthMetricCard.tsx
-- _bmad-output/implementation-artifacts/epic-4/4-6-quality-benchmark-report.md
-- .env
-- .env.staging.api
-- .env.production
 

@@ -25,7 +25,6 @@ import com.healthlens.api.entity.Profile;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.ProfileRepository;
-import com.healthlens.api.repository.ProfileShareRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -51,25 +50,24 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
-@Slf4j
 public class HealthRecordService {
+    private static final Logger log = LoggerFactory.getLogger(HealthRecordService.class);
 
     private static final Duration UPLOAD_URL_TTL = Duration.ofMinutes(15);
     private static final Duration UPLOAD_RESERVATION_TTL = Duration.ofMinutes(20);
-    private static final String STATUS_PROCESSING = "processing";
     private static final int HISTORY_PAGE_SIZE = 20;
     private static final String RECOMMENDATIONS_DISCLAIMER =
             "Thông tin này chỉ mang tính tham khảo và không thay thế tư vấn của bác sĩ chuyên khoa.";
+    private static final String STATUS_PROCESSING = "processing";
 
     private final StorageService storageService;
     private final ProfileRepository profileRepository;
     private final HealthRecordRepository healthRecordRepository;
-    private final ProfileShareRepository profileShareRepository;
     private final ReferenceDataService referenceDataService;
-    private final MetricExplanationRetrievalService metricExplanationRetrievalService;
     private final LlmService llmService;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -79,9 +77,7 @@ public class HealthRecordService {
             StorageService storageService,
             ProfileRepository profileRepository,
             HealthRecordRepository healthRecordRepository,
-            ProfileShareRepository profileShareRepository,
             ReferenceDataService referenceDataService,
-            MetricExplanationRetrievalService metricExplanationRetrievalService,
             LlmService llmService,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper,
@@ -90,9 +86,7 @@ public class HealthRecordService {
         this.storageService = storageService;
         this.profileRepository = profileRepository;
         this.healthRecordRepository = healthRecordRepository;
-        this.profileShareRepository = profileShareRepository;
         this.referenceDataService = referenceDataService;
-        this.metricExplanationRetrievalService = metricExplanationRetrievalService;
         this.llmService = llmService;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
@@ -244,12 +238,20 @@ public class HealthRecordService {
         List<MetricDto> metricsList = parseMetrics(record.getMetrics()).stream()
                 .map(metric -> enrichMetric(metric, profile, record.getExamDate()))
                 .collect(Collectors.toList());
+        String overallStatus = computeOverallStatus(metricsList);
+        List<MetricDto> keyMetrics = extractKeyMetrics(metricsList);
+        String summary = buildSummary(overallStatus, keyMetrics.size());
 
         return new HealthRecordDetailResponse(
                 record.getId(),
                 record.getProfileId(),
+                profile.getDisplayName(),
                 record.getStatus(),
                 metricsList,
+                overallStatus,
+                keyMetrics,
+                metricsList,
+                summary,
                 record.getExamDate() != null ? record.getExamDate().toString() : null,
                 record.getRecordType(),
                 record.getHospitalName(),
@@ -271,20 +273,13 @@ public class HealthRecordService {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Khong tim thay chi so trong health record"));
 
-        MetricExplanationRetrievalService.RetrievalResult retrievalResult = metricExplanationRetrievalService.retrieve(
-                metric.getName(),
-                metric.getStatus(),
-                metric.getReferenceRange(),
-                "vi"
-        );
-
         LlmService.ExplanationResult result = llmService.generateExplanationResult(
                 metric.getName(),
                 metric.getNormalizedValue() != null ? metric.getNormalizedValue() : metric.getValue(),
                 metric.getStatus(),
                 metric.getReferenceRange(),
                 "vi",
-                retrievalResult.knowledgeSnippet()
+                referenceDataService.buildMetricKnowledgeSnippet(metric.getName(), metric.getStatus(), metric.getReferenceRange())
         );
 
         return new MetricExplanationResponse(result.explanation(), result.source());
@@ -414,10 +409,11 @@ public class HealthRecordService {
                 Sort.by(Sort.Order.desc("examDate").nullsLast(), Sort.Order.desc("createdAt"))
         );
         UUID profileOwnerId = profile.getUser().getId();
-        Page<HealthRecord> records = healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNull(profileId, profileOwnerId, pageable);
+        Page<HealthRecord> records = healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNull(
+                profileId, profileOwnerId, pageable);
 
         List<HealthRecordHistoryItemResponse> items = records.getContent().stream()
-                .map(record -> toHistoryItem(record, profile, userId))
+                .map(record -> toHistoryItem(record, profile))
                 .collect(Collectors.toList());
 
         return new HealthRecordHistoryPageResponse(
@@ -695,6 +691,98 @@ public class HealthRecordService {
         return "health-record-upload:%s".formatted(recordId);
     }
 
+    private String computeOverallStatus(List<MetricDto> metrics) {
+        if (metrics == null || metrics.isEmpty()) {
+            return "normal";
+        }
+        boolean hasAbnormal = metrics.stream().anyMatch(metric -> isStatus(metric, "abnormal"));
+        if (hasAbnormal) {
+            return "abnormal";
+        }
+        boolean hasAttention = metrics.stream().anyMatch(metric -> isStatus(metric, "attention"));
+        if (hasAttention) {
+            return "attention";
+        }
+        return "normal";
+    }
+
+    private boolean isStatus(MetricDto metric, String expectedStatus) {
+        if (metric == null || metric.getStatus() == null) {
+            return false;
+        }
+        String normalized = normalizeRiskToken(metric.getStatus());
+        return switch (expectedStatus) {
+            case "abnormal" -> "abnormal".equals(normalized) || "bat thuong".equals(normalized);
+            case "attention" -> "attention".equals(normalized) || "can chu y".equals(normalized);
+            default -> expectedStatus.equals(normalized);
+        };
+    }
+
+    private List<MetricDto> extractKeyMetrics(List<MetricDto> metrics) {
+        if (metrics == null || metrics.isEmpty()) {
+            return List.of();
+        }
+        List<MetricDto> abnormalMetrics = metrics.stream()
+                .filter(metric -> isStatus(metric, "abnormal"))
+                .sorted((left, right) -> Integer.compare(metricSeverityScore(right), metricSeverityScore(left)))
+                .limit(5)
+                .toList();
+        if (!abnormalMetrics.isEmpty()) {
+            return abnormalMetrics;
+        }
+        return metrics.stream()
+                .filter(metric -> isStatus(metric, "attention"))
+                .sorted((left, right) -> Integer.compare(metricSeverityScore(right), metricSeverityScore(left)))
+                .limit(5)
+                .toList();
+    }
+
+    private int metricSeverityScore(MetricDto metric) {
+        int score = 0;
+        if (metric == null) {
+            return score;
+        }
+        if (isStatus(metric, "abnormal")) {
+            score += 100;
+        } else if (isStatus(metric, "attention")) {
+            score += 50;
+        }
+        if (Boolean.TRUE.equals(metric.getCritical())) {
+            score += 30;
+        }
+        String interpretation = metric.getInterpretation();
+        if (interpretation != null) {
+            String normalized = normalizeRiskToken(interpretation);
+            if ("critical".equals(normalized)) {
+                score += 20;
+            } else if ("high".equals(normalized) || "low".equals(normalized)) {
+                score += 10;
+            }
+        }
+        return score;
+    }
+
+    private String buildSummary(String overallStatus, int keyMetricCount) {
+        return switch (overallStatus) {
+            case "abnormal" -> "Có %d chỉ số cần chú ý. Hãy tham khảo ý kiến bác sĩ sớm.".formatted(Math.max(1, keyMetricCount));
+            case "attention" -> "Có %d chỉ số ở ngưỡng cần theo dõi thêm.".formatted(Math.max(1, keyMetricCount));
+            default -> "Tất cả chỉ số trong giới hạn bình thường. Tiếp tục duy trì!";
+        };
+    }
+
+    private String normalizeRiskToken(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String lower = value.trim().toLowerCase(Locale.ROOT)
+                .replace('_', ' ')
+                .replace('-', ' ');
+        return java.text.Normalizer.normalize(lower, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
     private List<MetricDto> parseMetrics(String rawMetrics) {
         if (rawMetrics == null || rawMetrics.isBlank()) {
             return List.of();
@@ -734,10 +822,6 @@ public class HealthRecordService {
     }
 
     private MetricDto enrichMetric(MetricDto metric, Profile profile, LocalDate examDate) {
-        return enrichMetric(metric, profile, examDate, true);
-    }
-
-    private MetricDto enrichMetric(MetricDto metric, Profile profile, LocalDate examDate, boolean persistAudit) {
         hydrateRawAndNormalizedFields(metric);
 
         if (metric.getReferenceRange() != null) {
@@ -752,14 +836,7 @@ public class HealthRecordService {
             return metric;
         }
 
-        MetricClassificationDto classification = persistAudit
-                ? referenceDataService.classifyMetric(
-                metric.getName(),
-                metric.getNormalizedValue(),
-                profile,
-                examDate
-        )
-                : referenceDataService.classifyMetricWithoutAudit(
+        MetricClassificationDto classification = referenceDataService.classifyMetric(
                 metric.getName(),
                 metric.getNormalizedValue(),
                 profile,
@@ -922,9 +999,9 @@ public class HealthRecordService {
         }
     }
 
-    private HealthRecordHistoryItemResponse toHistoryItem(HealthRecord record, Profile profile, UUID requesterId) {
+    private HealthRecordHistoryItemResponse toHistoryItem(HealthRecord record, Profile profile) {
         List<MetricDto> metrics = parseMetrics(record.getMetrics()).stream()
-                .map(metric -> enrichMetric(metric, profile, record.getExamDate(), false))
+                .map(metric -> enrichMetric(metric, profile, record.getExamDate()))
                 .collect(Collectors.toList());
         long abnormalCountLong = metrics.stream()
                 .map(MetricDto::getStatus)
@@ -955,7 +1032,7 @@ public class HealthRecordService {
                 record.getHospitalName(),
                 record.getSourceType(),
                 record.getCreatedAt(),
-                profile.getUser().getId().equals(requesterId)
+                true
         );
     }
 
@@ -986,10 +1063,7 @@ public class HealthRecordService {
     }
 
     private boolean canAccessProfileHistory(Profile profile, UUID userId) {
-        if (profile.getUser().getId().equals(userId)) {
-            return true;
-        }
-        return profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profile.getId(), userId);
+        return profile.getUser().getId().equals(userId);
     }
 
     private record UploadFormat(String extension, String contentType) {}

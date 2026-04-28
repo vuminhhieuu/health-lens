@@ -2,7 +2,8 @@ package com.healthlens.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.OcrResult;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
@@ -18,9 +19,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-@Slf4j
 @Service
 public class OcrJobConsumer {
+    private static final Logger log = LoggerFactory.getLogger(OcrJobConsumer.class);
 
     private final StringRedisTemplate redisTemplate;
     private final StorageService storageService;

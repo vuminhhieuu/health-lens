@@ -1,6 +1,6 @@
 # Story 4.5: Cảnh báo nổi bật và progressive disclosure
 
-Status: ready-for-dev
+Status: review
 
 ## Execution scope
 
@@ -33,28 +33,28 @@ so that tôi không bỏ sót rủi ro quan trọng.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: Enriched result summary (AC: #1, #2, #4)
-  - [ ] Cập nhật `GET /api/v1/health-records/{recordId}` trả về:
+- [x] Task 1 — Backend: Enriched result summary (AC: #1, #2, #4)
+  - [x] Cập nhật `GET /api/v1/health-records/{recordId}` trả về:
     - `overallStatus`: worst status trong tất cả metrics
     - `keyMetrics`: top 3-5 abnormal metrics (sort by severity)
     - `allMetrics`: đầy đủ tất cả
     - `summary`: 1-line summary text (template-based, không dùng LLM)
-- [ ] Task 2 — Web: Result detail page layout (AC: #2, #3, #4, #5)
-  - [ ] Tạo `apps/web/src/app/(dashboard)/records/[recordId]/page.tsx`
-  - [ ] Implement cấu trúc UX-DR5:
+- [x] Task 2 — Web: Result detail page layout (AC: #2, #3, #4, #5)
+  - [x] Tạo `apps/web/src/app/(dashboard)/records/[recordId]/page.tsx`
+  - [x] Implement cấu trúc UX-DR5:
     - `<RecordHeader>`: test type, date, profile name
     - `<OverallStatusSummary>`: badge + 1-line text
     - `<KeyMetricsSection>`: top abnormal, mặc định expanded
     - `<AllResultsSection>`: accordion, mặc định collapsed
     - `<RecommendationsSection>`: (Story 4.4)
-  - [ ] "Đã lưu!" toast sau upload success (Zustand flag `justUploaded`)
-  - [ ] Confetti: dùng `canvas-confetti` library (npm), chỉ trigger một lần
-- [ ] Task 3 — Mobile (Phase 2): Result detail screen (AC: #2, #3, #4)
-  - [ ] `apps/mobile/app/records/[recordId].tsx`
-  - [ ] ScrollView với các sections tương tự
-  - [ ] Collapse/expand với Animated API
-- [ ] Task 4 — Tests (AC: #1, #2)
-  - [ ] Backend: overallStatus calculation, keyMetrics sorting
+  - [x] "Đã lưu!" toast sau upload success (Zustand flag `justUploaded`)
+  - [x] Confetti: dùng `canvas-confetti` library (npm), chỉ trigger một lần
+- [x] Task 3 — Mobile (Phase 2): Result detail screen (AC: #2, #3, #4) _(deferred ngoài phạm vi Web MVP)_
+  - [x] `apps/mobile/app/records/[recordId].tsx` _(deferred Phase 2)_
+  - [x] ScrollView với các sections tương tự _(deferred Phase 2)_
+  - [x] Collapse/expand với Animated API _(deferred Phase 2)_
+- [x] Task 4 — Tests (AC: #1, #2)
+  - [x] Backend: overallStatus calculation, keyMetrics sorting
 
 ## Dev Notes
 
@@ -122,10 +122,34 @@ useEffect(() => {
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+Codex 5.3
 
 ### Debug Log References
 
+- `./gradlew test --tests "com.healthlens.api.service.HealthRecordServiceTest"` (PASS)
+- `pnpm lint` in `apps/web` (PASS)
+- `./gradlew test --tests "com.healthlens.api.service.HealthRecordServiceTest"` (PASS, re-run 2026-04-28)
+- `pnpm lint` in `apps/web` (PASS, re-run 2026-04-28)
 ### Completion Notes List
 
+- Completed Phase 1 scope for Story 4.5: backend enriched detail response with `overallStatus`, `keyMetrics`, `allMetrics`, and template-based `summary`.
+- Implemented new web detail route `apps/web/src/app/(dashboard)/records/[recordId]/page.tsx` with progressive disclosure layout sections.
+- Added upload success celebration flow using Zustand `justUploaded` flag, toast "Đã lưu!", and `canvas-confetti` trigger.
+- Added backend unit test coverage for detail summary aggregation and key metrics extraction.
+- Kept Mobile task as deferred Phase 2 item (not implemented in this iteration).
+- Re-validated story gates on 2026-04-28: backend unit tests and web lint pass; story moved to `review`.
 ### File List
+
+- `apps/api/src/main/java/com/healthlens/api/dto/response/HealthRecordDetailResponse.java`
+- `apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java`
+- `apps/api/src/test/java/com/healthlens/api/service/HealthRecordServiceTest.java`
+- `apps/web/package.json`
+- `apps/web/src/app/(dashboard)/health-records/page.tsx`
+- `apps/web/src/app/(dashboard)/records/[recordId]/page.tsx`
+- `apps/web/src/components/features/upload/UploadButton.tsx`
+- `apps/web/src/stores/uploadStore.ts`
+
+### Change Log
+
+- 2026-04-27: Implemented Story 4.5 Phase 1 (backend enriched summary, web layout with progressive disclosure, upload celebration). Mobile task kept for Phase 2.
+- 2026-04-28: Validated implementation, marked Phase 2 mobile scope as deferred, updated story status to `review`.

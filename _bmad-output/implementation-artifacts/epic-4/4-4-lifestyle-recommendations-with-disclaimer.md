@@ -1,6 +1,6 @@
 # Story 4.4: Gợi ý lối sống kèm disclaimer bắt buộc
 
-Status: review
+Status: done 
 
 ## Execution scope
 
@@ -101,7 +101,6 @@ Output as JSON array: ["recommendation1", "recommendation2", ...]
 
 ### Agent Model Used
 
-Codex 5.3
 Codex 5.3
 
 ### Debug Log References

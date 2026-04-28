@@ -7,6 +7,7 @@ import { ApiPaths, ALLOWED_FILE_TYPES, UPLOAD_MAX_SIZE_BYTES } from "@healthlens
 import { Upload, Loader2, AlertCircle } from "lucide-react";
 
 import { apiClient } from "@/lib/api/apiClient";
+import { useUploadStore } from "@/stores/uploadStore";
 
 type UploadStatus = "idle" | "uploading" | "done" | "error";
 
@@ -30,6 +31,7 @@ export function UploadButton({
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const markJustUploaded = useUploadStore((state) => state.markJustUploaded);
 
   const validateFile = (file: File) => {
     if (!ALLOWED_FILE_TYPES.includes(file.type as (typeof ALLOWED_FILE_TYPES)[number])) {
@@ -84,7 +86,7 @@ export function UploadButton({
 
       await apiClient.post(ApiPaths.HEALTH_RECORDS.CONFIRM_UPLOAD(uploadInfo.recordId));
       setStatus("done");
-      // Redirect to review page
+      markJustUploaded();
       router.push(`/health-records/review/${uploadInfo.recordId}`);
     } catch {
       setStatus("error");

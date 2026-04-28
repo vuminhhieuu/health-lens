@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
 import type { ReactNode } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -21,20 +21,19 @@ import {
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
-import { apiClient } from "@/lib/api/apiClient";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { apiClient } from "@/lib/api/apiClient";
 
 type Profile = {
   id: string;
-  displayName: string;
 };
 
-type HealthRecord = {
+type RecentRecord = {
   id: string;
-  testType?: string | null;
+  status: string;
+  recordType?: string | null;
   examDate?: string | null;
-  overallStatus?: "normal" | "attention" | "abnormal" | string;
-  abnormalCount?: number;
+  metrics?: Array<{ status?: string | null }> | null;
 };
 
 export default function DashboardHomePage() {
@@ -53,10 +52,10 @@ export default function DashboardHomePage() {
     queryKey: ["home-recent-records", primaryProfileId],
     enabled: Boolean(primaryProfileId),
     queryFn: async () => {
-      const response = await apiClient.get(ApiPaths.PROFILES.HEALTH_RECORDS(primaryProfileId as string), {
-        params: { page: 0, limit: 3 },
-      });
-      return (response.data?.data ?? []) as HealthRecord[];
+      const response = await apiClient.get(
+        `${ApiPaths.HEALTH_RECORDS.BASE}/profiles/${primaryProfileId as string}`
+      );
+      return (response.data?.data ?? []) as RecentRecord[];
     },
   });
 
@@ -132,16 +131,20 @@ export default function DashboardHomePage() {
                     <Stethoscope className="h-7 w-7" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-lg font-bold text-[#121e1c]">{record.testType || "Phiếu khám bệnh"}</p>
+                    <p className="truncate text-lg font-bold text-[#121e1c]">
+                      {record.recordType || "Phiếu khám bệnh"}
+                    </p>
                     <p className="mt-1 flex items-center gap-2 text-sm text-[#6d7a77]">
                       <CalendarDays className="h-4 w-4" />
                       Ngày thực hiện: {record.examDate || "Chưa có ngày khám"}
                     </p>
-                    <p className="mt-1 text-sm text-[#6d7a77]">Số chỉ số bất thường: {record.abnormalCount ?? 0}</p>
+                    <p className="mt-1 text-sm text-[#6d7a77]">
+                      Số chỉ số bất thường: {countRiskyMetrics(record.metrics)}
+                    </p>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${recordStatusClass(record.overallStatus)}`}>
-                      {recordStatusLabel(record.overallStatus)}
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${recordStatusClass(record.status)}`}>
+                      {recordStatusLabel(record.status)}
                     </span>
                     <Link
                       href={`/health-records/review/${record.id}`}
@@ -187,6 +190,30 @@ export default function DashboardHomePage() {
       </section>
     </DashboardPageShell>
   );
+}
+
+function countRiskyMetrics(metrics: RecentRecord["metrics"]) {
+  if (!metrics?.length) return 0;
+  return metrics.filter((m) => {
+    const s = m.status?.toLowerCase();
+    return s === "abnormal" || s === "attention";
+  }).length;
+}
+
+function recordStatusClass(status: string) {
+  if (status === "done") return "bg-[#e6f6f2] text-[#00685f]";
+  if (status === "review_required") return "bg-[#ffdbce] text-[#773215]";
+  if (status === "processing") return "bg-[#f1f5f9] text-[#64748b]";
+  if (status === "ocr_failed") return "bg-[#ffe4e6] text-[#be123c]";
+  return "bg-[#f1f5f9] text-[#64748b]";
+}
+
+function recordStatusLabel(status: string) {
+  if (status === "done") return "Hoàn tất";
+  if (status === "review_required") return "Chờ rà soát";
+  if (status === "processing") return "Đang xử lý";
+  if (status === "ocr_failed") return "Lỗi OCR";
+  return status || "Không xác định";
 }
 
 function StatCard({
@@ -252,20 +279,4 @@ function ActionTile({
       </div>
     </Link>
   );
-}
-
-function recordStatusClass(status: HealthRecord["overallStatus"]) {
-  if (status === "abnormal") return "bg-[#ffdad6] text-[#ba1a1a]";
-  if (status === "attention") return "bg-[#ffdbce] text-[#773215]";
-  if (status === "normal") return "bg-[#e6f6f2] text-[#00685f]";
-  if (status === "error" || status === "failed" || status === "ocr_failed") return "bg-[#ffe4e6] text-[#be123c]";
-  return "bg-[#f1f5f9] text-[#64748b]";
-}
-
-function recordStatusLabel(status: HealthRecord["overallStatus"]) {
-  if (status === "abnormal") return "Bất thường";
-  if (status === "attention") return "Cần chú ý";
-  if (status === "normal") return "Bình thường";
-  if (status === "error" || status === "failed" || status === "ocr_failed") return "Lỗi";
-  return "Chưa xác thực";
 }

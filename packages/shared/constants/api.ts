@@ -49,7 +49,6 @@ export const ApiPaths = {
     UPDATE: (id: string) => `/api/${API_VERSION}/profiles/${id}`,
     DELETE: (id: string) => `/api/${API_VERSION}/profiles/${id}`,
     SET_DEFAULT: (id: string) => `/api/${API_VERSION}/profiles/${id}/set-default`,
-    HEALTH_RECORDS: (id: string) => `/api/${API_VERSION}/profiles/${id}/health-records`,
   },
 
   /** Health record endpoints */

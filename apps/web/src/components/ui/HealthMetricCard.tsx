@@ -58,25 +58,8 @@ const STATUS_META: Record<MetricStatus, { label: string; color: string; icon: ty
   },
 };
 
-const UI_FALLBACK_EXPLANATION = [
-  "Chỉ số này là gì: Đây là một chỉ số xét nghiệm phản ánh tình trạng sức khỏe hiện tại.",
-  "Chỉ số này liên quan đến: Cân bằng chuyển hóa, miễn dịch hoặc chức năng cơ quan tùy loại xét nghiệm.",
-  "Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng: Bạn nên theo dõi thêm và trao đổi với bác sĩ để được tư vấn phù hợp.",
-].join("\n");
-
-function toThreeLineExplanation(raw: string | undefined): string {
-  if (!raw || !raw.trim()) {
-    return UI_FALLBACK_EXPLANATION;
-  }
-  const lines = raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (lines.length >= 3) {
-    return lines.slice(0, 3).join("\n");
-  }
-  return UI_FALLBACK_EXPLANATION;
-}
+const UI_FALLBACK_EXPLANATION =
+  "Chỉ số này cần được bác sĩ giải thích thêm để đánh giá chính xác.";
 
 export function HealthMetricCard({
   recordId,
@@ -113,12 +96,9 @@ export function HealthMetricCard({
     staleTime: 7 * 24 * 60 * 60 * 1000,
   });
 
-  const explanationText = staticExplanation
-    ? toThreeLineExplanation(staticExplanation)
-    : expanded && !explanationQuery.isLoading
-      ? toThreeLineExplanation(explanationQuery.data?.explanation)
-      : "";
+  const explanationText = staticExplanation || explanationQuery.data?.explanation || "";
   const showExplanationSkeleton = expanded && !staticExplanation && explanationQuery.isLoading;
+  const showQueryFallback = expanded && !staticExplanation && explanationQuery.isError;
 
   const displayReference = referenceRange
     ? `${referenceRange.min} - ${referenceRange.max} ${referenceRange.unit ?? unit}`
@@ -190,6 +170,12 @@ export function HealthMetricCard({
                 <div className="h-3 w-full animate-pulse rounded bg-[#d4e7e3]" />
                 <div className="h-3 w-4/5 animate-pulse rounded bg-[#d4e7e3]" />
               </div>
+            ) : null}
+            {showQueryFallback ? (
+              <p className="mt-2">
+                <span className="font-semibold">Giải thích: </span>
+                {UI_FALLBACK_EXPLANATION}
+              </p>
             ) : null}
             {explanationText ? (
               <p className="mt-2 whitespace-pre-line">

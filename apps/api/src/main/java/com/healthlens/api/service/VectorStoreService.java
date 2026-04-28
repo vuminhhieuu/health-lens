@@ -1,7 +1,8 @@
 package com.healthlens.api.service;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -12,10 +13,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class VectorStoreService {
+    private static final Logger log = LoggerFactory.getLogger(VectorStoreService.class);
 
     private final VectorStore vectorStore;
 
@@ -37,23 +38,10 @@ public class VectorStoreService {
         log.info("Upserted document {} to vector store", id);
     }
 
-    public void upsertDocuments(List<Document> documents) {
-        if (documents == null || documents.isEmpty()) {
-            return;
-        }
-        vectorStore.add(documents);
-        log.info("Upserted {} documents to vector store", documents.size());
-    }
-
     public List<Document> semanticSearch(String query, int topK) {
-        return semanticSearch(query, topK, null);
-    }
-
-    public List<Document> semanticSearch(String query, int topK, String filterExpression) {
         SearchRequest request = SearchRequest.builder()
             .query(query)
             .topK(topK)
-            .filterExpression(filterExpression)
             .build();
         
         List<Document> results = vectorStore.similaritySearch(request);
