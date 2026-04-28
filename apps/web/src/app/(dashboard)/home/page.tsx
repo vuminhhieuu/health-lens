@@ -143,10 +143,13 @@ export default function DashboardHomePage() {
                     <span className={`rounded-full px-3 py-1 text-xs font-bold ${recordStatusClass(record.overallStatus)}`}>
                       {recordStatusLabel(record.overallStatus)}
                     </span>
-                    <p className="inline-flex items-center gap-1 text-sm font-semibold text-[#00685f]">
+                    <Link
+                      href={`/health-records/review/${record.id}`}
+                      className="inline-flex items-center gap-1 text-sm font-semibold text-[#00685f] hover:underline"
+                    >
                       Xem chi tiết
                       <ChevronRight className="h-4 w-4" />
-                    </p>
+                    </Link>
                   </div>
                 </article>
               ))
@@ -254,11 +257,15 @@ function ActionTile({
 function recordStatusClass(status: HealthRecord["overallStatus"]) {
   if (status === "abnormal") return "bg-[#ffdad6] text-[#ba1a1a]";
   if (status === "attention") return "bg-[#ffdbce] text-[#773215]";
-  return "bg-[#e6f6f2] text-[#00685f]";
+  if (status === "normal") return "bg-[#e6f6f2] text-[#00685f]";
+  if (status === "error" || status === "failed" || status === "ocr_failed") return "bg-[#ffe4e6] text-[#be123c]";
+  return "bg-[#f1f5f9] text-[#64748b]";
 }
 
 function recordStatusLabel(status: HealthRecord["overallStatus"]) {
   if (status === "abnormal") return "Bất thường";
   if (status === "attention") return "Cần chú ý";
-  return "Bình thường";
+  if (status === "normal") return "Bình thường";
+  if (status === "error" || status === "failed" || status === "ocr_failed") return "Lỗi";
+  return "Chưa xác thực";
 }

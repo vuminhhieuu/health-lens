@@ -2,17 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Calendar, ChevronRight, Loader2, Activity, Search, Filter, ShieldPlus, TrendingUp } from "lucide-react";
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
+import { UploadButton } from "@/components/features/upload/UploadButton";
 import { apiClient } from "@/lib/api/apiClient";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 
 type HistoryItem = {
   id: string;
+  status?: string | null;
   examDate: string | null;
   testType: string;
   overallStatus: "normal" | "attention" | "abnormal" | string;
@@ -43,6 +45,7 @@ const PAGE_SIZE = 20;
 
 export default function ProfileHistoryPage() {
   const params = useParams<{ profileId: string }>();
+  const router = useRouter();
   const profileId = params.profileId;
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -124,8 +127,11 @@ export default function ProfileHistoryPage() {
         return false;
       }
 
-      if (statusFilter !== "all" && item.overallStatus !== statusFilter) {
-        return false;
+      if (statusFilter !== "all") {
+        const itemStatus = resolveHistoryStatus(item);
+        if (itemStatus !== statusFilter) {
+          return false;
+        }
       }
 
       if (periodFilter === "all") {
@@ -177,7 +183,7 @@ export default function ProfileHistoryPage() {
       title="Lịch sử khám bệnh"
       subtitle="Xem diễn tiến sức khỏe theo thời gian, mới nhất ở trên cùng."
       breadcrumbs={[
-        { label: "Hồ sơ gia đình", href: "/profiles" },
+        { label: "Kết quả khám", href: "/health-records" },
         { label: currentProfileName },
       ]}
     >
@@ -203,12 +209,7 @@ export default function ProfileHistoryPage() {
                 <h2 className="text-2xl font-bold text-[#005049]">Kết quả Sức khỏe</h2>
                 <p className="mt-1 text-sm text-[#6d7a77]">Quản lý và theo dõi tất cả các kết quả xét nghiệm y tế của bạn.</p>
               </div>
-              <Link
-                href={`/health-records?profileId=${profileId}&openUpload=1`}
-                className="inline-flex items-center justify-center rounded-xl bg-[#008378] px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110"
-              >
-                Tải lên kết quả mới
-              </Link>
+              <UploadButton profileId={profileId} />
             </div>
 
             <div className="mb-4 grid grid-cols-1 divide-y divide-[#e8eeec] overflow-hidden rounded-2xl border border-[#dde6e3] bg-[#f8fbfa] lg:grid-cols-4 lg:divide-x lg:divide-y-0">
@@ -261,6 +262,8 @@ export default function ProfileHistoryPage() {
                   <option value="normal">Bình thường</option>
                   <option value="attention">Cần chú ý</option>
                   <option value="abnormal">Bất thường</option>
+                  <option value="unverified">Chưa xác thực</option>
+                  <option value="error">Lỗi</option>
                 </select>
               </label>
             </div>
@@ -289,12 +292,17 @@ export default function ProfileHistoryPage() {
                       </p>
                     </div>
                     <span className="text-[#6d7a77]">{item.hospitalName?.trim() || "Chưa cập nhật"}</span>
-                    <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyle(item.overallStatus)}`}>
-                      {statusLabel(item.overallStatus)}
+                    <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyle(resolveHistoryStatus(item))}`}>
+                      {statusLabel(resolveHistoryStatus(item))}
                     </span>
-                    <span className="inline-flex items-center justify-end text-right font-semibold text-[#6d7a77]">
-                      Chưa hỗ trợ chi tiết
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/health-records/review/${item.id}`)}
+                      className="inline-flex items-center justify-end gap-1 text-right font-semibold text-[#0c9f94] transition hover:underline"
+                    >
+                      Xem chi tiết
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
                   </div>
                 ))
               ) : (
@@ -392,8 +400,18 @@ function statusStyle(status: string): string {
       return "bg-red-100 text-red-700";
     case "attention":
       return "bg-amber-100 text-amber-700";
-    default:
+    case "normal":
       return "bg-emerald-100 text-emerald-700";
+    case "error":
+    case "failed":
+    case "ocr_failed":
+      return "bg-rose-100 text-rose-700";
+    case "unverified":
+    case "pending":
+    case "review_required":
+      return "bg-slate-100 text-slate-700";
+    default:
+      return "bg-slate-100 text-slate-700";
   }
 }
 
@@ -403,7 +421,37 @@ function statusLabel(status: string): string {
       return "Bất thường";
     case "attention":
       return "Cần chú ý";
-    default:
+    case "normal":
       return "Bình thường";
+    case "error":
+    case "failed":
+    case "ocr_failed":
+      return "Lỗi";
+    case "unverified":
+    case "pending":
+    case "review_required":
+      return "Chưa xác thực";
+    default:
+      return "Chưa xác thực";
   }
+}
+
+function resolveHistoryStatus(item: HistoryItem): string {
+  const fallbackStatus = (item as unknown as { recordStatus?: string | null; verificationStatus?: string | null });
+  const recordStatus = (item.status ?? fallbackStatus.recordStatus ?? fallbackStatus.verificationStatus)?.toLowerCase();
+  if (recordStatus === "done") {
+    return item.overallStatus ?? "normal";
+  }
+  if (recordStatus === "review_required" || recordStatus === "processing" || recordStatus === "pending") {
+    return "unverified";
+  }
+  if (recordStatus === "ocr_failed" || recordStatus === "failed" || recordStatus === "error") {
+    return "error";
+  }
+  // Fallback for old API payloads that don't include record status.
+  const looksLikeIncompleteRecord = !item.examDate;
+  if (looksLikeIncompleteRecord) {
+    return item.sourceType === "ocr_partial" ? "unverified" : "error";
+  }
+  return item.overallStatus ?? "unverified";
 }

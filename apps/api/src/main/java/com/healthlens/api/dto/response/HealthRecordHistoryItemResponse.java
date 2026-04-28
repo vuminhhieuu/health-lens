@@ -6,6 +6,7 @@ import java.util.UUID;
 
 public record HealthRecordHistoryItemResponse(
         UUID id,
+        String status,
         LocalDate examDate,
         String testType,
         String overallStatus,
