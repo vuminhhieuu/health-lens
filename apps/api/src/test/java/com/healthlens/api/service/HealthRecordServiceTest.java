@@ -51,6 +51,7 @@ class HealthRecordServiceTest {
     @Mock private ProfileRepository profileRepository;
     @Mock private HealthRecordRepository healthRecordRepository;
     @Mock private ReferenceDataService referenceDataService;
+    @Mock private MetricExplanationRetrievalService metricExplanationRetrievalService;
     @Mock private LlmService llmService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
@@ -65,6 +66,7 @@ class HealthRecordServiceTest {
                 profileRepository,
                 healthRecordRepository,
                 referenceDataService,
+                metricExplanationRetrievalService,
                 llmService,
                 redisTemplate,
                 new ObjectMapper(),
@@ -454,6 +456,17 @@ class HealthRecordServiceTest {
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
         when(healthRecordRepository.findByIdAndUserId(recordId, userId)).thenReturn(Optional.of(record));
+        when(metricExplanationRetrievalService.retrieve(
+                nullable(String.class),
+                nullable(String.class),
+                any(ReferenceRangeDto.class),
+                nullable(String.class)))
+                .thenReturn(new MetricExplanationRetrievalService.RetrievalResult(
+                        "Metric identity: ...\nClinical relation: ...\nOut-of-range impact: ...",
+                        "qdrant",
+                        true,
+                        0.91
+                ));
         when(llmService.generateExplanationResult(
                 nullable(String.class),
                 nullable(String.class),
@@ -467,6 +480,12 @@ class HealthRecordServiceTest {
 
         assertThat(response.explanation()).isEqualTo("Giải thích đơn giản");
         assertThat(response.source()).isEqualTo("llm");
+        verify(metricExplanationRetrievalService).retrieve(
+                eq("Glucose"),
+                eq("normal"),
+                any(ReferenceRangeDto.class),
+                eq("vi")
+        );
     }
 
     @Test

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
@@ -49,6 +50,12 @@ class OcrServiceTest {
     private AwsTextractClient textractClient;
 
     @Mock
+    private GoogleCloudVisionClient googleCloudVisionClient;
+
+    @Mock
+    private MeterRegistry meterRegistry;
+
+    @Mock
     private ChatClient chatClient;
 
     @Mock
@@ -67,9 +74,13 @@ class OcrServiceTest {
         ocrService = new OcrService(
                 ocrRestTemplate,
                 textractClient,
+                googleCloudVisionClient,
+                meterRegistry,
                 chatClient,
                 objectMapper,
                 OCR_SERVICE_URL,
+                "easyocr",
+                "textract",
                 "",
                 "https://openrouter.ai/api/v1",
                 "meta-llama/llama-3.3-70b-instruct",
@@ -120,6 +131,7 @@ class OcrServiceTest {
             );
             // Should NOT call Textract when EasyOCR succeeds
             verifyNoInteractions(textractClient);
+            verifyNoInteractions(googleCloudVisionClient);
         }
 
         @Test
@@ -175,6 +187,87 @@ class OcrServiceTest {
             assertThat(result).isNotNull();
             assertThat(result.getText()).isEmpty();
             assertThat(result.getSource()).isEqualTo("easyocr");
+        }
+    }
+
+    @Nested
+    @DisplayName("Provider Routing theo môi trường")
+    class ProviderRoutingTests {
+
+        @Test
+        @DisplayName("Staging/prod: GCV là primary, không gọi EasyOCR khi GCV success")
+        void processImage_gcvPrimarySuccess_skipsEasyOcr() {
+            OcrService gcvPrimaryService = new OcrService(
+                    ocrRestTemplate,
+                    textractClient,
+                    googleCloudVisionClient,
+                    meterRegistry,
+                    chatClient,
+                    objectMapper,
+                    OCR_SERVICE_URL,
+                    "gcv",
+                    "textract",
+                    "",
+                    "https://openrouter.ai/api/v1",
+                    "meta-llama/llama-3.3-70b-instruct",
+                    ""
+            );
+
+            when(googleCloudVisionClient.extract(TEST_IMAGE_URL)).thenReturn(
+                    OcrResult.builder()
+                            .text("GCV OCR text")
+                            .confidence(0.88f)
+                            .source("gcv")
+                            .language("vi")
+                            .processingTimeMs(1200)
+                            .build()
+            );
+
+            OcrResult result = gcvPrimaryService.processImage(TEST_IMAGE_URL);
+
+            assertThat(result.getSource()).isEqualTo("gcv");
+            verify(googleCloudVisionClient).extract(TEST_IMAGE_URL);
+            verifyNoInteractions(ocrRestTemplate);
+            verifyNoInteractions(textractClient);
+        }
+
+        @Test
+        @DisplayName("Staging/prod: GCV fail thì fallback Textract")
+        void processImage_gcvFail_fallbacksToTextract() {
+            OcrService gcvPrimaryService = new OcrService(
+                    ocrRestTemplate,
+                    textractClient,
+                    googleCloudVisionClient,
+                    meterRegistry,
+                    chatClient,
+                    objectMapper,
+                    OCR_SERVICE_URL,
+                    "gcv",
+                    "textract",
+                    "",
+                    "https://openrouter.ai/api/v1",
+                    "meta-llama/llama-3.3-70b-instruct",
+                    ""
+            );
+
+            when(googleCloudVisionClient.extract(TEST_IMAGE_URL))
+                    .thenThrow(new OcrProcessingException("GCV unavailable"));
+            when(textractClient.extract(TEST_IMAGE_URL)).thenReturn(
+                    OcrResult.builder()
+                            .text("")
+                            .confidence(0.0f)
+                            .source("textract-stub")
+                            .language("unknown")
+                            .processingTimeMs(0)
+                            .build()
+            );
+
+            OcrResult result = gcvPrimaryService.processImage(TEST_IMAGE_URL);
+
+            assertThat(result.getSource()).isEqualTo("textract-stub");
+            verify(googleCloudVisionClient).extract(TEST_IMAGE_URL);
+            verify(textractClient).extract(TEST_IMAGE_URL);
+            verifyNoInteractions(ocrRestTemplate);
         }
     }
 

@@ -14,6 +14,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -56,6 +58,7 @@ class LlmServiceTest {
         ReflectionTestUtils.setField(llmService, "initialDelayMs", 0L);
         ReflectionTestUtils.setField(llmService, "retryMultiplier", 1.0);
         ReflectionTestUtils.setField(llmService, "maxTotalDelayMs", 4500L);
+        ReflectionTestUtils.setField(llmService, "retrievalVersion", "v1");
     }
 
     // =========================================================
@@ -160,6 +163,24 @@ class LlmServiceTest {
         llmService.generateExplanation("Glucose", "5.6", "normal", referenceRange(), "vi");
 
         verify(valueOperations).set(anyString(), eq("llm||llm explanation"), eq(Duration.ofDays(7)));
+    }
+
+    @Test
+    @DisplayName("Cache key thay đổi khi retrieval-version thay đổi")
+    void generateExplanation_cacheKeyChangesWhenRetrievalVersionChanges() {
+        List<String> requestedKeys = new ArrayList<>();
+        when(valueOperations.get(anyString())).thenAnswer(invocation -> {
+            requestedKeys.add(invocation.getArgument(0));
+            return null;
+        });
+        mockGroqApiSuccess("llm explanation");
+
+        llmService.generateExplanation("Glucose", "5.6", "normal", referenceRange(), "vi");
+        ReflectionTestUtils.setField(llmService, "retrievalVersion", "v2");
+        llmService.generateExplanation("Glucose", "5.6", "normal", referenceRange(), "vi");
+
+        assertThat(requestedKeys).hasSize(2);
+        assertThat(requestedKeys.get(0)).isNotEqualTo(requestedKeys.get(1));
     }
 
     @Test

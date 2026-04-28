@@ -53,6 +53,9 @@ public class LlmService {
     @Value("${app.ai.explanation.prompt-version:v2}")
     private String promptVersion;
 
+    @Value("${app.ai.explanation.retrieval-version:v1}")
+    private String retrievalVersion;
+
     private static final Map<String, String> FALLBACK_EXPLANATIONS = Map.of(
             "Glucose", "Đây là lượng đường trong máu của bạn tại thời điểm xét nghiệm. Bạn nên gặp bác sĩ để được tư vấn phù hợp với tình trạng cơ thể.",
             "HbA1c", "Đây là chỉ số cho biết mức đường huyết trung bình trong khoảng 3 tháng gần đây. Bạn nên trao đổi với bác sĩ để hiểu rõ ý nghĩa kết quả.",
@@ -299,6 +302,7 @@ public class LlmService {
                 normalizeStatus(status),
                 normalizeLang(lang),
                 promptVersion == null ? "v2" : promptVersion.trim(),
+                retrievalVersion == null ? "v1" : retrievalVersion.trim(),
                 referenceRange == null || referenceRange.min() == null ? "" : referenceRange.min().toPlainString(),
                 referenceRange == null || referenceRange.max() == null ? "" : referenceRange.max().toPlainString(),
                 referenceRange == null || referenceRange.unit() == null ? "" : referenceRange.unit().trim(),

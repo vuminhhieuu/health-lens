@@ -37,10 +37,23 @@ public class VectorStoreService {
         log.info("Upserted document {} to vector store", id);
     }
 
+    public void upsertDocuments(List<Document> documents) {
+        if (documents == null || documents.isEmpty()) {
+            return;
+        }
+        vectorStore.add(documents);
+        log.info("Upserted {} documents to vector store", documents.size());
+    }
+
     public List<Document> semanticSearch(String query, int topK) {
+        return semanticSearch(query, topK, null);
+    }
+
+    public List<Document> semanticSearch(String query, int topK, String filterExpression) {
         SearchRequest request = SearchRequest.builder()
             .query(query)
             .topK(topK)
+            .filterExpression(filterExpression)
             .build();
         
         List<Document> results = vectorStore.similaritySearch(request);
