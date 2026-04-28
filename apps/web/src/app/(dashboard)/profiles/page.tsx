@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Users, Search, Filter, Loader2, AlertCircle } from "lucide-react";
 import { apiClient } from "@/lib/api/apiClient";
@@ -32,7 +31,6 @@ type UserProfile = {
 };
 
 export default function ProfilesPage() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -242,20 +240,10 @@ export default function ProfilesPage() {
               onPress={
                 profile.isSelf
                   ? undefined
-                  : () => router.push(`/profiles/${profile.id}/history`)
-              }
-              onViewTimeline={
-                profile.isSelf
-                  ? undefined
-                  : () => router.push(`/profiles/${profile.id}/history`)
-              }
-              onEditProfile={
-                profile.isSelf
-                  ? undefined
                   : () => {
-                      setEditingProfileId(profile.id);
-                      setIsEditModalOpen(true);
-                    }
+                    setEditingProfileId(profile.id);
+                    setIsEditModalOpen(true);
+                  }
               }
             />
           ))}

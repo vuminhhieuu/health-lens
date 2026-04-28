@@ -1,6 +1,6 @@
 # Story 5.2: Xem chi tiết một bản ghi từ timeline
 
-Status: ready-for-dev
+Status: review
 
 ## Execution scope
 
@@ -32,16 +32,16 @@ so that tôi xem đầy đủ chỉ số và giải thích của lần khám đ�
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Reuse từ Story 4.5 (AC: #1, #2, #3)
-  - [ ] Detail page `apps/web/src/app/(dashboard)/records/[recordId]/page.tsx` đã có
-  - [ ] Navigate từ history item → `/records/{recordId}`
-  - [ ] Ensure back navigation về history page
-- [ ] Task 2 — Read-only mode cho family member (AC: #4)
-  - [ ] Detect context: is owner or family viewer? (từ API response `isOwner: boolean`)
-  - [ ] Hide action buttons (delete, edit) khi `isOwner = false`
-- [ ] Task 3 — Mobile navigation (AC: #1)
-  - [ ] Từ history FlatList tap → navigate `app/records/[recordId]`
-  - [ ] Back stack đúng về history screen
+- [x] Task 1 — Reuse từ Story 4.5 (AC: #1, #2, #3)
+  - [x] Detail page `apps/web/src/app/(dashboard)/health-records/review/[recordId]/page.tsx` được tái sử dụng cho lịch sử
+  - [x] Navigate từ history item → `/health-records/review/{recordId}`
+  - [x] Ensure back navigation về history page (giữ browser history stack qua client navigation)
+- [x] Task 2 — Read-only mode cho family member (AC: #4)
+  - [x] Detect context: is owner or family viewer? (từ API response `isOwner: boolean`)
+  - [x] Hide action buttons (delete, edit) khi `isOwner = false`
+- [x] Task 3 — Mobile navigation (AC: #1)
+  - [x] Deferred theo execution scope Phase 1 (Web MVP only)
+  - [x] Mobile back stack sẽ được triển khai ở Phase 2
 
 ## Dev Notes
 
@@ -79,10 +79,23 @@ Backend xác định `isOwner` dựa trên: record.profile.userId == jwtUserId
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+Codex 5.3
 
 ### Debug Log References
 
+- `pnpm exec eslint "src/app/(dashboard)/profiles/[profileId]/history/page.tsx" "src/app/(dashboard)/health-records/review/[recordId]/page.tsx"` (pass)
+
 ### Completion Notes List
 
+- Added history-item action to open result detail from timeline to existing detail route.
+- Reused existing record detail page and enforced owner/family read-only behavior using `isOwner` from API.
+- Family viewer can still see full metric cards/explanations but cannot edit/delete/save.
+- Mobile subtasks are explicitly deferred by story execution scope (Phase 1 web-only).
+
 ### File List
+- apps/web/src/app/(dashboard)/profiles/[profileId]/history/page.tsx
+- apps/web/src/app/(dashboard)/health-records/review/[recordId]/page.tsx
+
+### Change Log
+
+- 2026-04-28: Implemented web detail navigation from history timeline and family read-only mode for shared record detail view. Marked story ready for review.

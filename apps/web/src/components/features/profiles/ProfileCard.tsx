@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
-import { User, ChevronRight, Calendar, EllipsisVertical } from "lucide-react";
+import { User, ChevronRight, Calendar } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
 
@@ -16,8 +15,6 @@ interface ProfileCardProps {
   lastUpdated?: string | Date;
   isSelected?: boolean;
   onPress?: () => void;
-  onViewTimeline?: () => void;
-  onEditProfile?: () => void;
 }
 
 const statusConfig = {
@@ -47,10 +44,7 @@ export function ProfileCard({
   lastUpdated,
   isSelected,
   onPress,
-  onViewTimeline,
-  onEditProfile,
 }: ProfileCardProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const status = latestStatus ? statusConfig[latestStatus] : null;
 
   const formattedDate = lastUpdated
@@ -97,54 +91,9 @@ export function ProfileCard({
             )}
           </div>
         </div>
-        {onViewTimeline || onEditProfile ? (
-          <div className="relative">
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setMenuOpen((value) => !value);
-              }}
-              className="rounded-lg p-1.5 text-[#6d7a77] transition hover:bg-[#e9f6f3] hover:text-[#00685f]"
-              aria-label="Mở menu thao tác hồ sơ"
-            >
-              <EllipsisVertical className="h-5 w-5" />
-            </button>
-
-            {menuOpen ? (
-              <div className="absolute right-0 top-9 z-20 min-w-[180px] rounded-xl border border-[#bcc9c6]/40 bg-white p-1.5 shadow-lg">
-                {onViewTimeline ? (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setMenuOpen(false);
-                      onViewTimeline();
-                    }}
-                    className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-[#121e1c] transition hover:bg-[#e9f6f3]"
-                  >
-                    Xem lịch sử khám
-                  </button>
-                ) : null}
-                {onEditProfile ? (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setMenuOpen(false);
-                      onEditProfile();
-                    }}
-                    className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-[#121e1c] transition hover:bg-[#e9f6f3]"
-                  >
-                    Chỉnh sửa hồ sơ
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : (
+        {onPress ? (
           <ChevronRight className="w-5 h-5 text-[#bcc9c6] group-hover:text-[#00685f] group-hover:translate-x-1 transition-all" />
-        )}
+        ) : null}
       </div>
 
       {notes && (

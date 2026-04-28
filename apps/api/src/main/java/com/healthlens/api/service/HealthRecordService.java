@@ -797,6 +797,7 @@ public class HealthRecordService {
 
         return new HealthRecordHistoryItemResponse(
                 record.getId(),
+                record.getStatus(),
                 record.getExamDate(),
                 testType,
                 overallStatus,

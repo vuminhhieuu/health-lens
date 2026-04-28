@@ -50,6 +50,18 @@ export default function DashboardLayout({
     { name: "Cài đặt", href: "/settings", icon: Settings, exact: true },
   ];
 
+  const isProfileHistoryRoute = /^\/profiles\/[^/]+\/history(?:\/.*)?$/.test(pathname ?? "");
+  const isNavItemActive = (item: { href: string; exact: boolean }) => {
+    if (item.href === "/health-records") {
+      return pathname === item.href || pathname?.startsWith(`${item.href}/`) || isProfileHistoryRoute;
+    }
+    if (item.href === "/profiles") {
+      if (isProfileHistoryRoute) return false;
+      return pathname === item.href || pathname?.startsWith(`${item.href}/`);
+    }
+    return item.exact ? pathname === item.href : pathname === item.href || pathname?.startsWith(`${item.href}/`);
+  };
+
   const logout = () => {
     useAuthStore.getState().clearAuth();
     router.push("/login");
@@ -65,9 +77,7 @@ export default function DashboardLayout({
           {/* Horizontal Nav Links in Header */}
           <nav className="hidden md:flex items-center gap-6">
             {navItems.slice(0, 3).map((item) => {
-              const isActive = item.exact
-                ? pathname === item.href
-                : pathname === item.href || pathname?.startsWith(`${item.href}/`);
+              const isActive = isNavItemActive(item);
               if (isActive) {
                 return (
                   <Link key={item.name} href={item.href} className="text-[#00685f] font-semibold px-3 py-1 rounded-lg bg-white/50">
@@ -125,9 +135,7 @@ export default function DashboardLayout({
 
           <nav className="flex flex-col gap-2 flex-grow">
             {navItems.map((item) => {
-              const isActive = item.exact
-                ? pathname === item.href
-                : pathname === item.href || pathname?.startsWith(`${item.href}/`);
+              const isActive = isNavItemActive(item);
               const Icon = item.icon;
 
               if (isActive) {

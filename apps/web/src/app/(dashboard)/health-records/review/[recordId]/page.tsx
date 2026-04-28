@@ -1,6 +1,7 @@
 "use client";
 
-import { type ChangeEvent, useEffect, useMemo, useState, useRef } from "react";
+import { type ChangeEvent, type ReactNode, useEffect, useMemo, useState, useRef } from "react";
+import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
@@ -19,6 +20,12 @@ import {
   ScanLine,
   PenLine,
   Trash2,
+  Share2,
+  FileDown,
+  Building2,
+  Info,
+  UtensilsCrossed,
+  Dumbbell,
 } from "lucide-react";
 import { z } from "zod";
 
@@ -76,10 +83,16 @@ type ReferenceMetricOption = {
   unit: string;
 };
 
+type Profile = {
+  id: string;
+  displayName: string;
+};
+
 type ReviewRecordStatus = "processing" | "review_required" | "done" | "ocr_failed";
 
 type ReviewRecordData = {
   profileId?: string;
+  isOwner?: boolean;
   status: ReviewRecordStatus;
   fileUrl?: string;
   metrics?: MetricDto[];
@@ -154,6 +167,16 @@ export default function ReviewRecordPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: profiles = [] } = useQuery<Profile[]>({
+    queryKey: ["profiles-for-record-owner-label"],
+    queryFn: async () => {
+      const response = await apiClient.get(ApiPaths.PROFILES.BASE);
+      return (response.data?.data ?? []) as Profile[];
+    },
+    enabled: data?.status === "done" && !!data?.profileId,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const initialized = useRef(false);
   const initialSnapshotRef = useRef<string>("");
   const skipUnloadWarningRef = useRef(false);
@@ -193,7 +216,7 @@ export default function ReviewRecordPage() {
         diagnosis: data.diagnosis ?? "",
       });
       initialized.current = true;
-      setEditMode(data.status === "review_required" || (data.status === "ocr_failed" && manualMode));
+      setEditMode((data.status === "review_required" || (data.status === "ocr_failed" && manualMode)) && (data.isOwner ?? true));
     }
   }, [data, manualMode]);
 
@@ -438,19 +461,51 @@ export default function ReviewRecordPage() {
     }
   };
 
+  const historyHref = data?.profileId ? `/profiles/${data.profileId}/history` : null;
+  const renderReviewStateShell = (currentLabel: string, content: ReactNode) => (
+    <main className="min-h-screen w-full bg-[#effcf9]">
+      <div className="sticky top-16 z-30 border-b border-[#bcc9c6]/25 bg-[#effcf9]/95 px-6 py-3 backdrop-blur">
+        <nav className="text-sm font-medium text-[#6d7a77]">
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="inline-flex items-center gap-1">
+              <Link href="/health-records" className="hover:text-[#00685f] hover:underline">
+                Kết quả khám
+              </Link>
+              <span>/</span>
+            </span>
+            <span className="inline-flex items-center gap-1">
+              {historyHref ? (
+                <Link href={historyHref} className="text-[#6d7a77] hover:text-[#00685f] hover:underline">
+                  Lịch sử khám bệnh
+                </Link>
+              ) : (
+                <span className="text-[#6d7a77]">Lịch sử khám bệnh</span>
+              )}
+              <span>/</span>
+            </span>
+            <span className="text-[#3d4947]">{currentLabel}</span>
+          </div>
+        </nav>
+      </div>
+      <div className="mx-auto w-full max-w-[1360px] px-6 pb-10 pt-6">{content}</div>
+    </main>
+  );
+
   if (isLoading || data?.status === "processing") {
-    return (
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col items-center justify-center gap-6 bg-[#effcf9] px-6 py-10">
+    return renderReviewStateShell(
+      "Review kết quả khám",
+      <div className="flex min-h-[50vh] w-full flex-col items-center justify-center gap-6">
         <Loader2 className="h-10 w-10 animate-spin text-[#00685f]" />
-        <h2 className="text-xl font-bold text-[#005049]">Hệ thống đang xử lý OCR</h2>
+        <h2 className="text-xl font-bold text-[#121e1c]">Hệ thống đang xử lý OCR</h2>
         <p className="text-[#4e6360]">Quá trình này có thể mất một chút thời gian, vui lòng không đóng trang...</p>
       </div>
     );
   }
 
   if (isError) {
-    return (
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col items-center justify-center gap-6 bg-[#effcf9] px-6 py-10">
+    return renderReviewStateShell(
+      "Review kết quả khám",
+      <div className="flex min-h-[50vh] w-full flex-col items-center justify-center gap-6">
         <AlertTriangle className="h-10 w-10 text-[#ba1a1a]" />
         <h2 className="text-xl font-bold text-[#ba1a1a]">Lỗi tải dữ liệu</h2>
         <button onClick={() => refetch()} className="rounded-xl bg-[#00685f] px-6 py-2 text-white">
@@ -462,7 +517,8 @@ export default function ReviewRecordPage() {
 
   if (data?.status === "ocr_failed" && !manualMode) {
     const hasPartialMetrics = (data.metrics?.length ?? 0) > 0 || Boolean(data.hasLowConfidenceMetrics);
-    return (
+    return renderReviewStateShell(
+      "Review kết quả khám",
       <>
         <input
           ref={retryFileInputRef}
@@ -486,8 +542,9 @@ export default function ReviewRecordPage() {
   }
 
   if (!data) {
-    return (
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col items-center justify-center gap-6 bg-[#effcf9] px-6 py-10 text-center">
+    return renderReviewStateShell(
+      "Review kết quả khám",
+      <div className="flex min-h-[50vh] w-full flex-col items-center justify-center gap-6 text-center">
         <AlertTriangle className="h-10 w-10 text-[#ba1a1a]" />
         <h2 className="text-xl font-bold text-[#ba1a1a]">Không tìm thấy dữ liệu hồ sơ</h2>
         <button
@@ -502,17 +559,248 @@ export default function ReviewRecordPage() {
 
   const canConfirm = data?.status === "review_required" || (data?.status === "ocr_failed" && manualMode);
   const canToggleEditResults = data?.status === "done" || (data?.status === "ocr_failed" && manualMode);
+  const isOwner = data.isOwner ?? true;
   const showMetricCards = !editMode;
   const showEditableTable = editMode;
   const showConfidenceColumn = canConfirm;
   const fileUrl = data.fileUrl ?? "";
   const isPdf = fileUrl.toLowerCase().includes(".pdf");
   const isDoneView = data.status === "done" && showMetricCards;
+  const displayRecordType = recordType?.trim() || "Phiếu khám bệnh";
+  const displayExamDate = examDate?.trim() || "Chưa có ngày khám";
+  const displayHospitalName = hospitalName?.trim() || "Chưa cập nhật cơ sở y tế";
+  const abnormalMetrics = metrics.filter((metric) => metric.status === "abnormal").length;
+  const attentionMetrics = metrics.filter((metric) => metric.status === "attention").length;
+  const overallSummary =
+    abnormalMetrics > 0 ? "Cần theo dõi" : attentionMetrics > 0 ? "Cần chú ý" : "Bình thường";
+  const profileDisplayName = data.profileId
+    ? profiles.find((profile) => profile.id === data.profileId)?.displayName
+    : undefined;
+  const profileOwnerLabel = profileDisplayName ?? (isOwner ? "Tôi" : "Thành viên gia đình");
 
-  return (
-    <div className="mx-auto min-h-screen w-full max-w-[1600px] bg-[#effcf9] px-6 py-10">
+  if (isDoneView) {
+    return (
+      <main className="min-h-screen w-full bg-[#effcf9]">
+        <div className="sticky top-16 z-30 border-b border-[#bcc9c6]/25 bg-[#effcf9]/95 px-6 py-3 backdrop-blur">
+          <nav className="text-sm font-medium text-[#6d7a77]">
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="inline-flex items-center gap-1">
+                <Link href="/health-records" className="hover:text-[#00685f] hover:underline">
+                  Kết quả khám
+                </Link>
+                <span>/</span>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                {data.profileId ? (
+                  <Link href={`/profiles/${data.profileId}/history`} className="text-[#6d7a77] hover:text-[#00685f] hover:underline">
+                    Lịch sử khám bệnh
+                  </Link>
+                ) : (
+                  <span className="text-[#6d7a77]">Lịch sử khám bệnh</span>
+                )}
+                <span>/</span>
+              </span>
+              <span className="text-[#3d4947]">
+                {displayRecordType} - {displayExamDate}
+              </span>
+            </div>
+          </nav>
+        </div>
+        <div className="mx-auto w-full max-w-[1360px] px-6 pb-10 pt-6">
+          <div className="space-y-6">
+
+          <section className="flex flex-col gap-4 rounded-[28px] bg-white p-6 shadow-sm md:flex-row md:items-end md:justify-between">
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight text-[#121e1c]">
+                {displayRecordType} - {displayExamDate}
+              </h1>
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#deebe8] px-3 py-1.5 text-xs font-bold text-[#274d48]">
+                <Building2 className="h-3.5 w-3.5" />
+                {displayHospitalName}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {isOwner ? (
+                <button
+                  type="button"
+                  onClick={() => setEditMode(true)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#00685f] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+                >
+                  <Edit2 className="h-4 w-4" />
+                  Chỉnh sửa kết quả
+                </button>
+              ) : null}
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center gap-2 rounded-xl bg-[#e9f6f3] px-4 py-2 text-sm font-semibold text-[#3d4947]"
+              >
+                <Share2 className="h-4 w-4" />
+                Chia sẻ
+              </button>
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center gap-2 rounded-xl bg-[#e9f6f3] px-4 py-2 text-sm font-semibold text-[#3d4947]"
+              >
+                <FileDown className="h-4 w-4" />
+                Tải PDF
+              </button>
+              {isOwner ? (
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#ffdad6] px-4 py-2 text-sm font-semibold text-[#ba1a1a]"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Xóa
+                </button>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <article className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#00685f] to-[#008378] p-7 text-white shadow-md lg:col-span-2">
+              <div className="relative z-10">
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-sm font-bold">
+                  <CheckCircle className="h-4 w-4" />
+                  {overallSummary}
+                </span>
+                <h2 className="mt-4 text-2xl font-bold">Tổng quan kết quả xét nghiệm</h2>
+                <p className="mt-2 max-w-2xl text-white/85">
+                  {overallSummary === "Bình thường"
+                    ? "Các chỉ số chính đang trong ngưỡng an toàn. Tiếp tục duy trì lối sống lành mạnh."
+                    : "Một số chỉ số cần theo dõi thêm. Bạn nên xem kỹ phần giải thích và khuyến nghị bên dưới."}
+                </p>
+              </div>
+              <div className="pointer-events-none absolute -right-10 -bottom-12 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
+            </article>
+            <article className="rounded-[28px] bg-white p-6 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#3d4947]">Nguồn dữ liệu</p>
+              <p className="mt-2 text-lg font-bold text-[#121e1c]">{displayHospitalName}</p>
+              <p className="mt-5 text-xs text-[#6d7a77]">
+                Mã hồ sơ: <span className="font-mono font-semibold text-[#121e1c]">{recordId}</span>
+              </p>
+              <p className="mt-2 text-xs text-[#6d7a77]">
+                Hồ sơ của: <span className="font-semibold text-[#121e1c]">{profileOwnerLabel}</span>
+              </p>
+            </article>
+          </section>
+
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-bold text-[#121e1c]">Chỉ số chi tiết</h3>
+              <span className="rounded-full bg-[#deebe8] px-3 py-1 text-xs font-bold uppercase text-[#00685f]">
+                Tổng {metrics.length}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {metrics.map((metric, idx) => {
+                const metricValue = metric.value?.trim() || "--";
+                const metricUnit = metric.unit?.trim() || "";
+                const metricRangeText = compactRangeText(metric);
+                const metricPercent = compactMetricPercent(metric);
+                const isNormal = (metric.status ?? "no_data") === "normal";
+                return (
+                  <article key={`${metric.name}-${idx}`} className="rounded-3xl bg-white p-5 shadow-sm">
+                    <div className="mb-5 flex items-start justify-between gap-2">
+                      <span className="line-clamp-2 text-xs font-extrabold tracking-wide text-[#3d4947] uppercase">
+                        {metric.displayNameVi || metric.name}
+                      </span>
+                      <CheckCircle className={`h-4 w-4 shrink-0 ${isNormal ? "text-[#00685f]" : "text-[#6d7a77]"}`} />
+                    </div>
+                    <div className="flex items-end gap-1.5">
+                      <span className="text-[44px] leading-none font-black tracking-tight text-[#121e1c]">{metricValue}</span>
+                      <span className="pb-1 text-2xs font-semibold text-[#3d4947]">{metricUnit}</span>
+                    </div>
+                    <div className="mt-4 h-2 w-full rounded-full bg-[#deebe8]">
+                      <div
+                        className="h-full rounded-full bg-[#008378] transition-all"
+                        style={{ width: `${metricPercent}%` }}
+                      />
+                    </div>
+                    <div className="mt-3 flex items-center justify-between text-xs font-extrabold uppercase tracking-wide">
+                      <span className="text-[#4e6360]">Ngưỡng: {metricRangeText}</span>
+                      <span className={isNormal ? "text-[#00685f]" : "text-[#773215]"}>{recordStatusLabel(metric.status)}</span>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="rounded-[28px] bg-[#e9f6f3] p-7">
+            <div className="mb-4 flex items-center gap-2">
+              <div className="rounded-xl bg-[#d8e5e2] p-2 text-[#00685f]">
+                <Info className="h-4 w-4" />
+              </div>
+              <h3 className="text-2xl font-black tracking-tight text-[#121e1c]">Khuyến nghị từ AI</h3>
+            </div>
+            <div className="mb-5 rounded-2xl bg-[#ffdbce]/50 px-4 py-3 text-sm text-[#773215]">
+              Khuyến nghị chỉ mang tính tham khảo và không thay thế tư vấn y khoa chuyên nghiệp.
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <article className="flex items-start gap-4 rounded-3xl bg-white p-5">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#deebe8] text-[#00685f]">
+                  <UtensilsCrossed className="h-[18px] w-[18px]" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-[#121e1c]">Chế độ dinh dưỡng</h4>
+                  <p className="mt-1 text-sm text-[#3d4947]">
+                    Ưu tiên khẩu phần cân bằng, giảm thực phẩm chế biến sẵn và theo dõi đường huyết định kỳ.
+                  </p>
+                </div>
+              </article>
+              <article className="flex items-start gap-4 rounded-3xl bg-white p-5">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#deebe8] text-[#00685f]">
+                  <Dumbbell className="h-[18px] w-[18px]" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-[#121e1c]">Hoạt động thể chất</h4>
+                  <p className="mt-1 text-sm text-[#3d4947]">
+                    Duy trì vận động nhẹ 30 phút/ngày và tái khám theo lịch nếu có chỉ số cần chú ý.
+                  </p>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <h4 className="text-sm font-bold uppercase tracking-wide text-[#3d4947]">Giải thích chi tiết từng chỉ số</h4>
+            {metrics.map((metric, idx) => (
+              <HealthMetricCard
+                key={`${metric.name}-detail-${idx}`}
+                recordId={recordId}
+                metricName={metric.name}
+                displayNameVi={metric.displayNameVi}
+                value={metric.value}
+                unit={metric.unit}
+                referenceRange={metric.referenceRange}
+                rangeContext={metric.rangeContext}
+                referenceRangeSource={metric.referenceRangeSource}
+                status={metric.status ?? "no_data"}
+                critical={metric.critical}
+                explanation={metric.explanation}
+              />
+            ))}
+          </section>
+
+          {!isOwner ? (
+            <p className="rounded-xl border border-[#d7e5e1] bg-white px-4 py-3 text-sm text-[#4e6360]">
+              Bạn đang xem hồ sơ ở chế độ chia sẻ. Chỉnh sửa và xóa dữ liệu đã bị vô hiệu hóa.
+            </p>
+          ) : null}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  return renderReviewStateShell(
+    "Review kết quả khám",
+    <div className="w-full py-2">
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-[#005049]">
+        <h1 className="text-3xl font-bold text-[#121e1c]">
           {isDoneView ? "Chi tiết kết quả đã xác nhận" : "Kiểm tra kết quả trích xuất"}
         </h1>
         <p className="mt-2 text-sm text-[#4e6360]">
@@ -573,6 +861,7 @@ export default function ReviewRecordPage() {
                 className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378]"
                 value={examDate}
                 onChange={(e) => setExamDate(e.target.value)}
+                disabled={!isOwner}
               />
             </div>
             <div className="rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm">
@@ -583,6 +872,7 @@ export default function ReviewRecordPage() {
                 className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378]"
                 value={recordType}
                 onChange={(e) => setRecordType(e.target.value)}
+                disabled={!isOwner}
               />
             </div>
           </div>
@@ -595,6 +885,7 @@ export default function ReviewRecordPage() {
               className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378]"
               value={hospitalName}
               onChange={(e) => setHospitalName(e.target.value)}
+              disabled={!isOwner}
             />
           </div>
 
@@ -606,6 +897,7 @@ export default function ReviewRecordPage() {
               className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378] resize-none"
               value={diagnosis}
               onChange={(e) => setDiagnosis(e.target.value)}
+              disabled={!isOwner}
             />
           </div>
 
@@ -614,7 +906,7 @@ export default function ReviewRecordPage() {
               <div className="border-b border-[#c5dfd9] bg-[#effcf9] px-6 py-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-[#005049]">Danh sách chỉ số và ngưỡng tham chiếu</h3>
-                  {canToggleEditResults ? (
+                  {canToggleEditResults && isOwner ? (
                     <button
                       type="button"
                       onClick={() => setEditMode(true)}
@@ -646,7 +938,7 @@ export default function ReviewRecordPage() {
             </div>
           )}
 
-          {showEditableTable && (
+          {showEditableTable && isOwner && (
             <div className="rounded-2xl border border-[#b7d8d1] bg-white shadow-sm overflow-hidden">
               <div className="flex items-center justify-between border-b border-[#c5dfd9] bg-[#effcf9] px-6 py-4">
                 <h3 className="text-sm font-semibold text-[#005049]">Chỉnh sửa danh sách chỉ số</h3>
@@ -817,17 +1109,23 @@ export default function ReviewRecordPage() {
             </div>
           )}
 
-          <div className="flex justify-end pt-4 pb-12">
-            <button
-              onClick={() => (canConfirm ? setShowConfirmModal(true) : executeSave(false))}
-              disabled={isSaving || (!canConfirm && !isDirty)}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#00685f] px-10 py-4 font-bold text-white shadow-lg transition hover:brightness-110 hover:translate-y-[-2px] disabled:opacity-70 disabled:transform-none"
-            >
-              {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
-              {canConfirm ? "XÁC NHẬN VÀ LƯU HỒ SƠ" : "LƯU CHỈNH SỬA"}
-            </button>
-          </div>
-          {!canConfirm && !isDirty && !showEditableTable && (
+          {isOwner ? (
+            <div className="flex justify-end pt-4 pb-12">
+              <button
+                onClick={() => (canConfirm ? setShowConfirmModal(true) : executeSave(false))}
+                disabled={isSaving || (!canConfirm && !isDirty)}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#00685f] px-10 py-4 font-bold text-white shadow-lg transition hover:brightness-110 hover:translate-y-[-2px] disabled:opacity-70 disabled:transform-none"
+              >
+                {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
+                {canConfirm ? "XÁC NHẬN VÀ LƯU HỒ SƠ" : "LƯU CHỈNH SỬA"}
+              </button>
+            </div>
+          ) : (
+            <p className="rounded-xl border border-[#d7e5e1] bg-white px-4 py-3 text-sm text-[#4e6360]">
+              Bạn đang xem hồ sơ ở chế độ chia sẻ. Chỉnh sửa và xóa dữ liệu đã bị vô hiệu hóa.
+            </p>
+          )}
+          {!canConfirm && !isDirty && !showEditableTable && isOwner && (
             <p className="text-right text-sm text-[#6d7a77]">
               Hồ sơ đã xác nhận. Chỉnh sửa thông tin hành chính ở trên hoặc bấm &quot;Chỉnh sửa kết quả&quot; để cập nhật các chỉ số.
             </p>
@@ -1009,4 +1307,35 @@ function SourceBadge({ source }: { source: string }) {
       {isManual ? "Nhập tay" : "OCR"}
     </span>
   );
+}
+
+function compactRangeText(metric: MetricDto): string {
+  const min = metric.referenceRange?.min;
+  const max = metric.referenceRange?.max;
+  if (typeof min === "number" && typeof max === "number") {
+    return `${min}-${max}`;
+  }
+  if (typeof max === "number") {
+    return `<${max}`;
+  }
+  return "N/A";
+}
+
+function compactMetricPercent(metric: MetricDto): number {
+  const raw = metric.value?.replace(",", ".").trim() ?? "";
+  const numericValue = Number(raw);
+  const min = metric.referenceRange?.min;
+  const max = metric.referenceRange?.max;
+  if (!Number.isFinite(numericValue) || typeof min !== "number" || typeof max !== "number" || max <= min) {
+    return 60;
+  }
+  const ratio = ((numericValue - min) / (max - min)) * 100;
+  return Math.max(8, Math.min(100, Math.round(ratio)));
+}
+
+function recordStatusLabel(status?: MetricDto["status"]): string {
+  if (status === "abnormal") return "Bất thường";
+  if (status === "attention") return "Cần chú ý";
+  if (status === "normal") return "Bình thường";
+  return "Không rõ";
 }

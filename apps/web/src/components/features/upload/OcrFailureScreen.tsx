@@ -33,7 +33,7 @@ export function OcrFailureScreen({
   const failureReason = ocrFailureReason?.trim() || "Không thể nhận diện dữ liệu từ tệp đã tải lên.";
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-8 bg-[#effcf9] px-4 py-8 sm:px-6 sm:py-10">
+    <div className="flex w-full flex-col gap-8">
       <header className="space-y-3">
         <div className="inline-flex items-center gap-2 rounded-full border border-[#f2b8b5] bg-[#ffefee] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#ba1a1a]">
           <AlertTriangle className="h-3.5 w-3.5" />
