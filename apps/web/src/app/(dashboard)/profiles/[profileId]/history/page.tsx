@@ -3,14 +3,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Calendar, ChevronRight, Loader2, Activity, Search, Filter, ShieldPlus, TrendingUp } from "lucide-react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Calendar, Loader2, Activity, Search, Filter, ShieldPlus, TrendingUp, Trash2, Eye, ChevronRight } from "lucide-react";
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
 import { UploadButton } from "@/components/features/upload/UploadButton";
 import { apiClient } from "@/lib/api/apiClient";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { DeleteRecordModal } from "@/components/features/health-records/DeleteRecordModal";
 
 type HistoryItem = {
   id: string;
@@ -22,6 +23,7 @@ type HistoryItem = {
   hospitalName: string | null;
   sourceType: string | null;
   createdAt: string;
+  canDelete?: boolean;
 };
 
 type HistoryPagination = {
@@ -48,10 +50,14 @@ export default function ProfileHistoryPage() {
   const router = useRouter();
   const profileId = params.profileId;
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const historyQueryKey = ["profile-history", profileId] as const;
   const [searchTerm, setSearchTerm] = useState("");
   const [periodFilter, setPeriodFilter] = useState("all");
   const [testTypeFilter, setTestTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [deleteTarget, setDeleteTarget] = useState<HistoryItem | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const { data: profiles = [] } = useQuery({
     queryKey: ["profiles-for-history-breadcrumb"],
@@ -62,7 +68,7 @@ export default function ProfileHistoryPage() {
   });
 
   const historyQuery = useInfiniteQuery({
-    queryKey: ["profile-history", profileId],
+    queryKey: historyQueryKey,
     enabled: Boolean(profileId),
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
@@ -80,6 +86,41 @@ export default function ProfileHistoryPage() {
     },
   });
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = historyQuery;
+  const deleteMutation = useMutation({
+    mutationFn: async (recordId: string) => {
+      await apiClient.delete(ApiPaths.HEALTH_RECORDS.DELETE(recordId));
+      return recordId;
+    },
+    onSuccess: (recordId) => {
+      queryClient.setQueryData(historyQueryKey, (oldData: typeof historyQuery.data) => {
+        if (!oldData) return oldData;
+        const didRemoveRecord = oldData.pages.some((page) => page.data.some((item) => item.id === recordId));
+        if (!didRemoveRecord) return oldData;
+        const nextTotal = Math.max(0, (oldData.pages[0]?.pagination.total ?? 0) - 1);
+        return {
+          ...oldData,
+          pages: oldData.pages.map((page) => {
+            const nextTotalPages =
+              page.pagination.limit > 0 ? Math.max(1, Math.ceil(nextTotal / page.pagination.limit)) : page.pagination.totalPages;
+            return {
+              ...page,
+              data: page.data.filter((item) => item.id !== recordId),
+              pagination: {
+                ...page.pagination,
+                total: nextTotal,
+                totalPages: nextTotalPages,
+              },
+            };
+          }),
+        };
+      });
+      setDeleteError(null);
+      setDeleteTarget(null);
+    },
+    onError: () => {
+      setDeleteError("Xóa kết quả thất bại. Vui lòng thử lại.");
+    },
+  });
 
   useEffect(() => {
     if (!loadMoreRef.current) return;
@@ -295,14 +336,28 @@ export default function ProfileHistoryPage() {
                     <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyle(resolveHistoryStatus(item))}`}>
                       {statusLabel(resolveHistoryStatus(item))}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/health-records/review/${item.id}`)}
-                      className="inline-flex items-center justify-end gap-1 text-right font-semibold text-[#0c9f94] transition hover:underline"
-                    >
-                      Xem chi tiết
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center justify-end gap-3">
+                      {item.canDelete ? (
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(item)}
+                          className="inline-flex items-center rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
+                          aria-label="Xóa kết quả"
+                          title="Xóa kết quả"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/health-records/review/${item.id}`)}
+                        className="inline-flex items-center rounded-md p-1.5 text-[#0c9f94] transition hover:bg-[#eaf9f5]"
+                        aria-label="Xem chi tiết"
+                        title="Xem chi tiết"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 ))
               ) : (
@@ -338,6 +393,7 @@ export default function ProfileHistoryPage() {
                 </span>
               )}
             </div>
+            {deleteError ? <p className="mt-3 text-sm text-[#ba1a1a]">{deleteError}</p> : null}
 
           </article>
 
@@ -390,6 +446,24 @@ export default function ProfileHistoryPage() {
           </div>
         </section>
       )}
+      <DeleteRecordModal
+        open={Boolean(deleteTarget)}
+        title="Xác nhận xóa kết quả?"
+        description={
+          deleteTarget
+            ? `Bạn có chắc muốn xóa kết quả ${deleteTarget.testType || "Phiếu khám bệnh"}? Kết quả sẽ bị ẩn khỏi lịch sử ngay bây giờ và file ảnh/PDF gốc sẽ bị xóa vĩnh viễn sau 30 ngày.`
+            : undefined
+        }
+        onCancel={() => {
+          setDeleteError(null);
+          setDeleteTarget(null);
+        }}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          deleteMutation.mutate(deleteTarget.id);
+        }}
+        isPending={deleteMutation.isPending}
+      />
     </DashboardPageShell>
   );
 }

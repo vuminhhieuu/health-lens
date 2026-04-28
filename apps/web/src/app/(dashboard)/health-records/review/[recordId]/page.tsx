@@ -33,6 +33,7 @@ import { apiClient } from "@/lib/api/apiClient";
 import { ALLOWED_FILE_TYPES, ApiPaths, UPLOAD_MAX_SIZE_BYTES } from "@healthlens/shared/constants";
 import { HealthMetricCard } from "@/components/ui/HealthMetricCard";
 import { OcrFailureScreen } from "@/components/features/upload/OcrFailureScreen";
+import { DeleteRecordModal } from "@/components/features/health-records/DeleteRecordModal";
 
 type MetricDto = {
   name: string;
@@ -139,6 +140,9 @@ export default function ReviewRecordPage() {
   const [isKeepingPartial, setIsKeepingPartial] = useState(false);
   const [isRetryUploading, setIsRetryUploading] = useState(false);
   const [retryUploadError, setRetryUploadError] = useState<string | null>(null);
+  const [isDeletingRecord, setIsDeletingRecord] = useState(false);
+  const [deleteRecordError, setDeleteRecordError] = useState<string | null>(null);
+  const [showDeleteRecordModal, setShowDeleteRecordModal] = useState(false);
   const retryFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -461,7 +465,31 @@ export default function ReviewRecordPage() {
     }
   };
 
+  const handleDeleteRecord = async () => {
+    try {
+      setIsDeletingRecord(true);
+      setDeleteRecordError(null);
+      setShowDeleteRecordModal(false);
+      await apiClient.delete(ApiPaths.HEALTH_RECORDS.DELETE(recordId));
+      const redirectPath = data?.profileId ? `/profiles/${data.profileId}/history` : "/health-records";
+      router.push(redirectPath);
+    } catch {
+      setDeleteRecordError("Xóa kết quả thất bại. Vui lòng thử lại.");
+    } finally {
+      setIsDeletingRecord(false);
+    }
+  };
+
   const historyHref = data?.profileId ? `/profiles/${data.profileId}/history` : null;
+  const deleteRecordModal = (
+    <DeleteRecordModal
+      open={showDeleteRecordModal}
+      onCancel={() => setShowDeleteRecordModal(false)}
+      onConfirm={() => void handleDeleteRecord()}
+      isPending={isDeletingRecord}
+    />
+  );
+
   const renderReviewStateShell = (currentLabel: string, content: ReactNode) => (
     <main className="min-h-screen w-full bg-[#effcf9]">
       <div className="sticky top-16 z-30 border-b border-[#bcc9c6]/25 bg-[#effcf9]/95 px-6 py-3 backdrop-blur">
@@ -649,15 +677,19 @@ export default function ReviewRecordPage() {
               {isOwner ? (
                 <button
                   type="button"
-                  disabled
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#ffdad6] px-4 py-2 text-sm font-semibold text-[#ba1a1a]"
+                  onClick={() => setShowDeleteRecordModal(true)}
+                  disabled={isDeletingRecord}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#ffdad6] px-4 py-2 text-sm font-semibold text-[#ba1a1a] disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  <Trash2 className="h-4 w-4" />
-                  Xóa
+                  {isDeletingRecord ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  {isDeletingRecord ? "Đang xóa..." : "Xóa"}
                 </button>
               ) : null}
             </div>
           </section>
+          {deleteRecordError ? (
+            <div className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]">{deleteRecordError}</div>
+          ) : null}
 
           <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
             <article className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#00685f] to-[#008378] p-7 text-white shadow-md lg:col-span-2">
@@ -792,6 +824,7 @@ export default function ReviewRecordPage() {
           ) : null}
           </div>
         </div>
+        {deleteRecordModal}
       </main>
     );
   }
@@ -1165,6 +1198,8 @@ export default function ReviewRecordPage() {
           </div>
         </div>
       )}
+
+      {deleteRecordModal}
 
       {/* Add Metric Dialog */}
       {showAddDialog && (

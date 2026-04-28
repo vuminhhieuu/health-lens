@@ -138,7 +138,7 @@ class HealthRecordServiceTest {
         existing.setStatus("ocr_failed");
 
         Profile profile = buildProfile(userId, profileId);
-        when(healthRecordRepository.findByIdAndUserId(retryRecordId, userId)).thenReturn(Optional.of(existing));
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(retryRecordId, userId)).thenReturn(Optional.of(existing));
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
         when(storageService.generateUploadUrl(any(), any(Duration.class), eq("application/pdf")))
                 .thenReturn("https://signed-upload-url-retry");
@@ -167,7 +167,7 @@ class HealthRecordServiceTest {
         existing.setProfileId(profileId);
         existing.setStatus("done");
 
-        when(healthRecordRepository.findByIdAndUserId(retryRecordId, userId)).thenReturn(Optional.of(existing));
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(retryRecordId, userId)).thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> healthRecordService.createUploadUrl(
                 userId,
@@ -242,7 +242,7 @@ class HealthRecordServiceTest {
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get("health-record-upload:" + recordId)).thenReturn(reservationJson);
-        when(healthRecordRepository.findByIdAndUserId(recordId, userId)).thenReturn(Optional.of(existing));
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> healthRecordService.confirmUpload(userId, recordId))
                 .isInstanceOf(IllegalStateException.class)
@@ -461,7 +461,7 @@ class HealthRecordServiceTest {
         record.setUserId(userId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
-        when(healthRecordRepository.findByIdAndUserId(recordId, userId)).thenReturn(Optional.of(record));
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
         when(metricExplanationRetrievalService.retrieve(
                 nullable(String.class),
                 nullable(String.class),
@@ -500,7 +500,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        when(healthRecordRepository.findByIdAndUserId(recordId, userId)).thenReturn(Optional.empty());
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> healthRecordService.getMetricExplanation(userId, recordId, "Glucose"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -518,7 +518,7 @@ class HealthRecordServiceTest {
         record.setId(recordId);
         record.setUserId(userId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
-        when(healthRecordRepository.findByIdAndUserId(recordId, userId)).thenReturn(Optional.of(record));
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
 
         assertThatThrownBy(() -> healthRecordService.getMetricExplanation(userId, recordId, "Glucose"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -559,7 +559,7 @@ class HealthRecordServiceTest {
         record.setCreatedAt(java.time.Instant.now());
         record.setExamDate(LocalDate.of(2026, 4, 1));
 
-        when(healthRecordRepository.findAllByProfileIdAndUserId(eq(profileId), eq(userId), any(PageRequest.class)))
+        when(healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNull(eq(profileId), eq(userId), any(PageRequest.class)))
                 .thenReturn(new PageImpl<>(List.of(record), PageRequest.of(0, 20), 1));
 
         var result = healthRecordService.getProfileHistory(userId, profileId, 0, 20);
@@ -599,13 +599,13 @@ class HealthRecordServiceTest {
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
         when(profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId))
                 .thenReturn(true);
-        when(healthRecordRepository.findAllByProfileIdAndUserId(eq(profileId), eq(ownerId), any(PageRequest.class)))
+        when(healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNull(eq(profileId), eq(ownerId), any(PageRequest.class)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         var result = healthRecordService.getProfileHistory(viewerId, profileId, 0, 20);
 
         assertThat(result.data()).isEmpty();
-        verify(healthRecordRepository).findAllByProfileIdAndUserId(eq(profileId), eq(ownerId), any(PageRequest.class));
+        verify(healthRecordRepository).findAllByProfileIdAndUserIdAndDeletedAtIsNull(eq(profileId), eq(ownerId), any(PageRequest.class));
     }
 
     @Test
@@ -615,13 +615,13 @@ class HealthRecordServiceTest {
         UUID profileId = UUID.randomUUID();
         Profile profile = buildProfile(userId, profileId);
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
-        when(healthRecordRepository.findAllByProfileIdAndUserId(eq(profileId), eq(userId), any(PageRequest.class)))
+        when(healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNull(eq(profileId), eq(userId), any(PageRequest.class)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         healthRecordService.getProfileHistory(userId, profileId, 0, 200);
 
         ArgumentCaptor<PageRequest> pageRequestCaptor = ArgumentCaptor.forClass(PageRequest.class);
-        verify(healthRecordRepository).findAllByProfileIdAndUserId(eq(profileId), eq(userId), pageRequestCaptor.capture());
+        verify(healthRecordRepository).findAllByProfileIdAndUserIdAndDeletedAtIsNull(eq(profileId), eq(userId), pageRequestCaptor.capture());
         assertThat(pageRequestCaptor.getValue().getPageSize()).isEqualTo(20);
     }
 
@@ -900,6 +900,40 @@ class HealthRecordServiceTest {
 
         assertThat(record.getSourceType()).isEqualTo("mixed");
         verify(healthRecordRepository).save(record);
+    }
+
+    @Test
+    @DisplayName("deleteHealthRecord soft delete thành công")
+    void deleteHealthRecord_success() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+
+        when(healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)).thenReturn(Optional.of(record));
+
+        healthRecordService.deleteHealthRecord(userId, recordId);
+
+        assertThat(record.getDeletedAt()).isNotNull();
+        verify(healthRecordRepository).save(record);
+    }
+
+    @Test
+    @DisplayName("deleteHealthRecord từ user khác thì trả 403")
+    void deleteHealthRecord_forbiddenWhenNotOwner() {
+        UUID ownerId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(ownerId);
+
+        when(healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)).thenReturn(Optional.of(record));
+
+        assertThatThrownBy(() -> healthRecordService.deleteHealthRecord(requesterId, recordId))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("quyen xoa");
     }
 
     private Profile buildProfile(UUID userId, UUID profileId) {

@@ -13,6 +13,7 @@ public record HealthRecordHistoryItemResponse(
         int abnormalCount,
         String hospitalName,
         String sourceType,
-        Instant createdAt
+        Instant createdAt,
+        boolean canDelete
 ) {
 }

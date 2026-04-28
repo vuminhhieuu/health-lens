@@ -1,6 +1,6 @@
 # Story 5.1: Timeline lịch sử theo từng hồ sơ
 
-Status: review
+Status: done
 
 ## Execution scope
 

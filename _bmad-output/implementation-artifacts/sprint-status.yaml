@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-04-28T21:19:00+07:00
+last_updated: 2026-04-29T00:31:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -131,9 +131,9 @@ sprint_focus: "History timeline, family sharing, admin panel, analytics dashboar
 development_status:
   # Epic 5: History (3 stories) - SPRINT 3
   epic-5: in-progress
-  5-1-profile-history-timeline: review
-  5-2-open-history-result-details: review
-  5-3-delete-health-result-record: sprint-3
+  5-1-profile-history-timeline: done
+  5-2-open-history-result-details: done
+  5-3-delete-health-result-record: review
   epic-5-retrospective: optional
 
   # Epic 6: Family Sharing (4 stories) - SPRINT 3
