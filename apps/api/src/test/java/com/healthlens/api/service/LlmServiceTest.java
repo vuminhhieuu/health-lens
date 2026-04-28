@@ -1,5 +1,6 @@
 package com.healthlens.api.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +38,7 @@ class LlmServiceTest {
     private ChatClient groqChatClient;
     @Mock
     private StringRedisTemplate redisTemplate;
+    private ObjectMapper objectMapper;
     @Mock
     private ValueOperations<String, String> valueOperations;
 
@@ -50,7 +52,8 @@ class LlmServiceTest {
 
     @BeforeEach
     void setUp() {
-        llmService = new LlmService(groqChatClient, redisTemplate);
+        objectMapper = new ObjectMapper();
+        llmService = new LlmService(groqChatClient, redisTemplate, objectMapper);
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         ReflectionTestUtils.setField(llmService, "defaultFallbackExplanation",
                 "Kết quả cần được bác sĩ chuyên khoa giải thích thêm.");
@@ -240,6 +243,98 @@ class LlmServiceTest {
         assertThat(result).contains("Chỉ số này là gì:");
         assertThat(result).contains("Chỉ số này liên quan đến:");
         assertThat(result).contains("Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng:");
+    }
+
+    @Test
+    @DisplayName("Recommendations: cache hit thì không gọi LLM")
+    void generateRecommendations_cacheHit_returnsCachedData() {
+        when(valueOperations.get(anyString())).thenReturn("[\"An nhat\", \"Tap deu\"]");
+
+        List<String> result = llmService.generateRecommendations(
+                List.of(new LlmService.RecommendationMetricInput("Glucose", "8.1", "mmol/L", "abnormal")),
+                45,
+                "female"
+        );
+
+        assertThat(result).hasSizeBetween(2, 3);
+        assertThat(result.stream().anyMatch(line -> line.toLowerCase().contains("dinh dưỡng"))).isTrue();
+        assertThat(result.stream().anyMatch(line -> line.toLowerCase().contains("sinh hoạt"))).isTrue();
+        verify(groqChatClient, never()).prompt();
+    }
+
+    @Test
+    @DisplayName("Recommendations: cache miss thì gọi LLM và parse JSON output")
+    void generateRecommendations_cacheMiss_callsLlmAndParseJson() {
+        when(valueOperations.get(anyString())).thenReturn(null);
+        mockGroqApiSuccess("[\"Chế độ dinh dưỡng: Với Đường huyết, bạn nên giảm đồ ngọt\", \"Chế độ sinh hoạt: Với Glucose, đi bộ sau ăn 20-30 phút\"]");
+
+        List<String> result = llmService.generateRecommendations(
+                List.of(new LlmService.RecommendationMetricInput("Glucose", "8.1", "mmol/L", "abnormal")),
+                45,
+                "female"
+        );
+
+        assertThat(result).containsExactly(
+                "Chế độ dinh dưỡng: Với Đường huyết, bạn nên giảm đồ ngọt",
+                "Chế độ sinh hoạt: Với Glucose, đi bộ sau ăn 20-30 phút"
+        );
+        verify(valueOperations).set(anyString(), anyString(), eq(Duration.ofDays(7)));
+    }
+
+    @Test
+    @DisplayName("Recommendations: cache malformed thì bỏ qua cache và fallback khi LLM lỗi")
+    void generateRecommendations_cacheMalformed_thenFallbackWhenLlmFails() {
+        when(valueOperations.get(anyString())).thenReturn("malformed-cache-value");
+        when(groqChatClient.prompt()).thenThrow(new RuntimeException("LLM down"));
+
+        List<String> result = llmService.generateRecommendations(
+                List.of(new LlmService.RecommendationMetricInput("Glucose", "8.1", "mmol/L", "abnormal")),
+                45,
+                "female"
+        );
+
+        assertThat(result).isNotEmpty();
+        verify(groqChatClient).prompt();
+        verify(valueOperations).set(anyString(), anyString(), eq(Duration.ofDays(7)));
+    }
+
+    @Test
+    @DisplayName("Recommendations: LLM exception thì fallback được cache cho lần sau")
+    void generateRecommendations_llmException_cachesFallback() {
+        when(valueOperations.get(anyString())).thenReturn(null);
+        when(groqChatClient.prompt()).thenThrow(new RuntimeException("Rate limit"));
+
+        List<String> result = llmService.generateRecommendations(
+                List.of(new LlmService.RecommendationMetricInput("Glucose", "8.1", "mmol/L", "abnormal")),
+                45,
+                "female"
+        );
+
+        assertThat(result).isNotEmpty();
+        verify(valueOperations).set(anyString(), anyString(), eq(Duration.ofDays(7)));
+    }
+
+    @Test
+    @DisplayName("Recommendations fallback: ưu tiên metric có severity cao nhất")
+    void generateRecommendations_fallbackPrioritizesMostSevereMetric() {
+        when(valueOperations.get(anyString())).thenReturn(null);
+        when(groqChatClient.prompt()).thenThrow(new RuntimeException("LLM down"));
+
+        List<String> result = llmService.generateRecommendations(
+                List.of(
+                        new LlmService.RecommendationMetricInput("Glucose", "6.2", "mmol/L", "attention"),
+                        new LlmService.RecommendationMetricInput("LDL-C", "4.1", "mmol/L", "abnormal"),
+                        new LlmService.RecommendationMetricInput("Triglyceride", "2.5", "mmol/L", "warning")
+                ),
+                45,
+                "female"
+        );
+
+        assertThat(result).isNotEmpty();
+        assertThat(result.get(0)).contains("LDL-C");
+        assertThat(result.get(0)).contains("bất thường");
+        assertThat(result.stream().anyMatch(line -> line.toLowerCase().contains("dinh dưỡng"))).isTrue();
+        assertThat(result.stream().anyMatch(line -> line.toLowerCase().contains("sinh hoạt"))).isTrue();
     }
 
     private void mockGroqApiSuccess(String responseContent) {

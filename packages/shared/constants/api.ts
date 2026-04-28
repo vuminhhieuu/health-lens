@@ -75,6 +75,7 @@ export const ApiPaths = {
     /** Preferred route: pass `metricName` as query parameter to avoid encoded-slash path issues. */
     EXPLANATION: (id: string, metricName: string) =>
       `/api/${API_VERSION}/health-records/${id}/metrics/explanation?metricName=${encodeURIComponent(metricName)}`,
+    RECOMMENDATIONS: (id: string) => `/api/${API_VERSION}/health-records/${id}/recommendations`,
     UPLOAD_IMAGE: (id: string) => `/api/${API_VERSION}/health-records/${id}/image`,
     ANALYZE: (id: string) => `/api/${API_VERSION}/health-records/${id}/analyze`,
     GET_ANALYSIS: (id: string) => `/api/${API_VERSION}/health-records/${id}/analysis`,

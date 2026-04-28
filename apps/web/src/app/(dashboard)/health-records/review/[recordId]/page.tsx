@@ -24,8 +24,8 @@ import {
   FileDown,
   Building2,
   Info,
-  UtensilsCrossed,
-  Dumbbell,
+  Heart,
+  Apple,
 } from "lucide-react";
 import { z } from "zod";
 
@@ -108,6 +108,20 @@ type ReviewRecordData = {
   labSite?: string | null;
 };
 
+type RecommendationsData = {
+  recommendations: string[];
+  disclaimer: string;
+  allNormal: boolean;
+};
+
+type RecommendationCategory = "nutrition" | "lifestyle";
+
+type RecommendationGroup = {
+  category: RecommendationCategory;
+  title: string;
+  items: string[];
+};
+
 const metricSchema = z.object({
   name: z.string().min(1, "Tên chỉ số không được để trống"),
   value: z
@@ -180,6 +194,20 @@ export default function ReviewRecordPage() {
     enabled: data?.status === "done" && !!data?.profileId,
     staleTime: 5 * 60 * 1000,
   });
+
+  const { data: recommendationsData } = useQuery<RecommendationsData>({
+    queryKey: ["record-recommendations", recordId, data?.status],
+    queryFn: async () => {
+      const res = await apiClient.get(ApiPaths.HEALTH_RECORDS.RECOMMENDATIONS(recordId));
+      return res.data?.data;
+    },
+    enabled: Boolean(recordId && data?.status === "done"),
+    staleTime: 5 * 60 * 1000,
+  });
+  const recommendationGroups = useMemo(
+    () => groupRecommendations(recommendationsData?.recommendations ?? []),
+    [recommendationsData?.recommendations]
+  );
 
   const initialized = useRef(false);
   const initialSnapshotRef = useRef<string>("");
@@ -347,8 +375,6 @@ export default function ReviewRecordPage() {
       const resolvedKeepPartial = keepPartial || (data?.status === "ocr_failed" && manualMode);
       const finalMetrics: MetricDto[] = metrics;
 
-      // Send only contract-required fields to avoid deserialization failures
-      // from optional/null legacy OCR fields.
       const payloadMetrics: ConfirmMetricPayload[] = finalMetrics.map((m) => ({
         name: m.name ?? "",
         value: m.value ?? "",
@@ -376,13 +402,6 @@ export default function ReviewRecordPage() {
       });
       await refetch();
       alert("Lưu kết quả khám thành công!");
-      if (!resolvedKeepPartial) {
-        skipUnloadWarningRef.current = true;
-      }
-      if (manualMode) {
-        skipUnloadWarningRef.current = true;
-        router.replace(`/health-records/review/${recordId}`);
-      }
       return true;
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string; title?: string }; status?: number } };
@@ -769,31 +788,34 @@ export default function ReviewRecordPage() {
               <h3 className="text-2xl font-black tracking-tight text-[#121e1c]">Khuyến nghị từ AI</h3>
             </div>
             <div className="mb-5 rounded-2xl bg-[#ffdbce]/50 px-4 py-3 text-sm text-[#773215]">
-              Khuyến nghị chỉ mang tính tham khảo và không thay thế tư vấn y khoa chuyên nghiệp.
+              {recommendationsData?.disclaimer ??
+                "Thông tin này chỉ mang tính tham khảo và không thay thế tư vấn của bác sĩ chuyên khoa."}
             </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <article className="flex items-start gap-4 rounded-3xl bg-white p-5">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#deebe8] text-[#00685f]">
-                  <UtensilsCrossed className="h-[18px] w-[18px]" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-[#121e1c]">Chế độ dinh dưỡng</h4>
-                  <p className="mt-1 text-sm text-[#3d4947]">
-                    Ưu tiên khẩu phần cân bằng, giảm thực phẩm chế biến sẵn và theo dõi đường huyết định kỳ.
-                  </p>
-                </div>
-              </article>
-              <article className="flex items-start gap-4 rounded-3xl bg-white p-5">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#deebe8] text-[#00685f]">
-                  <Dumbbell className="h-[18px] w-[18px]" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-[#121e1c]">Hoạt động thể chất</h4>
-                  <p className="mt-1 text-sm text-[#3d4947]">
-                    Duy trì vận động nhẹ 30 phút/ngày và tái khám theo lịch nếu có chỉ số cần chú ý.
-                  </p>
-                </div>
-              </article>
+            <div className="space-y-3">
+              {recommendationGroups.map((group) => {
+                const GroupIcon = recommendationIcon(group.category);
+                return (
+                  <article key={group.category} className="rounded-3xl bg-white p-5">
+                    <div className="mb-3 flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#deebe8] text-[#00685f]">
+                        <GroupIcon className="h-4 w-4" />
+                      </div>
+                      <h4 className="font-bold text-[#121e1c]">{group.title}</h4>
+                    </div>
+                    <div className="space-y-2">
+                      {group.items.length ? (
+                        group.items.map((item, idx) => (
+                          <p key={`${group.category}-${idx}`} className="text-sm text-[#3d4947]">
+                            - {item}
+                          </p>
+                        ))
+                      ) : (
+                        <p className="text-sm text-[#6d7a77]">Chưa có khuyến nghị cho nhóm này.</p>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </section>
 
@@ -970,6 +992,41 @@ export default function ReviewRecordPage() {
               </div>
             </div>
           )}
+
+          {showMetricCards && data.status === "done" && recommendationsData ? (
+            <div className="rounded-2xl border border-[#b7d8d1] bg-white shadow-sm overflow-hidden">
+              <div className="border-b border-[#c5dfd9] bg-[#effcf9] px-6 py-4">
+                <h3 className="text-sm font-semibold text-[#005049]">Khuyến nghị theo nhóm</h3>
+              </div>
+              <div className="space-y-3 p-6">
+                {recommendationGroups.map((group) => {
+                  const GroupIcon = recommendationIcon(group.category);
+                  return (
+                    <div key={group.category} className="rounded-xl border border-[#d7e5e1] bg-[#f9fcfb] p-4">
+                      <div className="mb-2 flex items-center gap-2 text-[#005049]">
+                        <GroupIcon className="h-4 w-4 shrink-0" />
+                        <h4 className="text-sm font-semibold">{group.title}</h4>
+                      </div>
+                      <div className="space-y-1">
+                        {group.items.length ? (
+                          group.items.map((item, idx) => (
+                            <p key={`${group.category}-${idx}`} className="text-sm text-[#1d3b36]">
+                              - {item}
+                            </p>
+                          ))
+                        ) : (
+                          <p className="text-sm text-[#6d7a77]">Chưa có khuyến nghị cho nhóm này.</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="mt-4 rounded-lg bg-[#f5f7f7] px-4 py-3 text-xs text-[#6d7a77] whitespace-pre-line">
+                  {recommendationsData.disclaimer}
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {showEditableTable && isOwner && (
             <div className="rounded-2xl border border-[#b7d8d1] bg-white shadow-sm overflow-hidden">
@@ -1373,4 +1430,47 @@ function recordStatusLabel(status?: MetricDto["status"]): string {
   if (status === "attention") return "Cần chú ý";
   if (status === "normal") return "Bình thường";
   return "Không rõ";
+}
+
+function recommendationCategory(item: string): RecommendationCategory {
+  const content = item.toLowerCase();
+  if (content.startsWith("chế độ sinh hoạt:") || content.startsWith("sinh hoạt:")) {
+    return "lifestyle";
+  }
+  if (content.startsWith("chế độ dinh dưỡng:") || content.startsWith("dinh dưỡng:")) {
+    return "nutrition";
+  }
+  if (/(ăn|dinh dưỡng|khẩu phần|chất béo|đường|muối|rau|trái cây|thực phẩm)/i.test(content)) {
+    return "nutrition";
+  }
+  return "lifestyle";
+}
+
+function recommendationTitle(category: RecommendationCategory): string {
+  if (category === "nutrition") return "Chế độ dinh dưỡng";
+  return "Chế độ sinh hoạt";
+}
+
+function recommendationIcon(category: RecommendationCategory) {
+  if (category === "nutrition") return Apple;
+  return Heart;
+}
+
+function groupRecommendations(items: string[]): RecommendationGroup[] {
+  const groups = new Map<RecommendationCategory, string[]>();
+  items.forEach((item) => {
+    const category = recommendationCategory(item);
+    const current = groups.get(category) ?? [];
+    current.push(item);
+    groups.set(category, current);
+  });
+
+  const categoryOrder: RecommendationCategory[] = ["nutrition", "lifestyle"];
+  return categoryOrder
+    .map((category) => ({
+      category,
+      title: recommendationTitle(category),
+      items: groups.get(category) ?? [],
+    }))
+    .filter((group) => group.items.length > 0);
 }

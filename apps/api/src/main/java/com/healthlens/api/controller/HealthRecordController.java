@@ -8,6 +8,7 @@ import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.HealthRecordDetailResponse;
 import com.healthlens.api.dto.response.HealthRecordStatusResponse;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
+import com.healthlens.api.dto.response.RecommendationsResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
 import com.healthlens.api.service.HealthRecordService;
 import jakarta.validation.Valid;
@@ -102,6 +103,16 @@ public class HealthRecordController {
     ) {
         UUID userId = UUID.fromString(authentication.getName());
         MetricExplanationResponse response = healthRecordService.getMetricExplanation(userId, recordId, metricName);
+        return ResponseEntity.ok(buildResponseBody(response));
+    }
+
+    @GetMapping("/{recordId}/recommendations")
+    public ResponseEntity<Map<String, Object>> getRecommendations(
+            Authentication authentication,
+            @PathVariable UUID recordId
+    ) {
+        UUID userId = UUID.fromString(authentication.getName());
+        RecommendationsResponse response = healthRecordService.getRecommendations(userId, recordId);
         return ResponseEntity.ok(buildResponseBody(response));
     }
 
