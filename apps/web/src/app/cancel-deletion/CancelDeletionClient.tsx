@@ -1,10 +1,17 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Callout } from "@radix-ui/themes";
 import { AlertTriangle, CheckCircle2, Loader } from "lucide-react";
+import { AxiosError } from "axios";
 import { useAccountDeletion } from '../../hooks/useAccountDeletion';
+
+interface ApiErrorData {
+  error?: string;
+  detail?: string;
+}
 
 /**
  * Story 1.6 - AC #5: Cancel deletion page
@@ -14,9 +21,7 @@ import { useAccountDeletion } from '../../hooks/useAccountDeletion';
 export default function CancelDeletionClient() {
   const calledRef = useRef(false);
   const searchParams = useSearchParams();
-  const router = useRouter();
   const token = searchParams.get("token");
-  console.log("Cancel token:", token);
 
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("");
@@ -34,26 +39,27 @@ export default function CancelDeletionClient() {
         setStatus("success");
         setMessage(result.message);
 
-      } catch (err: any) {
-        if (err?.response?.status === 409) {
+      } catch (err) {
+        const error = err as AxiosError<ApiErrorData>;
+        if (error?.response?.status === 409) {
           setStatus("success");
           setMessage("Yêu cầu xóa đã được xử lý trước đó");
           return;
         }
         setStatus("error");
 
-        const message =
-          err?.response?.data?.detail ||
-          err?.response?.data?.error ||
-          err?.message ||
+        const errorMessage =
+          error?.response?.data?.detail ||
+          error?.response?.data?.error ||
+          error?.message ||
           "Không thể hủy yêu cầu xóa tài khoản";
 
-        setMessage(message);
+        setMessage(errorMessage);
       }
     };
 
     run();
-  }, [token]);
+  }, [token, cancelDeletion]);
 
   return (
     <div className="flex-grow p-6 md:p-12 lg:p-16 max-w-7xl mx-auto bg-[#effcf9] min-h-screen text-[#121e1c]">
@@ -103,12 +109,12 @@ export default function CancelDeletionClient() {
             <p className="text-[#6d7a77] mb-6">
               Tài khoản của bạn đã được khôi phục. Bạn có thể đăng nhập bình thường.
             </p>
-            <a
+            <Link
               href="/login"
               className="inline-block bg-[#00685f] hover:bg-[#004d47] text-white font-bold py-3 px-6 rounded-xl transition-colors shadow-md hover:shadow-lg"
             >
               Quay lại trang đăng nhập
-            </a>
+            </Link>
           </div>
         )}
 
@@ -128,18 +134,18 @@ export default function CancelDeletionClient() {
             </Callout.Root>
             <p className="text-[#6d7a77] mb-6 text-lg">{message}</p>
             <div className="flex gap-3">
-              <a
+              <Link
                 href="/login"
                 className="flex-1 text-center bg-[#00685f] hover:bg-[#004d47] text-white font-bold py-3 px-6 rounded-xl transition-colors shadow-md hover:shadow-lg"
               >
                 Quay lại trang đăng nhập
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/"
                 className="flex-1 text-center px-6 py-3 border-2 border-[#bcc9c6]/20 text-[#121e1c] font-bold rounded-xl hover:bg-[#e9f6f3] transition-colors"
               >
                 Trang chủ
-              </a>
+              </Link>
             </div>
           </div>
         )}

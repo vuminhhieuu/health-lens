@@ -24,17 +24,25 @@ interface CancelDeletionResponse {
     };
 }
 
+interface ApiErrorData {
+    error?: string;
+    detail?: string;
+}
+
+type ApiError = AxiosError<ApiErrorData>;
+
 export const useAccountDeletion = () => {
     const [isRequesting, setIsRequesting] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [requestSuccess, setRequestSuccess] = useState(false);
     const [cancelSuccess, setCancelSuccess] = useState(false);
-    const getErrorMessage = (err: AxiosError<any>) =>
+
+    const getErrorMessage = useCallback((err: ApiError) =>
         err?.response?.data?.error ||
         err?.response?.data?.detail ||
         err?.message ||
-        'Có lỗi xảy ra';
+        'Có lỗi xảy ra', []);
 
     const requestDeletion = useCallback(async (password: string) => {
         setIsRequesting(true);
@@ -54,7 +62,7 @@ export const useAccountDeletion = () => {
             return data.data;
 
         } catch (err) {
-            const error = err as AxiosError<any>;
+            const error = err as ApiError;
             setError(getErrorMessage(error));
             throw err;
 
@@ -79,13 +87,14 @@ export const useAccountDeletion = () => {
             const data: CancelDeletionResponse = response.data;
             setCancelSuccess(true);
             return data.data;
-        } catch (err: any) {
+        } catch (err) {
+            const error = err as ApiError;
             const message =
-                err?.response?.status === 400
+                error?.response?.status === 400
                     ? 'Token không hợp lệ hoặc đã hết hạn'
-                    : err?.response?.status === 409
+                    : error?.response?.status === 409
                         ? 'Yêu cầu xóa này không thể hủy được'
-                        : getErrorMessage(err);
+                        : getErrorMessage(error);
 
             setError(message);
             throw err;
