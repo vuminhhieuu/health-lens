@@ -12,9 +12,17 @@ type UploadStatus = "idle" | "uploading" | "done" | "error";
 
 interface UploadButtonProps {
   profileId: string;
+  label?: string;
+  className?: string;
+  size?: "default" | "compact";
 }
 
-export function UploadButton({ profileId }: UploadButtonProps) {
+export function UploadButton({
+  profileId,
+  label = "Tải tệp PDF/JPG/PNG",
+  className,
+  size = "default",
+}: UploadButtonProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -86,6 +94,8 @@ export function UploadButton({ profileId }: UploadButtonProps) {
     }
   };
 
+  const sizeClassName = size === "compact" ? "px-5 py-2.5" : "px-6 py-3";
+
   return (
     <div className="flex w-full flex-col items-start sm:w-auto">
       <input
@@ -97,12 +107,13 @@ export function UploadButton({ profileId }: UploadButtonProps) {
       />
 
       <button
+        type="button"
         onClick={handleSelect}
         disabled={status === "uploading"}
-        className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-[#00685f] px-6 py-3 font-semibold text-white transition hover:brightness-110 disabled:opacity-70 shadow-sm"
+        className={`inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-[#00685f] font-semibold text-white transition hover:brightness-110 disabled:opacity-70 shadow-sm ${sizeClassName} ${className ?? ""}`}
       >
         {status === "uploading" ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
-        Tải tệp PDF/JPG/PNG
+        {label}
       </button>
 
       {status === "uploading" && (

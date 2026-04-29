@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Calendar, Loader2, Activity, Search, Filter, ShieldPlus, TrendingUp, Trash2, Eye, ChevronRight } from "lucide-react";
@@ -235,12 +234,13 @@ export default function ProfileHistoryPage() {
             <Activity className="h-7 w-7" />
           </div>
           <p className="mb-5 text-[#4e6360]">Hồ sơ này chưa có kết quả nào.</p>
-          <Link
-            href={`/health-records?profileId=${profileId}&openUpload=1`}
-            className="inline-flex items-center rounded-xl bg-[#00685f] px-5 py-2.5 font-semibold text-white transition hover:brightness-110"
-          >
-            Thêm kết quả đầu tiên
-          </Link>
+          <div className="mx-auto w-fit">
+            <UploadButton
+              profileId={profileId}
+              label="Thêm kết quả đầu tiên"
+              size="compact"
+            />
+          </div>
         </section>
       ) : (
         <section className="mt-3 space-y-4">
