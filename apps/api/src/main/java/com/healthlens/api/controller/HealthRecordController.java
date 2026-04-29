@@ -13,6 +13,7 @@ import com.healthlens.api.service.HealthRecordService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -124,6 +125,16 @@ public class HealthRecordController {
         UUID userId = UUID.fromString(authentication.getName());
         healthRecordService.updateMetrics(userId, recordId, request);
         return ResponseEntity.ok(buildResponseBody(Map.of("message", "Metrics updated successfully")));
+    }
+
+    @DeleteMapping("/{recordId}")
+    public ResponseEntity<Map<String, Object>> deleteRecord(
+            Authentication authentication,
+            @PathVariable UUID recordId
+    ) {
+        UUID userId = UUID.fromString(authentication.getName());
+        healthRecordService.deleteHealthRecord(userId, recordId);
+        return ResponseEntity.ok(buildResponseBody(Map.of("message", "Deleted successfully")));
     }
 
     @GetMapping("/profiles/{profileId}")

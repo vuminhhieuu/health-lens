@@ -18,6 +18,7 @@ import com.healthlens.api.dto.MetricDto;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.healthlens.api.annotation.Auditable;
 import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.exception.ResourceNotFoundException;
@@ -31,12 +32,15 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Period;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -97,7 +101,7 @@ public class HealthRecordService {
         UUID recordId = UUID.randomUUID();
 
         if (request.retryRecordId() != null) {
-            HealthRecord existingRecord = healthRecordRepository.findByIdAndUserId(request.retryRecordId(), userId)
+            HealthRecord existingRecord = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(request.retryRecordId(), userId)
                     .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
             if (!"ocr_failed".equals(existingRecord.getStatus())) {
                 throw new IllegalStateException("Chi duoc retry upload khi OCR that bai");
@@ -130,7 +134,7 @@ public class HealthRecordService {
             throw new IllegalArgumentException("Record khong thuoc ve nguoi dung hien tai");
         }
 
-        HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId).orElseGet(HealthRecord::new);
+        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId).orElseGet(HealthRecord::new);
         boolean isNewRecord = record.getId() == null;
         if (isNewRecord) {
             record.setId(recordId);
@@ -179,7 +183,7 @@ public class HealthRecordService {
             }
         }
 
-        HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId)
+        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
         
         java.util.List<MetricDto> metricsList = null;
@@ -225,7 +229,7 @@ public class HealthRecordService {
 
     @Transactional(readOnly = true)
     public HealthRecordDetailResponse getDetail(UUID userId, UUID recordId, UUID profileId) {
-        HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId)
+        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Health record khong ton tai"));
 
         UUID resolvedProfileId = profileId != null ? profileId : record.getProfileId();
@@ -256,7 +260,7 @@ public class HealthRecordService {
 
     @Transactional(readOnly = true)
     public MetricExplanationResponse getMetricExplanation(UUID userId, UUID recordId, String metricName) {
-        HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId)
+        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
 
         MetricDto metric = parseMetrics(record.getMetrics()).stream()
@@ -285,7 +289,7 @@ public class HealthRecordService {
 
     @Transactional(readOnly = true)
     public java.util.List<HealthRecordStatusResponse> getRecordsByProfile(UUID userId, UUID profileId) {
-        return healthRecordRepository.findAllByProfileIdAndUserIdOrderByCreatedAtDesc(profileId, userId)
+        return healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(profileId, userId)
                 .stream()
                 .map(record -> {
                     java.util.List<MetricDto> metricsList = null;
@@ -329,10 +333,10 @@ public class HealthRecordService {
                 Sort.by(Sort.Order.desc("examDate").nullsLast(), Sort.Order.desc("createdAt"))
         );
         UUID profileOwnerId = profile.getUser().getId();
-        Page<HealthRecord> records = healthRecordRepository.findAllByProfileIdAndUserId(profileId, profileOwnerId, pageable);
+        Page<HealthRecord> records = healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNull(profileId, profileOwnerId, pageable);
 
         List<HealthRecordHistoryItemResponse> items = records.getContent().stream()
-                .map(record -> toHistoryItem(record, profile))
+                .map(record -> toHistoryItem(record, profile, userId))
                 .collect(Collectors.toList());
 
         return new HealthRecordHistoryPageResponse(
@@ -510,6 +514,46 @@ public class HealthRecordService {
 
         String cacheKey = "health-record-status:" + userId + ":" + recordId;
         redisTemplate.delete(cacheKey);
+    }
+
+    @Transactional
+    @Auditable(action = "DELETE_HEALTH_RECORD")
+    public void deleteHealthRecord(UUID userId, UUID recordId) {
+        HealthRecord record = healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)
+                .orElseThrow(() -> new ResourceNotFoundException("Health record khong ton tai"));
+
+        if (!record.getUserId().equals(userId)) {
+            throw new AccessDeniedException("Ban khong co quyen xoa health record nay");
+        }
+
+        record.setDeletedAt(Instant.now());
+        healthRecordRepository.save(record);
+        redisTemplate.delete("health-record-status:" + userId + ":" + recordId);
+    }
+
+    @Scheduled(cron = "0 0 2 * * *")
+    public void purgeSoftDeletedRecords() {
+        Instant threshold = Instant.now().minus(30, ChronoUnit.DAYS);
+        int batchSize = 100;
+
+        while (true) {
+            Page<HealthRecord> staleRecords = healthRecordRepository.findAllByDeletedAtBefore(
+                    threshold,
+                    PageRequest.of(0, batchSize)
+            );
+            if (staleRecords.isEmpty()) {
+                break;
+            }
+
+            for (HealthRecord record : staleRecords.getContent()) {
+                try {
+                    storageService.deleteObject(record.getFileKey());
+                    healthRecordRepository.delete(record);
+                } catch (Exception ex) {
+                    log.error("Failed to purge soft-deleted health record {}", record.getId(), ex);
+                }
+            }
+        }
     }
 
     private static final Set<String> VALID_SOURCES = Set.of(
@@ -772,7 +816,7 @@ public class HealthRecordService {
         }
     }
 
-    private HealthRecordHistoryItemResponse toHistoryItem(HealthRecord record, Profile profile) {
+    private HealthRecordHistoryItemResponse toHistoryItem(HealthRecord record, Profile profile, UUID requesterId) {
         List<MetricDto> metrics = parseMetrics(record.getMetrics()).stream()
                 .map(metric -> enrichMetric(metric, profile, record.getExamDate(), false))
                 .collect(Collectors.toList());
@@ -804,7 +848,8 @@ public class HealthRecordService {
                 abnormalCount,
                 record.getHospitalName(),
                 record.getSourceType(),
-                record.getCreatedAt()
+                record.getCreatedAt(),
+                profile.getUser().getId().equals(requesterId)
         );
     }
 

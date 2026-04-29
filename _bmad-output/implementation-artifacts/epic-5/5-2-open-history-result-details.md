@@ -1,6 +1,6 @@
 # Story 5.2: Xem chi tiết một bản ghi từ timeline
 
-Status: review
+Status: done
 
 ## Execution scope
 

@@ -25,7 +25,9 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -87,5 +89,20 @@ class HealthRecordControllerTest {
                 .andExpect(jsonPath("$.data.source").value("fallback"))
                 .andExpect(jsonPath("$.data.explanation").value(explanation))
                 .andExpect(jsonPath("$.meta.timestamp").exists());
+    }
+
+    @Test
+    @DisplayName("DELETE health record gọi service và trả 200")
+    void deleteHealthRecord_returnsOk() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/v1/health-records/{recordId}", recordId)
+                        .with(SecurityMockMvcRequestPostProcessors.user(userId.toString()))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.message").value("Deleted successfully"));
+
+        verify(healthRecordService).deleteHealthRecord(userId, recordId);
     }
 }
