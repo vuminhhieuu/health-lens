@@ -67,7 +67,7 @@ export default function DashboardHomePage() {
 
   return (
     <DashboardPageShell
-      title="Chào mừng quay lại! 👋"
+      title="Chào mừng quay lại!"
       subtitle="Đây là tổng quan tình trạng sức khỏe của bạn hôm nay."
       actions={
         <div className="text-left lg:text-right">

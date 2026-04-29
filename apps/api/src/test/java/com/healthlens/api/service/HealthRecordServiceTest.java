@@ -5,6 +5,7 @@ import com.healthlens.api.dto.MetricDto;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
+import com.healthlens.api.dto.response.RecommendationsResponse;
 import com.healthlens.api.dto.request.UpdateMetricsRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
@@ -43,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -934,6 +936,174 @@ class HealthRecordServiceTest {
         assertThatThrownBy(() -> healthRecordService.deleteHealthRecord(requesterId, recordId))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("quyen xoa");
+    }
+
+    @Test
+    @DisplayName("getRecommendations tra ve thong diep khich le khi tat ca chi so normal")
+    void getRecommendations_allNormal_returnsPositiveMessage() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        Profile profile = buildProfile(userId, profileId);
+        profile.setBirthDate(LocalDate.of(1995, 1, 1));
+        profile.setGender("male");
+
+        MetricDto metric = MetricDto.builder()
+                .name("Glucose")
+                .value("5.4")
+                .normalizedValue("5.4")
+                .status("normal")
+                .referenceRange(new ReferenceRangeDto(
+                        BigDecimal.valueOf(3.9),
+                        BigDecimal.valueOf(6.4),
+                        BigDecimal.valueOf(3.2),
+                        BigDecimal.valueOf(7.1),
+                        "mmol/L"
+                ))
+                .build();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setProfileId(profileId);
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
+
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+
+        RecommendationsResponse response = healthRecordService.getRecommendations(userId, recordId);
+
+        assertThat(response.allNormal()).isTrue();
+        assertThat(response.recommendations()).hasSize(1);
+        verify(llmService, never()).generateRecommendations(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("getRecommendations goi LLM khi co chi so attention hoac abnormal")
+    void getRecommendations_withRiskyMetrics_callsLlm() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        Profile profile = buildProfile(userId, profileId);
+        profile.setBirthDate(LocalDate.of(1980, 1, 1));
+        profile.setGender("female");
+
+        MetricDto metric = MetricDto.builder()
+                .name("Glucose")
+                .value("8.2")
+                .normalizedValue("8.2")
+                .status("abnormal")
+                .referenceRange(new ReferenceRangeDto(
+                        BigDecimal.valueOf(3.9),
+                        BigDecimal.valueOf(6.4),
+                        BigDecimal.valueOf(3.2),
+                        BigDecimal.valueOf(7.1),
+                        "mmol/L"
+                ))
+                .build();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setProfileId(profileId);
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
+
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+        when(llmService.generateRecommendations(any(), any(), any(), any()))
+                .thenReturn(List.of("Giam duong trong bua an", "Tap the duc deu dan"));
+
+        RecommendationsResponse response = healthRecordService.getRecommendations(userId, recordId);
+
+        assertThat(response.allNormal()).isFalse();
+        assertThat(response.recommendations()).hasSize(2);
+        verify(llmService).generateRecommendations(any(), any(), eq("female"), any());
+    }
+
+    @Test
+    @DisplayName("getRecommendations goi LLM khi phiếu luu attention nhung sau enrich thanh normal (tranh luon allNormal)")
+    void getRecommendations_priorAttentionMismatch_stillCallsLlm() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        Profile profile = buildProfile(userId, profileId);
+        profile.setBirthDate(LocalDate.of(1980, 1, 1));
+        profile.setGender("female");
+
+        MetricDto metric = MetricDto.builder()
+                .name("Glucose")
+                .value("5.4")
+                .normalizedValue("5.4")
+                .status("attention")
+                .referenceRange(new ReferenceRangeDto(
+                        BigDecimal.valueOf(3.9),
+                        BigDecimal.valueOf(6.4),
+                        BigDecimal.valueOf(3.2),
+                        BigDecimal.valueOf(7.1),
+                        "mmol/L"
+                ))
+                .build();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setProfileId(profileId);
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
+
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+        when(llmService.generateRecommendations(any(), any(), any(), any()))
+                .thenReturn(List.of("Goi y 1", "Goi y 2"));
+
+        RecommendationsResponse response = healthRecordService.getRecommendations(userId, recordId);
+
+        assertThat(response.allNormal()).isFalse();
+        verify(llmService).generateRecommendations(any(), any(), eq("female"), any());
+    }
+
+    @Test
+    @DisplayName("getRecommendations goi LLM khi phiếu luu warning nhung sau enrich thanh normal")
+    void getRecommendations_priorWarningMismatch_stillCallsLlm() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        Profile profile = buildProfile(userId, profileId);
+        profile.setBirthDate(LocalDate.of(1980, 1, 1));
+        profile.setGender("female");
+
+        MetricDto metric = MetricDto.builder()
+                .name("Glucose")
+                .value("5.4")
+                .normalizedValue("5.4")
+                .status("warning")
+                .referenceRange(new ReferenceRangeDto(
+                        BigDecimal.valueOf(3.9),
+                        BigDecimal.valueOf(6.4),
+                        BigDecimal.valueOf(3.2),
+                        BigDecimal.valueOf(7.1),
+                        "mmol/L"
+                ))
+                .build();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setProfileId(profileId);
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
+
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+        when(llmService.generateRecommendations(any(), any(), any(), any()))
+                .thenReturn(List.of("Goi y 1", "Goi y 2"));
+
+        RecommendationsResponse response = healthRecordService.getRecommendations(userId, recordId);
+
+        assertThat(response.allNormal()).isFalse();
+        verify(llmService).generateRecommendations(any(), any(), eq("female"), any());
     }
 
     private Profile buildProfile(UUID userId, UUID profileId) {

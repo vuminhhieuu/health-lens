@@ -10,6 +10,7 @@ import com.healthlens.api.dto.response.HealthRecordDetailResponse;
 import com.healthlens.api.dto.response.HealthRecordHistoryItemResponse;
 import com.healthlens.api.dto.response.HealthRecordHistoryPageResponse;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
+import com.healthlens.api.dto.response.RecommendationsResponse;
 import com.healthlens.api.dto.response.HealthRecordStatusResponse;
 import com.healthlens.api.dto.response.PaginationResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
@@ -41,6 +42,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Period;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -59,6 +61,8 @@ public class HealthRecordService {
     private static final Duration UPLOAD_RESERVATION_TTL = Duration.ofMinutes(20);
     private static final String STATUS_PROCESSING = "processing";
     private static final int HISTORY_PAGE_SIZE = 20;
+    private static final String RECOMMENDATIONS_DISCLAIMER =
+            "Thông tin này chỉ mang tính tham khảo và không thay thế tư vấn của bác sĩ chuyên khoa.";
 
     private final StorageService storageService;
     private final ProfileRepository profileRepository;
@@ -217,7 +221,6 @@ public class HealthRecordService {
             storageService.generateDownloadUrl(record.getFileKey(), Duration.ofHours(1))
         );
         
-        // Cache the result for 5 seconds
         try {
             redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(response), Duration.ofSeconds(5));
         } catch (Exception e) {
@@ -285,6 +288,84 @@ public class HealthRecordService {
         );
 
         return new MetricExplanationResponse(result.explanation(), result.source());
+    }
+
+    @Transactional(readOnly = true)
+    public RecommendationsResponse getRecommendations(UUID userId, UUID recordId) {
+        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Health record khong ton tai"));
+
+        if (record.getProfileId() == null) {
+            throw new ResourceNotFoundException("Profile khong ton tai");
+        }
+
+        Profile profile = profileRepository.findById(record.getProfileId())
+                .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
+        if (!profile.getUser().getId().equals(userId)) {
+            throw new AccessDeniedException("Profile khong thuoc ve nguoi dung");
+        }
+
+        /*
+         * Story 4.4: classify sau enrich có thể khác status đã lưu trên phiếu/OCR (hoặc UI đã hiển thị).
+         * Nếu chỉ lọc theo status sau enrich, riskyMetrics có thể rỗng → luôn trả allNormal.
+         * Giữ union: attention/warning/abnormal trước enrich HOẶC sau enrich.
+         * Khi đưa vào LLM: nếu sau enrich là normal nhưng trước đó là attention/warning/abnormal, vẫn truyền
+         * status rủi ro (prior) để LlmService không lọc hết input.
+         */
+        List<RecommendationRiskMetric> recommendationRisks = new ArrayList<>();
+        for (MetricDto metric : parseMetrics(record.getMetrics())) {
+            if (metric == null) {
+                continue;
+            }
+            String priorStatus = metric.getStatus();
+            enrichMetric(metric, profile, record.getExamDate());
+            if (isRiskStatus(metric.getStatus()) || isRiskStatus(priorStatus)) {
+                recommendationRisks.add(new RecommendationRiskMetric(metric, priorStatus));
+            }
+        }
+
+        if (recommendationRisks.isEmpty()) {
+            return new RecommendationsResponse(
+                    List.of("Kết quả của bạn nhìn chung tốt. Tiếp tục duy trì lối sống lành mạnh!"),
+                    RECOMMENDATIONS_DISCLAIMER,
+                    true
+            );
+        }
+
+        Integer age = resolveAge(profile, record.getExamDate());
+        List<LlmService.RecommendationMetricInput> llmInputs = recommendationRisks.stream()
+                .map(rm -> new LlmService.RecommendationMetricInput(
+                        rm.metric().getName(),
+                        rm.metric().getNormalizedValue() != null ? rm.metric().getNormalizedValue() : rm.metric().getValue(),
+                        rm.metric().getUnit(),
+                        recommendationStatusForLlm(rm.metric(), rm.priorStatus()),
+                        rm.metric().getDisplayNameVi()))
+                .toList();
+        List<String> recommendations = llmService.generateRecommendations(
+                llmInputs,
+                age,
+                profile.getGender(),
+                recommendationExamContext(record));
+        return new RecommendationsResponse(recommendations, RECOMMENDATIONS_DISCLAIMER, false);
+    }
+
+    /** Ngữ cảnh phiếu khám giúp LLM không chỉ đưa khẩu phần chung cho mọi xét nghiệm. */
+    private static String recommendationExamContext(HealthRecord record) {
+        StringBuilder sb = new StringBuilder();
+        if (record.getRecordType() != null && !record.getRecordType().isBlank()) {
+            sb.append("Loại phiếu/xét nghiệm: ").append(record.getRecordType().trim());
+        }
+        if (record.getDiagnosis() != null && !record.getDiagnosis().isBlank()) {
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            String d = record.getDiagnosis().trim().replaceAll("\\s+", " ");
+            if (d.length() > 400) {
+                d = d.substring(0, 400).concat("…");
+            }
+            sb.append("Kết luận/ghi chú trên phiếu (chỉ là ngữ cảnh, không thay chẩn đoán): ").append(d);
+        }
+        return sb.toString();
     }
 
     @Transactional(readOnly = true)
@@ -625,6 +706,31 @@ public class HealthRecordService {
             log.warn("Failed to parse metrics JSON", e);
             return List.of();
         }
+    }
+
+    private static boolean isRiskStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return false;
+        }
+        String s = status.trim().toLowerCase(Locale.ROOT);
+        return "attention".equals(s) || "warning".equals(s) || "abnormal".equals(s);
+    }
+
+    /**
+     * Status gửi sang LLM cache/recommendations: ưu tiên phân loại sau enrich;
+     * nếu đã về normal nhưng phiếu trước đó đánh dấu attention/abnormal thì giữ prior để không bị LlmService lọc mất.
+     */
+    private static String recommendationStatusForLlm(MetricDto enriched, String priorStatus) {
+        if (isRiskStatus(enriched.getStatus())) {
+            return enriched.getStatus();
+        }
+        if (isRiskStatus(priorStatus)) {
+            return priorStatus.trim();
+        }
+        return enriched.getStatus() != null ? enriched.getStatus() : "unknown";
+    }
+
+    private record RecommendationRiskMetric(MetricDto metric, String priorStatus) {
     }
 
     private MetricDto enrichMetric(MetricDto metric, Profile profile, LocalDate examDate) {
