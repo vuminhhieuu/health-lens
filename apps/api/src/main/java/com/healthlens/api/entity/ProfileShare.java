@@ -28,6 +28,7 @@ public class ProfileShare {
     @Column(name = "viewer_id", nullable = false)
     private UUID viewerId;
 
+
     @Column(name = "access_level", nullable = false, length = 20)
     private String accessLevel;
 
@@ -44,6 +45,7 @@ public class ProfileShare {
         }
         if (grantedAt == null) {
             grantedAt = Instant.now();
+
         }
         if (accessLevel == null || accessLevel.isBlank()) {
             accessLevel = "view";

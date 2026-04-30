@@ -2,6 +2,7 @@ package com.healthlens.api.controller;
 
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.response.AcceptInvitationResultResponse;
+
 import com.healthlens.api.dto.response.IncomingProfileInvitationResponse;
 import com.healthlens.api.service.ProfileShareService;
 import java.time.Instant;
@@ -11,6 +12,7 @@ import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,6 +45,7 @@ public class InvitationController {
                 )
         ));
     }
+
 
     @GetMapping("/incoming")
     public ResponseEntity<Map<String, Object>> listIncomingInvitations(Authentication authentication) {

@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
 import axios from "axios";
 import { Loader2 } from "lucide-react";
 import { ApiPaths } from "@healthlens/shared/constants";
 import { apiClient } from "@/lib/api/apiClient";
+
 
 function problemDetailMessage(data: unknown): string | undefined {
   if (typeof data !== "object" || data === null || !("detail" in data)) {
@@ -26,6 +28,7 @@ type AcceptResult = {
 };
 
 export default function AcceptInvitationPage() {
+
   const [error, setError] = useState<string | null>(null);
   const token =
     typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("token") : null;
@@ -43,6 +46,7 @@ export default function AcceptInvitationPage() {
           setError("Không thể xử lý lời mời. Vui lòng thử lại.");
           return;
         }
+
         // Full navigation so dashboard loads with fresh auth/session (same-tab deep link from email).
         window.location.replace(result.redirectUrl);
       } catch (err: unknown) {
@@ -73,6 +77,7 @@ export default function AcceptInvitationPage() {
     };
 
     void run();
+
   }, [token]);
 
   if (!token) {

@@ -8,6 +8,7 @@ public record ProfileInvitationResponse(
         String email,
         String status,
         Instant expiresAt,
+
         Instant createdAt,
         String accessLevel
 ) {

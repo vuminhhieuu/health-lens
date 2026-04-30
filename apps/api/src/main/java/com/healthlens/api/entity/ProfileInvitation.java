@@ -28,6 +28,7 @@ public class ProfileInvitation {
     @Column(name = "invitee_email", nullable = false, length = 255)
     private String inviteeEmail;
 
+
     @Column(name = "access_level", nullable = false, length = 20)
     private String accessLevel;
 
@@ -57,6 +58,7 @@ public class ProfileInvitation {
         if (status == null || status.isBlank()) {
             status = "pending";
         }
+
         if (accessLevel == null || accessLevel.isBlank()) {
             accessLevel = "view";
         }

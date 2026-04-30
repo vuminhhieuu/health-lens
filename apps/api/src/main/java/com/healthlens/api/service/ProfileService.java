@@ -3,17 +3,23 @@ package com.healthlens.api.service;
 import com.healthlens.api.dto.request.CreateProfileRequest;
 import com.healthlens.api.dto.request.UpdateProfileRequest;
 import com.healthlens.api.dto.response.ProfileResponse;
+import com.healthlens.api.dto.response.SharedProfileResponse;
+import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.Profile;
+import com.healthlens.api.entity.ProfileShare;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ProfileLimitExceededException;
 import com.healthlens.api.exception.ResourceNotFoundException;
+import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.ProfileRepository;
+import com.healthlens.api.repository.ProfileShareRepository;
 import com.healthlens.api.repository.UserRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -24,10 +30,19 @@ public class ProfileService {
     private static final int MAX_PROFILES_PER_USER = 10;
 
     private final ProfileRepository profileRepository;
+    private final ProfileShareRepository profileShareRepository;
+    private final HealthRecordRepository healthRecordRepository;
     private final UserRepository userRepository;
 
-    public ProfileService(ProfileRepository profileRepository, UserRepository userRepository) {
+    public ProfileService(
+            ProfileRepository profileRepository,
+            ProfileShareRepository profileShareRepository,
+            HealthRecordRepository healthRecordRepository,
+            UserRepository userRepository
+    ) {
         this.profileRepository = profileRepository;
+        this.profileShareRepository = profileShareRepository;
+        this.healthRecordRepository = healthRecordRepository;
         this.userRepository = userRepository;
     }
 
@@ -36,6 +51,34 @@ public class ProfileService {
         return profileRepository.findAllByUserId(userId)
                 .stream()
                 .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<SharedProfileResponse> getSharedProfiles(UUID userId) {
+        return profileShareRepository.findAllByViewerIdAndRevokedAtIsNull(userId).stream()
+                .map(ProfileShare::getProfileId)
+                .distinct()
+                .map(profileId -> {
+                    Profile profile = profileRepository.findById(profileId)
+                            .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay ho so duoc chia se"));
+                    UUID ownerId = profile.getUser().getId();
+                    HealthRecord latest = healthRecordRepository
+                            .findTopByProfileIdAndUserIdAndDeletedAtIsNullOrderByExamDateDescCreatedAtDesc(profileId, ownerId)
+                            .orElse(null);
+                    String latestStatus = "unverified";
+                    Instant lastUpdated = profile.getUpdatedAt();
+                    if (latest != null) {
+                        latestStatus = "done".equals(latest.getStatus()) ? "normal" : latest.getStatus();
+                        lastUpdated = latest.getCreatedAt();
+                    }
+                    return new SharedProfileResponse(
+                            profile.getId(),
+                            profile.getDisplayName(),
+                            latestStatus,
+                            lastUpdated
+                    );
+                })
                 .collect(Collectors.toList());
     }
 

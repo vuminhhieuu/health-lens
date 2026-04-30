@@ -64,6 +64,10 @@ export const ApiPaths = {
     REJECT: (invitationId: string) => `/api/${API_VERSION}/invitations/${invitationId}/reject`,
   },
 
+  SHARED_PROFILES: {
+    LIST: `/api/${API_VERSION}/shared-profiles`,
+  },
+
   /** Health record endpoints */
   HEALTH_RECORDS: {
     BASE: `/api/${API_VERSION}/health-records`,

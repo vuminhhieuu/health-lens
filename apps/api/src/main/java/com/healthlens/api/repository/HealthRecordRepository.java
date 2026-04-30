@@ -12,6 +12,7 @@ import java.util.UUID;
 public interface HealthRecordRepository extends JpaRepository<HealthRecord, UUID> {
     Optional<HealthRecord> findByIdAndUserIdAndDeletedAtIsNull(UUID id, UUID userId);
     Optional<HealthRecord> findByIdAndDeletedAtIsNull(UUID id);
+    Optional<HealthRecord> findTopByProfileIdAndUserIdAndDeletedAtIsNullOrderByExamDateDescCreatedAtDesc(UUID profileId, UUID userId);
     java.util.List<HealthRecord> findAllByProfileIdAndUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(UUID profileId, UUID userId);
     Page<HealthRecord> findAllByProfileIdAndUserIdAndDeletedAtIsNull(UUID profileId, UUID userId, Pageable pageable);
     java.util.List<HealthRecord> findAllByDeletedAtBefore(Instant threshold);

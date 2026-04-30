@@ -65,6 +65,7 @@ export default function ProfileHistoryPage() {
       return (response.data?.data ?? []) as Profile[];
     },
   });
+
   const historyQuery = useInfiniteQuery({
     queryKey: historyQueryKey,
     enabled: Boolean(profileId),
@@ -119,6 +120,7 @@ export default function ProfileHistoryPage() {
       setDeleteError("Xóa kết quả thất bại. Vui lòng thử lại.");
     },
   });
+
   useEffect(() => {
     if (!loadMoreRef.current) return;
     const node = loadMoreRef.current;
@@ -225,6 +227,7 @@ export default function ProfileHistoryPage() {
         { label: currentProfileName },
       ]}
     >
+
       {allItems.length === 0 ? (
         <section className="mt-3 rounded-3xl border-2 border-dashed border-[#b7d8d1] bg-white px-12 py-14 text-center shadow-sm">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#effcf9] text-[#00685f]">

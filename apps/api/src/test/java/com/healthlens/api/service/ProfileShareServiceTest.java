@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.healthlens.api.dto.response.AcceptInvitationResultResponse;
+
 import com.healthlens.api.dto.response.IncomingProfileInvitationResponse;
 import com.healthlens.api.dto.response.ProfileInvitationResponse;
 import com.healthlens.api.entity.Profile;
@@ -21,6 +22,7 @@ import com.healthlens.api.repository.ProfileShareRepository;
 import com.healthlens.api.repository.UserRepository;
 import java.time.Instant;
 import java.time.LocalDate;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -28,6 +30,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
@@ -94,6 +97,7 @@ class ProfileShareServiceTest {
 
         AcceptInvitationResultResponse result = profileShareService.acceptInvitation("token-1", null);
 
+
         assertThat(result.outcome()).isEqualTo("require-login");
         assertThat(result.redirectUrl()).contains("/login?returnUrl=");
         assertThat(result.redirectUrl()).contains("invitations%2Faccept");
@@ -109,6 +113,7 @@ class ProfileShareServiceTest {
         AcceptInvitationResultResponse result = profileShareService.acceptInvitation("token-2", UUID.randomUUID());
 
         assertThat(result.outcome()).isEqualTo("expired");
+
         assertThat(result.redirectUrl()).isEqualTo("/profiles");
         verify(profileInvitationRepository, never()).save(any(ProfileInvitation.class));
     }
@@ -156,6 +161,7 @@ class ProfileShareServiceTest {
         when(profileInvitationRepository.findByToken("token-3")).thenReturn(Optional.of(invitation));
         when(userRepository.findById(viewerId)).thenReturn(Optional.of(viewer));
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+
         when(profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId))
                 .thenReturn(false);
         when(profileShareRepository.save(any(ProfileShare.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -164,6 +170,7 @@ class ProfileShareServiceTest {
         AcceptInvitationResultResponse result = profileShareService.acceptInvitation("token-3", viewerId);
 
         assertThat(result.outcome()).isEqualTo("accepted");
+
         assertThat(result.redirectUrl()).isEqualTo("/profiles/" + profileId + "/history");
         verify(profileShareRepository).save(any(ProfileShare.class));
         verify(profileInvitationRepository).save(invitation);
@@ -194,6 +201,7 @@ class ProfileShareServiceTest {
     }
 
     @Test
+
     void listInvitations_marksPastDuePendingAsExpired() {
         UUID ownerId = UUID.randomUUID();
         UUID profileId = UUID.randomUUID();
@@ -217,6 +225,7 @@ class ProfileShareServiceTest {
         assertThatThrownBy(() -> profileShareService.inviteByEmail(UUID.randomUUID(), UUID.randomUUID(), "a@b.com"))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
+
 
     @Test
     void listIncomingInvitations_returnsPendingRowsWithAcceptPath() {

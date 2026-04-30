@@ -10,6 +10,7 @@ public interface ProfileInvitationRepository extends JpaRepository<ProfileInvita
     Optional<ProfileInvitation> findByToken(String token);
     List<ProfileInvitation> findAllByProfileIdOrderByCreatedAtDesc(UUID profileId);
 
+
     List<ProfileInvitation> findAllByInviteeEmailIgnoreCaseAndStatusOrderByCreatedAtDesc(
             String inviteeEmail, String status);
     Optional<ProfileInvitation> findByProfileIdAndInviteeEmailIgnoreCaseAndStatus(UUID profileId, String inviteeEmail, String status);

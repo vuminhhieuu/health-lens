@@ -112,6 +112,7 @@ public class ProfileController {
             @Valid @RequestBody InviteProfileMemberRequest request
     ) {
         UUID userId = extractUserId(authentication);
+
         ProfileInvitationResponse invitation =
                 profileShareService.inviteByEmail(userId, profileId, request.email(), request.accessLevel());
         return ResponseEntity.status(HttpStatus.CREATED).body(buildResponseBody(invitation));
@@ -126,6 +127,7 @@ public class ProfileController {
         List<ProfileInvitationResponse> invitations = profileShareService.listInvitations(userId, profileId);
         return ResponseEntity.ok(buildResponseBody(invitations));
     }
+
 
     @DeleteMapping("/{profileId}/invitations/{invitationId}")
     public ResponseEntity<Void> cancelInvitation(

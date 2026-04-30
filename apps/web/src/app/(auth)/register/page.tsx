@@ -21,6 +21,7 @@ const registerPageSchema = registerSchema.extend({
 type RegisterPageInput = z.infer<typeof registerPageSchema>;
 
 export default function RegisterPage() {
+
   const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const inviteToken = searchParams?.get("inviteToken") ?? null;
   const returnUrl = searchParams?.get("returnUrl") ?? null;

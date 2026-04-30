@@ -1,6 +1,7 @@
 package com.healthlens.api.service;
 
 import com.healthlens.api.dto.response.AcceptInvitationResultResponse;
+
 import com.healthlens.api.dto.response.IncomingProfileInvitationResponse;
 import com.healthlens.api.dto.response.ProfileInvitationResponse;
 import com.healthlens.api.entity.Profile;
@@ -12,6 +13,7 @@ import com.healthlens.api.repository.ProfileInvitationRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
 import com.healthlens.api.repository.UserRepository;
+
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -29,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ProfileShareService {
 
+
     private static final int INVITE_VALID_DAYS = 7;
 
     private final ProfileRepository profileRepository;
@@ -39,6 +42,7 @@ public class ProfileShareService {
 
     @Value("${app.frontend.base-url:http://localhost:3000}")
     private String frontendBaseUrl;
+
 
     private static final String FAMILY_PROFILES_PATH = "/profiles";
 
@@ -68,6 +72,7 @@ public class ProfileShareService {
     }
 
     @Transactional
+
     public List<ProfileInvitationResponse> listInvitations(UUID requesterId, UUID profileId) {
         assertProfileOwner(requesterId, profileId);
         Instant now = Instant.now();
@@ -178,6 +183,7 @@ public class ProfileShareService {
             );
         }
 
+
         User viewer = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User khong ton tai"));
 
@@ -212,6 +218,7 @@ public class ProfileShareService {
         invitation.setStatus("accepted");
         invitation.setAcceptedAt(now);
         profileInvitationRepository.save(invitation);
+
 
         return new AcceptInvitationResultResponse("accepted", historyPath, profileId);
     }
