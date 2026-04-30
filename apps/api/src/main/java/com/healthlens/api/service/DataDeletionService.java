@@ -1,6 +1,7 @@
 package com.healthlens.api.service;
 
 import com.healthlens.api.dto.request.DeleteAccountRequest;
+import com.healthlens.api.dto.response.CancelDeletionResponse;
 import com.healthlens.api.dto.response.DeleteAccountResponse;
 import com.healthlens.api.entity.AccountStatus;
 import com.healthlens.api.entity.DataDeletionRequest;
@@ -24,6 +25,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -124,12 +127,16 @@ public class DataDeletionService {
 
         log.info("Deletion request created: userId={} scheduledAt={}", userId, deletionRequest.getScheduledDeletionAt());
 
-        String cancellationLink = webCancellationUrl + "?token=" + cancellationToken;
+        String cancellationLink = webCancellationUrl
+                + "?token=" + encodeQueryParam(cancellationToken)
+                + "&requestedAt=" + encodeQueryParam(requestedAt.toString())
+                + "&scheduledDeletionAt=" + encodeQueryParam(deletionRequest.getScheduledDeletionAt().toString())
+                + "&email=" + encodeQueryParam(user.getEmail());
         try {
             emailService.sendDeletionConfirmationEmail(user, deletionRequest, cancellationLink);
         } catch (Exception e) {
             // Email is best-effort: the request itself is already persisted and visible to the user
-            log.error("Failed to send deletion confirmation email to userId={}", userId, e);
+            log.error("Gửi email xác nhận yêu cầu xóa tài khoản thất bại cho userId={}", userId, e);
         }
 
         return new DeleteAccountResponse(
@@ -144,7 +151,7 @@ public class DataDeletionService {
      * AC #5 — validate token, restore account to ACTIVE if still in grace period.
      */
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public void cancelDeletionRequest(String cancellationToken) {
+    public CancelDeletionResponse cancelDeletionRequest(String cancellationToken) {
         DataDeletionRequest deletionRequest = deletionRequestRepository.findByCancellationToken(cancellationToken)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid cancellation token"));
 
@@ -156,7 +163,7 @@ public class DataDeletionService {
         deletionRequestRepository.save(deletionRequest);
 
         User user = userRepository.findById(deletionRequest.getUserId())
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new IllegalArgumentException("Người dùng không tồn tại"));
         user.setAccountStatus(AccountStatus.ACTIVE);
         userRepository.save(user);
 
@@ -167,6 +174,12 @@ public class DataDeletionService {
         } catch (Exception e) {
             log.error("Failed to send cancellation confirmation email to userId={}", deletionRequest.getUserId(), e);
         }
+
+        return new CancelDeletionResponse(
+                "Yêu cầu xóa tài khoản đã được hủy",
+                user.getEmail(),
+                Instant.now()
+        );
     }
 
     /**
@@ -254,5 +267,9 @@ public class DataDeletionService {
         byte[] randomBytes = new byte[32];
         new SecureRandom().nextBytes(randomBytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    }
+
+    private String encodeQueryParam(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 }

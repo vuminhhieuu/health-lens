@@ -24,6 +24,9 @@ export const FRONTEND_ROUTES = {
   PROFILE: '/profile',
   HEALTH_RECORDS: '/health-records',
   SETTINGS: '/settings',
+  DELETE_ACCOUNT: '/settings/delete-account',
+  CANCEL_DELETION: '/cancel-deletion',
+  EMAIL_PREVIEW_DELETION_REQUEST: '/email-previews/deletion-request',
 } as const;
 
 /**

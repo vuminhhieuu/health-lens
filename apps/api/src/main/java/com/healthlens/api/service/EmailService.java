@@ -13,9 +13,18 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
+import java.time.Instant;
+import java.time.Year;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+
 @Slf4j
 @Service
 public class EmailService {
+
+    private static final ZoneId VN_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final DateTimeFormatter DELETION_DEADLINE_FORMATTER =
+            DateTimeFormatter.ofPattern("HH:mm - dd/MM/yyyy").withZone(VN_ZONE);
 
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
@@ -104,35 +113,20 @@ public class EmailService {
             return;
         }
 
-        String htmlContent = """
-                <html>
-                  <body style="font-family: Arial, sans-serif; color: #111827;">
-                    <h2>HealthLens - Xác nhận yêu cầu xóa tài khoản</h2>
-                    <p>Chào %s,</p>
-                    <p>Chúng tôi đã nhận được yêu cầu xóa tài khoản của bạn theo Nghị định 13/2023/NĐ-CP. Tài khoản và toàn bộ dữ liệu sẽ bị xóa vĩnh viễn sau 72 giờ.</p>
-                    <p><strong>Thời gian xóa dự kiến:</strong> %s</p>
-                    <p><strong>Dữ liệu sẽ bị xóa vĩnh viễn:</strong></p>
-                    <ul>
-                      <li>Thông tin cá nhân (họ tên, ngày sinh, giới tính, email)</li>
-                      <li>Tất cả hồ sơ sức khỏe và kết quả xét nghiệm</li>
-                      <li>Tất cả tệp PDF, ảnh kết quả khám đã tải lên</li>
-                      <li>Lịch sử đồng ý xử lý dữ liệu (consent logs)</li>
-                      <li>Phiên đăng nhập, token làm mới và token đặt lại mật khẩu</li>
-                    </ul>
-                    <p>Trong vòng 72 giờ tới bạn có thể hủy yêu cầu này bằng cách bấm vào liên kết bên dưới:</p>
-                    <p><a href="%s" style="background-color: #00685f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Hủy yêu cầu xóa tài khoản</a></p>
-                    <p>Nếu bạn không thực hiện yêu cầu này, vui lòng bấm vào liên kết hủy phía trên ngay lập tức và liên hệ đội hỗ trợ.</p>
-                    <p>Xin cảm ơn,<br>Đội HealthLens</p>
-                  </body>
-                </html>
-                """.formatted(user.getFullName(), deletionRequest.getScheduledDeletionAt(), cancellationLink);
+        String displayName = user.getFullName() == null || user.getFullName().isBlank()
+                ? "bạn"
+                : user.getFullName();
+        String deadlineFormatted = formatDeletionDeadline(deletionRequest.getScheduledDeletionAt());
+        int currentYear = Year.now(VN_ZONE).getValue();
+
+        String htmlContent = renderDeletionRequestTemplate(displayName, deadlineFormatted, cancellationLink, currentYear);
 
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
             helper.setFrom(fromAddress);
             helper.setTo(user.getEmail());
-            helper.setSubject("[HealthLens] Xác nhận yêu cầu xóa tài khoản");
+            helper.setSubject("[HealthLens] Xác nhận yêu cầu xóa dữ liệu");
             helper.setText(htmlContent, true);
 
             mailSender.send(message);
@@ -230,5 +224,36 @@ public class EmailService {
         Context context = new Context();
         context.setVariable("verificationLink", verificationLink);
         return templateEngine.process("email/verification", context);
+    }
+
+    private static String formatDeletionDeadline(Instant scheduledDeletionAt) {
+        if (scheduledDeletionAt == null) {
+            return "";
+        }
+        return DELETION_DEADLINE_FORMATTER.format(scheduledDeletionAt);
+    }
+
+    private String renderDeletionRequestTemplate(
+            String displayName,
+            String deadlineFormatted,
+            String cancellationLink,
+            int currentYear) {
+        if (templateEngine == null) {
+            return """
+                    <html><body style="font-family:Segoe UI,Arial,sans-serif;color:#121e1c;">
+                    <p>Xin chào %s,</p>
+                    <p>Chúng tôi đã nhận được yêu cầu xóa dữ liệu cá nhân của bạn (NĐ 13/2023/NĐ-CP).</p>
+                    <p>Hoàn tất xóa dự kiến trước: <strong>%s</strong> (tối đa 72 giờ).</p>
+                    <p><a href="%s">Hủy yêu cầu xóa</a></p>
+                    <p style="font-size:12px;color:#6d7a77;">© %d HealthLens Meridian · privacy@healthlens.vn</p>
+                    </body></html>
+                    """.formatted(displayName, deadlineFormatted, cancellationLink, currentYear);
+        }
+        Context context = new Context();
+        context.setVariable("displayName", displayName);
+        context.setVariable("deadlineFormatted", deadlineFormatted);
+        context.setVariable("cancellationLink", cancellationLink);
+        context.setVariable("currentYear", currentYear);
+        return templateEngine.process("email/deletion-request", context);
     }
 }

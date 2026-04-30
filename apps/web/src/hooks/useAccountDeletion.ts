@@ -18,6 +18,8 @@ interface DeleteAccountResponse {
 interface CancelDeletionResponse {
     data: {
         message: string;
+        email?: string;
+        cancelledAt?: string;
     };
     meta: {
         timestamp: string;

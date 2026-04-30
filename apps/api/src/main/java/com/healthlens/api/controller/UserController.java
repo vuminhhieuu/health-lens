@@ -3,6 +3,7 @@ package com.healthlens.api.controller;
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.DeleteAccountRequest;
 import com.healthlens.api.dto.request.UpdateUserRequest;
+import com.healthlens.api.dto.response.CancelDeletionResponse;
 import com.healthlens.api.dto.response.DeleteAccountResponse;
 import com.healthlens.api.dto.response.UserResponse;
 import com.healthlens.api.service.DataDeletionService;
@@ -65,11 +66,8 @@ public class UserController {
     @DeleteMapping("/deletion-requests/cancel")
     public ResponseEntity<Map<String, Object>> cancelDeletion(
             @RequestParam String token) {
-        
-        dataDeletionService.cancelDeletionRequest(token);
-        return ResponseEntity.ok(buildResponseBody(Map.of(
-                "message", "Yeu cau xoa tai khoan da duoc huy"
-        )));
+        CancelDeletionResponse response = dataDeletionService.cancelDeletionRequest(token);
+        return ResponseEntity.ok(buildResponseBody(response));
     }
 
     private UUID extractUserId(Authentication authentication) {

@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema } from "@healthlens/shared/schemas/auth";
-import { CircleHelp, Eye, EyeOff, LogIn, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CircleHelp, Eye, EyeOff, Globe, LogIn, MailOpen, ShieldCheck, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, Suspense } from "react";
@@ -34,6 +34,12 @@ function LoginContent() {
 
   const [submitError, setSubmitError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isPendingDeletionBlocked, setIsPendingDeletionBlocked] = useState(
+    searchParams.get("pendingDeletion") === "1",
+  );
+  const [pendingDeletionMessage, setPendingDeletionMessage] = useState(
+    "Yêu cầu xóa tài khoản của bạn đã được ghi nhận. Theo Nghị định 13/2023/NĐ-CP, hệ thống đang trong quá trình xóa dữ liệu vĩnh viễn (tối đa 72 giờ). Trong thời gian này, bạn không thể đăng nhập.",
+  );
 
   const {
     register,
@@ -50,6 +56,7 @@ function LoginContent() {
 
   const onSubmit = async (data: LoginInput) => {
     setSubmitError("");
+    setIsPendingDeletionBlocked(false);
 
     try {
       const response = await apiClient.post(API_ROUTES.AUTH.LOGIN, {
@@ -103,6 +110,17 @@ function LoginContent() {
           );
         } else if (resp.status === 401) {
           setSubmitError("Email hoặc mật khẩu không đúng.");
+        } else if (resp.status === 403 || resp.status === 423) {
+          const detail = (resp.data?.detail ?? "").toLowerCase();
+          if (detail.includes("pending") || detail.includes("đang chờ xóa")) {
+            setIsPendingDeletionBlocked(true);
+            setPendingDeletionMessage(
+              resp.data?.detail ||
+              "Yêu cầu xóa tài khoản của bạn đã được ghi nhận. Theo Nghị định 13/2023/NĐ-CP, hệ thống đang trong quá trình xóa dữ liệu vĩnh viễn (tối đa 72 giờ). Trong thời gian này, bạn không thể đăng nhập.",
+            );
+          } else {
+            setSubmitError("Tài khoản chưa thể đăng nhập ở thời điểm hiện tại.");
+          }
         } else {
           setSubmitError("Đăng nhập thất bại. Vui lòng thử lại.");
         }
@@ -127,6 +145,13 @@ function LoginContent() {
           >
             <CircleHelp className="h-5 w-5" />
           </button>
+          <button
+            type="button"
+            aria-label="Ngôn ngữ"
+            className="rounded-full p-2 text-[#3f6560] transition hover:bg-[#d8e5e2]"
+          >
+            <Globe className="h-5 w-5" />
+          </button>
         </div>
       </header>
 
@@ -144,6 +169,77 @@ function LoginContent() {
           </div>
 
           {/* Form */}
+          {isPendingDeletionBlocked ? (
+            <div className="mb-6 rounded-xl border border-[#bcc9c6]/20 bg-white p-0 shadow-[0_8px_32px_rgba(18,30,28,0.06)]">
+              <div className="flex items-center gap-3 border-b border-[#f3e3be] bg-[#fff9eb] px-6 py-3">
+                <TriangleAlert className="h-5 w-5 text-[#92700e]" />
+                <p className="text-sm font-semibold tracking-tight text-[#92700e]">
+                  Tài khoản đang chờ xóa
+                </p>
+              </div>
+              <div className="space-y-6 p-6">
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-bold tracking-tight text-[#121e1c]">
+                    Đăng nhập không khả dụng
+                  </h2>
+                  <p className="text-sm leading-relaxed text-[#3d4947]">{pendingDeletionMessage}</p>
+                </div>
+
+                <div className="space-y-4 opacity-40 select-none pointer-events-none">
+                  <div className="space-y-1">
+                    <label className="ml-1 text-xs font-semibold text-[#3d4947]">Email</label>
+                    <div className="flex h-12 items-center rounded-lg border-b-2 border-[#bcc9c6] bg-[#deebe8] px-4">
+                      <span className="text-[#3d4947]">example@healthlens.vn</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="ml-1 text-xs font-semibold text-[#3d4947]">Mật khẩu</label>
+                    <div className="flex h-12 items-center rounded-lg border-b-2 border-[#bcc9c6] bg-[#deebe8] px-4">
+                      <span className="text-[#3d4947]">••••••••••••</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <a
+                    href="mailto:"
+                    className="flex h-12 items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-[#00685f] to-[#008378] font-semibold text-white transition-all hover:opacity-90"
+                  >
+                    <MailOpen className="h-5 w-5" />
+                    Mở email để hủy yêu cầu xóa
+                  </a>
+                  <Link
+                    href="/"
+                    className="flex h-12 items-center justify-center rounded-lg border-2 border-[#bcc9c6] font-semibold text-[#3d4947] transition-colors hover:bg-[#e9f6f3]"
+                  >
+                    Quay lại trang chủ
+                  </Link>
+                </div>
+
+                <div className="space-y-4 border-t border-[#d8e5e2] pt-6">
+                  <div className="rounded-xl border border-[#bcc9c6]/10 bg-[#e9f6f3] p-4">
+                    <p className="mb-3 text-xs font-medium text-[#3d4947]">
+                      Không nhận được email? Nhập email của bạn để chúng tôi gửi lại liên kết hủy:
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="email"
+                        placeholder="Email của bạn"
+                        className="h-10 flex-grow rounded-lg border border-[#bcc9c6] bg-white px-3 text-sm outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[#00685f]"
+                      />
+                      <button
+                        type="button"
+                        className="h-10 shrink-0 rounded-lg bg-[#3f6560] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#456b66]"
+                      >
+                        Gửi lại
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <form
             className="space-y-6"
             onSubmit={handleSubmit(onSubmit)}
@@ -163,6 +259,7 @@ function LoginContent() {
                 autoComplete="email"
                 placeholder="email@vi-du.com"
                 {...register("email")}
+                disabled={isPendingDeletionBlocked}
                 className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
               />
               {errors.email ? (
@@ -187,6 +284,7 @@ function LoginContent() {
                   autoComplete="current-password"
                   placeholder="••••••••"
                   {...register("password")}
+                  disabled={isPendingDeletionBlocked}
                   className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 pr-12 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
                 />
                 <button
@@ -213,7 +311,7 @@ function LoginContent() {
             <div className="text-right">
               <Link
                 href="/forgot-password"
-                className="text-sm font-semibold text-[#00685f] transition hover:underline"
+                className={`text-sm font-semibold text-[#00685f] transition hover:underline ${isPendingDeletionBlocked ? "pointer-events-none opacity-40" : ""}`}
               >
                 Quên mật khẩu?
               </Link>
@@ -223,10 +321,15 @@ function LoginContent() {
             <button
               id="login-submit"
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isPendingDeletionBlocked}
               className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-[#00685f] to-[#008378] text-lg font-bold text-white shadow-lg transition hover:brightness-110 disabled:opacity-60"
             >
-              {isSubmitting ? (
+              {isPendingDeletionBlocked ? (
+                <>
+                  <AlertTriangle className="h-5 w-5" />
+                  Tài khoản đang chờ xóa
+                </>
+              ) : isSubmitting ? (
                 "Đang xử lý..."
               ) : (
                 <>
@@ -238,7 +341,7 @@ function LoginContent() {
           </form>
 
           {/* Error message */}
-          {submitError ? (
+              {submitError ? (
             <p className="mt-4 text-center text-sm text-[#ba1a1a]">
               {submitError}
             </p>

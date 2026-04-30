@@ -49,6 +49,7 @@ export const ApiPaths = {
     UPDATE: (id: string) => `/api/${API_VERSION}/profiles/${id}`,
     DELETE: (id: string) => `/api/${API_VERSION}/profiles/${id}`,
     SET_DEFAULT: (id: string) => `/api/${API_VERSION}/profiles/${id}/set-default`,
+    HEALTH_RECORDS: (id: string) => `/api/${API_VERSION}/health-records/profiles/${id}`,
   },
 
   /** Health record endpoints */
@@ -64,6 +65,7 @@ export const ApiPaths = {
     CONFIRM_RECORD: (id: string) => `/api/${API_VERSION}/health-records/${id}/confirm`,
     UPDATE_METRICS: (id: string) => `/api/${API_VERSION}/health-records/${id}/metrics`,
     STATUS: (id: string) => `/api/${API_VERSION}/health-records/${id}/status`,
+    RECOMMENDATIONS: (id: string) => `/api/${API_VERSION}/health-records/${id}/recommendations`,
     /**
      * @deprecated Prefer `EXPLANATION`, which sends `metricName` as a query parameter.
      * Path-segment routing may fail for metric names containing `/` on some server configs.
