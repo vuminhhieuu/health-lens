@@ -96,6 +96,107 @@ public class EmailService {
         }
     }
 
+    public void sendProfileInvitationEmail(User inviter, String inviteeEmail, String invitationLink) {
+        if (mailSender == null) {
+            log.error("[EmailService] JavaMailSender is not configured! Cannot send profile invitation to {}", inviteeEmail);
+            return;
+        }
+
+        String htmlContent = renderProfileInvitationTemplate(inviter.getFullName(), invitationLink);
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(inviteeEmail);
+            helper.setSubject("[HealthLens] " + inviter.getFullName() + " muốn chia sẻ hồ sơ sức khỏe với bạn");
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+        } catch (MessagingException e) {
+            log.error("[EmailService] Failed to send profile invitation to {}", inviteeEmail, e);
+            throw new IllegalStateException("Gui email moi chia se ho so that bai", e);
+        }
+    }
+
+    private String renderProfileInvitationTemplate(String inviterName, String invitationLink) {
+        if (templateEngine == null) {
+            return """
+                    <html>
+                      <body
+                        style="
+                          margin: 0;
+                          padding: 0;
+                          background: #f3f4f6;
+                          font-family: Segoe UI, Arial, sans-serif;
+                          color: #111827;
+                        "
+                      >
+                        <div
+                          style="
+                            max-width: 600px;
+                            margin: 24px auto;
+                            background: #ffffff;
+                            border-radius: 12px;
+                            overflow: hidden;
+                          "
+                        >
+                          <div
+                            style="
+                              background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                              padding: 28px;
+                              text-align: center;
+                            "
+                          >
+                            <h1 style="color: #ffffff; margin: 0; font-size: 28px">HealthLens</h1>
+                          </div>
+                          <div style="padding: 28px">
+                            <h2 style="margin-top: 0">Lời mời chia sẻ hồ sơ sức khỏe</h2>
+                            <p>Xin chào,</p>
+                            <p><strong>%s</strong> muốn chia sẻ hồ sơ sức khỏe với bạn trên HealthLens.</p>
+                            <p>Nhấn vào nút bên dưới để xem và chấp nhận lời mời:</p>
+                            <div style="text-align: center; margin: 24px 0">
+                              <a
+                                href="%s"
+                                style="
+                                  display: inline-block;
+                                  background: #10b981;
+                                  color: #ffffff;
+                                  padding: 12px 28px;
+                                  border-radius: 8px;
+                                  text-decoration: none;
+                                  font-weight: 600;
+                                "
+                              >
+                                Xem lời mời
+                              </a>
+                            </div>
+                            <p style="font-size: 14px; color: #6b7280">
+                              Lời mời có hiệu lực trong 7 ngày. Nếu bạn chưa có tài khoản, hệ thống sẽ hướng dẫn bạn đăng ký trước khi truy cập hồ sơ được chia sẻ.
+                            </p>
+                          </div>
+                          <div
+                            style="
+                              background: #f9fafb;
+                              padding: 18px;
+                              text-align: center;
+                              font-size: 13px;
+                              color: #6b7280;
+                            "
+                          >
+                            <p style="margin: 0">HealthLens - Theo dõi sức khỏe của bạn</p>
+                          </div>
+                        </div>
+                      </body>
+                    </html>
+                    """.formatted(inviterName, invitationLink);
+        }
+
+        Context context = new Context();
+        context.setVariable("inviterName", inviterName);
+        context.setVariable("invitationLink", invitationLink);
+        return templateEngine.process("email/profile-invitation", context);
+    }
+
     private String renderVerificationTemplate(String verificationLink) {
         if (templateEngine == null) {
             return """

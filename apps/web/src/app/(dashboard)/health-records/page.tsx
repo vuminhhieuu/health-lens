@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { Loader2, Users } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Loader2, Share2, Users } from "lucide-react";
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
@@ -11,6 +11,7 @@ import { API_ROUTES } from "@/lib/api/routes";
 import { ProfileCard, HealthStatus } from "@/components/features/profiles/ProfileCard";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { apiClient } from "@/lib/api/apiClient";
+import { InviteMemberModal } from "@/components/features/profiles/InviteMemberModal";
 
 type Profile = {
   id: string;
@@ -20,6 +21,23 @@ type Profile = {
   latestStatus?: HealthStatus;
 };
 
+function extractApiDetail(error: unknown, fallback: string): string {
+  if (error && typeof error === "object" && "response" in error) {
+    const axiosError = error as {
+      response?: {
+        data?: {
+          detail?: string;
+          title?: string;
+          message?: string;
+        };
+      };
+    };
+    const data = axiosError.response?.data;
+    return data?.detail ?? data?.title ?? data?.message ?? fallback;
+  }
+  return fallback;
+}
+
 type UserProfile = {
   id: string;
   fullName: string;
@@ -27,6 +45,8 @@ type UserProfile = {
 
 export default function HealthRecordsPage() {
   const router = useRouter();
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [invitingProfileId, setInvitingProfileId] = useState<string | null>(null);
   const { data: profiles = [], isLoading } = useQuery({
     queryKey: ["profiles-for-health-records-hub"],
     queryFn: async () => {
@@ -41,6 +61,22 @@ export default function HealthRecordsPage() {
     queryFn: async () => {
       const response = await apiClient.get(API_ROUTES.USERS.ME);
       return response.data?.data as UserProfile;
+    },
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: async (payload: { email: string; accessLevel: "view" | "edit" }) => {
+      if (!invitingProfileId) {
+        throw new Error("Thiếu profile để chia sẻ.");
+      }
+      await apiClient.post(ApiPaths.PROFILES.INVITATIONS(invitingProfileId), payload);
+    },
+    onSuccess: () => {
+      setInviteModalOpen(false);
+      setInvitingProfileId(null);
+    },
+    onError: (error: unknown) => {
+      alert(extractApiDetail(error, "Không thể gửi lời mời chia sẻ."));
     },
   });
 
@@ -94,6 +130,18 @@ export default function HealthRecordsPage() {
                 latestStatus={profile.latestStatus}
                 lastUpdated={profile.updatedAt}
                 onPress={canOpenHistory ? () => router.push(`/profiles/${profile.id}/history`) : undefined}
+                secondaryAction={
+                  canOpenHistory
+                    ? {
+                        label: "Share",
+                        icon: Share2,
+                        onClick: () => {
+                          setInvitingProfileId(profile.id);
+                          setInviteModalOpen(true);
+                        },
+                      }
+                    : undefined
+                }
               />
             );
           })}
@@ -107,6 +155,17 @@ export default function HealthRecordsPage() {
           <p className="mt-2 text-[#6d7a77]">Vui lòng tạo hồ sơ để theo dõi lịch sử khám bệnh.</p>
         </div>
       )}
+      <InviteMemberModal
+        isOpen={inviteModalOpen}
+        onClose={() => {
+          setInviteModalOpen(false);
+          setInvitingProfileId(null);
+        }}
+        isLoading={inviteMutation.isPending}
+        title="Chia sẻ quyền xem kết quả khám"
+        description="Nhập email người nhận."
+        onSubmit={(payload) => inviteMutation.mutate(payload)}
+      />
     </DashboardPageShell>
   );
 }

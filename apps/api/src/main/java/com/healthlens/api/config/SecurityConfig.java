@@ -52,6 +52,7 @@ public class SecurityConfig {
                     .requestMatchers(ApiRoutes.ACTUATOR_HEALTH, ApiRoutes.ACTUATOR_HEALTH_PATTERN).permitAll()
                     .requestMatchers(ApiRoutes.AUTH_PATTERN).permitAll()
                     .requestMatchers(ApiRoutes.DEV_PATTERN).permitAll()
+                    .requestMatchers(ApiRoutes.INVITATIONS_ACCEPT).permitAll()
                     .requestMatchers(ApiRoutes.SWAGGER_UI_PATTERN, ApiRoutes.SWAGGER_HTML, ApiRoutes.API_DOCS_PATTERN).permitAll()
                     .anyRequest().authenticated()
             )
