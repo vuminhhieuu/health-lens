@@ -170,7 +170,12 @@ public class AuthService {
         }
 
         if (user == null || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            rateLimiter.recordFailure(normalizedEmail);
+            if (user != null) {
+                rateLimiter.recordFailure(normalizedEmail);
+            } else {
+                // Also record failure for non-existent emails to prevent timing attacks
+                rateLimiter.recordFailure(normalizedEmail);
+            }
             throw new BadCredentialsException("Email hoac mat khau khong dung");
         }
 

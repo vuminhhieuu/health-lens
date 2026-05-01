@@ -14,6 +14,7 @@ import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.ProfileRepository;
+import com.healthlens.api.repository.ProfileShareRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -50,6 +51,7 @@ class HealthRecordServiceTest {
     @Mock private StorageService storageService;
     @Mock private ProfileRepository profileRepository;
     @Mock private HealthRecordRepository healthRecordRepository;
+    @Mock private ProfileShareRepository profileShareRepository;
     @Mock private ReferenceDataService referenceDataService;
     @Mock private MetricExplanationRetrievalService metricExplanationRetrievalService;
     @Mock private LlmService llmService;
@@ -65,6 +67,7 @@ class HealthRecordServiceTest {
                 storageService,
                 profileRepository,
                 healthRecordRepository,
+                profileShareRepository,
                 referenceDataService,
                 metricExplanationRetrievalService,
                 llmService,

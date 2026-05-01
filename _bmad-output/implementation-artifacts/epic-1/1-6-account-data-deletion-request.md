@@ -1,6 +1,6 @@
 # Story 1.6: Quy trình yêu cầu xóa toàn bộ dữ liệu tài khoản
 
-Status: review
+Status: done
 
 ## Execution scope
 
@@ -33,7 +33,6 @@ Status: review
 | Hủy yêu cầu xóa (xác nhận) | `/cancel-deletion?token=...` | `apps/web/src/app/cancel-deletion/CancelDeletionClient.tsx` |
 | Đã hủy yêu cầu xóa (success sau API) | `/cancel-deletion?token=...` | `apps/web/src/app/cancel-deletion/CancelDeletionClient.tsx` |
 | Hủy yêu cầu xóa - token không hợp lệ | `/cancel-deletion?token=invalid` | `apps/web/src/app/cancel-deletion/CancelDeletionClient.tsx` |
-| Email xác nhận yêu cầu xóa (preview cho dev/QA) | `/email-previews/deletion-request` | `apps/web/src/app/email-previews/deletion-request/page.tsx` |
 
 ## Story
 
@@ -147,7 +146,6 @@ Codex 5.3
 
 - Hoàn thiện UI luồng Story 1.6 theo Stitch cho 3 màn hình chính: gửi yêu cầu xóa, chặn đăng nhập khi pending deletion, hủy yêu cầu xóa.
 - Bổ sung template email xác nhận yêu cầu xóa (`email/deletion-request`) và tích hợp render bằng Thymeleaf trong `EmailService`.
-- Thêm trang preview email nội bộ để QA/dev đối chiếu copy/layout nhanh.
 - Bổ sung test cho login pending-deletion, delete-account page và cancel-deletion invalid-link.
 - Cập nhật nhẹ header email theo yêu cầu UX: bỏ icon emoji, giữ header trung tính tương thích email client.
 ### File List
@@ -160,6 +158,5 @@ Codex 5.3
 - `apps/web/src/app/(dashboard)/settings/delete-account/page.test.tsx`
 - `apps/web/src/app/cancel-deletion/CancelDeletionClient.tsx`
 - `apps/web/src/app/cancel-deletion/CancelDeletionClient.test.tsx`
-- `apps/web/src/app/email-previews/deletion-request/page.tsx`
 - `apps/web/src/lib/api/routes.ts`
 - `apps/web/vitest.setup.ts`

@@ -23,8 +23,15 @@ apiClient.interceptors.request.use((config) => {
   const isCancelDeletion =
     config.url?.includes("/deletion-requests/cancel");
 
-  if (isCancelDeletion) {
-    delete config.headers.Authorization;
+  if (isCancelDeletion && config.headers) {
+    const headers = config.headers;
+    if (typeof headers.delete === "function") {
+      headers.delete("Authorization");
+      headers.delete("authorization");
+    } else {
+      delete (headers as Record<string, unknown>).Authorization;
+      delete (headers as Record<string, unknown>).authorization;
+    }
     return config;
   }
 

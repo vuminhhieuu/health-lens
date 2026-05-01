@@ -7,29 +7,43 @@ import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.request.UpdateMetricsRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.HealthRecordDetailResponse;
+import com.healthlens.api.dto.response.HealthRecordHistoryItemResponse;
+import com.healthlens.api.dto.response.HealthRecordHistoryPageResponse;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
+import com.healthlens.api.dto.response.RecommendationsResponse;
 import com.healthlens.api.dto.response.HealthRecordStatusResponse;
+import com.healthlens.api.dto.response.PaginationResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
 import com.healthlens.api.dto.MetricClassificationDto;
 import com.healthlens.api.dto.MetricDto;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.healthlens.api.annotation.Auditable;
 import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.ProfileRepository;
+import com.healthlens.api.repository.ProfileShareRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Period;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -46,10 +60,14 @@ public class HealthRecordService {
     private static final Duration UPLOAD_URL_TTL = Duration.ofMinutes(15);
     private static final Duration UPLOAD_RESERVATION_TTL = Duration.ofMinutes(20);
     private static final String STATUS_PROCESSING = "processing";
+    private static final int HISTORY_PAGE_SIZE = 20;
+    private static final String RECOMMENDATIONS_DISCLAIMER =
+            "Thông tin này chỉ mang tính tham khảo và không thay thế tư vấn của bác sĩ chuyên khoa.";
 
     private final StorageService storageService;
     private final ProfileRepository profileRepository;
     private final HealthRecordRepository healthRecordRepository;
+    private final ProfileShareRepository profileShareRepository;
     private final ReferenceDataService referenceDataService;
     private final MetricExplanationRetrievalService metricExplanationRetrievalService;
     private final LlmService llmService;
@@ -61,6 +79,7 @@ public class HealthRecordService {
             StorageService storageService,
             ProfileRepository profileRepository,
             HealthRecordRepository healthRecordRepository,
+            ProfileShareRepository profileShareRepository,
             ReferenceDataService referenceDataService,
             MetricExplanationRetrievalService metricExplanationRetrievalService,
             LlmService llmService,
@@ -71,6 +90,7 @@ public class HealthRecordService {
         this.storageService = storageService;
         this.profileRepository = profileRepository;
         this.healthRecordRepository = healthRecordRepository;
+        this.profileShareRepository = profileShareRepository;
         this.referenceDataService = referenceDataService;
         this.metricExplanationRetrievalService = metricExplanationRetrievalService;
         this.llmService = llmService;
@@ -272,6 +292,84 @@ public class HealthRecordService {
     }
 
     @Transactional(readOnly = true)
+    public RecommendationsResponse getRecommendations(UUID userId, UUID recordId) {
+        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Health record khong ton tai"));
+
+        if (record.getProfileId() == null) {
+            throw new ResourceNotFoundException("Profile khong ton tai");
+        }
+
+        Profile profile = profileRepository.findById(record.getProfileId())
+                .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
+        if (!profile.getUser().getId().equals(userId)) {
+            throw new AccessDeniedException("Profile khong thuoc ve nguoi dung");
+        }
+
+        /*
+         * Story 4.4: classify sau enrich có thể khác status đã lưu trên phiếu/OCR (hoặc UI đã hiển thị).
+         * Nếu chỉ lọc theo status sau enrich, riskyMetrics có thể rỗng → luôn trả allNormal.
+         * Giữ union: attention/warning/abnormal trước enrich HOẶC sau enrich.
+         * Khi đưa vào LLM: nếu sau enrich là normal nhưng trước đó là attention/warning/abnormal, vẫn truyền
+         * status rủi ro (prior) để LlmService không lọc hết input.
+         */
+        List<RecommendationRiskMetric> recommendationRisks = new ArrayList<>();
+        for (MetricDto metric : parseMetrics(record.getMetrics())) {
+            if (metric == null) {
+                continue;
+            }
+            String priorStatus = metric.getStatus();
+            enrichMetric(metric, profile, record.getExamDate());
+            if (isRiskStatus(metric.getStatus()) || isRiskStatus(priorStatus)) {
+                recommendationRisks.add(new RecommendationRiskMetric(metric, priorStatus));
+            }
+        }
+
+        if (recommendationRisks.isEmpty()) {
+            return new RecommendationsResponse(
+                    List.of("Kết quả của bạn nhìn chung tốt. Tiếp tục duy trì lối sống lành mạnh!"),
+                    RECOMMENDATIONS_DISCLAIMER,
+                    true
+            );
+        }
+
+        Integer age = resolveAge(profile, record.getExamDate());
+        List<LlmService.RecommendationMetricInput> llmInputs = recommendationRisks.stream()
+                .map(rm -> new LlmService.RecommendationMetricInput(
+                        rm.metric().getName(),
+                        rm.metric().getNormalizedValue() != null ? rm.metric().getNormalizedValue() : rm.metric().getValue(),
+                        rm.metric().getUnit(),
+                        recommendationStatusForLlm(rm.metric(), rm.priorStatus()),
+                        rm.metric().getDisplayNameVi()))
+                .toList();
+        List<String> recommendations = llmService.generateRecommendations(
+                llmInputs,
+                age,
+                profile.getGender(),
+                recommendationExamContext(record));
+        return new RecommendationsResponse(recommendations, RECOMMENDATIONS_DISCLAIMER, false);
+    }
+
+    /** Ngữ cảnh phiếu khám giúp LLM không chỉ đưa khẩu phần chung cho mọi xét nghiệm. */
+    private static String recommendationExamContext(HealthRecord record) {
+        StringBuilder sb = new StringBuilder();
+        if (record.getRecordType() != null && !record.getRecordType().isBlank()) {
+            sb.append("Loại phiếu/xét nghiệm: ").append(record.getRecordType().trim());
+        }
+        if (record.getDiagnosis() != null && !record.getDiagnosis().isBlank()) {
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            String d = record.getDiagnosis().trim().replaceAll("\\s+", " ");
+            if (d.length() > 400) {
+                d = d.substring(0, 400).concat("…");
+            }
+            sb.append("Kết luận/ghi chú trên phiếu (chỉ là ngữ cảnh, không thay chẩn đoán): ").append(d);
+        }
+        return sb.toString();
+    }
+
+    @Transactional(readOnly = true)
     public java.util.List<HealthRecordStatusResponse> getRecordsByProfile(UUID userId, UUID profileId) {
         return healthRecordRepository.findAllByProfileIdAndUserIdOrderByCreatedAtDesc(profileId, userId)
                 .stream()
@@ -301,6 +399,37 @@ public class HealthRecordService {
                     );
                 })
                 .collect(Collectors.toList());
+    }
+
+@Transactional(readOnly = true)
+    public HealthRecordHistoryPageResponse getProfileHistory(UUID userId, UUID profileId, int page, int limit) {
+        Profile profile = profileRepository.findById(profileId)
+                .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
+        if (!canAccessProfileHistory(profile, userId)) {
+            throw new AccessDeniedException("Profile khong thuoc ve nguoi dung");
+        }
+
+        PageRequest pageable = PageRequest.of(
+                Math.max(page, 0),
+                Math.min(Math.max(limit, 1), HISTORY_PAGE_SIZE),
+                Sort.by(Sort.Order.desc("examDate").nullsLast(), Sort.Order.desc("createdAt"))
+        );
+        UUID profileOwnerId = profile.getUser().getId();
+        Page<HealthRecord> records = healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNull(profileId, profileOwnerId, pageable);
+
+        List<HealthRecordHistoryItemResponse> items = records.getContent().stream()
+                .map(record -> toHistoryItem(record, profile, userId))
+                .collect(Collectors.toList());
+
+        return new HealthRecordHistoryPageResponse(
+                items,
+                new PaginationResponse(
+                        records.getNumber(),
+                        records.getSize(),
+                        records.getTotalElements(),
+                        records.getTotalPages()
+                )
+        );
     }
 
     @Transactional
@@ -474,14 +603,37 @@ public class HealthRecordService {
         HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
 
-        healthRecordRepository.delete(record);
-        redisTemplate.delete("health-record-status:" + userId + ":" + recordId);
+        if (!record.getUserId().equals(userId)) {
+            throw new AccessDeniedException("Ban khong co quyen xoa health record nay");
+        }
 
-        String fileKey = record.getFileKey();
-        if (fileKey != null && !fileKey.isBlank()) {
-            int lastSlash = fileKey.lastIndexOf('/');
-            String prefix = lastSlash > 0 ? fileKey.substring(0, lastSlash + 1) : fileKey;
-            storageService.deleteObjectsByPrefix(prefix);
+        record.setDeletedAt(Instant.now());
+        healthRecordRepository.save(record);
+        redisTemplate.delete("health-record-status:" + userId + ":" + recordId);
+    }
+
+    @Scheduled(cron = "0 0 2 * * *")
+    public void purgeSoftDeletedRecords() {
+        Instant threshold = Instant.now().minus(30, ChronoUnit.DAYS);
+        int batchSize = 100;
+
+        while (true) {
+            Page<HealthRecord> staleRecords = healthRecordRepository.findAllByDeletedAtBefore(
+                    threshold,
+                    PageRequest.of(0, batchSize)
+            );
+            if (staleRecords.isEmpty()) {
+                break;
+            }
+
+            for (HealthRecord record : staleRecords.getContent()) {
+                try {
+                    storageService.deleteObject(record.getFileKey());
+                    healthRecordRepository.delete(record);
+                } catch (Exception ex) {
+                    log.error("Failed to purge soft-deleted health record {}", record.getId(), ex);
+                }
+            }
         }
     }
 
@@ -556,7 +708,36 @@ public class HealthRecordService {
         }
     }
 
+    private static boolean isRiskStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return false;
+        }
+        String s = status.trim().toLowerCase(Locale.ROOT);
+        return "attention".equals(s) || "warning".equals(s) || "abnormal".equals(s);
+    }
+
+    /** 
+     * Status gửi sang LLM cache/recommendations: ưu tiên phân loại sau enrich;
+     * nếu đã về normal nhưng phiếu trước đó đánh dấu attention/abnormal thì giữ prior để không bị LlmService lọc mất.
+     */
+    private static String recommendationStatusForLlm(MetricDto enriched, String priorStatus) {
+        if (isRiskStatus(enriched.getStatus())) {
+            return enriched.getStatus();
+        }
+        if (isRiskStatus(priorStatus)) {
+            return priorStatus.trim();
+        }
+        return enriched.getStatus() != null ? enriched.getStatus() : "unknown";
+    }
+
+    private record RecommendationRiskMetric(MetricDto metric, String priorStatus) {
+    }
+
     private MetricDto enrichMetric(MetricDto metric, Profile profile, LocalDate examDate) {
+        return enrichMetric(metric, profile, examDate, true);
+    }
+
+    private MetricDto enrichMetric(MetricDto metric, Profile profile, LocalDate examDate, boolean persistAudit) {
         hydrateRawAndNormalizedFields(metric);
 
         if (metric.getReferenceRange() != null) {
@@ -571,7 +752,14 @@ public class HealthRecordService {
             return metric;
         }
 
-        MetricClassificationDto classification = referenceDataService.classifyMetric(
+        MetricClassificationDto classification = persistAudit
+                ? referenceDataService.classifyMetric(
+                metric.getName(),
+                metric.getNormalizedValue(),
+                profile,
+                examDate
+        )
+                : referenceDataService.classifyMetricWithoutAudit(
                 metric.getName(),
                 metric.getNormalizedValue(),
                 profile,
@@ -732,6 +920,76 @@ public class HealthRecordService {
         } catch (JsonProcessingException ex) {
             return "{\"failureReason\":\"processing_error\"}";
         }
+    }
+
+    private HealthRecordHistoryItemResponse toHistoryItem(HealthRecord record, Profile profile, UUID requesterId) {
+        List<MetricDto> metrics = parseMetrics(record.getMetrics()).stream()
+                .map(metric -> enrichMetric(metric, profile, record.getExamDate(), false))
+                .collect(Collectors.toList());
+        long abnormalCountLong = metrics.stream()
+                .map(MetricDto::getStatus)
+                .filter(Objects::nonNull)
+                .map(status -> status.toLowerCase(Locale.ROOT))
+                .filter(status -> "abnormal".equals(status) || "attention".equals(status))
+                .count();
+        int abnormalCount = Math.toIntExact(Math.min(abnormalCountLong, Integer.MAX_VALUE));
+
+        String overallStatus = metrics.stream()
+                .map(MetricDto::getStatus)
+                .filter(Objects::nonNull)
+                .map(status -> status.toLowerCase(Locale.ROOT))
+                .max(Comparator.comparingInt(this::statusPriority))
+                .orElse("normal");
+
+        String testType = (record.getRecordType() != null && !record.getRecordType().isBlank())
+                ? record.getRecordType()
+                : inferTestTypeFromMetrics(metrics);
+
+        return new HealthRecordHistoryItemResponse(
+                record.getId(),
+                record.getStatus(),
+                record.getExamDate(),
+                testType,
+                overallStatus,
+                abnormalCount,
+                record.getHospitalName(),
+                record.getSourceType(),
+                record.getCreatedAt(),
+                profile.getUser().getId().equals(requesterId)
+        );
+    }
+
+    private int statusPriority(String status) {
+        return switch (status) {
+            case "abnormal" -> 3;
+            case "attention" -> 2;
+            case "normal" -> 1;
+            default -> 0;
+        };
+    }
+
+    private String inferTestTypeFromMetrics(List<MetricDto> metrics) {
+        if (metrics == null || metrics.isEmpty()) {
+            return "Phiếu khám bệnh";
+        }
+        String firstMetricName = metrics.stream()
+                .map(MetricDto::getName)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .findFirst()
+                .orElse(null);
+        if (firstMetricName == null) {
+            return "Xét nghiệm";
+        }
+        return "Xét nghiệm - " + firstMetricName;
+    }
+
+    private boolean canAccessProfileHistory(Profile profile, UUID userId) {
+        if (profile.getUser().getId().equals(userId)) {
+            return true;
+        }
+        return profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profile.getId(), userId);
     }
 
     private record UploadFormat(String extension, String contentType) {}

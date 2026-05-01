@@ -7,12 +7,24 @@ import { Loader2, User, Users, Check, FileText, Activity, ChevronRight, Calendar
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
+import { API_ROUTES } from "@/lib/api/routes";
+import { ProfileCard, HealthStatus } from "@/components/features/profiles/ProfileCard";
+import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+
 import { UploadButton } from "@/components/features/upload/UploadButton";
 import { apiClient } from "@/lib/api/apiClient";
 
 type Profile = {
   id: string;
   displayName: string;
+  notes?: string;
+  updatedAt?: string;
+  latestStatus?: HealthStatus;
+};
+
+type UserProfile = {
+  id: string;
+  fullName: string;
 };
 
 type HealthRecord = {
@@ -60,6 +72,7 @@ export default function HealthRecordsPage() {
   });
 
   return (
+
     <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-6 bg-[#effcf9] px-6 py-10">
       <header>
         <h1 className="text-3xl font-bold text-[#005049]">Kết quả khám và xét nghiệm</h1>
@@ -91,15 +104,13 @@ export default function HealthRecordsPage() {
                 <button
                   key={profile.id}
                   onClick={() => setSelectedProfileId(profile.id)}
-                  className={`relative flex items-center gap-3 rounded-2xl border-2 px-5 py-3 transition-all duration-200 ${
-                    isActive
-                      ? "border-[#00685f] bg-[#effcf9] text-[#00685f] shadow-sm"
-                      : "border-[#e0f0ed] bg-white text-[#4e6360] hover:border-[#b7d8d1]"
-                  }`}
+                  className={`relative flex items-center gap-3 rounded-2xl border-2 px-5 py-3 transition-all duration-200 ${isActive
+                    ? "border-[#00685f] bg-[#effcf9] text-[#00685f] shadow-sm"
+                    : "border-[#e0f0ed] bg-white text-[#4e6360] hover:border-[#b7d8d1]"
+                    }`}
                 >
-                  <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                    isActive ? "bg-[#00685f] text-white" : "bg-[#effcf9] text-[#00685f]"
-                  }`}>
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-full ${isActive ? "bg-[#00685f] text-white" : "bg-[#effcf9] text-[#00685f]"
+                    }`}>
                     <User className="h-4 w-4" />
                   </div>
                   <span className="font-bold">{profile.displayName}</span>
@@ -117,7 +128,7 @@ export default function HealthRecordsPage() {
 
       <section className="space-y-4">
         <h2 className="text-xl font-bold text-[#005049]">Lịch sử kết quả</h2>
-        
+
         {isLoadingRecords || isLoading ? (
           <div className="flex justify-center py-10">
             <Loader2 className="h-8 w-8 animate-spin text-[#00685f]" />
@@ -129,22 +140,20 @@ export default function HealthRecordsPage() {
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {records.map((record: HealthRecord) => (
-              <div 
-                key={record.id} 
+              <div
+                key={record.id}
                 className="group flex flex-col sm:flex-row sm:items-center justify-between rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm transition-all duration-300 hover:shadow-md hover:border-[#00685f]/30"
               >
                 <div className="flex gap-4 items-start">
-                  <div className={`hidden sm:flex h-12 w-12 items-center justify-center rounded-xl ${
-                    isLabRecord(record.recordType) ? "bg-[#effcf9] text-[#00685f]" : "bg-[#fff7ed] text-[#c2410c]"
-                  }`}>
+                  <div className={`hidden sm:flex h-12 w-12 items-center justify-center rounded-xl ${isLabRecord(record.recordType) ? "bg-[#effcf9] text-[#00685f]" : "bg-[#fff7ed] text-[#c2410c]"
+                    }`}>
                     {isLabRecord(record.recordType) ? <Activity className="h-6 w-6" /> : <FileText className="h-6 w-6" />}
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-lg text-[#005049]">{record.recordType || "Phiếu khám bệnh"}</span>
-                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                        record.status === "done" ? "bg-[#ccfbf1] text-[#0f766e]" : "bg-[#fef3c7] text-[#92400e]"
-                      }`}>
+                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${record.status === "done" ? "bg-[#ccfbf1] text-[#0f766e]" : "bg-[#fef3c7] text-[#92400e]"
+                        }`}>
                         {record.status === "done" ? "Đã xác nhận" : "Đang chờ rà soát"}
                       </span>
                     </div>
@@ -167,7 +176,7 @@ export default function HealthRecordsPage() {
                   </div>
                 </div>
                 <div className="mt-6 sm:mt-0">
-                  <button 
+                  <button
                     onClick={() => router.push(`/health-records/review/${record.id}`)}
                     className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-white border-2 border-[#00685f] px-5 py-2.5 text-sm font-bold text-[#00685f] transition-all duration-200 hover:bg-[#00685f] hover:text-white"
                   >

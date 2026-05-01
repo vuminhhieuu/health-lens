@@ -212,7 +212,7 @@ class DataDeletionServiceTest {
 
         assertThatThrownBy(() -> dataDeletionService.cancelDeletionRequest(invalidToken))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Invalid cancellation token");
+                .hasMessage("Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực.");
 
         verify(userRepository, never()).save(any());
         verify(emailService, never()).sendCancellationConfirmationEmail(any());

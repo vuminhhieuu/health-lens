@@ -1,6 +1,7 @@
 package com.healthlens.api.service;
 
 import com.healthlens.api.dto.request.CreateProfileRequest;
+import com.healthlens.api.dto.request.UpdateProfileRequest;
 import com.healthlens.api.dto.response.ProfileResponse;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.time.Instant;
 import java.time.LocalDate;

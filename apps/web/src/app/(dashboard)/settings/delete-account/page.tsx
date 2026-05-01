@@ -1,25 +1,22 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import type { ComponentProps } from "react";
 import { useRouter } from "next/navigation";
 import { Callout } from "@radix-ui/themes";
 import {
   AlertTriangle,
-  ArrowLeftRight,
   CheckCircle2,
-  CircleHelp,
-  Database,
-  FileClock,
-  FileSpreadsheet,
-  LogOut,
-  ShieldAlert,
-  HeartPulse,
-  Paperclip,
+  FileText,
+  FileUp,
+  FolderOpen,
+  Info,
+  Shield,
   ShieldCheck,
   Stethoscope,
   Trash2,
   UserRound,
-  FileUp,
 } from "lucide-react";
 
 import { useAccountDeletion } from "@/hooks/useAccountDeletion";
@@ -28,18 +25,46 @@ import { useAuthStore } from "@/stores/authStore";
 /**
  * Story 1.6 — UI theo Stitch (project 2069125245324220624):
  * - Màn “Yêu cầu xóa tài khoản”: bước 1 xác nhận + bước 2 mật khẩu
- * - Màn “Yêu cầu xóa đã được gửi”: success sau API
+ * - Sau khi gửi thành công: chuyển thẳng tới đăng nhập
  */
 export default function DeleteAccountPage() {
   const router = useRouter();
   const clearAuth = useAuthStore((state) => state.clearAuth);
-  const { requestDeletion, isRequesting, error: hookError, requestSuccess } = useAccountDeletion();
+  const { requestDeletion, isRequesting, error: hookError } = useAccountDeletion();
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [hasReadConsequences, setHasReadConsequences] = useState(false);
-  const [deletionLink, setDeletionLink] = useState<string | null>(null);
+  const [requestSent, setRequestSent] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(6);
+  const redirectScheduledRef = useRef(false);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    if (!requestSent) return;
+
+    const countdownInterval = window.setInterval(() => {
+      setSecondsLeft((current) => (current > 1 ? current - 1 : 1));
+    }, 1000);
+    const redirectTimeout = window.setTimeout(() => {
+      clearAuth();
+      window.location.replace("/login?deleted=true");
+    }, 6000);
+
+    return () => {
+      window.clearInterval(countdownInterval);
+      window.clearTimeout(redirectTimeout);
+    };
+  }, [requestSent, clearAuth]);
+
+  useEffect(() => {
+    if (!requestSent) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [requestSent]);
+
+  const handleSubmit: NonNullable<ComponentProps<"form">["onSubmit"]> = async (e) => {
     e.preventDefault();
     if (!hasReadConsequences) {
       setPasswordError("Vui lòng xác nhận bạn đã hiểu hậu quả của việc xóa tài khoản");
@@ -51,157 +76,48 @@ export default function DeleteAccountPage() {
     }
     setPasswordError(null);
     try {
-      const result = await requestDeletion(password);
-      setDeletionLink(result.cancellationLink);
+      await requestDeletion(password);
+      if (!redirectScheduledRef.current) {
+        redirectScheduledRef.current = true;
+        setSecondsLeft(6);
+      }
       setPassword("");
-      setTimeout(() => {
-        clearAuth();
-        router.push("/login?deleted=true");
-      }, 4000);
+      setRequestSent(true);
     } catch (err) {
       console.error("Deletion request failed", err);
     }
   };
 
-  if (requestSuccess && deletionLink) {
-    return (
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#effcf9_0%,#e4f1ee_100%)] p-6 text-[#121e1c]">
-        <main className="mx-auto w-full max-w-[640px]">
-          <div className="mb-8 flex justify-center">
-            <div className="flex items-center gap-2">
-              <HeartPulse className="h-8 w-8 text-[#00685f]" />
-              <span className="text-2xl font-extrabold tracking-tight text-[#00685f]">HealthLens</span>
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-xl bg-white shadow-[0_8px_32px_rgba(18,30,28,0.06)]">
-            <div className="flex flex-col items-center p-10 text-center">
-              <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-[#e9f6f3]">
-                <CheckCircle2 className="h-12 w-12 text-[#00685f]" aria-hidden />
-              </div>
-
-              <h1 className="mb-4 text-3xl font-extrabold tracking-tight">Yêu cầu xóa dữ liệu đã được gửi</h1>
-              <p className="mb-8 max-w-lg leading-relaxed text-[#3d4947]">
-                Chúng tôi đã tiếp nhận yêu cầu của bạn. Theo <span className="font-semibold">Nghị định 13/2023/NĐ-CP</span> về
-                Bảo vệ dữ liệu cá nhân, toàn bộ dữ liệu của bạn sẽ được xóa vĩnh viễn khỏi hệ thống trong tối đa{" "}
-                <span className="font-bold text-[#00685f]">72 giờ</span>.
-              </p>
-
-              <div className="mb-6 w-full rounded-xl bg-[#e9f6f3] p-6 text-left">
-                <h3 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-[#00685f]">
-                  <Database className="h-4 w-4" />
-                  Dữ liệu sẽ bị xóa bỏ
-                </h3>
-                <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <li className="flex items-center gap-3 text-sm text-[#3d4947]">
-                    <UserRound className="h-4 w-4 text-[#00685f]" />
-                    Thông tin định danh (PII)
-                  </li>
-                  <li className="flex items-center gap-3 text-sm text-[#3d4947]">
-                    <FileSpreadsheet className="h-4 w-4 text-[#00685f]" />
-                    Hồ sơ sức khỏe cá nhân
-                  </li>
-                  <li className="flex items-center gap-3 text-sm text-[#3d4947]">
-                    <Paperclip className="h-4 w-4 text-[#00685f]" />
-                    Tệp tin đính kèm (PDF/Ảnh)
-                  </li>
-                  <li className="flex items-center gap-3 text-sm text-[#3d4947]">
-                    <ShieldCheck className="h-4 w-4 text-[#00685f]" />
-                    Nhật ký đồng ý (Consent logs)
-                  </li>
-                  <li className="flex items-center gap-3 text-sm text-[#3d4947]">
-                    <FileClock className="h-4 w-4 text-[#00685f]" />
-                    Nhật ký hoạt động (Audit logs)
-                  </li>
-                </ul>
-              </div>
-
-              <div className="mb-10 flex w-full gap-4 rounded-lg border-l-4 border-[#6d7a77] bg-[#d8e5e2] p-4 text-left">
-                <ShieldAlert className="h-5 w-5 shrink-0 text-[#6d7a77]" />
-                <p className="text-sm text-[#3d4947]">
-                  Tài khoản của bạn sẽ bị <span className="font-bold">vô hiệu hóa đăng nhập</span> ngay lập tức trong thời gian chờ xử
-                  lý để đảm bảo tính toàn vẹn của tiến trình xóa.
-                </p>
-              </div>
-
-              <div className="flex w-full flex-col gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    clearAuth();
-                    router.push("/login?deleted=true");
-                  }}
-                  className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00685f] to-[#008378] text-lg font-bold text-white transition-all hover:shadow-lg"
-                >
-                  <LogOut className="h-5 w-5" />
-                  Đăng xuất ngay
-                </button>
-                <button
-                  type="button"
-                  onClick={() => router.push("/login")}
-                  className="flex h-14 w-full items-center justify-center gap-2 rounded-xl border-2 border-[#bcc9c6] text-lg font-bold text-[#00685f] transition-all hover:bg-[#e9f6f3]"
-                >
-                  <ArrowLeftRight className="h-5 w-5" />
-                  Quay về trang đăng nhập
-                </button>
-              </div>
-
-              <div className="mt-8">
-                <p className="text-sm text-[#3d4947]">
-                  Đổi ý?{" "}
-                  <a
-                    href={deletionLink}
-                    className="font-semibold text-[#00685f] underline underline-offset-4 transition-colors hover:text-[#008378]"
-                  >
-                    Hủy yêu cầu xóa qua liên kết trong email
-                  </a>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <footer className="mt-12 text-center">
-            <p className="text-xs font-medium uppercase tracking-[0.2em] text-[#6d7a77]">
-              HealthLens Security Compliance — 2024
-            </p>
-          </footer>
-        </main>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-[#effcf9] text-[#121e1c]">
-      <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between bg-teal-50/80 px-6 backdrop-blur-md md:px-8">
-        <div className="flex items-center gap-2">
-          <HeartPulse className="h-6 w-6 text-[#00685f]" />
-          <span className="text-xl font-bold tracking-tight text-teal-900">HealthLens</span>
-        </div>
-        <button
-          type="button"
-          className="flex items-center gap-2 rounded-full p-2 text-teal-600 transition-colors hover:bg-teal-100/50"
-        >
-          <CircleHelp className="h-5 w-5" />
-          <span className="text-sm font-medium">Trợ giúp</span>
-        </button>
-      </header>
+    <div className="relative flex min-h-screen flex-col bg-[#effcf9] text-[#121e1c]">
+      <main
+        className={
+          requestSent
+            ? "pointer-events-none flex min-h-screen flex-1 select-none flex-col px-4 py-8 opacity-0 md:px-8 md:py-12 lg:px-12"
+            : "flex w-full flex-1 flex-col px-4 py-8 md:px-8 md:py-12 lg:px-12"
+        }
+        aria-hidden={requestSent}
+      >
+        <section className="w-full flex-1 rounded-xl border border-[#bcc9c6]/10 bg-white p-8 shadow-[0_8px_32px_rgba(18,30,28,0.06)] md:p-12">
+          {!requestSent && (
+            <>
+              <div className="mb-10 text-center">
+                <h1 className="mb-3 text-3xl font-bold tracking-tight text-[#121e1c]">Yêu cầu xóa tài khoản</h1>
+                <p className="mx-auto max-w-lg leading-relaxed text-[#3d4947]">
+                  Chúng tôi rất tiếc khi thấy bạn rời đi. Vui lòng hoàn thành các bước bên dưới để thực
+                  hiện quyền xóa dữ liệu theo Nghị định 13/2023/NĐ-CP.
+                </p>
+              </div>
 
-      <main className="flex flex-1 items-center justify-center p-6 md:p-12">
-        <section className="w-full max-w-3xl rounded-xl border border-[#bcc9c6]/10 bg-white p-8 shadow-[0_8px_32px_rgba(18,30,28,0.06)] md:p-12">
-          <div className="mb-10 text-center">
-            <h1 className="mb-3 text-3xl font-bold tracking-tight text-[#121e1c]">Yêu cầu xóa tài khoản</h1>
-            <p className="mx-auto max-w-lg leading-relaxed text-[#3d4947]">
-              Chúng tôi rất tiếc khi thấy bạn rời đi. Vui lòng hoàn thành các bước bên dưới để thực
-              hiện quyền xóa dữ liệu theo Nghị định 13/2023/NĐ-CP.
-            </p>
-          </div>
+              <div className="mb-10 flex justify-center gap-3">
+                <div className="h-1.5 w-16 rounded-full bg-[#00685f]" />
+                <div className="h-1.5 w-16 rounded-full bg-[#deebe8]" />
+              </div>
+            </>
+          )}
 
-          <div className="mb-10 flex justify-center gap-3">
-            <div className="h-1.5 w-16 rounded-full bg-[#00685f]" />
-            <div className="h-1.5 w-16 rounded-full bg-[#deebe8]" />
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-8">
+          {!requestSent ? (
+            <form onSubmit={handleSubmit} className="space-y-8">
             <div className="rounded-xl border-l-4 border-[#ba1a1a] bg-[#ffdad6]/30 p-6">
               <div className="flex gap-4">
                 <AlertTriangle className="h-5 w-5 text-[#ba1a1a]" />
@@ -304,46 +220,86 @@ export default function DeleteAccountPage() {
                 </button>
               </div>
             </div>
-          </form>
-
-          <div className="mt-8 flex flex-wrap justify-center gap-6 text-xs font-medium uppercase tracking-widest text-[#3d4947]/60">
-            <a className="transition-colors hover:text-[#00685f]" href="#">
-              Chính sách bảo mật
-            </a>
-            <a className="transition-colors hover:text-[#00685f]" href="#">
-              Điều khoản dịch vụ
-            </a>
-            <a className="transition-colors hover:text-[#00685f]" href="#">
-              Liên hệ hỗ trợ
-            </a>
-          </div>
+            </form>
+          ) : (
+            <div className="min-h-[50vh]" aria-hidden />
+          )}
         </section>
       </main>
 
-      <footer className="flex w-full flex-col items-center justify-between gap-6 border-t border-teal-100 bg-teal-50 px-12 py-10 md:flex-row">
-        <div className="flex flex-col gap-2">
-          <p className="text-xs font-medium uppercase tracking-widest text-teal-900">
-            © 2024 HealthLens. HIPAA Compliant &amp; Secure.
-          </p>
-          <p className="text-[10px] uppercase tracking-widest text-teal-500">
-            Tuân thủ Nghị định 13/2023/NĐ-CP về Bảo vệ dữ liệu cá nhân
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-8">
-          <a className="text-xs uppercase tracking-widest text-teal-500 opacity-80 transition-opacity hover:opacity-100 hover:underline" href="#">
-            Privacy Policy
-          </a>
-          <a className="text-xs uppercase tracking-widest text-teal-500 opacity-80 transition-opacity hover:opacity-100 hover:underline" href="#">
-            Terms of Service
-          </a>
-          <a className="text-xs uppercase tracking-widest text-teal-500 opacity-80 transition-opacity hover:opacity-100 hover:underline" href="#">
-            Data Rights
-          </a>
-          <a className="text-xs uppercase tracking-widest text-teal-500 opacity-80 transition-opacity hover:opacity-100 hover:underline" href="#">
-            Contact Support
-          </a>
-        </div>
-      </footer>
+      {requestSent &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[200] flex cursor-default flex-col items-center justify-start overflow-y-auto bg-[#121e1c]/45 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:justify-center sm:p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="deletion-sent-title"
+          >
+            <div className="mx-auto flex w-full max-w-3xl flex-col justify-center py-8 sm:min-h-0 sm:py-0">
+              <div className="rounded-xl border border-[#bcc9c6]/15 bg-white p-8 text-center shadow-[0_8px_32px_rgba(18,30,28,0.12)] md:p-10">
+                <div className="mx-auto mb-4 flex items-center justify-center gap-2">
+                  <Shield className="h-6 w-6 text-[#00685f]" aria-hidden />
+                  <span className="text-lg font-extrabold tracking-tight text-[#00685f]">HealthLens</span>
+                </div>
+                <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-[#e9f6f3]">
+                  <CheckCircle2 className="h-12 w-12 text-[#00685f]" />
+                </div>
+
+                <h2 id="deletion-sent-title" className="mb-4 text-3xl font-extrabold tracking-tight text-[#121e1c]">
+                  Yêu cầu xóa dữ liệu đã được gửi
+                </h2>
+                <p className="mx-auto mb-8 max-w-2xl leading-relaxed text-[#3d4947]">
+                  Chúng tôi đã tiếp nhận yêu cầu của bạn. Theo <strong>Nghị định 13/2023/NĐ-CP</strong>{" "}
+                  về bảo vệ dữ liệu cá nhân, toàn bộ dữ liệu của bạn sẽ được xóa vĩnh viễn khỏi hệ thống
+                  trong tối đa <span className="font-bold text-[#00685f]">72 giờ</span>.
+                </p>
+
+                <div className="mb-6 rounded-xl bg-[#e9f6f3] p-6 text-left">
+                  <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-[#00685f]">
+                    Dữ liệu sẽ bị xóa bỏ
+                  </h3>
+                  <ul className="grid grid-cols-1 gap-3 text-sm text-[#3d4947] md:grid-cols-2">
+                    <li className="flex items-center gap-3">
+                      <UserRound className="h-4 w-4 text-[#00685f]" />
+                      Thông tin định danh (PII)
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <FolderOpen className="h-4 w-4 text-[#00685f]" />
+                      Hồ sơ sức khỏe cá nhân
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <FileUp className="h-4 w-4 text-[#00685f]" />
+                      Tệp tin đính kèm (PDF/Ảnh)
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <ShieldCheck className="h-4 w-4 text-[#00685f]" />
+                      Nhật ký đồng ý (Consent logs)
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <FileText className="h-4 w-4 text-[#00685f]" />
+                      Nhật ký hoạt động (Audit logs)
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="mb-8 flex gap-3 rounded-lg border-l-4 border-[#6d7a77] bg-[#d8e5e2] p-4 text-left">
+                  <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#3d4947]" />
+                  <p className="text-sm text-[#3d4947]">
+                    Tài khoản của bạn sẽ bị <strong>vô hiệu hóa đăng nhập</strong> ngay lập tức trong thời
+                    gian chờ xử lý để đảm bảo tính toàn vẹn của tiến trình xóa.
+                  </p>
+                </div>
+
+                <p className="text-sm text-[#3d4947]">
+                  Phiên làm việc sẽ được khóa và bạn được chuyển về đăng nhập sau{" "}
+                  <span className="font-semibold text-[#00685f]">{secondsLeft} giây</span>.
+                </p>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

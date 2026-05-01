@@ -153,7 +153,8 @@ public class DataDeletionService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public CancelDeletionResponse cancelDeletionRequest(String cancellationToken) {
         DataDeletionRequest deletionRequest = deletionRequestRepository.findByCancellationToken(cancellationToken)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid cancellation token"));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực."));
 
         if (!deletionRequest.canBeCancelled()) {
             throw new IllegalStateException("Yeu cau xoa nay khong the huy duoc");

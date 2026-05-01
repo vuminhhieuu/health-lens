@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, CalendarCheck, CheckCircle2, HelpCircle, Info, Loader, Mail, RefreshCcw, Send, Timer, Undo2 } from "lucide-react";
 import { AxiosError } from "axios";
 import { useAccountDeletion } from '../../hooks/useAccountDeletion';
@@ -10,6 +10,18 @@ import { useAccountDeletion } from '../../hooks/useAccountDeletion';
 interface ApiErrorData {
   error?: string;
   detail?: string;
+}
+
+/** Chuẩn hóa token từ query (trình đọc mail đôi khi mã hóa ký tự thêm một lần). */
+function normalizeCancellationToken(raw: string | null): string | null {
+  if (raw == null) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    return decodeURIComponent(trimmed);
+  } catch {
+    return trimmed;
+  }
 }
 
 const parseTimestamp = (value?: string | null) => {
@@ -23,8 +35,9 @@ const parseTimestamp = (value?: string | null) => {
  * Xác nhận hủy, thành công, liên kết không hợp lệ (không hiển thị mã lỗi kỹ thuật).
  */
 export default function CancelDeletionClient() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams.get("token");
+  const token = normalizeCancellationToken(searchParams.get("token"));
   const requestedAt = searchParams.get("requestedAt");
   const scheduledDeletionAt = searchParams.get("scheduledDeletionAt");
 
@@ -33,6 +46,7 @@ export default function CancelDeletionClient() {
   const [resendEmail, setResendEmail] = useState("");
   const [confirmedEmail, setConfirmedEmail] = useState<string | null>(null);
   const [cancelledAt, setCancelledAt] = useState<string | null>(null);
+  const [redirectSecondsLeft, setRedirectSecondsLeft] = useState(3);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const { cancelDeletion } = useAccountDeletion();
   const successMessage =
@@ -56,18 +70,28 @@ export default function CancelDeletionClient() {
     return () => window.clearInterval(timer);
   }, [deletionTimestamp]);
 
+  useEffect(() => {
+    if (status !== "success") return;
+
+    const countdownInterval = window.setInterval(() => {
+      setRedirectSecondsLeft((current) => (current > 1 ? current - 1 : 1));
+    }, 1000);
+
+    const redirectTimeout = window.setTimeout(() => {
+      router.replace("/login");
+    }, 3000);
+
+    return () => {
+      window.clearInterval(countdownInterval);
+      window.clearTimeout(redirectTimeout);
+    };
+  }, [status, router]);
+
   const cancelledAtDisplay = useMemo(() => {
     const parsed = parseTimestamp(cancelledAt);
     if (Number.isNaN(parsed)) return "--";
     return new Date(parsed).toLocaleString("vi-VN");
   }, [cancelledAt]);
-
-  const scheduledDeletionDisplay = useMemo(() => {
-    if (!scheduledDeletionAt) return "Trong vòng 72 giờ kể từ khi gửi yêu cầu";
-    const deletionTimestamp = parseTimestamp(scheduledDeletionAt);
-    if (Number.isNaN(deletionTimestamp)) return "Trong vòng 72 giờ kể từ khi gửi yêu cầu";
-    return new Date(deletionTimestamp).toLocaleString("vi-VN");
-  }, [scheduledDeletionAt]);
 
   const remainingMs = useMemo<number | null>(() => {
     if (Number.isNaN(deletionTimestamp)) return null;
@@ -118,51 +142,43 @@ export default function CancelDeletionClient() {
       const result = await cancelDeletion(token);
       if (result?.email) setConfirmedEmail(result.email);
       setCancelledAt(result?.cancelledAt ?? new Date().toISOString());
+      setRedirectSecondsLeft(3);
       setStatus("success");
     } catch (err) {
       const error = err as AxiosError<ApiErrorData>;
       if (error?.response?.status === 409) {
+        setCancelledAt(new Date().toISOString());
+        setRedirectSecondsLeft(3);
         setStatus("success");
         return;
       }
       setStatus("error");
       setMessage(
         error?.response?.data?.detail ||
-          error?.response?.data?.error ||
-          error?.message ||
-          "Không thể hoàn tất hủy yêu cầu. Vui lòng thử lại hoặc liên hệ hỗ trợ.",
+        error?.response?.data?.error ||
+        error?.message ||
+        "Không thể hoàn tất hủy yêu cầu. Vui lòng thử lại hoặc liên hệ hỗ trợ.",
       );
     }
   };
 
   return (
     <div className="min-h-screen bg-[#effcf9] text-[#121e1c] antialiased">
-      <header className="fixed top-0 z-50 w-full bg-teal-50/80 backdrop-blur-xl shadow-sm">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="text-2xl font-bold tracking-tight text-teal-900">HealthLens</div>
-          <button
-            type="button"
-            className="rounded-full p-2 text-teal-700 transition-colors hover:bg-teal-50 hover:text-teal-900"
-            aria-label="Trợ giúp"
-          >
-            <HelpCircle className="h-5 w-5" />
-          </button>
-        </div>
-      </header>
-
-      <main className="mx-auto flex min-h-screen max-w-xl items-center justify-center px-4 pb-12 pt-24">
+      <main className="mx-auto flex min-h-screen max-w-xl items-center justify-center px-4 py-12">
         {status === "ready" && (
           <div className="w-full">
             <div className="overflow-hidden rounded-xl bg-white shadow-[0_8px_32px_rgba(18,30,28,0.06)]">
               <div className="flex flex-col items-center bg-[#00685f]/5 p-8 text-center">
                 <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#008378] text-white shadow-lg shadow-[#00685f]/20">
-                  <CheckCircle2 className="h-8 w-8" />
+                  <HelpCircle className="h-8 w-8" />
                 </div>
                 <h1 className="mb-1 text-2xl font-bold tracking-tight text-[#00685f]">
-                  {isExpired ? "Liên kết đã hết hạn" : "Mã xác thực hợp lệ"}
+                  {isExpired ? "Liên kết đã hết hạn" : "Xác nhận hủy yêu cầu xóa"}
                 </h1>
                 <p className="text-sm text-[#3d4947]">
-                  {isExpired ? "Bạn đã quá thời gian 72 giờ để hủy yêu cầu xóa." : "Yêu cầu xóa tài khoản của bạn đang được xử lý"}
+                  {isExpired
+                    ? "Bạn đã quá thời gian 72 giờ để hủy yêu cầu xóa. Liên kết từ email không còn hiệu lực"
+                    : "Yêu cầu xóa tài khoản của bạn đang trong thời gian chờ xử lý."}
                 </p>
               </div>
               <div className="space-y-8 p-8">
@@ -205,11 +221,10 @@ export default function CancelDeletionClient() {
                     type="button"
                     onClick={handleConfirmCancel}
                     disabled={isExpired}
-                    className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl font-semibold text-white shadow-md transition-all ${
-                      isExpired
-                        ? "cursor-not-allowed bg-[#bcc9c6]"
-                        : "bg-gradient-to-r from-[#00685f] to-[#008378] hover:shadow-lg"
-                    }`}
+                    className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl font-semibold text-white shadow-md transition-all ${isExpired
+                      ? "cursor-not-allowed bg-[#bcc9c6]"
+                      : "bg-gradient-to-r from-[#00685f] to-[#008378] hover:shadow-lg"
+                      }`}
                   >
                     <Undo2 className="h-4 w-4" />
                     Hủy yêu cầu xóa (khôi phục tài khoản)
@@ -277,20 +292,9 @@ export default function CancelDeletionClient() {
               </div>
             </section>
 
-            <div className="mb-8 flex w-full flex-col gap-4">
-              <Link
-                href="/login"
-                className="flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-[#00685f] to-[#008378] text-base font-semibold text-white shadow-lg shadow-[#00685f]/20 transition-all hover:shadow-xl hover:shadow-[#00685f]/30"
-              >
-                Đăng nhập lại
-              </Link>
-              <Link
-                href="/"
-                className="flex h-12 w-full items-center justify-center rounded-xl border-2 border-[#00685f]/20 bg-transparent text-base font-semibold text-[#00685f] transition-all hover:bg-[#00685f]/5"
-              >
-                Về trang chủ
-              </Link>
-            </div>
+            <p className="mb-8 text-sm text-[#3d4947]">
+              Hệ thống sẽ tự động chuyển bạn về trang đăng nhập sau <span className="font-semibold text-[#00685f]">{redirectSecondsLeft} giây</span>.
+            </p>
 
             <div className="flex items-start gap-3 rounded-lg bg-[#ffdbce]/30 p-4 text-left">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#924628]" />

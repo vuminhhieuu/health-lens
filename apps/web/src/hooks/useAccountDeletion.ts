@@ -91,9 +91,12 @@ export const useAccountDeletion = () => {
             return data.data;
         } catch (err) {
             const error = err as ApiError;
+            const detail = error?.response?.data?.detail;
             const message =
                 error?.response?.status === 400
-                    ? 'Token không hợp lệ hoặc đã hết hạn'
+                    ? (typeof detail === 'string' && detail.trim().length > 0
+                        ? detail
+                        : 'Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực.')
                     : error?.response?.status === 409
                         ? 'Yêu cầu xóa này không thể hủy được'
                         : getErrorMessage(error);

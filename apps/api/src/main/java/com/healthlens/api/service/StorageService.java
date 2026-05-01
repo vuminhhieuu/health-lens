@@ -13,6 +13,7 @@ import software.amazon.awssdk.services.s3.model.BucketAlreadyExistsException;
 import software.amazon.awssdk.services.s3.model.BucketAlreadyOwnedByYouException;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.Delete;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -173,14 +174,24 @@ public class StorageService {
     }
 
     /**
+     * Delete every object whose key starts with the given prefix (quiet batch deletes).
+     * Delegates to {@link #deleteObjectsByPrefix(String, boolean)} with {@code quiet=true}.
+     */
+    public int deleteObjectsByPrefix(String prefix) {
+        return deleteObjectsByPrefix(prefix, true);
+    }
+
+    /**
      * Delete every object whose key starts with the given prefix.
      * Used by Story 1.6 right-to-delete to wipe a user's uploaded files.
      *
      * Returns the number of objects deleted (best-effort; logs but does not
      * throw when MinIO/S3 is unavailable so the rest of the deletion sequence
      * can still complete).
+     *
+     * @param quiet passed through to S3 batch delete ({@link Delete.Builder#quiet(Boolean)})
      */
-    public int deleteObjectsByPrefix(String prefix) {
+    public int deleteObjectsByPrefix(String prefix, boolean quiet) {
         if (prefix == null || prefix.isBlank()) {
             return 0;
         }
@@ -209,7 +220,7 @@ public class StorageService {
 
                 DeleteObjectsResponse deleteResponse = s3Client.deleteObjects(DeleteObjectsRequest.builder()
                         .bucket(bucket)
-                        .delete(Delete.builder().objects(identifiers).quiet(true).build())
+                        .delete(Delete.builder().objects(identifiers).quiet(quiet).build())
                         .build());
 
                 totalDeleted += identifiers.size();
@@ -229,6 +240,13 @@ public class StorageService {
             log.error("S3 error while deleting objects under prefix '{}': {}", prefix, ex.getMessage(), ex);
             return totalDeleted;
         }
+    }
+
+    public void deleteObject(String key) {
+        s3Client.deleteObject(DeleteObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .build());
     }
 
     @PreDestroy

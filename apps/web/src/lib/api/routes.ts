@@ -26,7 +26,6 @@ export const FRONTEND_ROUTES = {
   SETTINGS: '/settings',
   DELETE_ACCOUNT: '/settings/delete-account',
   CANCEL_DELETION: '/cancel-deletion',
-  EMAIL_PREVIEW_DELETION_REQUEST: '/email-previews/deletion-request',
 } as const;
 
 /**
