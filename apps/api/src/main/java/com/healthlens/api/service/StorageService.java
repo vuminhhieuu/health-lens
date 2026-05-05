@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import jakarta.annotation.PreDestroy;
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
@@ -238,6 +239,12 @@ public class StorageService {
             return totalDeleted;
         } catch (S3Exception ex) {
             log.error("S3 error while deleting objects under prefix '{}': {}", prefix, ex.getMessage(), ex);
+            return totalDeleted;
+        } catch (SdkException ex) {
+            log.error("S3 client error while deleting objects under prefix '{}': {}", prefix, ex.getMessage(), ex);
+            return totalDeleted;
+        } catch (RuntimeException ex) {
+            log.error("Unexpected error while deleting objects under prefix '{}': {}", prefix, ex.getMessage(), ex);
             return totalDeleted;
         }
     }

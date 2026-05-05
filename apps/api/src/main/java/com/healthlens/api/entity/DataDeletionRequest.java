@@ -6,6 +6,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
@@ -72,15 +73,33 @@ public class DataDeletionRequest {
         }
     }
 
+    @PreUpdate
+    public void preUpdate() {
+        updatedAt = Instant.now();
+    }
+
     public boolean isPending() {
         return status == DeletionRequestStatus.PENDING;
     }
 
+    /**
+     * Pending request whose scheduled deletion time is at or before now — no longer cancellable.
+     * Uses inclusive deadline boundary ({@code now >= scheduledDeletionAt}) so cancellation matches
+     * grace-period semantics (cannot cancel once the scheduled deletion instant is reached).
+     */
     public boolean isOverdue() {
-        return isPending() && Instant.now().isAfter(scheduledDeletionAt);
+        if (!isPending()) {
+            return false;
+        }
+        if (scheduledDeletionAt == null) {
+            return true;
+        }
+        return !Instant.now().isBefore(scheduledDeletionAt);
     }
 
     public boolean canBeCancelled() {
-        return isPending();
+        return isPending()
+                && scheduledDeletionAt != null
+                && Instant.now().isBefore(scheduledDeletionAt);
     }
 }

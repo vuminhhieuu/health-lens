@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema } from "@healthlens/shared/schemas/auth";
-import { AlertTriangle, CircleHelp, Eye, EyeOff, Globe, LogIn, MailOpen, ShieldCheck, TriangleAlert } from "lucide-react";
+import { AlertTriangle, CircleHelp, Eye, EyeOff, Globe, LogIn, ShieldCheck, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, Suspense } from "react";
@@ -17,6 +17,8 @@ import { API_ROUTES } from "@/lib/api/routes";
 import { useAuthStore } from "@/stores/authStore";
 
 type LoginInput = z.infer<typeof loginSchema>;
+const PENDING_DELETION_UI_MESSAGE =
+  "Yêu cầu xóa tài khoản của bạn đã được ghi nhận. Theo Nghị định 13/2023/NĐ-CP, hệ thống đang trong quá trình xóa dữ liệu vĩnh viễn (tối đa 72 giờ). Trong thời gian này, bạn không thể đăng nhập.";
 
 export default function LoginPage() {
   return (
@@ -38,7 +40,7 @@ function LoginContent() {
     searchParams.get("pendingDeletion") === "1",
   );
   const [pendingDeletionMessage, setPendingDeletionMessage] = useState(
-    "Yêu cầu xóa tài khoản của bạn đã được ghi nhận. Theo Nghị định 13/2023/NĐ-CP, hệ thống đang trong quá trình xóa dữ liệu vĩnh viễn (tối đa 72 giờ). Trong thời gian này, bạn không thể đăng nhập.",
+    PENDING_DELETION_UI_MESSAGE,
   );
 
   const {
@@ -72,7 +74,7 @@ function LoginContent() {
       );
 
       try {
-        await syncActiveConsentVersion().catch(() => {});
+        await syncActiveConsentVersion().catch(() => { });
         const consentRes = await apiClient.get<{
           consentGiven?: boolean;
           consentVersion?: string | null;
@@ -100,7 +102,12 @@ function LoginContent() {
       ) {
         const resp = error.response as {
           status?: number;
-          data?: { detail?: string; retryAfterSeconds?: number };
+          data?: {
+            detail?: string;
+            title?: string;
+            type?: string;
+            retryAfterSeconds?: number;
+          };
         };
         if (resp.status === 429) {
           const retryAfter = resp.data?.retryAfterSeconds ?? 900;
@@ -112,12 +119,30 @@ function LoginContent() {
           setSubmitError("Email hoặc mật khẩu không đúng.");
         } else if (resp.status === 403 || resp.status === 423) {
           const detail = (resp.data?.detail ?? "").toLowerCase();
-          if (detail.includes("pending") || detail.includes("đang chờ xóa")) {
+          const title = (resp.data?.title ?? "").toLowerCase();
+          const type = (resp.data?.type ?? "").toLowerCase();
+          const normalize = (value: string) =>
+            value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          const detailPlain = normalize(detail);
+          const titlePlain = normalize(title);
+          const pendingMarkers = [
+            detail,
+            title,
+            type,
+            detailPlain,
+            titlePlain,
+          ];
+
+          const isPendingDeletion = pendingMarkers.some(
+            (value) =>
+              value.includes("pending") ||
+              value.includes("dang cho xoa") ||
+              value.includes("deletion-pending"),
+          );
+
+          if (isPendingDeletion) {
             setIsPendingDeletionBlocked(true);
-            setPendingDeletionMessage(
-              resp.data?.detail ||
-              "Yêu cầu xóa tài khoản của bạn đã được ghi nhận. Theo Nghị định 13/2023/NĐ-CP, hệ thống đang trong quá trình xóa dữ liệu vĩnh viễn (tối đa 72 giờ). Trong thời gian này, bạn không thể đăng nhập.",
-            );
+            setPendingDeletionMessage(PENDING_DELETION_UI_MESSAGE);
           } else {
             setSubmitError("Tài khoản chưa thể đăng nhập ở thời điểm hiện tại.");
           }
@@ -184,57 +209,17 @@ function LoginContent() {
                   </h2>
                   <p className="text-sm leading-relaxed text-[#3d4947]">{pendingDeletionMessage}</p>
                 </div>
-
-                <div className="space-y-4 opacity-40 select-none pointer-events-none">
-                  <div className="space-y-1">
-                    <label className="ml-1 text-xs font-semibold text-[#3d4947]">Email</label>
-                    <div className="flex h-12 items-center rounded-lg border-b-2 border-[#bcc9c6] bg-[#deebe8] px-4">
-                      <span className="text-[#3d4947]">example@healthlens.vn</span>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="ml-1 text-xs font-semibold text-[#3d4947]">Mật khẩu</label>
-                    <div className="flex h-12 items-center rounded-lg border-b-2 border-[#bcc9c6] bg-[#deebe8] px-4">
-                      <span className="text-[#3d4947]">••••••••••••</span>
-                    </div>
-                  </div>
-                </div>
+                <p className="rounded-lg font-semibold border border-[#bcc9c6]/30 bg-[#f6fbfa] px-4 py-3 text-xs leading-relaxed text-[#3d4947]">
+                  Vui lòng mở email đã nhận từ HealthLens và bấm liên kết hủy yêu cầu xóa tài khoản.
+                </p>
 
                 <div className="flex flex-col gap-3">
-                  <a
-                    href="mailto:"
-                    className="flex h-12 items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-[#00685f] to-[#008378] font-semibold text-white transition-all hover:opacity-90"
-                  >
-                    <MailOpen className="h-5 w-5" />
-                    Mở email để hủy yêu cầu xóa
-                  </a>
                   <Link
                     href="/"
                     className="flex h-12 items-center justify-center rounded-lg border-2 border-[#bcc9c6] font-semibold text-[#3d4947] transition-colors hover:bg-[#e9f6f3]"
                   >
                     Quay lại trang chủ
                   </Link>
-                </div>
-
-                <div className="space-y-4 border-t border-[#d8e5e2] pt-6">
-                  <div className="rounded-xl border border-[#bcc9c6]/10 bg-[#e9f6f3] p-4">
-                    <p className="mb-3 text-xs font-medium text-[#3d4947]">
-                      Không nhận được email? Nhập email của bạn để chúng tôi gửi lại liên kết hủy:
-                    </p>
-                    <div className="flex gap-2">
-                      <input
-                        type="email"
-                        placeholder="Email của bạn"
-                        className="h-10 flex-grow rounded-lg border border-[#bcc9c6] bg-white px-3 text-sm outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[#00685f]"
-                      />
-                      <button
-                        type="button"
-                        className="h-10 shrink-0 rounded-lg bg-[#3f6560] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#456b66]"
-                      >
-                        Gửi lại
-                      </button>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -341,7 +326,7 @@ function LoginContent() {
           </form>
 
           {/* Error message */}
-              {submitError ? (
+          {submitError ? (
             <p className="mt-4 text-center text-sm text-[#ba1a1a]">
               {submitError}
             </p>

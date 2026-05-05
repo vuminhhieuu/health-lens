@@ -84,6 +84,8 @@ app:
   security:
     blacklist-fail-closed: ${APP_SECURITY_BLACKLIST_FAIL_CLOSED:false}
     rate-limit-fail-closed: ${APP_SECURITY_RATE_LIMIT_FAIL_CLOSED:false}
+    # Short TTL: hot-path reads hit Redis; DataDeletionService writes through on every status change.
+    account-status-cache-ttl: ${APP_SECURITY_ACCOUNT_STATUS_CACHE_TTL:60s}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
   stream:

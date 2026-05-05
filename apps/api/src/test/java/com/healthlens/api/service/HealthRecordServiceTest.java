@@ -458,7 +458,7 @@ class HealthRecordServiceTest {
         record.setUserId(userId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
-        when(healthRecordRepository.findByIdAndUserId(recordId, userId)).thenReturn(Optional.of(record));
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
         when(metricExplanationRetrievalService.retrieve(
                 nullable(String.class),
                 nullable(String.class),
@@ -497,7 +497,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        when(healthRecordRepository.findByIdAndUserId(recordId, userId)).thenReturn(Optional.empty());
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> healthRecordService.getMetricExplanation(userId, recordId, "Glucose"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -515,7 +515,7 @@ class HealthRecordServiceTest {
         record.setId(recordId);
         record.setUserId(userId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
-        when(healthRecordRepository.findByIdAndUserId(recordId, userId)).thenReturn(Optional.of(record));
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
 
         assertThatThrownBy(() -> healthRecordService.getMetricExplanation(userId, recordId, "Glucose"))
                 .isInstanceOf(IllegalArgumentException.class)

@@ -187,7 +187,7 @@ public class HealthRecordService {
             }
         }
 
-        HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId)
+        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
         
         java.util.List<MetricDto> metricsList = null;
@@ -233,7 +233,7 @@ public class HealthRecordService {
 
     @Transactional(readOnly = true)
     public HealthRecordDetailResponse getDetail(UUID userId, UUID recordId, UUID profileId) {
-        HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId)
+        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Health record khong ton tai"));
 
         UUID resolvedProfileId = profileId != null ? profileId : record.getProfileId();
@@ -264,7 +264,7 @@ public class HealthRecordService {
 
     @Transactional(readOnly = true)
     public MetricExplanationResponse getMetricExplanation(UUID userId, UUID recordId, String metricName) {
-        HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId)
+        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
 
         MetricDto metric = parseMetrics(record.getMetrics()).stream()
@@ -371,7 +371,7 @@ public class HealthRecordService {
 
     @Transactional(readOnly = true)
     public java.util.List<HealthRecordStatusResponse> getRecordsByProfile(UUID userId, UUID profileId) {
-        return healthRecordRepository.findAllByProfileIdAndUserIdOrderByCreatedAtDesc(profileId, userId)
+        return healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(profileId, userId)
                 .stream()
                 .map(record -> {
                     java.util.List<MetricDto> metricsList = null;
@@ -599,8 +599,9 @@ public class HealthRecordService {
     }
 
     @Transactional
+    @Auditable(action = "DELETE_HEALTH_RECORD")
     public void deleteHealthRecord(UUID userId, UUID recordId) {
-        HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId)
+        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
 
         if (!record.getUserId().equals(userId)) {

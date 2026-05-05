@@ -30,9 +30,15 @@ describe("LoginPage", () => {
       ),
     ).toBeInTheDocument();
 
-    expect(screen.getByRole("link", { name: "Mở email để hủy yêu cầu xóa" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Vui lòng mở email đã nhận từ HealthLens và bấm liên kết hủy yêu cầu xóa tài khoản/i,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Quay lại trang chủ" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Gửi lại" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Gửi lại" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Tài khoản đang chờ xóa/i }),
     ).toBeDisabled();

@@ -15,9 +15,11 @@ import com.healthlens.api.repository.PasswordResetTokenRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.RefreshTokenRepository;
 import com.healthlens.api.repository.UserRepository;
+import com.healthlens.api.security.AccountStatusCache;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -50,6 +52,12 @@ import java.util.UUID;
 @Service
 public class DataDeletionService {
 
+    /**
+     * Name of partial unique index on {@code data_deletion_requests(user_id) WHERE status='PENDING'};
+     * referenced when mapping concurrent-insert violations to the same outcome as {@code existsByUserIdAndStatus}.
+     */
+    static final String PENDING_DELETION_UNIQUE_INDEX_NAME = "uq_data_deletion_requests_one_pending_per_user";
+
     private final DataDeletionRequestRepository deletionRequestRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -62,6 +70,7 @@ public class DataDeletionService {
     private final ConsentLogRepository consentLogRepository;
     private final StorageService storageService;
     private final DataDeletionService selfProxy;
+    private final AccountStatusCache accountStatusCache;
     private final String webCancellationUrl;
 
     public DataDeletionService(
@@ -76,6 +85,7 @@ public class DataDeletionService {
             PasswordResetTokenRepository passwordResetTokenRepository,
             ConsentLogRepository consentLogRepository,
             StorageService storageService,
+            AccountStatusCache accountStatusCache,
             @Lazy DataDeletionService selfProxy,
             @Value("${app.frontend.cancellation-url:http://localhost:3000/cancel-deletion}") String webCancellationUrl) {
         this.deletionRequestRepository = deletionRequestRepository;
@@ -89,6 +99,7 @@ public class DataDeletionService {
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.consentLogRepository = consentLogRepository;
         this.storageService = storageService;
+        this.accountStatusCache = accountStatusCache;
         this.selfProxy = selfProxy;
         this.webCancellationUrl = webCancellationUrl;
     }
@@ -118,12 +129,21 @@ public class DataDeletionService {
         deletionRequest.setScheduledDeletionAt(requestedAt.plusSeconds(72L * 3600));
         deletionRequest.setStatus(DeletionRequestStatus.PENDING);
         deletionRequest.setCancellationToken(cancellationToken);
-        deletionRequestRepository.save(deletionRequest);
+        try {
+            // Flush immediately so partial unique index catches concurrent creates (READ_COMMITTED + check-then-insert is not enough).
+            deletionRequestRepository.saveAndFlush(deletionRequest);
+        } catch (DataIntegrityViolationException ex) {
+            if (isDuplicatePendingDeletionConstraint(ex)) {
+                throw new IllegalStateException("Ban da co mot yeu cau xoa dang cho xu ly");
+            }
+            throw ex;
+        }
 
         // AC #3: revoke all active sessions and freeze the account immediately
         refreshTokenRepository.revokeAllByUserId(userId, requestedAt);
         user.setAccountStatus(AccountStatus.PENDING_DELETION);
         userRepository.save(user);
+        accountStatusCache.put(userId, AccountStatus.PENDING_DELETION);
 
         log.info("Deletion request created: userId={} scheduledAt={}", userId, deletionRequest.getScheduledDeletionAt());
 
@@ -156,17 +176,31 @@ public class DataDeletionService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực."));
 
-        if (!deletionRequest.canBeCancelled()) {
+        if (!deletionRequest.isPending()) {
             throw new IllegalStateException("Yeu cau xoa nay khong the huy duoc");
+        }
+
+        // Grace period ended but scheduler may not have run yet — still reject cancellation (ND13 semantics).
+        if (deletionRequest.isOverdue()) {
+            throw new IllegalStateException(
+                    "Thời gian cho phép hủy yêu cầu xóa đã kết thúc. Tài khoản đã hoặc sắp được xóa theo lịch đã đặt.");
+        }
+
+        User user = userRepository.findById(deletionRequest.getUserId())
+                .orElseThrow(() -> new IllegalArgumentException("Người dùng không tồn tại"));
+
+        // Avoid reactivating an account if deletion already ran (or DB is inconsistent): only cancel while still frozen.
+        if (user.getAccountStatus() != AccountStatus.PENDING_DELETION) {
+            throw new IllegalStateException(
+                    "Không thể hủy yêu cầu xóa: tài khoản không còn trong trạng thái chờ xóa.");
         }
 
         deletionRequest.setStatus(DeletionRequestStatus.CANCELLED);
         deletionRequestRepository.save(deletionRequest);
 
-        User user = userRepository.findById(deletionRequest.getUserId())
-                .orElseThrow(() -> new IllegalArgumentException("Người dùng không tồn tại"));
         user.setAccountStatus(AccountStatus.ACTIVE);
         userRepository.save(user);
+        accountStatusCache.put(deletionRequest.getUserId(), AccountStatus.ACTIVE);
 
         log.info("Deletion request cancelled: userId={}", deletionRequest.getUserId());
 
@@ -257,6 +291,7 @@ public class DataDeletionService {
         user.setPasswordHash("[deleted]");
         user.setEmailVerified(false);
         userRepository.save(user);
+        accountStatusCache.put(userId, AccountStatus.DELETED);
 
         // AC #2 audit-trail line per architecture.md "Chiến Lược Audit Logging"
         log.info("User data deleted per right-to-delete request: userId={} requestId={} files={} records={} profiles={} emailTokens={} resetTokens={} refreshTokens={} consentLogs={}",
@@ -272,5 +307,11 @@ public class DataDeletionService {
 
     private String encodeQueryParam(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private static boolean isDuplicatePendingDeletionConstraint(DataIntegrityViolationException ex) {
+        Throwable cause = ex.getMostSpecificCause();
+        String msg = cause != null ? cause.getMessage() : null;
+        return msg != null && msg.contains(PENDING_DELETION_UNIQUE_INDEX_NAME);
     }
 }

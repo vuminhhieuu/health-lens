@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosHeaders } from "axios";
 
 import { syncActiveConsentVersion } from "@/lib/consent/syncActiveConsentVersion";
 import { useAuthStore } from "@/stores/authStore";
@@ -19,24 +19,20 @@ const apiClient = axios.create({
 // Request interceptor: attach Authorization header
 apiClient.interceptors.request.use((config) => {
   const { accessToken } = useAuthStore.getState();
+  const headers = AxiosHeaders.from(config.headers);
+  config.headers = headers;
 
   const isCancelDeletion =
     config.url?.includes("/deletion-requests/cancel");
 
-  if (isCancelDeletion && config.headers) {
-    const headers = config.headers;
-    if (typeof headers.delete === "function") {
-      headers.delete("Authorization");
-      headers.delete("authorization");
-    } else {
-      delete (headers as Record<string, unknown>).Authorization;
-      delete (headers as Record<string, unknown>).authorization;
-    }
+  if (isCancelDeletion) {
+    headers.delete("Authorization");
+    headers.delete("authorization");
     return config;
   }
 
   if (accessToken) {
-    config.headers.Authorization = `Bearer ${accessToken}`;
+    headers.set("Authorization", `Bearer ${accessToken}`);
   }
 
   return config;

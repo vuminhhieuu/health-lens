@@ -14,6 +14,7 @@ import com.healthlens.api.repository.PasswordResetTokenRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.RefreshTokenRepository;
 import com.healthlens.api.repository.UserRepository;
+import com.healthlens.api.security.AccountStatusCache;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Instant;
@@ -54,6 +56,7 @@ class DataDeletionServiceTest {
     @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
     @Mock private ConsentLogRepository consentLogRepository;
     @Mock private StorageService storageService;
+    @Mock private AccountStatusCache accountStatusCache;
     @Mock private DataDeletionService selfProxy;
 
     private DataDeletionService dataDeletionService;
@@ -74,6 +77,7 @@ class DataDeletionServiceTest {
                 passwordResetTokenRepository,
                 consentLogRepository,
                 storageService,
+                accountStatusCache,
                 selfProxy,
                 "http://localhost:3000/cancel-deletion"
         );
@@ -92,7 +96,7 @@ class DataDeletionServiceTest {
         when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
         when(passwordEncoder.matches("ValidPassword123", testUser.getPasswordHash())).thenReturn(true);
         when(deletionRequestRepository.existsByUserIdAndStatus(userId, DeletionRequestStatus.PENDING)).thenReturn(false);
-        when(deletionRequestRepository.save(any(DataDeletionRequest.class)))
+        when(deletionRequestRepository.saveAndFlush(any(DataDeletionRequest.class)))
                 .thenAnswer(inv -> {
                     DataDeletionRequest r = inv.getArgument(0);
                     if (r.getId() == null) {
@@ -110,7 +114,7 @@ class DataDeletionServiceTest {
         assertThat(response.cancellationLink()).contains("cancel-deletion");
 
         ArgumentCaptor<DataDeletionRequest> captor = ArgumentCaptor.forClass(DataDeletionRequest.class);
-        verify(deletionRequestRepository).save(captor.capture());
+        verify(deletionRequestRepository).saveAndFlush(captor.capture());
 
         DataDeletionRequest savedRequest = captor.getValue();
         assertThat(savedRequest.getUserId()).isEqualTo(userId);
@@ -124,6 +128,7 @@ class DataDeletionServiceTest {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
         assertThat(userCaptor.getValue().getAccountStatus()).isEqualTo(AccountStatus.PENDING_DELETION);
+        verify(accountStatusCache).put(userId, AccountStatus.PENDING_DELETION);
 
         // AC #4: confirmation email
         verify(emailService).sendDeletionConfirmationEmail(any(User.class), any(DataDeletionRequest.class), anyString());
@@ -141,7 +146,7 @@ class DataDeletionServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Mat khau khong dung");
 
-        verify(deletionRequestRepository, never()).save(any());
+        verify(deletionRequestRepository, never()).saveAndFlush(any());
         verify(emailService, never()).sendDeletionConfirmationEmail(any(), any(), any());
     }
 
@@ -156,7 +161,7 @@ class DataDeletionServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("User not found");
 
-        verify(deletionRequestRepository, never()).save(any());
+        verify(deletionRequestRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -171,6 +176,32 @@ class DataDeletionServiceTest {
         assertThatThrownBy(() -> dataDeletionService.createDeletionRequest(userId, request))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Ban da co mot yeu cau xoa dang cho xu ly");
+
+        verify(deletionRequestRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("AC #1: Concurrent insert loses race — partial unique index maps to same message as duplicate pending")
+    void createDeletionRequest_duplicatePendingFromUniqueConstraint() {
+        DeleteAccountRequest request = new DeleteAccountRequest("ValidPassword123");
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
+        when(passwordEncoder.matches("ValidPassword123", testUser.getPasswordHash())).thenReturn(true);
+        when(deletionRequestRepository.existsByUserIdAndStatus(userId, DeletionRequestStatus.PENDING)).thenReturn(false);
+        when(deletionRequestRepository.saveAndFlush(any(DataDeletionRequest.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "duplicate key",
+                        new RuntimeException(
+                                "ERROR: duplicate key value violates unique constraint \""
+                                        + DataDeletionService.PENDING_DELETION_UNIQUE_INDEX_NAME + "\"")));
+
+        assertThatThrownBy(() -> dataDeletionService.createDeletionRequest(userId, request))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Ban da co mot yeu cau xoa dang cho xu ly");
+
+        verify(refreshTokenRepository, never()).revokeAllByUserId(any(), any());
+        verify(userRepository, never()).save(any());
+        verify(emailService, never()).sendDeletionConfirmationEmail(any(), any(), any());
     }
 
     // ========== CANCEL DELETION REQUEST TESTS ==========
@@ -183,11 +214,15 @@ class DataDeletionServiceTest {
         deletionRequest.setId(UUID.randomUUID());
         deletionRequest.setUserId(userId);
         deletionRequest.setStatus(DeletionRequestStatus.PENDING);
+        deletionRequest.setScheduledDeletionAt(Instant.now().plusSeconds(3600));
         deletionRequest.setCancellationToken(cancellationToken);
+
+        User frozenUser = createTestUser();
+        frozenUser.setAccountStatus(AccountStatus.PENDING_DELETION);
 
         when(deletionRequestRepository.findByCancellationToken(cancellationToken))
                 .thenReturn(Optional.of(deletionRequest));
-        when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(frozenUser));
 
         dataDeletionService.cancelDeletionRequest(cancellationToken);
 
@@ -198,6 +233,7 @@ class DataDeletionServiceTest {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
         assertThat(userCaptor.getValue().getAccountStatus()).isEqualTo(AccountStatus.ACTIVE);
+        verify(accountStatusCache).put(userId, AccountStatus.ACTIVE);
 
         verify(emailService).sendCancellationConfirmationEmail(any(User.class));
     }
@@ -234,6 +270,53 @@ class DataDeletionServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Yeu cau xoa nay khong the huy duoc");
 
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("AC #5: Cannot cancel after grace period — scheduledDeletionAt has passed")
+    void cancelDeletionRequest_afterGracePeriod() {
+        String token = "expired-token";
+        DataDeletionRequest deletionRequest = new DataDeletionRequest();
+        deletionRequest.setUserId(userId);
+        deletionRequest.setStatus(DeletionRequestStatus.PENDING);
+        deletionRequest.setScheduledDeletionAt(Instant.now().minusSeconds(60));
+        deletionRequest.setCancellationToken(token);
+
+        when(deletionRequestRepository.findByCancellationToken(token))
+                .thenReturn(Optional.of(deletionRequest));
+
+        assertThatThrownBy(() -> dataDeletionService.cancelDeletionRequest(token))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Thời gian cho phép hủy");
+
+        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).findById(any());
+        verify(deletionRequestRepository, never()).save(any());
+        verify(emailService, never()).sendCancellationConfirmationEmail(any());
+    }
+
+    @Test
+    @DisplayName("AC #5: Cannot cancel when account is no longer frozen for deletion (e.g. deletion already executed)")
+    void cancelDeletionRequest_accountNotPendingDeletion() {
+        String token = "token-still-pending-but-user-not";
+        DataDeletionRequest deletionRequest = new DataDeletionRequest();
+        deletionRequest.setUserId(userId);
+        deletionRequest.setStatus(DeletionRequestStatus.PENDING);
+        deletionRequest.setScheduledDeletionAt(Instant.now().plusSeconds(3600));
+        deletionRequest.setCancellationToken(token);
+
+        User deletedUser = createTestUser();
+        deletedUser.setAccountStatus(AccountStatus.DELETED);
+
+        when(deletionRequestRepository.findByCancellationToken(token)).thenReturn(Optional.of(deletionRequest));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(deletedUser));
+
+        assertThatThrownBy(() -> dataDeletionService.cancelDeletionRequest(token))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("không còn trong trạng thái chờ xóa");
+
+        verify(deletionRequestRepository, never()).save(any());
         verify(userRepository, never()).save(any());
     }
 
@@ -313,6 +396,7 @@ class DataDeletionServiceTest {
         assertThat(saved.getFullName()).isEqualTo("[Deleted User]");
         assertThat(saved.isEmailVerified()).isFalse();
 
+        verify(accountStatusCache).put(userId, AccountStatus.DELETED);
         verify(emailService, times(1)).sendDeletionCompletionEmail(any(User.class));
     }
 
@@ -332,6 +416,7 @@ class DataDeletionServiceTest {
         verify(storageService, never()).deleteObjectsByPrefix(anyString());
         verify(healthRecordRepository, never()).deleteAllByUserId(any());
         verify(userRepository, never()).save(any());
+        verify(accountStatusCache, never()).put(any(), any());
     }
 
     // ========== HELPER METHODS ==========

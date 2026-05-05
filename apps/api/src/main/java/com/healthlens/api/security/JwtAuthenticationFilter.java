@@ -2,8 +2,6 @@ package com.healthlens.api.security;
 
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.entity.AccountStatus;
-import com.healthlens.api.entity.User;
-import com.healthlens.api.repository.UserRepository;
 import com.healthlens.api.util.JwtUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -24,6 +22,7 @@ import org.springframework.web.util.UrlPathHelper;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Component
@@ -36,18 +35,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
     private final StringRedisTemplate redisTemplate;
-    private final UserRepository userRepository;
+    private final AccountStatusCache accountStatusCache;
     private final boolean securityFailClosed;
     private final UrlPathHelper urlPathHelper = new UrlPathHelper();
 
     public JwtAuthenticationFilter(
             JwtUtil jwtUtil,
             StringRedisTemplate redisTemplate,
-            UserRepository userRepository,
+            AccountStatusCache accountStatusCache,
             @Value("${app.security.blacklist-fail-closed:false}") boolean securityFailClosed) {
         this.jwtUtil = jwtUtil;
         this.redisTemplate = redisTemplate;
-        this.userRepository = userRepository;
+        this.accountStatusCache = accountStatusCache;
         this.securityFailClosed = securityFailClosed;
     }
 
@@ -81,13 +80,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // AC #3: Block authenticated requests for accounts in PENDING_DELETION or DELETED state.
         // The cancel endpoint is permitAll'd via SecurityConfig and never reaches here with a token.
         try {
-            User user = userRepository.findById(UUID.fromString(userId)).orElse(null);
-            if (user == null) {
+            Optional<AccountStatus> statusOpt =
+                    accountStatusCache.getStatus(UUID.fromString(userId));
+            if (statusOpt.isEmpty()) {
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            AccountStatus status = user.getAccountStatus();
+            AccountStatus status = statusOpt.get();
             if (status == AccountStatus.PENDING_DELETION || status == AccountStatus.DELETED) {
                 log.warn("Blocking request for {} account: userId={}, path={}",
                         status, userId, urlPathHelper.getRequestUri(request));

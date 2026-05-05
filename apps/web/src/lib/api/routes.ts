@@ -41,7 +41,8 @@ export const API_ROUTES = {
   USERS: {
     ME: "/api/v1/users/me",
     DELETION_REQUEST: "/api/v1/users/me/deletion-request",
-    CANCEL_DELETION: "/api/v1/users/deletion-requests/cancel"
+    /** Public cancel (no JWT): `DELETE` + query `token` from email — path is `/users/deletion-requests/...`, not `/users/me/...`. */
+    CANCEL_DELETION: "/api/v1/users/deletion-requests/cancel",
   },
   PROFILES: ApiPaths.PROFILES,
 } as const;

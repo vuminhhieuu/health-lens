@@ -1,9 +1,6 @@
 package com.healthlens.api.security;
 
 import com.healthlens.api.entity.AccountStatus;
-import com.healthlens.api.entity.User;
-import com.healthlens.api.entity.UserRole;
-import com.healthlens.api.repository.UserRepository;
 import com.healthlens.api.util.JwtUtil;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
@@ -42,14 +39,14 @@ class JwtAuthenticationFilterTest {
 
     @Mock private JwtUtil jwtUtil;
     @Mock private StringRedisTemplate redisTemplate;
-    @Mock private UserRepository userRepository;
+    @Mock private AccountStatusCache accountStatusCache;
     @Mock private FilterChain filterChain;
 
     private JwtAuthenticationFilter filter;
 
     @BeforeEach
     void setUp() {
-        filter = new JwtAuthenticationFilter(jwtUtil, redisTemplate, userRepository, false);
+        filter = new JwtAuthenticationFilter(jwtUtil, redisTemplate, accountStatusCache, false);
         SecurityContextHolder.clearContext();
     }
 
@@ -76,7 +73,7 @@ class JwtAuthenticationFilterTest {
         Claims claims = mock(Claims.class);
         when(claims.get("role", String.class)).thenReturn("ROLE_USER");
         when(jwtUtil.extractClaims(token)).thenReturn(claims);
-        when(userRepository.findById(userId)).thenReturn(Optional.of(userWithStatus(userId, AccountStatus.PENDING_DELETION)));
+        when(accountStatusCache.getStatus(userId)).thenReturn(Optional.of(AccountStatus.PENDING_DELETION));
 
         filter.doFilter(request, response, filterChain);
 
@@ -104,7 +101,7 @@ class JwtAuthenticationFilterTest {
         Claims claims = mock(Claims.class);
         when(claims.get("role", String.class)).thenReturn("ROLE_USER");
         when(jwtUtil.extractClaims(token)).thenReturn(claims);
-        when(userRepository.findById(userId)).thenReturn(Optional.of(userWithStatus(userId, AccountStatus.DELETED)));
+        when(accountStatusCache.getStatus(userId)).thenReturn(Optional.of(AccountStatus.DELETED));
 
         filter.doFilter(request, response, filterChain);
 
@@ -132,7 +129,7 @@ class JwtAuthenticationFilterTest {
         Claims claims = mock(Claims.class);
         when(claims.get("role", String.class)).thenReturn("ROLE_USER");
         when(jwtUtil.extractClaims(token)).thenReturn(claims);
-        when(userRepository.findById(userId)).thenReturn(Optional.of(userWithStatus(userId, AccountStatus.ACTIVE)));
+        when(accountStatusCache.getStatus(userId)).thenReturn(Optional.of(AccountStatus.ACTIVE));
 
         filter.doFilter(request, response, filterChain);
 
@@ -154,21 +151,6 @@ class JwtAuthenticationFilterTest {
 
         verify(filterChain).doFilter(request, response);
         verify(jwtUtil, never()).validateToken(anyString());
-        verify(userRepository, never()).findById(any(UUID.class));
-    }
-
-    private User userWithStatus(UUID id, AccountStatus status) {
-        User user = new User();
-        user.setId(id);
-        user.setEmail("test@example.com");
-        user.setFullName("Test User");
-        user.setBirthDate(java.time.LocalDate.of(1990, 1, 1));
-        user.setPasswordHash("hash");
-        user.setEmailVerified(true);
-        user.setRole(UserRole.ROLE_USER);
-        user.setAccountStatus(status);
-        user.setCreatedAt(java.time.Instant.now());
-        user.setUpdatedAt(java.time.Instant.now());
-        return user;
+        verify(accountStatusCache, never()).getStatus(any(UUID.class));
     }
 }

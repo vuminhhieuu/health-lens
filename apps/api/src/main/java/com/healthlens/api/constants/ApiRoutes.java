@@ -101,7 +101,9 @@ public final class ApiRoutes {
 
     // =========================================
     // User Deletion Paths (Story 1.6 - AC #5)
-    // Cancel endpoint is public (no auth) — token from email is the credential
+    // Create: POST .../users/me/deletion-request (authenticated).
+    // Cancel: DELETE .../users/deletion-requests/cancel?token=... — public (permitAll); NOT under /me/
+    // because the email cancellation token is the credential (no JWT on this call).
     // =========================================
     public static final String USERS_DELETION_BASE = API_V1 + "/users/deletion-requests";
     public static final String USERS_DELETION_CANCEL = USERS_DELETION_BASE + "/cancel";

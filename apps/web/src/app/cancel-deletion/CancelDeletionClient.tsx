@@ -240,7 +240,7 @@ export default function CancelDeletionClient() {
                 <div className="flex items-start gap-2 pt-2">
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#3d4947]" />
                   <p className="text-[11px] leading-normal text-[#3d4947]">
-                    Theo chính sách bảo mật, dữ liệu của bạn sẽ được giữ lại trong 14 ngày grace period trước khi bị xóa vĩnh viễn khỏi hệ thống của chúng tôi để đảm bảo quyền lợi khôi phục tài khoản. Hành động khôi phục sẽ tuân thủ các điều khoản dịch vụ hiện hành.
+                    Theo chính sách bảo mật, dữ liệu của bạn sẽ được giữ lại trong 72 giờ grace period trước khi bị xóa vĩnh viễn khỏi hệ thống của chúng tôi để đảm bảo quyền lợi khôi phục tài khoản. Hành động khôi phục sẽ tuân thủ các điều khoản dịch vụ hiện hành.
                   </p>
                 </div>
               </div>

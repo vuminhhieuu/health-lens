@@ -2,7 +2,7 @@
 -- Implements right-to-delete feature per Nghị định 13/2023/NĐ-CP
 
 CREATE TABLE data_deletion_requests (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     scheduled_deletion_at TIMESTAMP NOT NULL,

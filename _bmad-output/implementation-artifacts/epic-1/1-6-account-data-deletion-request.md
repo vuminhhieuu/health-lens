@@ -60,7 +60,7 @@ so that dữ liệu của tôi được xóa theo NĐ 13/2023.
   - [ ] Thêm cột `account_status` với values: `active`, `pending_deletion`, `deleted`
   - [ ] Cập nhật `JwtAuthenticationFilter` để reject users với status không phải `active`
 - [ ] Task 3 — Backend: Cancellation endpoint (AC: #5)
-  - [ ] `DELETE /api/v1/users/me/deletion-request?token={cancellationToken}`
+  - [ ] `DELETE /api/v1/users/deletion-requests/cancel?token={cancellationToken}` — **public** (`permitAll`), xác thực bằng token trong email (không JWT; vì vậy **không** nằm dưới `/api/v1/users/me/...`)
   - [ ] Validate cancellation token, chỉ cho phép nếu status còn `pending`
   - [ ] Khôi phục account_status về `active`
 - [ ] Task 4 — Backend: Scheduled deletion job (AC: #2)
