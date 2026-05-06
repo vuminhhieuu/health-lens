@@ -25,8 +25,11 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      const currentPath = window.location.pathname;
-      router.replace(`/login?returnUrl=${encodeURIComponent(currentPath)}`);
+      const returnPath =
+        typeof window !== "undefined"
+          ? `${window.location.pathname}${window.location.search}`
+          : "";
+      router.replace(`/login?returnUrl=${encodeURIComponent(returnPath || "/home")}`);
     }
   }, [isLoading, isAuthenticated, router]);
 

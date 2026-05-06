@@ -1,6 +1,6 @@
 # Story 4.4: Gợi ý lối sống kèm disclaimer bắt buộc
 
-Status: review
+Status: done
 
 ## Execution scope
 

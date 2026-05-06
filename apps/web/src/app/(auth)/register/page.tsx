@@ -21,6 +21,9 @@ const registerPageSchema = registerSchema.extend({
 type RegisterPageInput = z.infer<typeof registerPageSchema>;
 
 export default function RegisterPage() {
+  const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const inviteToken = searchParams?.get("inviteToken") ?? null;
+  const returnUrl = searchParams?.get("returnUrl") ?? null;
   const [successMessage, setSuccessMessage] = useState("");
   const [submitError, setSubmitError] = useState("");
 
@@ -79,6 +82,11 @@ export default function RegisterPage() {
           <div className="mb-10 text-center">
             <h1 className="mb-2 text-3xl font-extrabold tracking-tight text-[#121e1c]">Tạo Tài Khoản</h1>
             <p className="text-base text-[#3d4947]">Bắt đầu quản lý sức khỏe của bạn</p>
+            {inviteToken ? (
+              <p className="mt-3 rounded-lg bg-[#eaf9f5] px-3 py-2 text-sm text-[#005049]">
+                Bạn đang đăng ký từ lời mời chia sẻ hồ sơ gia đình.
+              </p>
+            ) : null}
           </div>
 
           <form className="space-y-6" onSubmit={handleSubmit(onSubmit)} noValidate>
@@ -189,7 +197,10 @@ export default function RegisterPage() {
           <div className="mt-8 border-t border-[#d8e5e2] pt-6 text-center">
             <p className="text-sm text-[#3d4947]">
               Đã có tài khoản?
-              <a href="/login" className="ml-1 font-bold text-[#00685f] hover:underline">
+              <a
+                href={returnUrl ? `/login?returnUrl=${encodeURIComponent(returnUrl)}` : "/login"}
+                className="ml-1 font-bold text-[#00685f] hover:underline"
+              >
                 Đăng Nhập
               </a>
             </p>

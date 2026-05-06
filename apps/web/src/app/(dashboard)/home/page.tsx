@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Activity,
   CalendarDays,
@@ -17,11 +17,14 @@ import {
   ShieldPlus,
   Stethoscope,
   Upload,
+  UserPlus,
+  X,
 } from "lucide-react";
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
 import { apiClient } from "@/lib/api/apiClient";
+import { InviteMemberModal } from "@/components/features/profiles/InviteMemberModal";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 
 type Profile = {
@@ -37,7 +40,28 @@ type HealthRecord = {
   abnormalCount?: number;
 };
 
+function extractApiDetail(error: unknown, fallback: string): string {
+  if (error && typeof error === "object" && "response" in error) {
+    const axiosError = error as {
+      response?: {
+        data?: {
+          detail?: string;
+          title?: string;
+          message?: string;
+        };
+      };
+    };
+    const data = axiosError.response?.data;
+    return data?.detail ?? data?.title ?? data?.message ?? fallback;
+  }
+  return fallback;
+}
+
 export default function DashboardHomePage() {
+  const [profilePickerOpen, setProfilePickerOpen] = useState(false);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [invitingProfileId, setInvitingProfileId] = useState<string | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
   const { data: profiles = [] } = useQuery({
     queryKey: ["home-profiles"],
     queryFn: async () => {
@@ -64,6 +88,22 @@ export default function DashboardHomePage() {
     if (!primaryProfileId) return "/health-records";
     return `/profiles/${primaryProfileId}/history`;
   }, [primaryProfileId]);
+
+  const inviteMutation = useMutation({
+    mutationFn: async (payload: { email: string; accessLevel: "view" | "edit" }) => {
+      if (!invitingProfileId) {
+        throw new Error("Thiếu profile để chia sẻ.");
+      }
+      await apiClient.post(ApiPaths.PROFILES.INVITATIONS(invitingProfileId), payload);
+    },
+    onSuccess: () => {
+      setInviteModalOpen(false);
+      setInvitingProfileId(null);
+    },
+    onError: (error: unknown) => {
+      alert(extractApiDetail(error, "Không thể gửi lời mời chia sẻ."));
+    },
+  });
 
   return (
     <DashboardPageShell
@@ -163,7 +203,15 @@ export default function DashboardHomePage() {
             <ActionTile icon={<Upload className="h-6 w-6" />} label="Tải kết quả" href={`/health-records?profileId=${primaryProfileId ?? ""}&openUpload=1`} />
             <ActionTile icon={<CalendarDays className="h-6 w-6" />} label="Đặt lịch khám" disabled />
             <ActionTile icon={<Eye className="h-6 w-6" />} label="Xem kết quả" href={historyHref} />
-            <ActionTile icon={<Share2 className="h-6 w-6" />} label="Chia sẻ" disabled />
+            <ActionTile
+              icon={<Share2 className="h-6 w-6" />}
+              label="Chia sẻ"
+              disabled={profiles.length === 0}
+              onClick={() => {
+                setSelectedProfileId(primaryProfileId ?? profiles[0]?.id ?? "");
+                setProfilePickerOpen(true);
+              }}
+            />
             <ActionTile icon={<HelpCircle className="h-6 w-6" />} label="Liên hệ bác sĩ" disabled />
             <ActionTile icon={<ShieldPlus className="h-6 w-6" />} label="Trợ giúp" disabled />
           </div>
@@ -185,6 +233,86 @@ export default function DashboardHomePage() {
           </div>
         </div>
       </section>
+      <InviteMemberModal
+        isOpen={inviteModalOpen}
+        onClose={() => {
+          setInviteModalOpen(false);
+          setInvitingProfileId(null);
+        }}
+        isLoading={inviteMutation.isPending}
+        title="Chia sẻ quyền xem kết quả khám"
+        description="Nhập email người nhận."
+        onSubmit={(payload) => inviteMutation.mutate(payload)}
+      />
+      {profilePickerOpen ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="flex max-h-[78vh] w-full max-w-2xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl shadow-black/20 animate-in zoom-in-95 duration-200">
+            <div className="relative p-7 pb-4">
+              <button
+                type="button"
+                onClick={() => setProfilePickerOpen(false)}
+                className="absolute top-6 right-6 rounded-full p-2 text-[#6d7a77] transition-colors hover:bg-[#e9f6f3]"
+                aria-label="Đóng"
+              >
+                <X size={20} />
+              </button>
+              <div className="mb-2 flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e9f6f3] text-[#00685f]">
+                  <UserPlus size={24} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black text-[#121e1c]">Chọn hồ sơ để chia sẻ</h3>
+                  <p className="mt-1 text-sm font-medium text-[#6d7a77]">
+                    Chọn hồ sơ sức khỏe bạn muốn chia sẻ cho người khác xem.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="px-7 pb-6">
+              <label className="mb-2 block text-sm font-bold text-[#121e1c]" htmlFor="share-profile-select">
+                Hồ sơ cần chia sẻ <span className="text-red-600">*</span>
+              </label>
+              <div className="relative">
+                <select
+                  id="share-profile-select"
+                  value={selectedProfileId}
+                  onChange={(event) => setSelectedProfileId(event.target.value)}
+                  className="h-12 w-full cursor-pointer appearance-none rounded-2xl border border-[#b7e8e0] bg-[#f0faf8] pr-10 pl-4 text-sm font-semibold text-[#3d4947] outline-none focus:border-[#008378]"
+                >
+                  {profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.displayName}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-[#00685f]">▾</span>
+              </div>
+            </div>
+            <div className="mt-auto flex items-center justify-end border-t border-[#e8eeec] px-7 py-4">
+              <button
+                type="button"
+                onClick={() => setProfilePickerOpen(false)}
+                className="mr-3 rounded-2xl border border-[#c5dfd9] bg-white px-5 py-2.5 text-sm font-bold text-[#3d4947] transition hover:bg-[#f6fbfa]"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={!selectedProfileId}
+                onClick={() => {
+                  if (!selectedProfileId) return;
+                  setInvitingProfileId(selectedProfileId);
+                  setProfilePickerOpen(false);
+                  setInviteModalOpen(true);
+                }}
+                className="rounded-2xl bg-[#008378] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110"
+              >
+                Tiếp tục
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </DashboardPageShell>
   );
 }
@@ -224,18 +352,25 @@ function ActionTile({
   label,
   href,
   disabled,
+  onClick,
 }: {
   icon: ReactNode;
   label: string;
   href?: string;
   disabled?: boolean;
+  onClick?: () => void;
 }) {
   const commonClass =
     "group aspect-square rounded-2xl bg-white p-4 shadow-sm transition-all duration-300 hover:bg-[#00685f] hover:text-white";
 
   if (disabled || !href) {
     return (
-      <button type="button" disabled className={`${commonClass} cursor-not-allowed opacity-60`}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={disabled ? undefined : onClick}
+        className={`${commonClass} ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+      >
         <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
           <span className="text-[#00685f] group-hover:text-white">{icon}</span>
           <span className="text-xs font-bold uppercase tracking-tight">{label}</span>

@@ -71,11 +71,26 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex, HttpServletRequest request) {
+        if (isPendingProfileInvitationDuplicate(ex)) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.CONFLICT, "Đã có lời mời đang chờ cho email này.");
+            problem.setType(URI.create("https://healthlens.vn/errors/invitation-pending-exists"));
+            problem.setTitle("Loi moi dang cho");
+            problem.setInstance(URI.create(request.getRequestURI()));
+            return problem;
+        }
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Email nay da duoc dang ky");
         problem.setType(URI.create("https://healthlens.vn/errors/email-already-exists"));
         problem.setTitle("Email da ton tai");
         problem.setInstance(URI.create(request.getRequestURI()));
         return problem;
+    }
+
+    private static boolean isPendingProfileInvitationDuplicate(DataIntegrityViolationException ex) {
+        String msg = ex.getMostSpecificCause() != null
+                ? ex.getMostSpecificCause().getMessage()
+                : ex.getMessage();
+        return msg != null && msg.contains("uq_profile_invitations_pending_profile_email");
     }
 
     @ExceptionHandler(WeakPasswordException.class)

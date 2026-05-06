@@ -50,6 +50,18 @@ export const ApiPaths = {
     DELETE: (id: string) => `/api/${API_VERSION}/profiles/${id}`,
     SET_DEFAULT: (id: string) => `/api/${API_VERSION}/profiles/${id}/set-default`,
     HEALTH_RECORDS: (id: string) => `/api/${API_VERSION}/profiles/${id}/health-records`,
+    INVITATIONS: (id: string) => `/api/${API_VERSION}/profiles/${id}/invitations`,
+    INVITATION_BY_ID: (profileId: string, invitationId: string) =>
+      `/api/${API_VERSION}/profiles/${profileId}/invitations/${invitationId}`,
+    INVITATION_RESEND: (profileId: string, invitationId: string) =>
+      `/api/${API_VERSION}/profiles/${profileId}/invitations/${invitationId}/resend`,
+  },
+
+  INVITATIONS: {
+    ACCEPT: (token: string) => `/api/${API_VERSION}/invitations/accept?token=${encodeURIComponent(token)}`,
+    /** Lời mời pending gửi đến email của user đang đăng nhập (thông báo trong app) */
+    INCOMING: `/api/${API_VERSION}/invitations/incoming`,
+    REJECT: (invitationId: string) => `/api/${API_VERSION}/invitations/${invitationId}/reject`,
   },
 
   /** Health record endpoints */

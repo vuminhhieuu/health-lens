@@ -1,6 +1,7 @@
 "use client";
 
 import { User, ChevronRight, Calendar } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
 
@@ -15,6 +16,11 @@ interface ProfileCardProps {
   lastUpdated?: string | Date;
   isSelected?: boolean;
   onPress?: () => void;
+  secondaryAction?: {
+    label: string;
+    onClick: () => void;
+    icon?: LucideIcon;
+  };
 }
 
 const statusConfig = {
@@ -44,6 +50,7 @@ export function ProfileCard({
   lastUpdated,
   isSelected,
   onPress,
+  secondaryAction,
 }: ProfileCardProps) {
   const status = latestStatus ? statusConfig[latestStatus] : null;
 
@@ -91,7 +98,19 @@ export function ProfileCard({
             )}
           </div>
         </div>
-        {onPress ? (
+        {secondaryAction ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              secondaryAction.onClick();
+            }}
+            className="inline-flex items-center gap-1 rounded-xl border border-[#c5dfd9] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#00685f] transition hover:bg-[#f0faf8]"
+          >
+            {secondaryAction.icon ? <secondaryAction.icon className="h-3.5 w-3.5" /> : null}
+            {secondaryAction.label}
+          </button>
+        ) : onPress ? (
           <ChevronRight className="w-5 h-5 text-[#bcc9c6] group-hover:text-[#00685f] group-hover:translate-x-1 transition-all" />
         ) : null}
       </div>

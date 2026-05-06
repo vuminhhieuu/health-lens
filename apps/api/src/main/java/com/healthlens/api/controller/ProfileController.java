@@ -2,15 +2,19 @@ package com.healthlens.api.controller;
 
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.CreateProfileRequest;
+import com.healthlens.api.dto.request.InviteProfileMemberRequest;
 import com.healthlens.api.dto.request.UpdateProfileRequest;
 import com.healthlens.api.dto.response.HealthRecordHistoryPageResponse;
+import com.healthlens.api.dto.response.ProfileInvitationResponse;
 import com.healthlens.api.dto.response.ProfileResponse;
 import com.healthlens.api.service.HealthRecordService;
 import com.healthlens.api.service.ProfileService;
+import com.healthlens.api.service.ProfileShareService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,10 +35,16 @@ public class ProfileController {
 
     private final ProfileService profileService;
     private final HealthRecordService healthRecordService;
+    private final ProfileShareService profileShareService;
 
-    public ProfileController(ProfileService profileService, HealthRecordService healthRecordService) {
+    public ProfileController(
+            ProfileService profileService,
+            HealthRecordService healthRecordService,
+            ProfileShareService profileShareService
+    ) {
         this.profileService = profileService;
         this.healthRecordService = healthRecordService;
+        this.profileShareService = profileShareService;
     }
 
     @GetMapping
@@ -93,6 +103,50 @@ public class ProfileController {
                         "requestId", UUID.randomUUID().toString()
                 )
         ));
+    }
+
+    @PostMapping("/{profileId}/invitations")
+    public ResponseEntity<Map<String, Object>> inviteProfileMember(
+            Authentication authentication,
+            @PathVariable UUID profileId,
+            @Valid @RequestBody InviteProfileMemberRequest request
+    ) {
+        UUID userId = extractUserId(authentication);
+        ProfileInvitationResponse invitation =
+                profileShareService.inviteByEmail(userId, profileId, request.email(), request.accessLevel());
+        return ResponseEntity.status(HttpStatus.CREATED).body(buildResponseBody(invitation));
+    }
+
+    @GetMapping("/{profileId}/invitations")
+    public ResponseEntity<Map<String, Object>> getProfileInvitations(
+            Authentication authentication,
+            @PathVariable UUID profileId
+    ) {
+        UUID userId = extractUserId(authentication);
+        List<ProfileInvitationResponse> invitations = profileShareService.listInvitations(userId, profileId);
+        return ResponseEntity.ok(buildResponseBody(invitations));
+    }
+
+    @DeleteMapping("/{profileId}/invitations/{invitationId}")
+    public ResponseEntity<Void> cancelInvitation(
+            Authentication authentication,
+            @PathVariable UUID profileId,
+            @PathVariable UUID invitationId
+    ) {
+        UUID userId = extractUserId(authentication);
+        profileShareService.cancelInvitation(userId, profileId, invitationId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{profileId}/invitations/{invitationId}/resend")
+    public ResponseEntity<Map<String, Object>> resendInvitation(
+            Authentication authentication,
+            @PathVariable UUID profileId,
+            @PathVariable UUID invitationId
+    ) {
+        UUID userId = extractUserId(authentication);
+        ProfileInvitationResponse invitation = profileShareService.resendInvitation(userId, profileId, invitationId);
+        return ResponseEntity.ok(buildResponseBody(invitation));
     }
 
     private UUID extractUserId(Authentication authentication) {

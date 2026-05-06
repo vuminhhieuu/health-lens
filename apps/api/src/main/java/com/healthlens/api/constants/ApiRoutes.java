@@ -50,6 +50,13 @@ public final class ApiRoutes {
     public static final String PROFILE_BY_ID = PROFILES_BASE + "/{id}";
     public static final String PROFILE_ENSURE_DEFAULT = PROFILES_BASE + "/ensure-default";
     public static final String PROFILE_SET_DEFAULT = PROFILES_BASE + "/{id}/set-default";
+    public static final String PROFILE_INVITATIONS = PROFILES_BASE + "/{profileId}/invitations";
+
+    // Invitation accept paths
+    public static final String INVITATIONS_BASE = API_V1 + "/invitations";
+    public static final String INVITATIONS_ACCEPT = INVITATIONS_BASE + "/accept";
+    public static final String INVITATIONS_INCOMING = INVITATIONS_BASE + "/incoming";
+    public static final String INVITATIONS_REJECT = INVITATIONS_BASE + "/{invitationId}/reject";
 
     // =========================================
     // Health Record Paths (Frontend: ApiPaths.HEALTH_RECORDS)
@@ -100,6 +107,7 @@ public final class ApiRoutes {
     // =========================================
     public static final String AUTH_PATTERN = AUTH_BASE + "/**";
     public static final String DEV_PATTERN = DEV_BASE + "/**";
+    public static final String INVITATIONS_ACCEPT_PATTERN = INVITATIONS_ACCEPT + "/**";
     public static final String SWAGGER_UI_PATTERN = "/swagger-ui/**";
     public static final String SWAGGER_HTML = "/swagger-ui.html";
     public static final String API_DOCS_PATTERN = "/v3/api-docs/**";

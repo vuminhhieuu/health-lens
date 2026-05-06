@@ -155,6 +155,7 @@ app:
     from: ${MAIL_FROM:no-reply@healthlens.vn}
     driver: ${MAIL_DRIVER:smtp}
   frontend:
+    base-url: ${WEB_APP_URL:http://localhost:3000}
     verification-url: ${WEB_VERIFY_URL:http://localhost:3000/verify-email}
   storage:
     bucket-auto-create: ${MINIO_BUCKET_AUTO_CREATE:true}
@@ -215,6 +216,7 @@ app:
     from: ${MAIL_FROM:noreply@healthlens.vn}
     driver: ${MAIL_DRIVER:smtp}
   frontend:
+    base-url: ${WEB_APP_URL:https://healthlens-staging.vercel.app}
     verification-url: ${WEB_VERIFY_URL:https://healthlens-staging.vercel.app/verify-email}
     reset-password-url: ${WEB_RESET_PASSWORD_URL:https://healthlens-staging.vercel.app/reset-password}
     login-url: ${WEB_LOGIN_URL:https://healthlens-staging.vercel.app/login}
@@ -283,6 +285,7 @@ app:
   cookie:
     secure: true
   frontend:
+    base-url: ${WEB_APP_URL:https://healthlens.vn}
     verification-url: ${WEB_VERIFY_URL:https://healthlens.vn/verify-email}
     reset-password-url: ${WEB_RESET_PASSWORD_URL:https://healthlens.vn/reset-password}
     login-url: ${WEB_LOGIN_URL:https://healthlens.vn/login}

@@ -22,11 +22,17 @@ public class ProfileShare {
     @Column(name = "profile_id", nullable = false)
     private UUID profileId;
 
+    @Column(name = "owner_id", nullable = false)
+    private UUID ownerId;
+
     @Column(name = "viewer_id", nullable = false)
     private UUID viewerId;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
+    @Column(name = "access_level", nullable = false, length = 20)
+    private String accessLevel;
+
+    @Column(name = "granted_at", nullable = false)
+    private Instant grantedAt;
 
     @Column(name = "revoked_at")
     private Instant revokedAt;
@@ -36,8 +42,11 @@ public class ProfileShare {
         if (id == null) {
             id = UUID.randomUUID();
         }
-        if (createdAt == null) {
-            createdAt = Instant.now();
+        if (grantedAt == null) {
+            grantedAt = Instant.now();
+        }
+        if (accessLevel == null || accessLevel.isBlank()) {
+            accessLevel = "view";
         }
     }
 }
