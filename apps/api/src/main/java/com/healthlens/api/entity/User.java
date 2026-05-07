@@ -14,6 +14,7 @@ import lombok.Setter;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
+import com.healthlens.api.entity.AccountStatus;
 
 @Getter
 @Setter
@@ -46,6 +47,10 @@ public class User {
     @Column(nullable = false, length = 20)
     private UserRole role;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "account_status", nullable = false, length = 20)
+    private AccountStatus accountStatus;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -59,6 +64,9 @@ public class User {
         }
         if (role == null) {
             role = UserRole.ROLE_USER;
+        }
+        if (accountStatus == null) {
+            accountStatus = AccountStatus.ACTIVE;
         }
         emailVerified = false;
         Instant now = Instant.now();

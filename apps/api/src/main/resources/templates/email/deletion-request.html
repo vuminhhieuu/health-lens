@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="vi" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Email xác nhận yêu cầu xóa - HealthLens</title>
+</head>
+
+<body style="
+      margin: 0;
+      padding: 0;
+      background-color: #f1f5f9;
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #121e1c;
+      -webkit-font-smoothing: antialiased;
+    ">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+    style="background-color: #f1f5f9; padding: 24px 12px">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="720" cellspacing="0" cellpadding="0"
+          style="max-width: 720px; width: 100%; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 32px rgba(18, 30, 28, 0.06)">
+          <tr>
+            <td style="
+                  padding: 28px 24px;
+                  background: linear-gradient(135deg, #00685f 0%, #008378 100%);
+                  text-align: center;
+                ">
+              <p
+                style="margin: 0; font-size: 12px; letter-spacing: 0.12em; font-weight: 700; color: rgba(255, 255, 255, 0.85); text-transform: uppercase">
+                Data Deletion Request
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 28px 24px 16px; text-align: center">
+              <div style="margin-bottom: 14px">
+                <span
+                  style="font-size: 30px; font-weight: 800; letter-spacing: -0.02em; color: #00685f; vertical-align: middle">HealthLens</span>
+              </div>
+              <h1 style="margin: 0; font-size: 30px; line-height: 1.2; font-weight: 700; color: #121e1c">
+                Yêu cầu xóa dữ liệu của bạn
+              </h1>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 0 24px 28px">
+              <p style="margin: 0 0 12px; font-size: 20px; font-weight: 600; color: #121e1c">
+                Chào <span th:text="${displayName}">bạn</span>,
+              </p>
+              <p style="margin: 0 0 24px; font-size: 16px; line-height: 1.7; color: #3d4947">
+                Chúng tôi đã nhận được yêu cầu xóa tài khoản và toàn bộ dữ liệu liên quan của bạn. Theo
+                <span style="font-weight: 700; color: #00685f"> Nghị định 13/2023/NĐ-CP</span> về bảo vệ dữ liệu cá
+                nhân,
+                quy trình này sẽ được thực hiện nghiêm ngặt và hoàn tất trong tối đa 72 giờ.
+              </p>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+                style="background-color: #e9f6f3; border-radius: 12px; margin-bottom: 18px">
+                <tr>
+                  <td style="padding: 20px">
+                    <p
+                      style="margin: 0 0 14px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; color: rgba(61, 73, 71, 0.8)">
+                      Dữ liệu sẽ bị xóa vĩnh viễn:
+                    </p>
+
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td width="50%" style="padding: 0 6px 8px 0">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+                            style="background-color: #ffffff; border-radius: 8px; border: 1px solid rgba(188, 201, 198, 0.4)">
+                            <tr>
+                              <td style="padding: 12px 10px; font-size: 14px; color: #121e1c">👤 PII (Thông tin cá nhân)
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                        <td width="50%" style="padding: 0 0 8px 6px">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+                            style="background-color: #ffffff; border-radius: 8px; border: 1px solid rgba(188, 201, 198, 0.4)">
+                            <tr>
+                              <td style="padding: 12px 10px; font-size: 14px; color: #121e1c">🩺 Hồ sơ sức khỏe</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td width="50%" style="padding: 0 6px 0 0">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+                            style="background-color: #ffffff; border-radius: 8px; border: 1px solid rgba(188, 201, 198, 0.4)">
+                            <tr>
+                              <td style="padding: 12px 10px; font-size: 14px; color: #121e1c">📎 Các tệp đính kèm</td>
+                            </tr>
+                          </table>
+                        </td>
+                        <td width="50%" style="padding: 0 0 0 6px">
+                          <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+                            style="background-color: #ffffff; border-radius: 8px; border: 1px solid rgba(188, 201, 198, 0.4)">
+                            <tr>
+                              <td style="padding: 12px 10px; font-size: 14px; color: #121e1c">📝 Nhật ký đồng thuận/hoạt
+                                động</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+                style="background-color: rgba(255, 219, 206, 0.35); border-left: 4px solid #924628; border-radius: 8px; margin-bottom: 22px">
+                <tr>
+                  <td style="padding: 14px 16px">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td style="font-size: 15px; font-weight: 700; color: #370e00">⏰ Hạn chót xử lý:</td>
+                        <td align="right" style="font-size: 15px; font-weight: 800; color: #924628"
+                          th:text="${deadlineFormatted}">
+                          15:30 - 18/03/2026
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <div style="text-align: center; margin-bottom: 24px">
+                <a th:href="${cancellationLink}" href="#" style="
+                      display: inline-block;
+                      padding: 14px 34px;
+                      border-radius: 12px;
+                      background: linear-gradient(to right, #00685f, #008378);
+                      color: #ffffff !important;
+                      font-size: 18px;
+                      font-weight: 700;
+                      text-decoration: none;
+                      box-shadow: 0 8px 24px rgba(0, 104, 95, 0.2);
+                    ">
+                  Hủy yêu cầu xóa
+                </a>
+              </div>
+
+              <div style="border-top: 1px solid #deebe8; padding-top: 18px; text-align: center">
+                <p
+                  style="margin: 0; font-size: 12px; line-height: 1.7; color: rgba(61, 73, 71, 0.85); font-style: italic">
+                  Đây là email tự động, vui lòng không phản hồi.<br />
+                  Nếu bạn gặp vấn đề hoặc không thực hiện yêu cầu này, hãy liên hệ hỗ trợ tại
+                  <a href="mailto:support@healthlens.vn"
+                    style="color: #00685f; font-weight: 700; text-decoration: none">support@healthlens.vn</a>
+                </p>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="background-color: #e9f6f3; padding: 18px 24px; text-align: center">
+              <p
+                style="margin: 0 0 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; color: rgba(61, 73, 71, 0.6)">
+                HealthLens Vietnam Co., Ltd
+              </p>
+              <p style="margin: 0; font-size: 10px; color: rgba(61, 73, 71, 0.6)">
+                Level 24, Landmark 81, Ho Chi Minh City, Vietnam
+              </p>
+              <p style="margin: 10px 0 0; font-size: 10px; color: #00685f">
+                © <span th:text="${currentYear}">2026</span> HealthLens Meridian
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+
+</html>

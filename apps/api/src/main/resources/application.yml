@@ -84,6 +84,8 @@ app:
   security:
     blacklist-fail-closed: ${APP_SECURITY_BLACKLIST_FAIL_CLOSED:false}
     rate-limit-fail-closed: ${APP_SECURITY_RATE_LIMIT_FAIL_CLOSED:false}
+    # Short TTL: hot-path reads hit Redis; DataDeletionService writes through on every status change.
+    account-status-cache-ttl: ${APP_SECURITY_ACCOUNT_STATUS_CACHE_TTL:60s}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
   stream:
@@ -157,6 +159,7 @@ app:
   frontend:
     base-url: ${WEB_APP_URL:http://localhost:3000}
     verification-url: ${WEB_VERIFY_URL:http://localhost:3000/verify-email}
+    cancellation-url: ${WEB_CANCELLATION_URL:http://localhost:3000/cancel-deletion}
   storage:
     bucket-auto-create: ${MINIO_BUCKET_AUTO_CREATE:true}
     cors-configure: ${MINIO_CORS_CONFIGURE:false}
@@ -220,6 +223,7 @@ app:
     verification-url: ${WEB_VERIFY_URL:https://healthlens-staging.vercel.app/verify-email}
     reset-password-url: ${WEB_RESET_PASSWORD_URL:https://healthlens-staging.vercel.app/reset-password}
     login-url: ${WEB_LOGIN_URL:https://healthlens-staging.vercel.app/login}
+    cancellation-url: ${WEB_CANCELLATION_URL:https://healthlens-staging.vercel.app/cancel-deletion}
   storage:
     endpoint: ${MINIO_ENDPOINT:}
     access-key: ${MINIO_ACCESS_KEY:}
@@ -289,6 +293,7 @@ app:
     verification-url: ${WEB_VERIFY_URL:https://healthlens.vn/verify-email}
     reset-password-url: ${WEB_RESET_PASSWORD_URL:https://healthlens.vn/reset-password}
     login-url: ${WEB_LOGIN_URL:https://healthlens.vn/login}
+    cancellation-url: ${WEB_CANCELLATION_URL:https://healthlens.vn/cancel-deletion}
   storage:
     endpoint: ${MINIO_ENDPOINT:}
     access-key: ${MINIO_ACCESS_KEY:}

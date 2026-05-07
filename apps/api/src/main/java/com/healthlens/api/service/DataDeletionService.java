@@ -1,0 +1,317 @@
+package com.healthlens.api.service;
+
+import com.healthlens.api.dto.request.DeleteAccountRequest;
+import com.healthlens.api.dto.response.CancelDeletionResponse;
+import com.healthlens.api.dto.response.DeleteAccountResponse;
+import com.healthlens.api.entity.AccountStatus;
+import com.healthlens.api.entity.DataDeletionRequest;
+import com.healthlens.api.entity.DeletionRequestStatus;
+import com.healthlens.api.entity.User;
+import com.healthlens.api.repository.ConsentLogRepository;
+import com.healthlens.api.repository.DataDeletionRequestRepository;
+import com.healthlens.api.repository.EmailVerificationTokenRepository;
+import com.healthlens.api.repository.HealthRecordRepository;
+import com.healthlens.api.repository.PasswordResetTokenRepository;
+import com.healthlens.api.repository.ProfileRepository;
+import com.healthlens.api.repository.RefreshTokenRepository;
+import com.healthlens.api.repository.UserRepository;
+import com.healthlens.api.security.AccountStatusCache;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.security.SecureRandom;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Service handling user account right-to-delete per Nghị định 13/2023/NĐ-CP (Story 1.6).
+ *
+ * <p>Lifecycle:
+ * <ol>
+ *   <li>{@link #createDeletionRequest(UUID, DeleteAccountRequest)} — verify password, create
+ *       request with 72-hour grace period, mark account {@code PENDING_DELETION}, send email
+ *       (AC #1, AC #4).</li>
+ *   <li>{@link #cancelDeletionRequest(String)} — restore account to {@code ACTIVE} via emailed
+ *       cancellation token within the grace period (AC #5).</li>
+ *   <li>{@link #processDeletionRequests()} — scheduler entry point: find overdue requests and
+ *       wipe data (AC #2).</li>
+ * </ol>
+ */
+@Slf4j
+@Service
+public class DataDeletionService {
+
+    /**
+     * Name of partial unique index on {@code data_deletion_requests(user_id) WHERE status='PENDING'};
+     * referenced when mapping concurrent-insert violations to the same outcome as {@code existsByUserIdAndStatus}.
+     */
+    static final String PENDING_DELETION_UNIQUE_INDEX_NAME = "uq_data_deletion_requests_one_pending_per_user";
+
+    private final DataDeletionRequestRepository deletionRequestRepository;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final EmailService emailService;
+    private final HealthRecordRepository healthRecordRepository;
+    private final ProfileRepository profileRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final EmailVerificationTokenRepository emailVerificationTokenRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final ConsentLogRepository consentLogRepository;
+    private final StorageService storageService;
+    private final DataDeletionService selfProxy;
+    private final AccountStatusCache accountStatusCache;
+    private final String webCancellationUrl;
+
+    public DataDeletionService(
+            DataDeletionRequestRepository deletionRequestRepository,
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            EmailService emailService,
+            HealthRecordRepository healthRecordRepository,
+            ProfileRepository profileRepository,
+            RefreshTokenRepository refreshTokenRepository,
+            EmailVerificationTokenRepository emailVerificationTokenRepository,
+            PasswordResetTokenRepository passwordResetTokenRepository,
+            ConsentLogRepository consentLogRepository,
+            StorageService storageService,
+            AccountStatusCache accountStatusCache,
+            @Lazy DataDeletionService selfProxy,
+            @Value("${app.frontend.cancellation-url:http://localhost:3000/cancel-deletion}") String webCancellationUrl) {
+        this.deletionRequestRepository = deletionRequestRepository;
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.emailService = emailService;
+        this.healthRecordRepository = healthRecordRepository;
+        this.profileRepository = profileRepository;
+        this.refreshTokenRepository = refreshTokenRepository;
+        this.emailVerificationTokenRepository = emailVerificationTokenRepository;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.consentLogRepository = consentLogRepository;
+        this.storageService = storageService;
+        this.accountStatusCache = accountStatusCache;
+        this.selfProxy = selfProxy;
+        this.webCancellationUrl = webCancellationUrl;
+    }
+
+    /**
+     * AC #1, AC #4 — verify password, create request, schedule deletion 72h ahead, send email.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public DeleteAccountResponse createDeletionRequest(UUID userId, DeleteAccountRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            throw new IllegalArgumentException("Mật khẩu không đúng");
+        }
+
+        if (deletionRequestRepository.existsByUserIdAndStatus(userId, DeletionRequestStatus.PENDING)) {
+            throw new IllegalStateException("Bạn đã có một yêu cầu xóa đang chờ xử lý");
+        }
+
+        String cancellationToken = generateCancellationToken();
+        Instant requestedAt = Instant.now();
+
+        DataDeletionRequest deletionRequest = new DataDeletionRequest();
+        deletionRequest.setUserId(userId);
+        deletionRequest.setRequestedAt(requestedAt);
+        deletionRequest.setScheduledDeletionAt(requestedAt.plusSeconds(72L * 3600));
+        deletionRequest.setStatus(DeletionRequestStatus.PENDING);
+        deletionRequest.setCancellationToken(cancellationToken);
+        try {
+            // Flush immediately so partial unique index catches concurrent creates (READ_COMMITTED + check-then-insert is not enough).
+            deletionRequestRepository.saveAndFlush(deletionRequest);
+        } catch (DataIntegrityViolationException ex) {
+            if (isDuplicatePendingDeletionConstraint(ex)) {
+                throw new IllegalStateException("Bạn đã có một yêu cầu xóa đang chờ xử lý");
+            }
+            throw ex;
+        }
+
+        // AC #3: revoke all active sessions and freeze the account immediately
+        refreshTokenRepository.revokeAllByUserId(userId, requestedAt);
+        user.setAccountStatus(AccountStatus.PENDING_DELETION);
+        userRepository.save(user);
+        accountStatusCache.put(userId, AccountStatus.PENDING_DELETION);
+
+        log.info("Deletion request created: userId={} scheduledAt={}", userId, deletionRequest.getScheduledDeletionAt());
+
+        String cancellationLink = webCancellationUrl
+                + "?token=" + encodeQueryParam(cancellationToken)
+                + "&requestedAt=" + encodeQueryParam(requestedAt.toString())
+                + "&scheduledDeletionAt=" + encodeQueryParam(deletionRequest.getScheduledDeletionAt().toString())
+                + "&email=" + encodeQueryParam(user.getEmail());
+        try {
+            emailService.sendDeletionConfirmationEmail(user, deletionRequest, cancellationLink);
+        } catch (Exception e) {
+            // Email is best-effort: the request itself is already persisted and visible to the user
+            log.error("Gửi email xác nhận yêu cầu xóa tài khoản thất bại cho userId={}", userId, e);
+        }
+
+        return new DeleteAccountResponse(
+                "Yêu cầu xóa tài khoản của bạn đã được nhận. Tài khoản sẽ bị xóa sau 72 giờ. Vui lòng kiểm tra email để hủy yêu cầu nếu cần thiết.",
+                deletionRequest.getId().toString(),
+                deletionRequest.getScheduledDeletionAt(),
+                cancellationLink
+        );
+    }
+
+    /**
+     * AC #5 — validate token, restore account to ACTIVE if still in grace period.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public CancelDeletionResponse cancelDeletionRequest(String cancellationToken) {
+        DataDeletionRequest deletionRequest = deletionRequestRepository.findByCancellationToken(cancellationToken)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực."));
+
+        if (!deletionRequest.isPending()) {
+            throw new IllegalStateException("Yêu cầu xóa này không thể hủy được");
+        }
+
+        // Grace period ended but scheduler may not have run yet — still reject cancellation (ND13 semantics).
+        if (deletionRequest.isOverdue()) {
+            throw new IllegalStateException(
+                    "Thời gian cho phép hủy yêu cầu xóa đã kết thúc. Tài khoản đã hoặc sắp được xóa theo lịch đã đặt.");
+        }
+
+        User user = userRepository.findById(deletionRequest.getUserId())
+                .orElseThrow(() -> new IllegalArgumentException("Người dùng không tồn tại"));
+
+        // Avoid reactivating an account if deletion already ran (or DB is inconsistent): only cancel while still frozen.
+        if (user.getAccountStatus() != AccountStatus.PENDING_DELETION) {
+            throw new IllegalStateException(
+                    "Không thể hủy yêu cầu xóa: tài khoản không còn trong trạng thái chờ xóa.");
+        }
+
+        deletionRequest.setStatus(DeletionRequestStatus.CANCELLED);
+        deletionRequestRepository.save(deletionRequest);
+
+        user.setAccountStatus(AccountStatus.ACTIVE);
+        userRepository.save(user);
+        accountStatusCache.put(deletionRequest.getUserId(), AccountStatus.ACTIVE);
+
+        log.info("Deletion request cancelled: userId={}", deletionRequest.getUserId());
+
+        try {
+            emailService.sendCancellationConfirmationEmail(user);
+        } catch (Exception e) {
+            log.error("Failed to send cancellation confirmation email to userId={}", deletionRequest.getUserId(), e);
+        }
+
+        return new CancelDeletionResponse(
+                "Yêu cầu xóa tài khoản đã được hủy",
+                user.getEmail(),
+                Instant.now()
+        );
+    }
+
+    /**
+     * AC #2 — scheduler driver: process every PENDING request whose 72-hour grace period has lapsed.
+     * Each request is wiped in its own transaction so a single failure never poisons the batch.
+     */
+    public void processDeletionRequests() {
+        List<DataDeletionRequest> overdue = deletionRequestRepository.findByStatusAndScheduledDeletionAtBefore(
+                DeletionRequestStatus.PENDING, Instant.now());
+
+        log.info("Processing {} overdue deletion request(s)", overdue.size());
+
+        for (DataDeletionRequest deletionRequest : overdue) {
+            try {
+                selfProxy.executeDataDeletion(deletionRequest.getId());
+            } catch (Exception e) {
+                log.error("Failed to execute deletion for requestId={}: {}",
+                        deletionRequest.getId(), e.getMessage(), e);
+            }
+        }
+    }
+
+    /**
+     * AC #2 — wipe all user data in the order required by the foreign key graph.
+     * Public so Spring can wrap it via the self-proxy with REQUIRES_NEW; never call directly.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void executeDataDeletion(UUID deletionRequestId) {
+        DataDeletionRequest deletionRequest = deletionRequestRepository.findById(deletionRequestId)
+                .orElseThrow(() -> new IllegalArgumentException("Deletion request not found: " + deletionRequestId));
+
+        if (deletionRequest.getStatus() != DeletionRequestStatus.PENDING) {
+            log.info("Skipping non-pending deletion request: requestId={} status={}",
+                    deletionRequestId, deletionRequest.getStatus());
+            return;
+        }
+
+        UUID userId = deletionRequest.getUserId();
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+
+        log.info("Starting data deletion: userId={} requestId={}", userId, deletionRequestId);
+
+        // 1. Object storage (PDFs / images) — best-effort, before DB rows so the keys remain available for tracing.
+        int filesDeleted = storageService.deleteObjectsByPrefix("health-records/" + userId + "/");
+
+        // 2-3. Health data tables (children of profile/user)
+        int healthRecordsDeleted = healthRecordRepository.deleteAllByUserId(userId);
+        int profilesDeleted = profileRepository.deleteAllByUserId(userId);
+
+        // 4-7. Auth + consent artefacts
+        int emailVerificationDeleted = emailVerificationTokenRepository.deleteAllByUserId(userId);
+        int passwordResetDeleted = passwordResetTokenRepository.deleteAllByUserId(userId);
+        int refreshTokensDeleted = refreshTokenRepository.deleteAllByUserId(userId);
+        int consentLogsDeleted = consentLogRepository.deleteAllByUserId(userId);
+
+        // 8. Mark this deletion request completed (kept as audit trail)
+        deletionRequest.setStatus(DeletionRequestStatus.COMPLETED);
+        deletionRequest.setCompletedAt(Instant.now());
+        deletionRequestRepository.save(deletionRequest);
+
+        // 9. Best-effort completion email BEFORE the user row is anonymised.
+        try {
+            emailService.sendDeletionCompletionEmail(user);
+        } catch (Exception e) {
+            log.error("Failed to send deletion completion email to userId={}", userId, e);
+        }
+
+        // 10. Anonymise the user row. We keep the record so foreign keys from external systems
+        // (e.g. audit logs, deletion request itself) remain valid; PII is fully removed.
+        user.setAccountStatus(AccountStatus.DELETED);
+        user.setEmail("deleted+" + userId + "@deleted.local");
+        user.setFullName("[Deleted User]");
+        user.setPasswordHash("[deleted]");
+        user.setEmailVerified(false);
+        userRepository.save(user);
+        accountStatusCache.put(userId, AccountStatus.DELETED);
+
+        // AC #2 audit-trail line per architecture.md "Chiến Lược Audit Logging"
+        log.info("User data deleted per right-to-delete request: userId={} requestId={} files={} records={} profiles={} emailTokens={} resetTokens={} refreshTokens={} consentLogs={}",
+                userId, deletionRequestId, filesDeleted, healthRecordsDeleted, profilesDeleted,
+                emailVerificationDeleted, passwordResetDeleted, refreshTokensDeleted, consentLogsDeleted);
+    }
+
+    private String generateCancellationToken() {
+        byte[] randomBytes = new byte[32];
+        new SecureRandom().nextBytes(randomBytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    }
+
+    private String encodeQueryParam(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private static boolean isDuplicatePendingDeletionConstraint(DataIntegrityViolationException ex) {
+        Throwable cause = ex.getMostSpecificCause();
+        String msg = cause != null ? cause.getMessage() : null;
+        return msg != null && msg.contains(PENDING_DELETION_UNIQUE_INDEX_NAME);
+    }
+}

@@ -16,6 +16,10 @@ CREATE INDEX idx_profile_invitations_profile_created
 CREATE INDEX idx_profile_invitations_token
     ON profile_invitations (token);
 
+CREATE UNIQUE INDEX uq_data_deletion_requests_one_pending_per_user ON data_deletion_requests (user_id)
+WHERE
+    status = 'PENDING';
+
 ALTER TABLE profile_shares
     ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
     ADD COLUMN IF NOT EXISTS granted_at TIMESTAMPTZ;

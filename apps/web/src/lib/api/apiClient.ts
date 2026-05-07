@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosHeaders } from "axios";
 
 import { syncActiveConsentVersion } from "@/lib/consent/syncActiveConsentVersion";
 import { useAuthStore } from "@/stores/authStore";
@@ -19,8 +19,19 @@ const apiClient = axios.create({
 // Request interceptor: attach Authorization header
 apiClient.interceptors.request.use((config) => {
   const { accessToken } = useAuthStore.getState();
+  const headers = AxiosHeaders.from(config.headers);
+  config.headers = headers;
+
+  const isCancelDeletion =
+    config.url?.includes("/deletion-requests/cancel");
+
+  if (isCancelDeletion) {
+    headers.delete("Authorization");
+    headers.delete("authorization");
+    return config;
+  }
   if (accessToken) {
-    config.headers.Authorization = `Bearer ${accessToken}`;
+    headers.set("Authorization", `Bearer ${accessToken}`);
   }
   return config;
 });
@@ -49,11 +60,14 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
 
     // Only attempt refresh for 401 that is NOT from auth endpoints
+    const isCancelDeletion =
+      originalRequest.url?.startsWith(API_ROUTES.USERS.CANCEL_DELETION);
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
       !originalRequest.url?.includes(API_ROUTES.AUTH.LOGIN) &&
-      !originalRequest.url?.includes(API_ROUTES.AUTH.REFRESH)
+      !originalRequest.url?.includes(API_ROUTES.AUTH.REFRESH) &&
+      !isCancelDeletion
     ) {
       if (isRefreshing) {
         // Queue subsequent 401s while refresh is in progress

@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema } from "@healthlens/shared/schemas/auth";
-import { CircleHelp, Eye, EyeOff, LogIn, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CircleHelp, Eye, EyeOff, Globe, LogIn, ShieldCheck, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, Suspense } from "react";
@@ -17,6 +17,8 @@ import { API_ROUTES } from "@/lib/api/routes";
 import { useAuthStore } from "@/stores/authStore";
 
 type LoginInput = z.infer<typeof loginSchema>;
+const PENDING_DELETION_UI_MESSAGE =
+  "Yêu cầu xóa tài khoản của bạn đã được ghi nhận. Theo Nghị định 13/2023/NĐ-CP, hệ thống đang trong quá trình xóa dữ liệu vĩnh viễn (tối đa 72 giờ). Trong thời gian này, bạn không thể đăng nhập.";
 
 export default function LoginPage() {
   return (
@@ -34,6 +36,12 @@ function LoginContent() {
 
   const [submitError, setSubmitError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isPendingDeletionBlocked, setIsPendingDeletionBlocked] = useState(
+    searchParams.get("pendingDeletion") === "1",
+  );
+  const [pendingDeletionMessage, setPendingDeletionMessage] = useState(
+    PENDING_DELETION_UI_MESSAGE,
+  );
 
   const {
     register,
@@ -50,6 +58,7 @@ function LoginContent() {
 
   const onSubmit = async (data: LoginInput) => {
     setSubmitError("");
+    setIsPendingDeletionBlocked(false);
 
     try {
       const response = await apiClient.post(API_ROUTES.AUTH.LOGIN, {
@@ -93,7 +102,12 @@ function LoginContent() {
       ) {
         const resp = error.response as {
           status?: number;
-          data?: { detail?: string; retryAfterSeconds?: number };
+          data?: {
+            detail?: string;
+            title?: string;
+            type?: string;
+            retryAfterSeconds?: number;
+          };
         };
         if (resp.status === 429) {
           const retryAfter = resp.data?.retryAfterSeconds ?? 900;
@@ -103,6 +117,35 @@ function LoginContent() {
           );
         } else if (resp.status === 401) {
           setSubmitError("Email hoặc mật khẩu không đúng.");
+        } else if (resp.status === 403 || resp.status === 423) {
+          const detail = (resp.data?.detail ?? "").toLowerCase();
+          const title = (resp.data?.title ?? "").toLowerCase();
+          const type = (resp.data?.type ?? "").toLowerCase();
+          const normalize = (value: string) =>
+            value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          const detailPlain = normalize(detail);
+          const titlePlain = normalize(title);
+          const pendingMarkers = [
+            detail,
+            title,
+            type,
+            detailPlain,
+            titlePlain,
+          ];
+
+          const isPendingDeletion = pendingMarkers.some(
+            (value) =>
+              value.includes("pending") ||
+              value.includes("dang cho xoa") ||
+              value.includes("deletion-pending"),
+          );
+
+          if (isPendingDeletion) {
+            setIsPendingDeletionBlocked(true);
+            setPendingDeletionMessage(PENDING_DELETION_UI_MESSAGE);
+          } else {
+            setSubmitError("Tài khoản chưa thể đăng nhập ở thời điểm hiện tại.");
+          }
         } else {
           setSubmitError("Đăng nhập thất bại. Vui lòng thử lại.");
         }
@@ -127,6 +170,13 @@ function LoginContent() {
           >
             <CircleHelp className="h-5 w-5" />
           </button>
+          <button
+            type="button"
+            aria-label="Ngôn ngữ"
+            className="rounded-full p-2 text-[#3f6560] transition hover:bg-[#d8e5e2]"
+          >
+            <Globe className="h-5 w-5" />
+          </button>
         </div>
       </header>
 
@@ -144,6 +194,37 @@ function LoginContent() {
           </div>
 
           {/* Form */}
+          {isPendingDeletionBlocked ? (
+            <div className="mb-6 rounded-xl border border-[#bcc9c6]/20 bg-white p-0 shadow-[0_8px_32px_rgba(18,30,28,0.06)]">
+              <div className="flex items-center gap-3 border-b border-[#f3e3be] bg-[#fff9eb] px-6 py-3">
+                <TriangleAlert className="h-5 w-5 text-[#92700e]" />
+                <p className="text-sm font-semibold tracking-tight text-[#92700e]">
+                  Tài khoản đang chờ xóa
+                </p>
+              </div>
+              <div className="space-y-6 p-6">
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-bold tracking-tight text-[#121e1c]">
+                    Đăng nhập không khả dụng
+                  </h2>
+                  <p className="text-sm leading-relaxed text-[#3d4947]">{pendingDeletionMessage}</p>
+                </div>
+                <p className="rounded-lg font-semibold border border-[#bcc9c6]/30 bg-[#f6fbfa] px-4 py-3 text-xs leading-relaxed text-[#3d4947]">
+                  Vui lòng mở email đã nhận từ HealthLens và bấm liên kết hủy yêu cầu xóa tài khoản.
+                </p>
+
+                <div className="flex flex-col gap-3">
+                  <Link
+                    href="/"
+                    className="flex h-12 items-center justify-center rounded-lg border-2 border-[#bcc9c6] font-semibold text-[#3d4947] transition-colors hover:bg-[#e9f6f3]"
+                  >
+                    Quay lại trang chủ
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <form
             className="space-y-6"
             onSubmit={handleSubmit(onSubmit)}
@@ -163,6 +244,7 @@ function LoginContent() {
                 autoComplete="email"
                 placeholder="email@vi-du.com"
                 {...register("email")}
+                disabled={isPendingDeletionBlocked}
                 className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
               />
               {errors.email ? (
@@ -187,6 +269,7 @@ function LoginContent() {
                   autoComplete="current-password"
                   placeholder="••••••••"
                   {...register("password")}
+                  disabled={isPendingDeletionBlocked}
                   className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 pr-12 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
                 />
                 <button
@@ -213,7 +296,7 @@ function LoginContent() {
             <div className="text-right">
               <Link
                 href="/forgot-password"
-                className="text-sm font-semibold text-[#00685f] transition hover:underline"
+                className={`text-sm font-semibold text-[#00685f] transition hover:underline ${isPendingDeletionBlocked ? "pointer-events-none opacity-40" : ""}`}
               >
                 Quên mật khẩu?
               </Link>
@@ -223,10 +306,15 @@ function LoginContent() {
             <button
               id="login-submit"
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isPendingDeletionBlocked}
               className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-[#00685f] to-[#008378] text-lg font-bold text-white shadow-lg transition hover:brightness-110 disabled:opacity-60"
             >
-              {isSubmitting ? (
+              {isPendingDeletionBlocked ? (
+                <>
+                  <AlertTriangle className="h-5 w-5" />
+                  Tài khoản đang chờ xóa
+                </>
+              ) : isSubmitting ? (
                 "Đang xử lý..."
               ) : (
                 <>
