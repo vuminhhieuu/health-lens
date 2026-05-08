@@ -3,6 +3,7 @@ package com.healthlens.api.exception;
 import com.healthlens.api.security.LoginRateLimiter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -98,6 +99,24 @@ public class GlobalExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Email nay da duoc dang ky");
         problem.setType(URI.create("https://healthlens.vn/errors/email-already-exists"));
         problem.setTitle("Email da ton tai");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        return problem;
+    }
+
+    /**
+     * Prevent DB errors from being masked as 401 via /error forward.
+     * Always return 500 with a safe, user-friendly message.
+     */
+    @ExceptionHandler(DataAccessException.class)
+    public ProblemDetail handleDataAccessException(DataAccessException ex, HttpServletRequest request) {
+        log.error("Database error at {}: {}", request.getRequestURI(),
+                ex.getMostSpecificCause() != null ? ex.getMostSpecificCause().getMessage() : ex.getMessage(), ex);
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Lỗi hệ thống dữ liệu. Vui lòng thử lại sau."
+        );
+        problem.setType(URI.create("https://healthlens.vn/errors/database-error"));
+        problem.setTitle("Database error");
         problem.setInstance(URI.create(request.getRequestURI()));
         return problem;
     }

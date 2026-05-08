@@ -17,8 +17,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,7 +30,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ProfileShareService {
-
     private static final int INVITE_VALID_DAYS = 7;
 
     private final ProfileRepository profileRepository;
@@ -39,12 +40,7 @@ public class ProfileShareService {
 
     @Value("${app.frontend.base-url:http://localhost:3000}")
     private String frontendBaseUrl;
-
     private static final String FAMILY_PROFILES_PATH = "/profiles";
-
-    private static String profileHistoryPath(UUID profileId) {
-        return "/profiles/" + profileId + "/history";
-    }
 
     /** Login then return to accept page so the invitation is completed after authentication. */
     private String buildLoginReturnUrl(String invitationToken) {
@@ -79,7 +75,41 @@ public class ProfileShareService {
                 profileInvitationRepository.save(invitation);
             }
         }
-        return invitations.stream().map(this::mapToResponse).collect(Collectors.toList());
+        Map<String, ProfileInvitationResponse> latestByEmail = new LinkedHashMap<>();
+        for (ProfileInvitation invitation : invitations) {
+            String emailKey = invitation.getInviteeEmail().trim().toLowerCase(Locale.ROOT);
+            latestByEmail.putIfAbsent(emailKey, mapToResponse(invitation));
+        }
+
+        List<ProfileShare> activeShares = profileShareRepository.findAllByProfileIdAndRevokedAtIsNull(profileId);
+        Map<UUID, User> viewersById = userRepository.findAllById(
+                        activeShares.stream()
+                                .map(ProfileShare::getViewerId)
+                                .distinct()
+                                .collect(Collectors.toList()))
+                .stream()
+                .collect(Collectors.toMap(User::getId, user -> user));
+
+        for (ProfileShare share : activeShares) {
+            User viewer = viewersById.get(share.getViewerId());
+            if (viewer == null || viewer.getEmail() == null || viewer.getEmail().isBlank()) {
+                continue;
+            }
+            String emailKey = viewer.getEmail().trim().toLowerCase(Locale.ROOT);
+            ProfileInvitationResponse existing = latestByEmail.get(emailKey);
+            if (existing == null || !"accepted".equals(existing.status())) {
+                latestByEmail.put(emailKey, new ProfileInvitationResponse(
+                        share.getId(),
+                        emailKey,
+                        "accepted",
+                        null,
+                        share.getGrantedAt(),
+                        share.getAccessLevel()
+                ));
+            }
+        }
+
+        return new ArrayList<>(latestByEmail.values());
     }
 
     private static boolean isPendingAndPastExpiry(ProfileInvitation invitation, Instant now) {
@@ -101,27 +131,41 @@ public class ProfileShareService {
                 .orElseThrow(() -> new ResourceNotFoundException("User khong ton tai"));
 
         String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
-        profileInvitationRepository
-                .findByProfileIdAndInviteeEmailIgnoreCaseAndStatus(profileId, normalizedEmail, "pending")
-                .ifPresent(inv -> {
-                    throw new IllegalStateException("Đã có lời mời đang chờ cho email này.");
-                });
+        String resolvedAccessLevel = (accessLevel == null || accessLevel.isBlank()) ? "view" : accessLevel.trim();
 
-        ProfileInvitation inv = new ProfileInvitation();
+        java.util.Optional<ProfileInvitation> latestInvitation = profileInvitationRepository
+                .findTopByProfileIdAndInviteeEmailIgnoreCaseOrderByCreatedAtDesc(profileId, normalizedEmail);
+        ProfileInvitation inv = (latestInvitation != null ? latestInvitation : java.util.Optional.<ProfileInvitation>empty())
+                .orElseGet(ProfileInvitation::new);
         inv.setProfileId(profileId);
         inv.setInviterId(ownerId);
         inv.setInviteeEmail(normalizedEmail);
         inv.setToken(newToken());
         inv.setStatus("pending");
+        inv.setAcceptedAt(null);
+        inv.setCreatedAt(Instant.now());
         inv.setExpiresAt(Instant.now().plus(INVITE_VALID_DAYS, ChronoUnit.DAYS));
-        if (accessLevel != null && !accessLevel.isBlank()) {
-            inv.setAccessLevel(accessLevel.trim());
+        inv.setAccessLevel(resolvedAccessLevel);
+
+        User invitee = userRepository.findByEmailIgnoreCase(normalizedEmail).orElse(null);
+        if (invitee != null) {
+            ProfileShare existingShare = profileShareRepository
+                    .findByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, invitee.getId())
+                    .orElse(null);
+            if (existingShare != null) {
+                existingShare.setAccessLevel(resolvedAccessLevel);
+                profileShareRepository.save(existingShare);
+                inv.setStatus("accepted");
+                inv.setAcceptedAt(Instant.now());
+            }
         }
 
         profileInvitationRepository.save(inv);
 
-        String link = buildInvitationLink(inv.getToken());
-        emailService.sendProfileInvitationEmail(inviter, normalizedEmail, link);
+        if (!"accepted".equals(inv.getStatus())) {
+            String link = buildInvitationLink(inv.getToken());
+            emailService.sendProfileInvitationEmail(inviter, normalizedEmail, link);
+        }
 
         return mapToResponse(inv);
     }
@@ -189,11 +233,10 @@ public class ProfileShareService {
                 .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay ho so"));
         UUID profileId = profile.getId();
         UUID ownerId = profile.getUser().getId();
-        String historyPath = profileHistoryPath(profileId);
 
         if ("accepted".equals(invitation.getStatus())) {
             ensureShareForInvitation(invitation, viewer.getId(), ownerId);
-            return new AcceptInvitationResultResponse("accepted", historyPath, profileId);
+            return new AcceptInvitationResultResponse("accepted", FAMILY_PROFILES_PATH, profileId);
         }
 
         if (!"pending".equals(invitation.getStatus())) {
@@ -213,7 +256,7 @@ public class ProfileShareService {
         invitation.setAcceptedAt(now);
         profileInvitationRepository.save(invitation);
 
-        return new AcceptInvitationResultResponse("accepted", historyPath, profileId);
+        return new AcceptInvitationResultResponse("accepted", FAMILY_PROFILES_PATH, profileId);
     }
 
     @Transactional

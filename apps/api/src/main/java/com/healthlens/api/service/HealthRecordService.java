@@ -22,6 +22,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.healthlens.api.annotation.Auditable;
 import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.Profile;
+import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.ProfileRepository;
@@ -48,6 +49,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -116,8 +118,11 @@ public class HealthRecordService {
 
         Profile profile = profileRepository.findById(targetProfileId)
                 .orElseThrow(() -> new IllegalArgumentException("Profile khong ton tai"));
-        if (!profile.getUser().getId().equals(userId)) {
-            throw new IllegalArgumentException("Profile khong thuoc ve nguoi dung hien tai");
+        UUID profileOwnerId = profile.getUser().getId();
+        boolean canUploadAsOwner = profileOwnerId.equals(userId);
+        boolean canUploadAsSharedEditor = hasEditAccess(targetProfileId, userId);
+        if (!canUploadAsOwner && !canUploadAsSharedEditor) {
+            throw new AccessDeniedException("Ban khong co quyen tai len cho ho so nay");
         }
 
         UploadFormat uploadFormat = resolveUploadFormat(request.fileType());
@@ -141,8 +146,14 @@ public class HealthRecordService {
         HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId).orElseGet(HealthRecord::new);
         boolean isNewRecord = record.getId() == null;
         if (isNewRecord) {
+            Optional<Profile> profileOptional = profileRepository.findById(reservation.profileId());
             record.setId(recordId);
-            record.setUserId(userId);
+            // Prefer owner id for shared-editor uploads; fallback for legacy/unit-test paths.
+            UUID recordOwnerId = profileOptional
+                    .map(Profile::getUser)
+                    .map(User::getId)
+                    .orElse(userId);
+            record.setUserId(recordOwnerId);
             record.setProfileId(reservation.profileId());
         } else if (!"ocr_failed".equals(record.getStatus())) {
             throw new IllegalStateException("Chi duoc xac nhan upload cho record moi hoac retry OCR that bai");
@@ -187,8 +198,8 @@ public class HealthRecordService {
             }
         }
 
-        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
-                .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+        AccessibleRecord accessibleRecord = loadAccessibleRecord(userId, recordId);
+        HealthRecord record = accessibleRecord.record();
         
         java.util.List<MetricDto> metricsList = null;
         boolean hasLowConfidenceMetrics = false;
@@ -207,6 +218,8 @@ public class HealthRecordService {
         
         HealthRecordStatusResponse response = new HealthRecordStatusResponse(
             record.getId(), 
+            accessibleRecord.isOwner(),
+            accessibleRecord.canEdit(),
             record.getStatus(), 
             metricsList,
             hasLowConfidenceMetrics,
@@ -232,13 +245,18 @@ public class HealthRecordService {
 
     @Transactional(readOnly = true)
     public HealthRecordDetailResponse getDetail(UUID userId, UUID recordId, UUID profileId) {
-        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Health record khong ton tai"));
+        AccessibleRecord accessibleRecord = loadAccessibleRecord(userId, recordId);
+        HealthRecord record = accessibleRecord.record();
 
-        UUID resolvedProfileId = profileId != null ? profileId : record.getProfileId();
-        Profile profile = profileRepository.findById(resolvedProfileId)
+        UUID recordProfileId = record.getProfileId();
+        if (profileId != null && !profileId.equals(recordProfileId)) {
+            throw new AccessDeniedException("Profile khong khop voi health record");
+        }
+        Profile profile = profileRepository.findById(recordProfileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
-        if (!profile.getUser().getId().equals(userId)) {
+        boolean canAccess = profile.getUser().getId().equals(userId)
+                || profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profile.getId(), userId);
+        if (!canAccess) {
             throw new AccessDeniedException("Profile khong thuoc ve nguoi dung");
         }
         List<MetricDto> metricsList = parseMetrics(record.getMetrics()).stream()
@@ -248,6 +266,8 @@ public class HealthRecordService {
         return new HealthRecordDetailResponse(
                 record.getId(),
                 record.getProfileId(),
+                accessibleRecord.isOwner(),
+                accessibleRecord.canEdit(),
                 record.getStatus(),
                 metricsList,
                 record.getExamDate() != null ? record.getExamDate().toString() : null,
@@ -263,8 +283,7 @@ public class HealthRecordService {
 
     @Transactional(readOnly = true)
     public MetricExplanationResponse getMetricExplanation(UUID userId, UUID recordId, String metricName) {
-        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
-                .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+        HealthRecord record = loadAccessibleRecord(userId, recordId).record();
 
         MetricDto metric = parseMetrics(record.getMetrics()).stream()
                 .filter(item -> item.getName() != null && item.getName().equalsIgnoreCase(metricName))
@@ -292,8 +311,8 @@ public class HealthRecordService {
 
     @Transactional(readOnly = true)
     public RecommendationsResponse getRecommendations(UUID userId, UUID recordId) {
-        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Health record khong ton tai"));
+        AccessibleRecord accessibleRecord = loadAccessibleRecord(userId, recordId);
+        HealthRecord record = accessibleRecord.record();
 
         if (record.getProfileId() == null) {
             throw new ResourceNotFoundException("Profile khong ton tai");
@@ -301,7 +320,7 @@ public class HealthRecordService {
 
         Profile profile = profileRepository.findById(record.getProfileId())
                 .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
-        if (!profile.getUser().getId().equals(userId)) {
+        if (!profile.getUser().getId().equals(userId) && !accessibleRecord.isShared()) {
             throw new AccessDeniedException("Profile khong thuoc ve nguoi dung");
         }
 
@@ -370,7 +389,15 @@ public class HealthRecordService {
 
     @Transactional(readOnly = true)
     public java.util.List<HealthRecordStatusResponse> getRecordsByProfile(UUID userId, UUID profileId) {
-        return healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(profileId, userId)
+        Profile profile = profileRepository.findById(profileId)
+                .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
+        if (!canAccessProfileHistory(profile, userId)) {
+            throw new AccessDeniedException("Profile khong thuoc ve nguoi dung");
+        }
+        boolean isOwner = profile.getUser().getId().equals(userId);
+        UUID ownerId = profile.getUser().getId();
+        boolean canEdit = isOwner || hasEditAccess(profileId, userId);
+        return healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(profileId, ownerId)
                 .stream()
                 .map(record -> {
                     java.util.List<MetricDto> metricsList = null;
@@ -383,6 +410,8 @@ public class HealthRecordService {
                     }
                     return new HealthRecordStatusResponse(
                         record.getId(),
+                        isOwner,
+                        canEdit,
                         record.getStatus(),
                         metricsList,
                         containsLowConfidenceMetrics(metricsList),
@@ -414,10 +443,11 @@ public class HealthRecordService {
                 Sort.by(Sort.Order.desc("examDate").nullsLast(), Sort.Order.desc("createdAt"))
         );
         UUID profileOwnerId = profile.getUser().getId();
+        boolean canDelete = profileOwnerId.equals(userId) || hasEditAccess(profileId, userId);
         Page<HealthRecord> records = healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNull(profileId, profileOwnerId, pageable);
 
         List<HealthRecordHistoryItemResponse> items = records.getContent().stream()
-                .map(record -> toHistoryItem(record, profile, userId))
+            .map(record -> toHistoryItem(record, profile, canDelete))
                 .collect(Collectors.toList());
 
         return new HealthRecordHistoryPageResponse(
@@ -508,7 +538,7 @@ public class HealthRecordService {
         HealthRecord record = healthRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
 
-        if (!record.getUserId().equals(userId)) {
+        if (!record.getUserId().equals(userId) && !hasEditAccess(record.getProfileId(), userId)) {
             throw new IllegalArgumentException("Ban khong co quyen xac nhan health record nay");
         }
 
@@ -573,7 +603,7 @@ public class HealthRecordService {
         HealthRecord record = healthRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
 
-        if (!record.getUserId().equals(userId)) {
+        if (!record.getUserId().equals(userId) && !hasEditAccess(record.getProfileId(), userId)) {
             throw new IllegalArgumentException("Ban khong co quyen cap nhat health record nay");
         }
 
@@ -603,7 +633,7 @@ public class HealthRecordService {
         HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
 
-        if (!record.getUserId().equals(userId)) {
+        if (!record.getUserId().equals(userId) && !hasEditAccess(record.getProfileId(), userId)) {
             throw new AccessDeniedException("Ban khong co quyen xoa health record nay");
         }
 
@@ -922,7 +952,7 @@ public class HealthRecordService {
         }
     }
 
-    private HealthRecordHistoryItemResponse toHistoryItem(HealthRecord record, Profile profile, UUID requesterId) {
+    private HealthRecordHistoryItemResponse toHistoryItem(HealthRecord record, Profile profile, boolean canDelete) {
         List<MetricDto> metrics = parseMetrics(record.getMetrics()).stream()
                 .map(metric -> enrichMetric(metric, profile, record.getExamDate(), false))
                 .collect(Collectors.toList());
@@ -955,7 +985,7 @@ public class HealthRecordService {
                 record.getHospitalName(),
                 record.getSourceType(),
                 record.getCreatedAt(),
-                profile.getUser().getId().equals(requesterId)
+                canDelete
         );
     }
 
@@ -992,6 +1022,28 @@ public class HealthRecordService {
         return profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profile.getId(), userId);
     }
 
+    private AccessibleRecord loadAccessibleRecord(UUID userId, UUID recordId) {
+        HealthRecord ownedRecord = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
+                .orElse(null);
+        if (ownedRecord != null) {
+            return new AccessibleRecord(ownedRecord, true, false, true);
+        }
+        HealthRecord record = healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)
+                .orElseThrow(() -> new ResourceNotFoundException("Health record khong ton tai"));
+        boolean shared = profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(record.getProfileId(), userId);
+        if (!shared) {
+            throw new AccessDeniedException("Ban khong co quyen truy cap health record nay");
+        }
+        boolean canEdit = hasEditAccess(record.getProfileId(), userId);
+        return new AccessibleRecord(record, false, true, canEdit);
+    }
+
+    private boolean hasEditAccess(UUID profileId, UUID userId) {
+        return profileShareRepository.existsByProfileIdAndViewerIdAndAccessLevelIgnoreCaseAndRevokedAtIsNull(
+                profileId, userId, "edit");
+    }
+
     private record UploadFormat(String extension, String contentType) {}
     private record UploadReservation(UUID userId, UUID profileId, String fileKey) {}
+    private record AccessibleRecord(HealthRecord record, boolean isOwner, boolean isShared, boolean canEdit) {}
 }

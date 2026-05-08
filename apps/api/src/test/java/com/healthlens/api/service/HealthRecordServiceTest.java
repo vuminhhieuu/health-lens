@@ -13,6 +13,7 @@ import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
@@ -505,7 +506,7 @@ class HealthRecordServiceTest {
         when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> healthRecordService.getMetricExplanation(userId, recordId, "Glucose"))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Health record khong ton tai");
     }
 

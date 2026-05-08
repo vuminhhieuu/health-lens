@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
@@ -17,7 +18,10 @@ import { ApiPaths } from "@healthlens/shared/constants";
 
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
-import { ProfileCard, HealthStatus } from "@/components/features/profiles/ProfileCard";
+import {
+  ProfileCard,
+  HealthStatus,
+} from "@/components/features/profiles/ProfileCard";
 import { CreateProfileModal } from "@/components/features/profiles/CreateProfileModal";
 import { EditProfileModal } from "@/components/features/profiles/EditProfileModal";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
@@ -53,6 +57,25 @@ type IncomingInvitation = {
   acceptPath: string;
 };
 
+type SharedProfile = {
+  profileId: string;
+  displayName: string;
+  accessLevel: "view" | "edit" | string;
+  latestStatus: string;
+  lastUpdated?: string;
+};
+
+function mapSharedStatusToCardStatus(
+  status?: string,
+): HealthStatus | undefined {
+  if (!status) return undefined;
+  const normalized = status.toLowerCase();
+  if (normalized === "normal") return "normal";
+  if (normalized === "attention" || normalized === "warning") return "warning";
+  if (normalized === "abnormal") return "critical";
+  return undefined;
+}
+
 function extractApiDetail(error: unknown, fallback: string): string {
   if (error && typeof error === "object" && "response" in error) {
     const axiosError = error as {
@@ -71,6 +94,7 @@ function extractApiDetail(error: unknown, fallback: string): string {
 }
 
 export default function ProfilesPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -101,13 +125,23 @@ export default function ProfilesPage() {
     },
   });
 
+  const { data: sharedProfiles = [] } = useQuery({
+    queryKey: ["shared-profiles"],
+    queryFn: async () => {
+      const resp = await apiClient.get(ApiPaths.SHARED_PROFILES.LIST);
+      return (resp.data?.data ?? []) as SharedProfile[];
+    },
+  });
+
   const rejectIncomingInvitationMutation = useMutation({
     mutationFn: async (invitationId: string) => {
       await apiClient.post(ApiPaths.INVITATIONS.REJECT(invitationId));
       return invitationId;
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["profile-invitations-incoming"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["profile-invitations-incoming"],
+      });
     },
     onError: (error: unknown) => {
       alert(extractApiDetail(error, "Không thể từ chối lời mời lúc này."));
@@ -129,20 +163,31 @@ export default function ProfilesPage() {
   });
 
   const updateProfileMutation = useMutation({
-    mutationFn: async ({ profileId, data }: { profileId: string; data: UpdateProfileInput }) => {
+    mutationFn: async ({
+      profileId,
+      data,
+    }: {
+      profileId: string;
+      data: UpdateProfileInput;
+    }) => {
       const payload = {
         ...data,
         birthDate: data.birthDate || null,
         gender: data.gender || null,
         notes: data.notes || null,
       };
-      const response = await apiClient.put(API_ROUTES.PROFILES.UPDATE(profileId), payload);
+      const response = await apiClient.put(
+        API_ROUTES.PROFILES.UPDATE(profileId),
+        payload,
+      );
       return response.data.data as Profile;
     },
     onMutate: async ({ profileId, data }) => {
       await queryClient.cancelQueries({ queryKey: ["profiles"] });
 
-      const previousProfiles = queryClient.getQueryData<Profile[]>(["profiles"]);
+      const previousProfiles = queryClient.getQueryData<Profile[]>([
+        "profiles",
+      ]);
       queryClient.setQueryData<Profile[]>(["profiles"], (old = []) =>
         old.map((profile) => {
           if (profile.id !== profileId) {
@@ -171,10 +216,14 @@ export default function ProfilesPage() {
     },
     onSuccess: (updatedProfile) => {
       queryClient.setQueryData<Profile[]>(["profiles"], (old = []) =>
-        old.map((profile) => (profile.id === updatedProfile.id ? updatedProfile : profile)),
+        old.map((profile) =>
+          profile.id === updatedProfile.id ? updatedProfile : profile,
+        ),
       );
       queryClient.invalidateQueries({ queryKey: ["profiles"] });
-      queryClient.invalidateQueries({ queryKey: ["profile", updatedProfile.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["profile", updatedProfile.id],
+      });
       setIsEditModalOpen(false);
       setEditingProfileId(null);
     },
@@ -183,22 +232,49 @@ export default function ProfilesPage() {
   const allProfiles = useMemo(() => {
     const normalizedSelfName = currentUser?.fullName.trim().toLowerCase();
 
-    return otherProfiles
+    const ownedProfiles = otherProfiles
       .filter((profile) => {
         const normalizedProfileName = profile.displayName.trim().toLowerCase();
-        const isSelfProfile = !!normalizedSelfName && normalizedProfileName === normalizedSelfName;
+        const isSelfProfile =
+          !!normalizedSelfName && normalizedProfileName === normalizedSelfName;
         return !isSelfProfile;
       })
       .map((profile) => ({
-        ...profile,
+        id: profile.id,
+        cardKey: `owned-${profile.id}`,
+        displayName: profile.displayName,
         relationship: "Người thân",
-        isSelf: false,
-      }))
-      .filter((profile) => profile.displayName.toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [currentUser, otherProfiles, searchQuery]);
+        notes: profile.notes,
+        latestStatus: profile.latestStatus,
+        lastUpdated: profile.updatedAt,
+        isSharedProfile: false,
+      }));
+
+    const sharedProfileCards = sharedProfiles.map((profile) => ({
+      id: profile.profileId,
+      cardKey: `shared-${profile.profileId}`,
+      displayName: profile.displayName,
+      relationship:
+        profile.accessLevel === "edit"
+          ? "Được chia sẻ (chỉnh sửa)"
+          : "Được chia sẻ (chỉ xem)",
+      notes:
+        profile.accessLevel === "edit"
+          ? "Bạn có thể chỉnh sửa dữ liệu hồ sơ này."
+          : "Bạn chỉ có quyền xem hồ sơ này.",
+      latestStatus: mapSharedStatusToCardStatus(profile.latestStatus),
+      lastUpdated: profile.lastUpdated,
+      isSharedProfile: true,
+    }));
+
+    return [...sharedProfileCards, ...ownedProfiles].filter((profile) =>
+      profile.displayName.toLowerCase().includes(searchQuery.toLowerCase()),
+    );
+  }, [currentUser, otherProfiles, searchQuery, sharedProfiles]);
 
   const editingProfile = useMemo(
-    () => otherProfiles.find((profile) => profile.id === editingProfileId) ?? null,
+    () =>
+      otherProfiles.find((profile) => profile.id === editingProfileId) ?? null,
     [otherProfiles, editingProfileId],
   );
 
@@ -211,7 +287,9 @@ export default function ProfilesPage() {
       <div className="flex grow items-center justify-center bg-[#effcf9] p-8">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-10 w-10 animate-spin text-[#00685f]" />
-          <p className="font-bold text-[#6d7a77]">Đang tải danh sách hồ sơ...</p>
+          <p className="font-bold text-[#6d7a77]">
+            Đang tải danh sách hồ sơ...
+          </p>
         </div>
       </div>
     );
@@ -249,19 +327,27 @@ export default function ProfilesPage() {
                 <div>
                   <p className="font-black text-[#121e1c]">Lời mời xem hồ sơ</p>
                   <p className="mt-1 text-sm font-medium text-[#3d4947]">
-                    <span className="font-bold text-[#005049]">{inv.inviterName}</span> mời bạn xem hồ sơ{" "}
-                    <span className="font-bold text-[#005049]">{inv.profileDisplayName}</span>
+                    <span className="font-bold text-[#005049]">
+                      {inv.inviterName}
+                    </span>{" "}
+                    mời bạn xem hồ sơ{" "}
+                    <span className="font-bold text-[#005049]">
+                      {inv.profileDisplayName}
+                    </span>
                     {inv.accessLevel === "edit" ? " (quyền chỉnh sửa)" : ""}.
                   </p>
                   <p className="mt-1 text-xs text-[#6d7a77]">
-                    Kiểm tra email hoặc chấp nhận trực tiếp tại đây — cùng một lời mời.
+                    Kiểm tra email hoặc chấp nhận trực tiếp tại đây — cùng một
+                    lời mời.
                   </p>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => rejectIncomingInvitationMutation.mutate(inv.id)}
+                  onClick={() =>
+                    rejectIncomingInvitationMutation.mutate(inv.id)
+                  }
                   disabled={rejectIncomingInvitationMutation.isPending}
                   className="inline-flex items-center justify-center rounded-2xl border border-[#c5dfd9] bg-white px-6 py-3 text-sm font-bold text-[#3d4947] shadow-sm transition hover:bg-[#f6fbfa] disabled:opacity-60"
                 >
@@ -303,20 +389,22 @@ export default function ProfilesPage() {
         <div className="grid grid-cols-1 gap-6 duration-500 animate-in slide-in-from-bottom-4 sm:grid-cols-2 lg:grid-cols-3">
           {allProfiles.map((profile) => (
             <ProfileCard
-              key={profile.id}
+              key={profile.cardKey}
               name={profile.displayName}
               relationship={profile.relationship}
               notes={profile.notes}
               latestStatus={profile.latestStatus}
-              lastUpdated={profile.updatedAt}
-              onPress={
-                profile.isSelf
-                  ? undefined
-                  : () => {
-                      setEditingProfileId(profile.id);
-                      setIsEditModalOpen(true);
-                    }
-              }
+              lastUpdated={profile.lastUpdated}
+              onPress={() => {
+                if (profile.isSharedProfile) {
+                  router.push(
+                    `/profiles/${profile.id}/history?displayName=${encodeURIComponent(profile.displayName)}`,
+                  );
+                  return;
+                }
+                setEditingProfileId(profile.id);
+                setIsEditModalOpen(true);
+              }}
             />
           ))}
         </div>
@@ -325,9 +413,12 @@ export default function ProfilesPage() {
           <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-[#e9f6f3] text-[#00685f]">
             <Users size={48} />
           </div>
-          <h3 className="mb-2 text-2xl font-black text-[#121e1c]">Chưa tìm thấy hồ sơ nào</h3>
+          <h3 className="mb-2 text-2xl font-black text-[#121e1c]">
+            Chưa tìm thấy hồ sơ nào
+          </h3>
           <p className="mb-8 max-w-xs font-medium text-[#6d7a77]">
-            Bắt đầu quản lý sức khỏe bằng cách thêm hồ sơ cho các thành viên trong gia đình.
+            Bắt đầu quản lý sức khỏe bằng cách thêm hồ sơ cho các thành viên
+            trong gia đình.
           </p>
           <button
             type="button"
@@ -345,9 +436,12 @@ export default function ProfilesPage() {
             <AlertCircle size={24} />
           </div>
           <div>
-            <h4 className="font-black text-[#92400e]">Bạn đã đạt giới hạn 10 hồ sơ người thân</h4>
+            <h4 className="font-black text-[#92400e]">
+              Bạn đã đạt giới hạn 10 hồ sơ người thân
+            </h4>
             <p className="text-sm font-medium text-[#92400e]/80">
-              Vui lòng liên hệ hỗ trợ hoặc nâng cấp tài khoản để quản lý nhiều hồ sơ hơn.
+              Vui lòng liên hệ hỗ trợ hoặc nâng cấp tài khoản để quản lý nhiều
+              hồ sơ hơn.
             </p>
           </div>
         </div>
@@ -367,7 +461,9 @@ export default function ProfilesPage() {
           setIsEditModalOpen(false);
           setEditingProfileId(null);
         }}
-        onSubmit={(profileId, data) => updateProfileMutation.mutate({ profileId, data })}
+        onSubmit={(profileId, data) =>
+          updateProfileMutation.mutate({ profileId, data })
+        }
         isLoading={updateProfileMutation.isPending}
       />
     </DashboardPageShell>

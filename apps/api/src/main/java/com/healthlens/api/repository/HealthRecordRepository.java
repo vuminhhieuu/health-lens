@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,9 +18,18 @@ public interface HealthRecordRepository extends JpaRepository<HealthRecord, UUID
     Optional<HealthRecord> findByIdAndUserId(UUID id, UUID userId);
     Optional<HealthRecord> findByIdAndUserIdAndDeletedAtIsNull(UUID id, UUID userId);
     Optional<HealthRecord> findByIdAndDeletedAtIsNull(UUID id);
-    java.util.List<HealthRecord> findAllByProfileIdAndUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(UUID profileId, UUID userId);
+    @Query(value = """
+        SELECT DISTINCT ON (h.profile_id) h.*
+        FROM health_records h
+        WHERE h.profile_id IN (:profileIds)
+          AND h.deleted_at IS NULL
+        ORDER BY h.profile_id ASC, h.exam_date DESC NULLS LAST, h.created_at DESC
+        """, nativeQuery = true)
+    List<HealthRecord> findLatestByProfileIdsAndDeletedAtIsNullOrderByProfileIdAscExamDateDescCreatedAtDesc(
+            @Param("profileIds") Collection<UUID> profileIds);
+    List<HealthRecord> findAllByProfileIdAndUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(UUID profileId, UUID userId);
     Page<HealthRecord> findAllByProfileIdAndUserIdAndDeletedAtIsNull(UUID profileId, UUID userId, Pageable pageable);
-    java.util.List<HealthRecord> findAllByDeletedAtBefore(Instant threshold);
+    List<HealthRecord> findAllByDeletedAtBefore(Instant threshold);
     Page<HealthRecord> findAllByDeletedAtBefore(Instant threshold, Pageable pageable);
     Page<HealthRecord> findAllByProfileIdAndUserId(UUID profileId, UUID userId, Pageable pageable);
 

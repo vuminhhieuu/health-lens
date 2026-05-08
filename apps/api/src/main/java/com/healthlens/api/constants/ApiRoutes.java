@@ -55,6 +55,7 @@ public final class ApiRoutes {
     public static final String PROFILE_ENSURE_DEFAULT = PROFILES_BASE + "/ensure-default";
     public static final String PROFILE_SET_DEFAULT = PROFILES_BASE + "/{id}/set-default";
     public static final String PROFILE_INVITATIONS = PROFILES_BASE + "/{profileId}/invitations";
+    public static final String SHARED_PROFILES = API_V1 + "/shared-profiles";
 
     // Invitation accept paths
     public static final String INVITATIONS_BASE = API_V1 + "/invitations";
