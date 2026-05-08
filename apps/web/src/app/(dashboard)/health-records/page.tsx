@@ -1,15 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader2, Share2, Users } from "lucide-react";
+import { Loader2, User, Share2, Users, Check, FileText, Activity, ChevronRight, Calendar, Landmark } from "lucide-react";
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
 import { API_ROUTES } from "@/lib/api/routes";
 import { ProfileCard, HealthStatus } from "@/components/features/profiles/ProfileCard";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { UploadButton } from "@/components/features/upload/UploadButton";
 import { apiClient } from "@/lib/api/apiClient";
 import { InviteMemberModal } from "@/components/features/profiles/InviteMemberModal";
 
@@ -19,6 +20,15 @@ type Profile = {
   notes?: string;
   updatedAt?: string;
   latestStatus?: HealthStatus;
+};
+
+type HealthRecord = {
+  id: string;
+  recordType?: string | null;
+  status?: string | null;
+  hospitalName?: string | null;
+  examDate?: string | null;
+  metrics?: Array<unknown> | null;
 };
 
 function extractApiDetail(error: unknown, fallback: string): string {
@@ -55,6 +65,14 @@ export default function HealthRecordsPage() {
       return (response.data?.data ?? []) as Profile[];
     },
   });
+  const searchParams = useSearchParams();
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const showRetryTips = searchParams.get("retry") === "1";
+  const isLabRecord = (recordType?: string | null) => {
+    if (!recordType) return false;
+    const normalized = recordType.toUpperCase();
+    return normalized.includes("XET NGHIEM") || normalized.includes("XÉT NGHIỆM");
+  };
 
   const { data: currentUser } = useQuery({
     queryKey: ["currentUser-for-health-records-hub"],

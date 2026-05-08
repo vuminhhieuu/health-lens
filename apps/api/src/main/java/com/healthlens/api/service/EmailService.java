@@ -1,6 +1,7 @@
 package com.healthlens.api.service;
 
 import com.healthlens.api.entity.User;
+import com.healthlens.api.entity.DataDeletionRequest;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
@@ -12,9 +13,17 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
+import java.time.Instant;
+import java.time.Year;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+
 @Slf4j
 @Service
 public class EmailService {
+    private static final ZoneId VN_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final DateTimeFormatter DELETION_DEADLINE_FORMATTER =
+            DateTimeFormatter.ofPattern("HH:mm - dd/MM/yyyy").withZone(VN_ZONE);
 
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
@@ -93,6 +102,108 @@ public class EmailService {
         } catch (MessagingException e) {
             log.error("[EmailService] Failed to send password reset email to {}", user.getEmail(), e);
             throw new IllegalStateException("Gui email dat lai mat khau that bai", e);
+        }
+    }
+
+    public void sendDeletionConfirmationEmail(User user, DataDeletionRequest deletionRequest, String cancellationLink) {
+        log.info("[EmailService] Attempting to send deletion confirmation email to: {}", user.getEmail());
+        if (mailSender == null) {
+            log.error("[EmailService] JavaMailSender is not configured! Cannot send deletion confirmation email to {}", user.getEmail());
+            return;
+        }
+
+        String displayName = user.getFullName() == null || user.getFullName().isBlank()
+                ? "bạn"
+                : user.getFullName();
+        String deadlineFormatted = formatDeletionDeadline(deletionRequest.getScheduledDeletionAt());
+        int currentYear = Year.now(VN_ZONE).getValue();
+
+        String htmlContent = renderDeletionRequestTemplate(displayName, deadlineFormatted, cancellationLink, currentYear);
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(user.getEmail());
+            helper.setSubject("[HealthLens] Xác nhận yêu cầu xóa dữ liệu");
+            helper.setText(htmlContent, true);
+
+            mailSender.send(message);
+            log.info("[EmailService] Deletion confirmation email sent successfully to: {}", user.getEmail());
+        } catch (MessagingException e) {
+            log.error("[EmailService] Failed to send deletion confirmation email to {}", user.getEmail(), e);
+            throw new IllegalStateException("Gui email xac nhan xoa tai khoan that bai", e);
+        }
+    }
+
+    public void sendCancellationConfirmationEmail(User user) {
+        log.info("[EmailService] Attempting to send cancellation confirmation email to: {}", user.getEmail());
+        if (mailSender == null) {
+            log.error("[EmailService] JavaMailSender is not configured! Cannot send cancellation confirmation email to {}", user.getEmail());
+            return;
+        }
+
+        String htmlContent = """
+                <html>
+                  <body style="font-family: Arial, sans-serif; color: #111827;">
+                    <h2>HealthLens - Hủy yêu cầu xóa tài khoản</h2>
+                    <p>Chào %s,</p>
+                    <p>Yêu cầu xóa tài khoản của bạn đã được hủy thành công. Tài khoản của bạn hiện tại đã được khôi phục và hoạt động bình thường.</p>
+                    <p>Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với đội hỗ trợ của chúng tôi.</p>
+                    <p>Xin cảm ơn,<br>Đội HealthLens</p>
+                  </body>
+                </html>
+                """.formatted(user.getFullName());
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(user.getEmail());
+            helper.setSubject("[HealthLens] Yêu cầu xóa tài khoản đã được hủy");
+            helper.setText(htmlContent, true);
+
+            mailSender.send(message);
+            log.info("[EmailService] Cancellation confirmation email sent successfully to: {}", user.getEmail());
+        } catch (MessagingException e) {
+            log.error("[EmailService] Failed to send cancellation confirmation email to {}", user.getEmail(), e);
+            throw new IllegalStateException("Gui email xac nhan huy xoa tai khoan that bai", e);
+        }
+    }
+
+    public void sendDeletionCompletionEmail(User user) {
+        log.info("[EmailService] Attempting to send deletion completion email to: {}", user.getEmail());
+        if (mailSender == null) {
+            log.error("[EmailService] JavaMailSender is not configured! Cannot send deletion completion email to {}", user.getEmail());
+            return;
+        }
+
+        String htmlContent = """
+                <html>
+                  <body style="font-family: Arial, sans-serif; color: #111827;">
+                    <h2>HealthLens - Xác nhận xóa tài khoản hoàn tất</h2>
+                    <p>Chào,</p>
+                    <p>Yêu cầu xóa tài khoản của bạn đã được hoàn tất. Tài khoản của bạn và toàn bộ dữ liệu cá nhân liên quan đã bị xóa vĩnh viễn khỏi hệ thống của chúng tôi.</p>
+                    <p>Dữ liệu có thể mất từ 7-30 ngày để bị xóa hoàn toàn từ các bản sao lưu.</p>
+                    <p>Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ với đội hỗ trợ của chúng tôi.</p>
+                    <p>Xin cảm ơn,<br>Đội HealthLens</p>
+                  </body>
+                </html>
+                """;
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(user.getEmail());
+            helper.setSubject("[HealthLens] Xóa tài khoản hoàn tất");
+            helper.setText(htmlContent, true);
+
+            mailSender.send(message);
+            log.info("[EmailService] Deletion completion email sent successfully to: {}", user.getEmail());
+        } catch (MessagingException e) {
+            log.error("[EmailService] Failed to send deletion completion email to {}", user.getEmail(), e);
+            throw new IllegalStateException("Gui email xac nhan xoa tai khoan hoan tat that bai", e);
         }
     }
 
@@ -213,5 +324,36 @@ public class EmailService {
         Context context = new Context();
         context.setVariable("verificationLink", verificationLink);
         return templateEngine.process("email/verification", context);
+    }
+
+    private static String formatDeletionDeadline(Instant scheduledDeletionAt) {
+        if (scheduledDeletionAt == null) {
+            return "";
+        }
+        return DELETION_DEADLINE_FORMATTER.format(scheduledDeletionAt);
+    }
+
+    private String renderDeletionRequestTemplate(
+            String displayName,
+            String deadlineFormatted,
+            String cancellationLink,
+            int currentYear) {
+        if (templateEngine == null) {
+            return """
+                    <html><body style="font-family:Segoe UI,Arial,sans-serif;color:#121e1c;">
+                    <p>Xin chào %s,</p>
+                    <p>Chúng tôi đã nhận được yêu cầu xóa dữ liệu cá nhân của bạn (NĐ 13/2023/NĐ-CP).</p>
+                    <p>Hoàn tất xóa dự kiến trước: <strong>%s</strong> (tối đa 72 giờ).</p>
+                    <p><a href="%s">Hủy yêu cầu xóa</a></p>
+                    <p style="font-size:12px;color:#6d7a77;">© %d HealthLens Meridian · privacy@healthlens.vn</p>
+                    </body></html>
+                    """.formatted(displayName, deadlineFormatted, cancellationLink, currentYear);
+        }
+        Context context = new Context();
+        context.setVariable("displayName", displayName);
+        context.setVariable("deadlineFormatted", deadlineFormatted);
+        context.setVariable("cancellationLink", cancellationLink);
+        context.setVariable("currentYear", currentYear);
+        return templateEngine.process("email/deletion-request", context);
     }
 }

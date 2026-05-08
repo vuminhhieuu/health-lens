@@ -105,7 +105,7 @@ public class HealthRecordService {
         UUID recordId = UUID.randomUUID();
 
         if (request.retryRecordId() != null) {
-            HealthRecord existingRecord = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(request.retryRecordId(), userId)
+            HealthRecord existingRecord = healthRecordRepository.findByIdAndUserId(request.retryRecordId(), userId)
                     .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
             if (!"ocr_failed".equals(existingRecord.getStatus())) {
                 throw new IllegalStateException("Chi duoc retry upload khi OCR that bai");
@@ -138,7 +138,7 @@ public class HealthRecordService {
             throw new IllegalArgumentException("Record khong thuoc ve nguoi dung hien tai");
         }
 
-        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId).orElseGet(HealthRecord::new);
+        HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId).orElseGet(HealthRecord::new);
         boolean isNewRecord = record.getId() == null;
         if (isNewRecord) {
             record.setId(recordId);
@@ -600,8 +600,8 @@ public class HealthRecordService {
     @Transactional
     @Auditable(action = "DELETE_HEALTH_RECORD")
     public void deleteHealthRecord(UUID userId, UUID recordId) {
-        HealthRecord record = healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)
-                .orElseThrow(() -> new ResourceNotFoundException("Health record khong ton tai"));
+        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
 
         if (!record.getUserId().equals(userId)) {
             throw new AccessDeniedException("Ban khong co quyen xoa health record nay");

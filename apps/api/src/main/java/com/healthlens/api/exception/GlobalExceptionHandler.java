@@ -48,6 +48,22 @@ public class GlobalExceptionHandler {
                 .body(problem);
     }
 
+    @ExceptionHandler(AccountPendingDeletionException.class)
+    public ProblemDetail handleAccountPendingDeletion(
+            AccountPendingDeletionException ex,
+            HttpServletRequest request) {
+
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.FORBIDDEN,
+                ex.getMessage()
+        );
+
+        problem.setTitle("Account Pending Deletion");
+        problem.setInstance(URI.create(request.getRequestURI()));
+
+        return problem;
+    }
+
     /**
      * AC #5: 401 Unauthorized with generic message (no email leak)
      */

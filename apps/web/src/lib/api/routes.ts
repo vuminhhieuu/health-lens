@@ -24,6 +24,8 @@ export const FRONTEND_ROUTES = {
   PROFILE: '/profile',
   HEALTH_RECORDS: '/health-records',
   SETTINGS: '/settings',
+  DELETE_ACCOUNT: '/settings/delete-account',
+  CANCEL_DELETION: '/cancel-deletion',
 } as const;
 
 /**
@@ -38,6 +40,9 @@ export const API_ROUTES = {
   HEALTH_RECORDS: ApiPaths.HEALTH_RECORDS,
   USERS: {
     ME: "/api/v1/users/me",
+    DELETION_REQUEST: "/api/v1/users/me/deletion-request",
+    /** Public cancel (no JWT): `DELETE` + query `token` from email — path is `/users/deletion-requests/...`, not `/users/me/...`. */
+    CANCEL_DELETION: "/api/v1/users/deletion-requests/cancel",
   },
   PROFILES: ApiPaths.PROFILES,
 } as const;

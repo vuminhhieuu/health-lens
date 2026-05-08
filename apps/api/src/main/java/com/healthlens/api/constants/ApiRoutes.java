@@ -43,9 +43,13 @@ public final class ApiRoutes {
     public static final String DEV_VERIFY_EMAIL = DEV_BASE + "/verify-email/{email}";
 
     // =========================================
-    // Profile Paths (Frontend: ApiPaths.PROFILES)
+    // User Paths (Frontend: ApiPaths.USERS)
     // =========================================
     public static final String USERS_BASE = API_V1 + "/users";
+
+    // =========================================
+    // Profile Paths (Frontend: ApiPaths.PROFILES)
+    // =========================================
     public static final String PROFILES_BASE = API_V1 + "/profiles";
     public static final String PROFILE_BY_ID = PROFILES_BASE + "/{id}";
     public static final String PROFILE_ENSURE_DEFAULT = PROFILES_BASE + "/ensure-default";
@@ -103,10 +107,20 @@ public final class ApiRoutes {
     public static final String OCR_STATUS = OCR_BASE + "/status";
 
     // =========================================
+    // User Deletion Paths (Story 1.6 - AC #5)
+    // Create: POST .../users/me/deletion-request (authenticated).
+    // Cancel: DELETE .../users/deletion-requests/cancel?token=... — public (permitAll); NOT under /me/
+    // because the email cancellation token is the credential (no JWT on this call).
+    // =========================================
+    public static final String USERS_DELETION_BASE = API_V1 + "/users/deletion-requests";
+    public static final String USERS_DELETION_CANCEL = USERS_DELETION_BASE + "/cancel";
+
+    // =========================================
     // Patterns (for SecurityConfig permitAll)
     // =========================================
     public static final String AUTH_PATTERN = AUTH_BASE + "/**";
     public static final String DEV_PATTERN = DEV_BASE + "/**";
+    public static final String USERS_DELETION_PATTERN = USERS_DELETION_BASE + "/**";
     public static final String INVITATIONS_ACCEPT_PATTERN = INVITATIONS_ACCEPT + "/**";
     public static final String SWAGGER_UI_PATTERN = "/swagger-ui/**";
     public static final String SWAGGER_HTML = "/swagger-ui.html";

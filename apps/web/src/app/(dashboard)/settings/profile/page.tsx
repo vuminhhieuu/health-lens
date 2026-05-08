@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -287,9 +288,12 @@ export default function ProfileSettingsPage() {
                 </div>
               </div>
               <div className="pt-6 border-t border-[#bcc9c6]/20">
-                <button type="button" className="w-full py-3 rounded-xl border-2 border-[#ba1a1a]/20 text-[#ba1a1a] font-bold hover:bg-[#ba1a1a]/5 transition-colors flex items-center justify-center gap-2">
+              <Link
+                  href="/settings/delete-account"
+                  className="w-full py-3 rounded-xl border-2 border-[#ba1a1a]/20 text-[#ba1a1a] font-bold hover:bg-[#ba1a1a]/5 transition-colors flex items-center justify-center gap-2 block"
+                >
                   <Trash2 className="w-4 h-4" /> Xóa tài khoản
-                </button>
+                </Link>
               </div>
             </div>
           </section>

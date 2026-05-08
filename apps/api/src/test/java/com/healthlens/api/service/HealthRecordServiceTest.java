@@ -140,7 +140,7 @@ class HealthRecordServiceTest {
         existing.setStatus("ocr_failed");
 
         Profile profile = buildProfile(userId, profileId);
-        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(retryRecordId, userId)).thenReturn(Optional.of(existing));
+        when(healthRecordRepository.findByIdAndUserId(retryRecordId, userId)).thenReturn(Optional.of(existing));
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
         when(storageService.generateUploadUrl(any(), any(Duration.class), eq("application/pdf")))
                 .thenReturn("https://signed-upload-url-retry");
@@ -169,7 +169,7 @@ class HealthRecordServiceTest {
         existing.setProfileId(profileId);
         existing.setStatus("done");
 
-        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(retryRecordId, userId)).thenReturn(Optional.of(existing));
+        when(healthRecordRepository.findByIdAndUserId(retryRecordId, userId)).thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> healthRecordService.createUploadUrl(
                 userId,
@@ -244,7 +244,7 @@ class HealthRecordServiceTest {
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get("health-record-upload:" + recordId)).thenReturn(reservationJson);
-        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(existing));
+        when(healthRecordRepository.findByIdAndUserId(recordId, userId)).thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> healthRecordService.confirmUpload(userId, recordId))
                 .isInstanceOf(IllegalStateException.class)
@@ -913,7 +913,7 @@ class HealthRecordServiceTest {
         record.setId(recordId);
         record.setUserId(userId);
 
-        when(healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)).thenReturn(Optional.of(record));
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
 
         healthRecordService.deleteHealthRecord(userId, recordId);
 
@@ -922,8 +922,8 @@ class HealthRecordServiceTest {
     }
 
     @Test
-    @DisplayName("deleteHealthRecord từ user khác thì trả 403")
-    void deleteHealthRecord_forbiddenWhenNotOwner() {
+    @DisplayName("deleteHealthRecord từ user khác thì trả not found")
+    void deleteHealthRecord_notFoundWhenNotOwner() {
         UUID ownerId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
@@ -931,11 +931,11 @@ class HealthRecordServiceTest {
         record.setId(recordId);
         record.setUserId(ownerId);
 
-        when(healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)).thenReturn(Optional.of(record));
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, requesterId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> healthRecordService.deleteHealthRecord(requesterId, recordId))
-                .isInstanceOf(AccessDeniedException.class)
-                .hasMessageContaining("quyen xoa");
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("khong ton tai");
     }
 
     @Test
