@@ -27,7 +27,7 @@ public class ProfileInvitation {
 
     @Column(name = "invitee_email", nullable = false, length = 255)
     private String inviteeEmail;
-
+    
     @Column(name = "access_level", nullable = false, length = 20)
     private String accessLevel;
 

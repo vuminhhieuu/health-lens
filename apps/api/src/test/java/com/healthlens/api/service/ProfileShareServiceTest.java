@@ -70,9 +70,6 @@ class ProfileShareServiceTest {
 
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
         when(userRepository.findById(ownerId)).thenReturn(Optional.of(inviter));
-        when(profileInvitationRepository.findByProfileIdAndInviteeEmailIgnoreCaseAndStatus(
-                profileId, "viewer@healthlens.vn", "pending"
-        )).thenReturn(Optional.empty());
         when(profileInvitationRepository.save(any(ProfileInvitation.class))).thenAnswer(invocation -> {
             ProfileInvitation invitation = invocation.getArgument(0);
             invitation.setId(UUID.randomUUID());
@@ -93,7 +90,6 @@ class ProfileShareServiceTest {
         when(profileInvitationRepository.findByToken("token-1")).thenReturn(Optional.of(invitation));
 
         AcceptInvitationResultResponse result = profileShareService.acceptInvitation("token-1", null);
-
         assertThat(result.outcome()).isEqualTo("require-login");
         assertThat(result.redirectUrl()).contains("/login?returnUrl=");
         assertThat(result.redirectUrl()).contains("invitations%2Faccept");
@@ -156,6 +152,7 @@ class ProfileShareServiceTest {
         when(profileInvitationRepository.findByToken("token-3")).thenReturn(Optional.of(invitation));
         when(userRepository.findById(viewerId)).thenReturn(Optional.of(viewer));
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+
         when(profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId))
                 .thenReturn(false);
         when(profileShareRepository.save(any(ProfileShare.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -164,7 +161,7 @@ class ProfileShareServiceTest {
         AcceptInvitationResultResponse result = profileShareService.acceptInvitation("token-3", viewerId);
 
         assertThat(result.outcome()).isEqualTo("accepted");
-        assertThat(result.redirectUrl()).isEqualTo("/profiles/" + profileId + "/history");
+        assertThat(result.redirectUrl()).isEqualTo("/profiles");
         verify(profileShareRepository).save(any(ProfileShare.class));
         verify(profileInvitationRepository).save(invitation);
     }

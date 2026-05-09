@@ -1,6 +1,6 @@
 # Story 6.1: Mời thành viên gia đình vào hồ sơ qua email
 
-Status: review
+Status: done
 
 ## Execution scope
 

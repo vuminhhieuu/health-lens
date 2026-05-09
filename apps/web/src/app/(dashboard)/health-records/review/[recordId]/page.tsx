@@ -94,6 +94,7 @@ type ReviewRecordStatus = "processing" | "review_required" | "done" | "ocr_faile
 type ReviewRecordData = {
   profileId?: string;
   isOwner?: boolean;
+  canEdit?: boolean;
   status: ReviewRecordStatus;
   fileUrl?: string;
   metrics?: MetricDto[];
@@ -248,7 +249,10 @@ export default function ReviewRecordPage() {
         diagnosis: data.diagnosis ?? "",
       });
       initialized.current = true;
-      setEditMode((data.status === "review_required" || (data.status === "ocr_failed" && manualMode)) && (data.isOwner ?? true));
+      setEditMode(
+        (data.status === "review_required" || (data.status === "ocr_failed" && manualMode)) &&
+          (data.canEdit ?? data.isOwner ?? true)
+      );
     }
   }, [data, manualMode]);
 
@@ -607,6 +611,7 @@ export default function ReviewRecordPage() {
   const canConfirm = data?.status === "review_required" || (data?.status === "ocr_failed" && manualMode);
   const canToggleEditResults = data?.status === "done" || (data?.status === "ocr_failed" && manualMode);
   const isOwner = data.isOwner ?? true;
+  const canEdit = data.canEdit ?? isOwner;
   const showMetricCards = !editMode;
   const showEditableTable = editMode;
   const showConfidenceColumn = canConfirm;
@@ -667,7 +672,7 @@ export default function ReviewRecordPage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {isOwner ? (
+              {canEdit ? (
                 <button
                   type="button"
                   onClick={() => setEditMode(true)}
@@ -693,7 +698,7 @@ export default function ReviewRecordPage() {
                 <FileDown className="h-4 w-4" />
                 Tải PDF
               </button>
-              {isOwner ? (
+              {canEdit ? (
                 <button
                   type="button"
                   onClick={() => setShowDeleteRecordModal(true)}
@@ -839,7 +844,7 @@ export default function ReviewRecordPage() {
             ))}
           </section>
 
-          {!isOwner ? (
+          {!canEdit ? (
             <p className="rounded-xl border border-[#d7e5e1] bg-white px-4 py-3 text-sm text-[#4e6360]">
               Bạn đang xem hồ sơ ở chế độ chia sẻ. Chỉnh sửa và xóa dữ liệu đã bị vô hiệu hóa.
             </p>
@@ -916,7 +921,7 @@ export default function ReviewRecordPage() {
                 className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378]"
                 value={examDate}
                 onChange={(e) => setExamDate(e.target.value)}
-                disabled={!isOwner}
+                disabled={!canEdit}
               />
             </div>
             <div className="rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm">
@@ -927,7 +932,7 @@ export default function ReviewRecordPage() {
                 className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378]"
                 value={recordType}
                 onChange={(e) => setRecordType(e.target.value)}
-                disabled={!isOwner}
+                disabled={!canEdit}
               />
             </div>
           </div>
@@ -940,7 +945,7 @@ export default function ReviewRecordPage() {
               className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378]"
               value={hospitalName}
               onChange={(e) => setHospitalName(e.target.value)}
-              disabled={!isOwner}
+              disabled={!canEdit}
             />
           </div>
 
@@ -952,7 +957,7 @@ export default function ReviewRecordPage() {
               className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378] resize-none"
               value={diagnosis}
               onChange={(e) => setDiagnosis(e.target.value)}
-              disabled={!isOwner}
+              disabled={!canEdit}
             />
           </div>
 
@@ -961,7 +966,7 @@ export default function ReviewRecordPage() {
               <div className="border-b border-[#c5dfd9] bg-[#effcf9] px-6 py-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-[#005049]">Danh sách chỉ số và ngưỡng tham chiếu</h3>
-                  {canToggleEditResults && isOwner ? (
+                  {canToggleEditResults && canEdit ? (
                     <button
                       type="button"
                       onClick={() => setEditMode(true)}
@@ -1028,7 +1033,7 @@ export default function ReviewRecordPage() {
             </div>
           ) : null}
 
-          {showEditableTable && isOwner && (
+          {showEditableTable && canEdit && (
             <div className="rounded-2xl border border-[#b7d8d1] bg-white shadow-sm overflow-hidden">
               <div className="flex items-center justify-between border-b border-[#c5dfd9] bg-[#effcf9] px-6 py-4">
                 <h3 className="text-sm font-semibold text-[#005049]">Chỉnh sửa danh sách chỉ số</h3>
@@ -1199,7 +1204,7 @@ export default function ReviewRecordPage() {
             </div>
           )}
 
-          {isOwner ? (
+          {canEdit ? (
             <div className="flex justify-end pt-4 pb-12">
               <button
                 onClick={() => (canConfirm ? setShowConfirmModal(true) : executeSave(false))}
@@ -1215,7 +1220,7 @@ export default function ReviewRecordPage() {
               Bạn đang xem hồ sơ ở chế độ chia sẻ. Chỉnh sửa và xóa dữ liệu đã bị vô hiệu hóa.
             </p>
           )}
-          {!canConfirm && !isDirty && !showEditableTable && isOwner && (
+          {!canConfirm && !isDirty && !showEditableTable && canEdit && (
             <p className="text-right text-sm text-[#6d7a77]">
               Hồ sơ đã xác nhận. Chỉnh sửa thông tin hành chính ở trên hoặc bấm &quot;Chỉnh sửa kết quả&quot; để cập nhật các chỉ số.
             </p>

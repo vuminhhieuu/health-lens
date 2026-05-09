@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader2, User, Share2, Users, Check, FileText, Activity, ChevronRight, Calendar, Landmark } from "lucide-react";
+import { Loader2, Share2, Users } from "lucide-react";
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
@@ -22,6 +22,21 @@ type Profile = {
   latestStatus?: HealthStatus;
 };
 
+type ProfileInvitation = {
+  id: string;
+  email: string;
+  status: string;
+  accessLevel: "view" | "edit" | string;
+};
+
+type SharedProfile = {
+  profileId: string;
+  displayName: string;
+  accessLevel: "view" | "edit" | string;
+  latestStatus?: string;
+  lastUpdated?: string;
+};
+
 type HealthRecord = {
   id: string;
   recordType?: string | null;
@@ -30,6 +45,15 @@ type HealthRecord = {
   examDate?: string | null;
   metrics?: Array<unknown> | null;
 };
+
+function mapSharedStatusToCardStatus(status?: string): HealthStatus | undefined {
+  if (!status) return undefined;
+  const normalized = status.toLowerCase();
+  if (normalized === "normal") return "normal";
+  if (normalized === "attention" || normalized === "warning") return "warning";
+  if (normalized === "abnormal") return "critical";
+  return undefined;
+}
 
 function extractApiDetail(error: unknown, fallback: string): string {
   if (error && typeof error === "object" && "response" in error) {
@@ -55,8 +79,10 @@ type UserProfile = {
 
 export default function HealthRecordsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [invitingProfileId, setInvitingProfileId] = useState<string | null>(null);
+  const [pendingAccessUpdates, setPendingAccessUpdates] = useState<Record<string, "view" | "edit">>({});
   const { data: profiles = [], isLoading } = useQuery({
     queryKey: ["profiles-for-health-records-hub"],
     queryFn: async () => {
@@ -81,22 +107,79 @@ export default function HealthRecordsPage() {
       return response.data?.data as UserProfile;
     },
   });
+  const { data: sharedProfiles = [] } = useQuery({
+    queryKey: ["shared-profiles"],
+    queryFn: async () => {
+      const response = await apiClient.get(ApiPaths.SHARED_PROFILES.LIST);
+      return (response.data?.data ?? []) as SharedProfile[];
+    },
+  });
 
   const inviteMutation = useMutation({
-    mutationFn: async (payload: { email: string; accessLevel: "view" | "edit" }) => {
+    mutationFn: async (payload: { email?: string; accessLevel?: "view" | "edit" }) => {
       if (!invitingProfileId) {
         throw new Error("Thiếu profile để chia sẻ.");
       }
-      await apiClient.post(ApiPaths.PROFILES.INVITATIONS(invitingProfileId), payload);
+      let invitedCount = 0;
+      if (payload.email && payload.accessLevel) {
+        await apiClient.post(ApiPaths.PROFILES.INVITATIONS(invitingProfileId), payload);
+        invitedCount += 1;
+      }
+      const updates = Object.entries(pendingAccessUpdates);
+      for (const [email, accessLevel] of updates) {
+        await apiClient.post(ApiPaths.PROFILES.INVITATIONS(invitingProfileId), { email, accessLevel });
+      }
+      return {
+        invitedCount,
+        updatedCount: updates.length,
+      };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["profile-shared-members", invitingProfileId] });
       setInviteModalOpen(false);
       setInvitingProfileId(null);
+      setPendingAccessUpdates({});
+      if (result.invitedCount > 0 && result.updatedCount > 0) {
+        alert("Đã gửi lời mời và lưu thay đổi quyền truy cập thành công.");
+        return;
+      }
+      if (result.invitedCount > 0) {
+        alert("Đã gửi lời mời chia sẻ thành công.");
+        return;
+      }
+      if (result.updatedCount > 0) {
+        alert("Đã lưu thay đổi quyền truy cập thành công.");
+      }
     },
     onError: (error: unknown) => {
       alert(extractApiDetail(error, "Không thể gửi lời mời chia sẻ."));
     },
   });
+
+  const { data: sharedMembers = [], isFetching: isSharedMembersLoading } = useQuery({
+    queryKey: ["profile-shared-members", invitingProfileId],
+    enabled: inviteModalOpen && Boolean(invitingProfileId),
+    queryFn: async () => {
+      const response = await apiClient.get(ApiPaths.PROFILES.INVITATIONS(invitingProfileId as string));
+      const invitations = (response.data?.data ?? []) as ProfileInvitation[];
+      return invitations
+        .filter((invitation) => invitation.status === "accepted")
+        .map((invitation) => ({
+          id: invitation.id,
+          email: invitation.email,
+          accessLevel: invitation.accessLevel,
+        }));
+    },
+  });
+
+  const displaySharedMembers = useMemo(
+    () =>
+      sharedMembers.map((member) => ({
+        ...member,
+        accessLevel: pendingAccessUpdates[member.email.toLowerCase()] ?? member.accessLevel,
+      })),
+    [pendingAccessUpdates, sharedMembers]
+  );
 
   const profileItems = useMemo(() => {
     const normalizedSelfName = currentUser?.fullName?.trim().toLowerCase();
@@ -120,11 +203,33 @@ export default function HealthRecordsPage() {
           updatedAt: selfProfile?.updatedAt,
           latestStatus: selfProfile?.latestStatus,
           relationship: "Chính chủ",
+          isSharedProfile: false,
         }]
       : [];
 
-    return [...selfItem, ...familyProfiles];
-  }, [currentUser, profiles]);
+    const familyItems = familyProfiles.map((profile) => ({
+      ...profile,
+      isSharedProfile: false,
+    }));
+
+    const sharedItems = sharedProfiles.map((profile) => ({
+      id: profile.profileId,
+      displayName: profile.displayName,
+      notes:
+        profile.accessLevel === "edit"
+          ? "Bạn có thể chỉnh sửa dữ liệu hồ sơ này."
+          : "Bạn chỉ có quyền xem hồ sơ này.",
+      updatedAt: profile.lastUpdated,
+      latestStatus: mapSharedStatusToCardStatus(profile.latestStatus),
+      relationship:
+        profile.accessLevel === "edit"
+          ? "Được chia sẻ (chỉnh sửa)"
+          : "Được chia sẻ (chỉ xem)",
+      isSharedProfile: true,
+    }));
+
+    return [...selfItem, ...familyItems, ...sharedItems];
+  }, [currentUser, profiles, sharedProfiles]);
 
   return (
     <DashboardPageShell
@@ -149,7 +254,7 @@ export default function HealthRecordsPage() {
                 lastUpdated={profile.updatedAt}
                 onPress={canOpenHistory ? () => router.push(`/profiles/${profile.id}/history`) : undefined}
                 secondaryAction={
-                  canOpenHistory
+                  canOpenHistory && !profile.isSharedProfile
                     ? {
                         label: "Share",
                         icon: Share2,
@@ -178,8 +283,18 @@ export default function HealthRecordsPage() {
         onClose={() => {
           setInviteModalOpen(false);
           setInvitingProfileId(null);
+          setPendingAccessUpdates({});
         }}
         isLoading={inviteMutation.isPending}
+        sharedMembers={displaySharedMembers}
+        isSharedMembersLoading={isSharedMembersLoading}
+        hasPendingAccessChanges={Object.keys(pendingAccessUpdates).length > 0}
+        onChangeAccessLevel={(member) =>
+          setPendingAccessUpdates((prev) => ({
+            ...prev,
+            [member.email.toLowerCase()]: member.accessLevel,
+          }))
+        }
         title="Chia sẻ quyền xem kết quả khám"
         description="Nhập email người nhận."
         onSubmit={(payload) => inviteMutation.mutate(payload)}

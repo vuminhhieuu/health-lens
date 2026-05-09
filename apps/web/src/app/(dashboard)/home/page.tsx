@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   CalendarDays,
@@ -40,6 +40,13 @@ type HealthRecord = {
   abnormalCount?: number;
 };
 
+type ProfileInvitation = {
+  id: string;
+  email: string;
+  status: string;
+  accessLevel: "view" | "edit" | string;
+};
+
 function extractApiDetail(error: unknown, fallback: string): string {
   if (error && typeof error === "object" && "response" in error) {
     const axiosError = error as {
@@ -58,10 +65,12 @@ function extractApiDetail(error: unknown, fallback: string): string {
 }
 
 export default function DashboardHomePage() {
+  const queryClient = useQueryClient();
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [invitingProfileId, setInvitingProfileId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const [pendingAccessUpdates, setPendingAccessUpdates] = useState<Record<string, "view" | "edit">>({});
   const { data: profiles = [] } = useQuery({
     queryKey: ["home-profiles"],
     queryFn: async () => {
@@ -90,20 +99,70 @@ export default function DashboardHomePage() {
   }, [primaryProfileId]);
 
   const inviteMutation = useMutation({
-    mutationFn: async (payload: { email: string; accessLevel: "view" | "edit" }) => {
+    mutationFn: async (payload: { email?: string; accessLevel?: "view" | "edit" }) => {
       if (!invitingProfileId) {
         throw new Error("Thiếu profile để chia sẻ.");
       }
-      await apiClient.post(ApiPaths.PROFILES.INVITATIONS(invitingProfileId), payload);
+      let invitedCount = 0;
+      if (payload.email && payload.accessLevel) {
+        await apiClient.post(ApiPaths.PROFILES.INVITATIONS(invitingProfileId), payload);
+        invitedCount += 1;
+      }
+      const updates = Object.entries(pendingAccessUpdates);
+      for (const [email, accessLevel] of updates) {
+        await apiClient.post(ApiPaths.PROFILES.INVITATIONS(invitingProfileId), { email, accessLevel });
+      }
+      return {
+        invitedCount,
+        updatedCount: updates.length,
+      };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["profile-shared-members", invitingProfileId] });
       setInviteModalOpen(false);
       setInvitingProfileId(null);
+      setPendingAccessUpdates({});
+      if (result.invitedCount > 0 && result.updatedCount > 0) {
+        alert("Đã gửi lời mời và lưu thay đổi quyền truy cập thành công.");
+        return;
+      }
+      if (result.invitedCount > 0) {
+        alert("Đã gửi lời mời chia sẻ thành công.");
+        return;
+      }
+      if (result.updatedCount > 0) {
+        alert("Đã lưu thay đổi quyền truy cập thành công.");
+      }
     },
     onError: (error: unknown) => {
       alert(extractApiDetail(error, "Không thể gửi lời mời chia sẻ."));
     },
   });
+
+  const { data: sharedMembers = [], isFetching: isSharedMembersLoading } = useQuery({
+    queryKey: ["profile-shared-members", invitingProfileId],
+    enabled: inviteModalOpen && Boolean(invitingProfileId),
+    queryFn: async () => {
+      const response = await apiClient.get(ApiPaths.PROFILES.INVITATIONS(invitingProfileId as string));
+      const invitations = (response.data?.data ?? []) as ProfileInvitation[];
+      return invitations
+        .filter((invitation) => invitation.status === "accepted")
+        .map((invitation) => ({
+          id: invitation.id,
+          email: invitation.email,
+          accessLevel: invitation.accessLevel,
+        }));
+    },
+  });
+
+  const displaySharedMembers = useMemo(
+    () =>
+      sharedMembers.map((member) => ({
+        ...member,
+        accessLevel: pendingAccessUpdates[member.email.toLowerCase()] ?? member.accessLevel,
+      })),
+    [pendingAccessUpdates, sharedMembers]
+  );
 
   return (
     <DashboardPageShell
@@ -238,8 +297,18 @@ export default function DashboardHomePage() {
         onClose={() => {
           setInviteModalOpen(false);
           setInvitingProfileId(null);
+          setPendingAccessUpdates({});
         }}
         isLoading={inviteMutation.isPending}
+        sharedMembers={displaySharedMembers}
+        isSharedMembersLoading={isSharedMembersLoading}
+        hasPendingAccessChanges={Object.keys(pendingAccessUpdates).length > 0}
+        onChangeAccessLevel={(member) =>
+          setPendingAccessUpdates((prev) => ({
+            ...prev,
+            [member.email.toLowerCase()]: member.accessLevel,
+          }))
+        }
         title="Chia sẻ quyền xem kết quả khám"
         description="Nhập email người nhận."
         onSubmit={(payload) => inviteMutation.mutate(payload)}

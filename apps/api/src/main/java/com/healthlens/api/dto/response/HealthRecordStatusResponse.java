@@ -8,6 +8,8 @@ import java.util.UUID;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record HealthRecordStatusResponse(
         UUID id,
+        Boolean isOwner,
+        Boolean canEdit,
         String status,
         List<MetricDto> metrics,
         Boolean hasLowConfidenceMetrics,

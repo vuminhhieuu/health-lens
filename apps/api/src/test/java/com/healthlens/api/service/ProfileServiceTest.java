@@ -1,18 +1,23 @@
 package com.healthlens.api.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.request.CreateProfileRequest;
 import com.healthlens.api.dto.request.UpdateProfileRequest;
 import com.healthlens.api.dto.response.ProfileResponse;
+import com.healthlens.api.dto.response.SharedProfileResponse;
+import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.Profile;
+import com.healthlens.api.entity.ProfileShare;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ProfileLimitExceededException;
 import com.healthlens.api.exception.ResourceNotFoundException;
+import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.ProfileRepository;
+import com.healthlens.api.repository.ProfileShareRepository;
 import com.healthlens.api.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
@@ -26,7 +31,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,7 +43,12 @@ class ProfileServiceTest {
     @Mock
     private UserRepository userRepository;
 
-    @InjectMocks
+    @Mock
+    private ProfileShareRepository profileShareRepository;
+
+    @Mock
+    private HealthRecordRepository healthRecordRepository;
+
     private ProfileService profileService;
 
     private User testUser;
@@ -49,6 +58,13 @@ class ProfileServiceTest {
     void setUp() {
         testUser = new User();
         testUser.setId(userId);
+        profileService = new ProfileService(
+                profileRepository,
+                profileShareRepository,
+                healthRecordRepository,
+                userRepository,
+                new ObjectMapper()
+        );
     }
 
     @Test
@@ -129,5 +145,164 @@ class ProfileServiceTest {
         assertThatThrownBy(() -> profileService.createProfile(userId, request))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("User khong ton tai");
+    }
+
+    @Test
+    void getSharedProfiles_shouldUseLatestRecordHealthStatusAndUpdatedAt() {
+        UUID viewerId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+
+        ProfileShare share = new ProfileShare();
+        share.setId(UUID.randomUUID());
+        share.setProfileId(profileId);
+        share.setViewerId(viewerId);
+        share.setOwnerId(ownerId);
+        share.setAccessLevel("edit");
+        share.setGrantedAt(Instant.parse("2026-05-01T00:00:00Z"));
+
+        User owner = new User();
+        owner.setId(ownerId);
+        Profile sharedProfile = new Profile();
+        sharedProfile.setId(profileId);
+        sharedProfile.setDisplayName("Mẹ");
+        sharedProfile.setUser(owner);
+        sharedProfile.setUpdatedAt(Instant.parse("2026-05-05T08:00:00Z"));
+
+        HealthRecord latest = new HealthRecord();
+        latest.setId(UUID.randomUUID());
+        latest.setProfileId(profileId);
+        latest.setStatus("done");
+        latest.setMetrics("[{\"name\":\"glucose\",\"status\":\"attention\"}]");
+        latest.setUpdatedAt(Instant.parse("2026-05-06T10:30:00Z"));
+
+        when(profileShareRepository.findAllByViewerIdAndRevokedAtIsNull(viewerId)).thenReturn(List.of(share));
+        when(profileRepository.findAllById(List.of(profileId))).thenReturn(List.of(sharedProfile));
+        when(healthRecordRepository.findLatestByProfileIdsAndDeletedAtIsNullOrderByProfileIdAscExamDateDescCreatedAtDesc(
+                List.of(profileId))).thenReturn(List.of(latest));
+
+        List<SharedProfileResponse> responses = profileService.getSharedProfiles(viewerId);
+
+        assertThat(responses).hasSize(1);
+        SharedProfileResponse response = responses.getFirst();
+        assertThat(response.profileId()).isEqualTo(profileId);
+        assertThat(response.displayName()).isEqualTo("Mẹ");
+        assertThat(response.accessLevel()).isEqualTo("edit");
+        assertThat(response.latestStatus()).isEqualTo("attention");
+        assertThat(response.lastUpdated()).isEqualTo(Instant.parse("2026-05-06T10:30:00Z"));
+    }
+
+    @Test
+    void getSharedProfiles_shouldReturnUnverifiedAndProfileUpdatedAtWhenNoRecord() {
+        UUID viewerId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+
+        ProfileShare share = new ProfileShare();
+        share.setId(UUID.randomUUID());
+        share.setProfileId(profileId);
+        share.setViewerId(viewerId);
+        share.setOwnerId(ownerId);
+        share.setAccessLevel("view");
+
+        User owner = new User();
+        owner.setId(ownerId);
+        Profile sharedProfile = new Profile();
+        sharedProfile.setId(profileId);
+        sharedProfile.setDisplayName("Bố");
+        sharedProfile.setUser(owner);
+        sharedProfile.setUpdatedAt(Instant.parse("2026-05-04T12:00:00Z"));
+
+        when(profileShareRepository.findAllByViewerIdAndRevokedAtIsNull(viewerId)).thenReturn(List.of(share));
+        when(profileRepository.findAllById(List.of(profileId))).thenReturn(List.of(sharedProfile));
+        when(healthRecordRepository.findLatestByProfileIdsAndDeletedAtIsNullOrderByProfileIdAscExamDateDescCreatedAtDesc(
+                List.of(profileId))).thenReturn(List.of());
+
+        List<SharedProfileResponse> responses = profileService.getSharedProfiles(viewerId);
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.getFirst().latestStatus()).isEqualTo("unverified");
+        assertThat(responses.getFirst().lastUpdated()).isEqualTo(Instant.parse("2026-05-04T12:00:00Z"));
+    }
+
+    @Test
+    void getSharedProfiles_shouldKeepFirstSharePerProfileAndIgnoreDuplicateShares() {
+        UUID viewerId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+
+        ProfileShare firstShare = new ProfileShare();
+        firstShare.setId(UUID.randomUUID());
+        firstShare.setProfileId(profileId);
+        firstShare.setViewerId(viewerId);
+        firstShare.setOwnerId(ownerId);
+        firstShare.setAccessLevel("view");
+
+        ProfileShare duplicateShare = new ProfileShare();
+        duplicateShare.setId(UUID.randomUUID());
+        duplicateShare.setProfileId(profileId);
+        duplicateShare.setViewerId(viewerId);
+        duplicateShare.setOwnerId(ownerId);
+        duplicateShare.setAccessLevel("edit");
+
+        User owner = new User();
+        owner.setId(ownerId);
+        Profile sharedProfile = new Profile();
+        sharedProfile.setId(profileId);
+        sharedProfile.setDisplayName("Ông");
+        sharedProfile.setUser(owner);
+        sharedProfile.setUpdatedAt(Instant.parse("2026-05-02T10:00:00Z"));
+
+        when(profileShareRepository.findAllByViewerIdAndRevokedAtIsNull(viewerId))
+                .thenReturn(List.of(firstShare, duplicateShare));
+        when(profileRepository.findAllById(List.of(profileId))).thenReturn(List.of(sharedProfile));
+        when(healthRecordRepository.findLatestByProfileIdsAndDeletedAtIsNullOrderByProfileIdAscExamDateDescCreatedAtDesc(
+                List.of(profileId))).thenReturn(List.of());
+
+        List<SharedProfileResponse> responses = profileService.getSharedProfiles(viewerId);
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.getFirst().profileId()).isEqualTo(profileId);
+        assertThat(responses.getFirst().accessLevel()).isEqualTo("view");
+    }
+
+    @Test
+    void getSharedProfiles_shouldUseFirstRecordPerProfileFromSortedBatchResult() {
+        UUID viewerId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+
+        ProfileShare share = new ProfileShare();
+        share.setId(UUID.randomUUID());
+        share.setProfileId(profileId);
+        share.setViewerId(viewerId);
+        share.setOwnerId(ownerId);
+        share.setAccessLevel("edit");
+
+        User owner = new User();
+        owner.setId(ownerId);
+        Profile sharedProfile = new Profile();
+        sharedProfile.setId(profileId);
+        sharedProfile.setDisplayName("Bà");
+        sharedProfile.setUser(owner);
+        sharedProfile.setUpdatedAt(Instant.parse("2026-05-03T08:00:00Z"));
+
+        HealthRecord latest = new HealthRecord();
+        latest.setId(UUID.randomUUID());
+        latest.setProfileId(profileId);
+        latest.setStatus("done");
+        latest.setMetrics("[{\"name\":\"cholesterol\",\"status\":\"abnormal\"}]");
+        latest.setUpdatedAt(Instant.parse("2026-05-07T11:00:00Z"));
+
+        when(profileShareRepository.findAllByViewerIdAndRevokedAtIsNull(viewerId)).thenReturn(List.of(share));
+        when(profileRepository.findAllById(List.of(profileId))).thenReturn(List.of(sharedProfile));
+        when(healthRecordRepository.findLatestByProfileIdsAndDeletedAtIsNullOrderByProfileIdAscExamDateDescCreatedAtDesc(
+                List.of(profileId))).thenReturn(List.of(latest));
+
+        List<SharedProfileResponse> responses = profileService.getSharedProfiles(viewerId);
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.getFirst().latestStatus()).isEqualTo("abnormal");
+        assertThat(responses.getFirst().lastUpdated()).isEqualTo(Instant.parse("2026-05-07T11:00:00Z"));
     }
 }

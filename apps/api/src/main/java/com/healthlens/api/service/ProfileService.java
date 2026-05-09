@@ -1,20 +1,32 @@
 package com.healthlens.api.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.healthlens.api.dto.MetricDto;
 import com.healthlens.api.dto.request.CreateProfileRequest;
 import com.healthlens.api.dto.request.UpdateProfileRequest;
 import com.healthlens.api.dto.response.ProfileResponse;
+import com.healthlens.api.dto.response.SharedProfileResponse;
+import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.Profile;
+import com.healthlens.api.entity.ProfileShare;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ProfileLimitExceededException;
 import com.healthlens.api.exception.ResourceNotFoundException;
+import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.ProfileRepository;
+import com.healthlens.api.repository.ProfileShareRepository;
 import com.healthlens.api.repository.UserRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -24,11 +36,23 @@ public class ProfileService {
     private static final int MAX_PROFILES_PER_USER = 10;
 
     private final ProfileRepository profileRepository;
+    private final ProfileShareRepository profileShareRepository;
+    private final HealthRecordRepository healthRecordRepository;
     private final UserRepository userRepository;
+    private final ObjectMapper objectMapper;
 
-    public ProfileService(ProfileRepository profileRepository, UserRepository userRepository) {
+    public ProfileService(
+            ProfileRepository profileRepository,
+            ProfileShareRepository profileShareRepository,
+            HealthRecordRepository healthRecordRepository,
+            UserRepository userRepository,
+            ObjectMapper objectMapper
+    ) {
         this.profileRepository = profileRepository;
+        this.profileShareRepository = profileShareRepository;
+        this.healthRecordRepository = healthRecordRepository;
         this.userRepository = userRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional(readOnly = true)
@@ -37,6 +61,92 @@ public class ProfileService {
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<SharedProfileResponse> getSharedProfiles(UUID userId) {
+        List<ProfileShare> activeShares = profileShareRepository.findAllByViewerIdAndRevokedAtIsNull(userId);
+        Map<UUID, ProfileShare> uniqueSharesByProfileId = new LinkedHashMap<>();
+        for (ProfileShare share : activeShares) {
+            uniqueSharesByProfileId.putIfAbsent(share.getProfileId(), share);
+        }
+        List<UUID> profileIds = new ArrayList<>(uniqueSharesByProfileId.keySet());
+        if (profileIds.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, Profile> profilesById = profileRepository.findAllById(profileIds).stream()
+                .collect(Collectors.toMap(Profile::getId, p -> p));
+        Map<UUID, HealthRecord> latestRecordByProfileId = healthRecordRepository
+            .findLatestByProfileIdsAndDeletedAtIsNullOrderByProfileIdAscExamDateDescCreatedAtDesc(profileIds)
+            .stream()
+            .collect(Collectors.toMap(HealthRecord::getProfileId, record -> record));
+
+        List<SharedProfileResponse> responses = new ArrayList<>();
+        for (ProfileShare share : uniqueSharesByProfileId.values()) {
+            UUID profileId = share.getProfileId();
+            Profile profile = profilesById.get(profileId);
+            if (profile == null) {
+                throw new ResourceNotFoundException("Khong tim thay ho so duoc chia se");
+            }
+            HealthRecord latest = latestRecordByProfileId.get(profileId);
+            String latestStatus = "unverified";
+            Instant lastUpdated = profile.getUpdatedAt();
+            if (latest != null) {
+                latestStatus = resolveLatestSharedStatus(latest);
+                lastUpdated = latest.getUpdatedAt();
+            }
+            responses.add(new SharedProfileResponse(
+                    profile.getId(),
+                    profile.getDisplayName(),
+                    share.getAccessLevel(),
+                    latestStatus,
+                    lastUpdated
+            ));
+        }
+        return responses;
+    }
+
+    private String resolveLatestSharedStatus(HealthRecord latest) {
+        List<MetricDto> metrics = parseMetrics(latest.getMetrics());
+        String overallStatus = metrics.stream()
+                .map(MetricDto::getStatus)
+                .filter(status -> status != null && !status.isBlank())
+                .map(String::trim)
+                .map(String::toLowerCase)
+                .max((left, right) -> Integer.compare(statusPriority(left), statusPriority(right)))
+                .orElse(null);
+        if (overallStatus != null) {
+            return overallStatus;
+        }
+        if ("done".equals(latest.getStatus())) {
+            return "normal";
+        }
+        if ("ocr_failed".equals(latest.getStatus()) || "failed".equals(latest.getStatus()) || "error".equals(latest.getStatus())) {
+            return "error";
+        }
+        return "unverified";
+    }
+
+    private int statusPriority(String status) {
+        return switch (status) {
+            case "abnormal" -> 3;
+            case "attention", "warning" -> 2;
+            case "normal" -> 1;
+            default -> 0;
+        };
+    }
+
+    private List<MetricDto> parseMetrics(String rawMetrics) {
+        if (rawMetrics == null || rawMetrics.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(rawMetrics, new TypeReference<List<MetricDto>>() {
+            });
+        } catch (Exception ignored) {
+            return List.of();
+        }
     }
 
     /**

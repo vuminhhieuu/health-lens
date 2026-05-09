@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import axios from "axios";
 import { Loader2 } from "lucide-react";
 import { ApiPaths } from "@healthlens/shared/constants";
 import { apiClient } from "@/lib/api/apiClient";
-
 function problemDetailMessage(data: unknown): string | undefined {
   if (typeof data !== "object" || data === null || !("detail" in data)) {
     return undefined;
@@ -19,16 +19,33 @@ function loginReturnUrlForToken(token: string): string {
   return `/login?returnUrl=${encodeURIComponent(returnUrl)}`;
 }
 
+function invitationLoginRedirectGuardKey(token: string): string {
+  return `invitation-login-redirect:${token}`;
+}
+
 type AcceptResult = {
   outcome: "accepted" | "require-register" | "expired" | string;
   redirectUrl: string;
   profileId: string;
 };
 
-export default function AcceptInvitationPage() {
+function LoadingState() {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[#effcf9] px-6">
+      <div className="rounded-2xl bg-white px-6 py-5 shadow-sm">
+        <div className="flex items-center gap-3 text-[#005049]">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <p className="text-sm font-semibold">Đang xử lý lời mời...</p>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function AcceptInvitationContent() {
+  const searchParams = useSearchParams();
+  const token = searchParams.get("token");
   const [error, setError] = useState<string | null>(null);
-  const token =
-    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("token") : null;
 
   useEffect(() => {
     if (!token) {
@@ -43,6 +60,7 @@ export default function AcceptInvitationPage() {
           setError("Không thể xử lý lời mời. Vui lòng thử lại.");
           return;
         }
+
         // Full navigation so dashboard loads with fresh auth/session (same-tab deep link from email).
         window.location.replace(result.redirectUrl);
       } catch (err: unknown) {
@@ -58,6 +76,13 @@ export default function AcceptInvitationPage() {
             return;
           }
           if (status === 401) {
+            // Prevent infinite redirect loops if backend returns 401 due to a masked server error.
+            const guardKey = invitationLoginRedirectGuardKey(token);
+            if (sessionStorage.getItem(guardKey) === "1") {
+              setError("Phiên đăng nhập không hợp lệ hoặc hệ thống đang lỗi. Vui lòng thử lại sau.");
+              return;
+            }
+            sessionStorage.setItem(guardKey, "1");
             window.location.replace(loginReturnUrlForToken(token));
             return;
           }
@@ -92,13 +117,14 @@ export default function AcceptInvitationPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#effcf9] px-6">
-      <div className="rounded-2xl bg-white px-6 py-5 shadow-sm">
-        <div className="flex items-center gap-3 text-[#005049]">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <p className="text-sm font-semibold">Đang xử lý lời mời...</p>
-        </div>
-      </div>
-    </main>
+    <LoadingState />
+  );
+}
+
+export default function AcceptInvitationPage() {
+  return (
+    <Suspense fallback={<LoadingState />}>
+      <AcceptInvitationContent />
+    </Suspense>
   );
 }
