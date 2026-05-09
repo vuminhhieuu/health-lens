@@ -52,8 +52,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+            HttpServletResponse response,
+            FilterChain filterChain) throws ServletException, IOException {
 
         String authHeader = request.getHeader(AUTHORIZATION_HEADER);
 
@@ -80,17 +80,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String userId = jwtUtil.extractSubject(token);
         String role = jwtUtil.extractClaims(token).get("role", String.class);
 
-        // AC #3: Block authenticated requests for accounts in PENDING_DELETION or DELETED state.
-        // The cancel endpoint is permitAll'd via SecurityConfig and never reaches here with a token.
+        // AC #3: Block authenticated requests for accounts in PENDING_DELETION or
+        // DELETED state.
+        // The cancel endpoint is permitAll'd via SecurityConfig and never reaches here
+        // with a token.
         try {
-            Optional<AccountStatus> statusOpt =
-                    accountStatusCache.getStatus(UUID.fromString(userId));
+            Optional<AccountStatus> statusOpt = accountStatusCache.getStatus(UUID.fromString(userId));
             if (statusOpt.isEmpty()) {
                 filterChain.doFilter(request, response);
                 return;
-        }
+            }
 
-        AccountStatus status = statusOpt.get();
+            AccountStatus status = statusOpt.get();
             if (status == AccountStatus.PENDING_DELETION || status == AccountStatus.DELETED) {
                 log.warn("Blocking request for {} account: userId={}, path={}",
                         status, userId, urlPathHelper.getRequestUri(request));
@@ -109,12 +110,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        UsernamePasswordAuthenticationToken authentication =
-                new UsernamePasswordAuthenticationToken(
-                        userId,
-                        null,
-                        List.of(new SimpleGrantedAuthority(role))
-                );
+        // For admin routes (non-auth), require totpVerified=true
+        String requestUri = request.getRequestURI();
+        if (requestUri.startsWith(ApiRoutes.ADMIN_BASE + "/") && !requestUri.startsWith(ApiRoutes.ADMIN_AUTH_BASE + "/")) {
+            Boolean totpVerified = jwtUtil.extractClaims(token).get("totpVerified", Boolean.class);
+            if (!Boolean.TRUE.equals(totpVerified)) {
+                response.sendError(HttpServletResponse.SC_FORBIDDEN, "TOTP verification required");
+                return;
+            }
+        }
+
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                userId,
+                null,
+                List.of(new SimpleGrantedAuthority(role)));
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
@@ -123,12 +132,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        // Public deletion-cancellation endpoint (token-based, no JWT). Avoid touching SecurityContext entirely.
+        // Public deletion-cancellation endpoint (token-based, no JWT). Avoid touching
+        // SecurityContext entirely.
         String path = urlPathHelper.getRequestUri(request);
         return path != null && path.startsWith(ApiRoutes.USERS_DELETION_BASE);
     }
 
-    private void writeAccountPendingDeletionResponse(HttpServletResponse response, AccountStatus status) throws IOException {
+    private void writeAccountPendingDeletionResponse(HttpServletResponse response, AccountStatus status)
+            throws IOException {
         response.setStatus(HttpStatus.FORBIDDEN.value());
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
         String detail = status == AccountStatus.DELETED
@@ -145,7 +156,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             return Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_KEY_PREFIX + jti));
         } catch (Exception e) {
-            log.error("Redis unavailable when checking token blacklist. Fail-closed: {}. Token JTI: {}", securityFailClosed, jti, e);
+            log.error("Redis unavailable when checking token blacklist. Fail-closed: {}. Token JTI: {}",
+                    securityFailClosed, jti, e);
             return securityFailClosed;
         }
     }

@@ -1,6 +1,6 @@
 # Story 7.1: Admin đăng nhập vào panel với MFA bắt buộc
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 
@@ -36,27 +36,27 @@ so that khu vực quản trị được bảo vệ đúng mức.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: Admin role setup (AC: #1, #5)
-  - [ ] Đảm bảo `ROLE_ADMIN` được define trong security config
-  - [ ] Tất cả `/api/v1/admin/**` routes chỉ cho phép `ROLE_ADMIN`
-  - [ ] Admin session TTL 15 phút (override user session)
-- [ ] Task 2 — Backend: TOTP setup + verify (AC: #1, #2, #3)
-  - [ ] Thêm dependency `com.warrenstrange:googleauth` cho TOTP
-  - [ ] Bảng `admin_totp_secrets(user_id, secret, is_verified, created_at)` (Flyway V015)
-  - [ ] `POST /api/v1/admin/auth/totp/setup` → generate TOTP secret + QR code URL
-  - [ ] `POST /api/v1/admin/auth/login` → validate password + TOTP → admin JWT
-  - [ ] `POST /api/v1/admin/auth/totp/verify` → verify code sau setup
-- [ ] Task 3 — Web: Admin login page (AC: #1, #2, #3)
-  - [ ] Tạo `apps/web/src/app/admin/login/page.tsx` (route group `/admin/`)
-  - [ ] Step 1: email + password form
-  - [ ] Step 2: TOTP input (6 digit, numeric)
-  - [ ] Setup flow: QR code display + verify code step
-- [ ] Task 4 — Web: Admin layout (AC: #4, #5)
-  - [ ] `apps/web/src/app/admin/layout.tsx` — check admin session
-  - [ ] Sidebar navigation: Reference Data, Audit Log, Analytics
-  - [ ] Session timeout: auto-redirect sau 15 phút
-- [ ] Task 5 — Tests (AC: #1, #2, #3)
-  - [ ] `AdminAuthServiceTest`: login success, wrong TOTP, expired TOTP, unverified TOTP
+- [x] Task 1 — Backend: Admin role setup (AC: #1, #5)
+  - [x] Đảm bảo `ROLE_ADMIN` được define trong security config
+  - [x] Tất cả `/api/v1/admin/**` routes chỉ cho phép `ROLE_ADMIN`
+  - [x] Admin session TTL 15 phút (override user session)
+- [x] Task 2 — Backend: TOTP setup + verify (AC: #1, #2, #3)
+  - [x] Thêm dependency `com.warrenstrange:googleauth` cho TOTP
+  - [x] Bảng `admin_totp_secrets(user_id, secret, is_verified, created_at, backup_codes)` (Flyway V015 / V018)
+  - [x] `POST /api/v1/admin/auth/totp/setup` → generate TOTP secret + QR code URL + 16 backup codes
+  - [x] `POST /api/v1/admin/auth/login` → validate password + TOTP (hoặc backup code) → admin JWT
+  - [x] `POST /api/v1/admin/auth/totp/verify` → verify code sau setup
+- [x] Task 3 — Web: Admin login page (AC: #1, #2, #3)
+  - [x] Tạo `apps/web/src/app/admin/login/page.tsx` (route group `/admin/`)
+  - [x] Step 1: email + password form
+  - [x] Step 2: TOTP input (6 digit, numeric)
+  - [x] Setup flow: QR code display + verify code step
+- [x] Task 4 — Web: Admin layout (AC: #4, #5)
+  - [x] `apps/web/src/app/admin/layout.tsx` — check admin session
+  - [x] Sidebar navigation: Reference Data, Audit Log, Analytics
+  - [x] Session timeout: auto-redirect sau 15 phút
+- [x] Task 5 — Tests (AC: #1, #2, #3)
+  - [x] `AdminAuthServiceTest`: login success, wrong TOTP, expired TOTP, unverified TOTP
 
 ## Dev Notes
 
@@ -127,3 +127,10 @@ _[To be filled by dev agent]_
 ### Completion Notes List
 
 ### File List
+
+### Review Findings
+
+- [x] [Review][Patch] Test compilation failure: AdminAuthServiceTest missing StringRedisTemplate [apps/api/src/test/java/com/healthlens/api/service/AdminAuthServiceTest.java:52]
+- [x] [Review][Patch] Potential empty string split bug in AdminAuthService [apps/api/src/main/java/com/healthlens/api/service/AdminAuthService.java:122]
+- [x] [Review][Patch] Backup codes join set to null when empty [apps/api/src/main/java/com/healthlens/api/service/AdminAuthService.java:127]
+- [x] [Review][Patch] Test message assertion mismatch [apps/api/src/test/java/com/healthlens/api/service/AdminAuthServiceTest.java:170]

@@ -57,6 +57,9 @@ public class SecurityConfig {
                     // Avoid masking app errors as 401 due to forwarding to /error.
                     .requestMatchers("/error").permitAll()
                     .requestMatchers(ApiRoutes.SWAGGER_UI_PATTERN, ApiRoutes.SWAGGER_HTML, ApiRoutes.API_DOCS_PATTERN).permitAll()
+                    .requestMatchers(ApiRoutes.ADMIN_AUTH_LOGIN).permitAll()
+                    .requestMatchers(ApiRoutes.ADMIN_AUTH_TOTP_SETUP, ApiRoutes.ADMIN_AUTH_TOTP_VERIFY).authenticated()
+                    .requestMatchers(ApiRoutes.ADMIN_PATTERN).hasAuthority("ROLE_ADMIN")
                     .anyRequest().authenticated()
             )
             // Return 401 (not 403) for missing/invalid auth so frontend can trigger refresh flow.
