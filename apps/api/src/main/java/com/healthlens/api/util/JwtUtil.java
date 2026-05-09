@@ -1,6 +1,7 @@
 package com.healthlens.api.util;
 
 import com.healthlens.api.entity.User;
+import com.healthlens.api.entity.UserRole;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -20,15 +21,18 @@ public class JwtUtil {
     private final SecretKey signingKey;
     private final long accessTtl;
     private final long refreshTtl;
+    private final long adminAccessTtl;
 
     public JwtUtil(
             @Value("${jwt.secret}") String secret,
             @Value("${jwt.access-ttl}") long accessTtl,
-            @Value("${jwt.refresh-ttl}") long refreshTtl
+            @Value("${jwt.refresh-ttl}") long refreshTtl,
+            @Value("${jwt.admin-access-ttl:900000}") long adminAccessTtl
     ) {
         this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTtl = accessTtl;
         this.refreshTtl = refreshTtl;
+        this.adminAccessTtl = adminAccessTtl;
     }
 
     /**
@@ -119,5 +123,31 @@ public class JwtUtil {
 
     public long getRefreshTtl() {
         return refreshTtl;
+    }
+
+    /**
+     * Generate an admin access token with totpVerified claim.
+     * Admin tokens expire in 15 minutes (admin session TTL).
+     */
+    public String generateAdminAccessToken(User user, boolean totpVerified) {
+        if (user.getRole() != UserRole.ROLE_ADMIN) {
+            throw new IllegalArgumentException("Cannot generate admin token for non-admin user");
+        }
+        Date now = new Date();
+        Date expiry = new Date(now.getTime() + adminAccessTtl);
+        return Jwts.builder()
+                .subject(user.getId().toString())
+                .claim("email", user.getEmail())
+                .claim("role", user.getRole().name())
+                .claim("totpVerified", totpVerified)
+                .id(UUID.randomUUID().toString())
+                .issuedAt(now)
+                .expiration(expiry)
+                .signWith(signingKey)
+                .compact();
+    }
+
+    public long getAdminAccessTtl() {
+        return adminAccessTtl;
     }
 }

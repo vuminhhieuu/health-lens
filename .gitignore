@@ -176,3 +176,5 @@ temp/
 !.opencode/.keep
 _bmad/*
 !_bmad/.keep
+.agents/*
+!.agents/.keep

@@ -30,7 +30,7 @@ apiClient.interceptors.request.use((config) => {
     headers.delete("authorization");
     return config;
   }
-  if (accessToken) {
+  if (accessToken && !headers.has("Authorization") && !headers.has("authorization")) {
     headers.set("Authorization", `Bearer ${accessToken}`);
   }
   return config;
@@ -67,6 +67,7 @@ apiClient.interceptors.response.use(
       !originalRequest._retry &&
       !originalRequest.url?.includes(API_ROUTES.AUTH.LOGIN) &&
       !originalRequest.url?.includes(API_ROUTES.AUTH.REFRESH) &&
+      !originalRequest.url?.includes("/admin/auth/") &&
       !isCancelDeletion
     ) {
       if (isRefreshing) {

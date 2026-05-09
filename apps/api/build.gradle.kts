@@ -65,6 +65,9 @@ dependencies {
 	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.8")
 	implementation("software.amazon.awssdk:s3:2.31.18")
 
+	// TOTP (Google Authenticator compatible)
+	implementation("com.warrenstrange:googleauth:1.4.0")
+
 	compileOnly("org.projectlombok:lombok")
 	developmentOnly("org.springframework.boot:spring-boot-devtools")
 	runtimeOnly("com.h2database:h2")

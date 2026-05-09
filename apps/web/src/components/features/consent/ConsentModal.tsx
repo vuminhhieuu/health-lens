@@ -36,7 +36,7 @@ export const ConsentModal: React.FC = () => {
     const policyVersion = activeConsentVersion ?? CONSENT_VERSION;
 
     // consentGiven is derived server-side against the active policy version (refresh / GET me/consent).
-    const hiddenPaths = ["/login", "/register", "/forgot-password", "/reset-password", "/verify-email"];
+    const hiddenPaths = ["/login", "/register", "/forgot-password", "/reset-password", "/verify-email", "/admin"];
     const shouldHideOnAuthRoutes = hiddenPaths.some((path) => pathname?.startsWith(path));
 
     if (!isAuthenticated || consentGiven || shouldHideOnAuthRoutes) {

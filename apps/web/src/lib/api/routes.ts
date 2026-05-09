@@ -26,6 +26,8 @@ export const FRONTEND_ROUTES = {
   SETTINGS: '/settings',
   DELETE_ACCOUNT: '/settings/delete-account',
   CANCEL_DELETION: '/cancel-deletion',
+  ADMIN_LOGIN: '/admin/login',
+  ADMIN_DASHBOARD: '/admin',
 } as const;
 
 /**
@@ -45,4 +47,5 @@ export const API_ROUTES = {
     CANCEL_DELETION: "/api/v1/users/deletion-requests/cancel",
   },
   PROFILES: ApiPaths.PROFILES,
+  ADMIN_AUTH: ApiPaths.ADMIN_AUTH,
 } as const;

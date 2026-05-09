@@ -7,9 +7,9 @@ package com.healthlens.api.constants;
  * This file must be kept in sync with the frontend constants.
  * 
  * Usage:
- *   - Controllers: @RequestMapping(ApiRoutes.AUTH_BASE)
- *   - Security: SecurityConfig permitAll patterns
- *   - Tests: Integration test paths
+ * - Controllers: @RequestMapping(ApiRoutes.AUTH_BASE)
+ * - Security: SecurityConfig permitAll patterns
+ * - Tests: Integration test paths
  */
 public final class ApiRoutes {
 
@@ -72,8 +72,8 @@ public final class ApiRoutes {
     public static final String HEALTH_RECORD_IMAGE = HEALTH_RECORDS_BASE + "/{id}/image";
     public static final String HEALTH_RECORD_ANALYZE = HEALTH_RECORDS_BASE + "/{id}/analyze";
     public static final String HEALTH_RECORD_ANALYSIS = HEALTH_RECORDS_BASE + "/{id}/analysis";
-    public static final String HEALTH_RECORD_METRIC_EXPLANATION =
-            HEALTH_RECORDS_BASE + "/{recordId}/metrics/{metricName}/explanation";
+    public static final String HEALTH_RECORD_METRIC_EXPLANATION = HEALTH_RECORDS_BASE
+            + "/{recordId}/metrics/{metricName}/explanation";
     public static final String HEALTH_RECORD_RECOMMENDATIONS = HEALTH_RECORDS_BASE + "/{recordId}/recommendations";
 
     // =========================================
@@ -110,11 +110,21 @@ public final class ApiRoutes {
     // =========================================
     // User Deletion Paths (Story 1.6 - AC #5)
     // Create: POST .../users/me/deletion-request (authenticated).
-    // Cancel: DELETE .../users/deletion-requests/cancel?token=... — public (permitAll); NOT under /me/
-    // because the email cancellation token is the credential (no JWT on this call).
+    // Cancel: DELETE .../users/deletion-requests/cancel?token=... — public
+    // (permitAll); NOT under /me/ because the email cancellation token is the
+    // credential (no JWT on this call).
     // =========================================
     public static final String USERS_DELETION_BASE = API_V1 + "/users/deletion-requests";
     public static final String USERS_DELETION_CANCEL = USERS_DELETION_BASE + "/cancel";
+
+    // =========================================
+    // Admin Auth Paths
+    // =========================================
+    public static final String ADMIN_BASE = API_V1 + "/admin";
+    public static final String ADMIN_AUTH_BASE = ADMIN_BASE + "/auth";
+    public static final String ADMIN_AUTH_LOGIN = ADMIN_AUTH_BASE + "/login";
+    public static final String ADMIN_AUTH_TOTP_SETUP = ADMIN_AUTH_BASE + "/totp/setup";
+    public static final String ADMIN_AUTH_TOTP_VERIFY = ADMIN_AUTH_BASE + "/totp/verify";
 
     // =========================================
     // Patterns (for SecurityConfig permitAll)
@@ -128,4 +138,6 @@ public final class ApiRoutes {
     public static final String API_DOCS_PATTERN = "/v3/api-docs/**";
     public static final String ACTUATOR_HEALTH = "/actuator/health";
     public static final String ACTUATOR_HEALTH_PATTERN = "/actuator/health/**";
+    public static final String ADMIN_AUTH_PATTERN = ADMIN_AUTH_BASE + "/**";
+    public static final String ADMIN_PATTERN = ADMIN_BASE + "/**";
 }

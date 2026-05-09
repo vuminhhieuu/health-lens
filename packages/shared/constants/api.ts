@@ -131,6 +131,14 @@ export const ApiPaths = {
     READINESS: `/actuator/health/readiness`,
     INFO: `/actuator/info`,
   },
+
+  /** Admin authentication endpoints */
+  ADMIN_AUTH: {
+    BASE: `/api/${API_VERSION}/admin/auth`,
+    LOGIN: `/api/${API_VERSION}/admin/auth/login`,
+    TOTP_SETUP: `/api/${API_VERSION}/admin/auth/totp/setup`,
+    TOTP_VERIFY: `/api/${API_VERSION}/admin/auth/totp/verify`,
+  },
 } as const;
 
 /**
