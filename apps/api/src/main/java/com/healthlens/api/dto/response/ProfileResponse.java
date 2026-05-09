@@ -10,6 +10,8 @@ public record ProfileResponse(
         LocalDate birthDate,
         String gender,
         String notes,
+        boolean isDefault,
+        Instant lastRecordAt,
         Instant createdAt,
         Instant updatedAt
 ) {

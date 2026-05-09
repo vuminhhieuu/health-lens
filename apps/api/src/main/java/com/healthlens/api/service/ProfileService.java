@@ -101,7 +101,11 @@ public class ProfileService {
                     profile.getDisplayName(),
                     share.getAccessLevel(),
                     latestStatus,
-                    lastUpdated
+                    lastUpdated,
+                    profile.getLastRecordAt(),
+                    profile.getBirthDate(),
+                    profile.getGender(),
+                    profile.getNotes()
             ));
         }
         return responses;
@@ -220,10 +224,14 @@ public class ProfileService {
         Profile profile = profileRepository.findById(profileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay ho so"));
 
-        // Ownership check: Ensure user can only update their own profile
+        // Access check: Ensure user is owner OR has "edit" shared access
         UUID profileOwnerId = profile.getUser().getId();
-        if (!userId.equals(profileOwnerId)) {
-            throw new AccessDeniedException("Không có quyền truy cập hồ sơ này");
+        boolean isOwner = userId.equals(profileOwnerId);
+        boolean hasEditAccess = profileShareRepository.existsByProfileIdAndViewerIdAndAccessLevelIgnoreCaseAndRevokedAtIsNull(
+                profileId, userId, "edit");
+        
+        if (!isOwner && !hasEditAccess) {
+            throw new AccessDeniedException("Không có quyền chỉnh sửa hồ sơ này");
         }
 
         // Validate displayName with defensive programming:
@@ -248,6 +256,15 @@ public class ProfileService {
         profile.setBirthDate(request.birthDate());
         profile.setGender(normalizeOptionalText(request.gender()));
         profile.setNotes(normalizedNotes);
+        
+        // Sync with User entity if this is a default profile
+        if (profile.isDefault()) {
+            User user = profile.getUser();
+            user.setFullName(normalizedDisplayName);
+            user.setBirthDate(request.birthDate());
+            user.setGender(normalizeOptionalText(request.gender()));
+            userRepository.save(user);
+        }
 
         Profile updatedProfile = profileRepository.save(profile);
         return mapToResponse(updatedProfile);
@@ -269,6 +286,8 @@ public class ProfileService {
                 profile.getBirthDate(),
                 profile.getGender(),
                 profile.getNotes(),
+                profile.isDefault(),
+                profile.getLastRecordAt(),
                 profile.getCreatedAt(),
                 profile.getUpdatedAt()
         );

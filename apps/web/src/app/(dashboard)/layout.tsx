@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuthStore } from "@/stores/authStore";
@@ -11,6 +11,8 @@ import {
   Search, Bell, HelpCircle,
   Home, FileText, User, Users, Settings, LogOut
 } from "lucide-react";
+import { apiClient } from "@/lib/api/apiClient";
+import { API_ROUTES } from "@/lib/api/routes";
 
 export default function DashboardLayout({
   children,
@@ -22,6 +24,19 @@ export default function DashboardLayout({
   const isLoading = useAuthBootstrap();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
+
+  const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
+  const avatarMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (avatarMenuRef.current && !avatarMenuRef.current.contains(event.target as Node)) {
+        setIsAvatarMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -65,9 +80,15 @@ export default function DashboardLayout({
     return item.exact ? pathname === item.href : pathname === item.href || pathname?.startsWith(`${item.href}/`);
   };
 
-  const logout = () => {
-    useAuthStore.getState().clearAuth();
-    router.push("/login");
+  const logout = async () => {
+    try {
+      await apiClient.post(API_ROUTES.AUTH.LOGOUT);
+    } catch (e) {
+      console.error("Logout API failed", e);
+    } finally {
+      useAuthStore.getState().clearAuth();
+      router.push("/login");
+    }
   };
 
   return (
@@ -113,9 +134,46 @@ export default function DashboardLayout({
           <button className="p-2 text-[#3d4947] hover:bg-[#e9f6f3] transition-colors rounded-full">
             <HelpCircle className="w-5 h-5" />
           </button>
-          <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#89f5e7] bg-[#d8e5e2]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img alt="Avatar" className="w-full h-full object-cover" src="https://ui-avatars.com/api/?name=H+L&background=00685f&color=fff&size=256" />
+          <div className="relative" ref={avatarMenuRef}>
+            <button
+              onClick={() => setIsAvatarMenuOpen(!isAvatarMenuOpen)}
+              className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#89f5e7] bg-[#d8e5e2] focus:outline-none focus:ring-2 focus:ring-[#00685f]/50 transition-all block"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img alt="Avatar" className="w-full h-full object-cover" src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.email?.[0] || 'U')}&background=00685f&color=fff&size=256`} />
+            </button>
+
+            {isAvatarMenuOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-[#bcc9c6]/20 py-2 z-50 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
+                <Link
+                  href="/settings/profile"
+                  onClick={() => setIsAvatarMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#3d4947] hover:bg-[#e9f6f3] transition-colors"
+                >
+                  <User className="w-4 h-4" />
+                  Hồ sơ cá nhân
+                </Link>
+                <Link
+                  href="/settings"
+                  onClick={() => setIsAvatarMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#3d4947] hover:bg-[#e9f6f3] transition-colors"
+                >
+                  <Settings className="w-4 h-4" />
+                  Cài đặt
+                </Link>
+                <div className="h-px bg-[#bcc9c6]/20 my-1"></div>
+                <button
+                  onClick={() => {
+                    setIsAvatarMenuOpen(false);
+                    logout();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#ba1a1a] hover:bg-[#ffdad6]/40 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Đăng xuất
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>

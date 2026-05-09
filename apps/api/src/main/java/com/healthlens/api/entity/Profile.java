@@ -50,6 +50,9 @@ public class Profile {
     @Column(name = "is_default", nullable = false)
     private boolean isDefault;
 
+    @Column(name = "last_record_at")
+    private Instant lastRecordAt;
+
     @PrePersist
     public void prePersist() {
         if (id == null) {

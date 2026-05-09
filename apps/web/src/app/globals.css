@@ -42,3 +42,12 @@ body {
 .hl-custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #00685f;
 }
+
+@keyframes pulse-short {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+.animate-pulse-short {
+  animation: pulse-short 2s ease-in-out infinite;
+}

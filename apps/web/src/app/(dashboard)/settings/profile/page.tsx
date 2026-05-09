@@ -28,23 +28,25 @@ export default function ProfileSettingsPage() {
   const queryClient = useQueryClient();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const {
+    register,
+    handleSubmit,
+    control,
+    reset,
+    formState: { errors, isValid, isSubmitting, isDirty },
+  } = useForm<UpdateUserProfileInput>({
+    resolver: zodResolver(updateUserProfileSchema),
+    mode: "onBlur",
+  });
+
   const { data: userProfile, isLoading, isError } = useQuery({
     queryKey: ["currentUser"],
     queryFn: async () => {
       const response = await apiClient.get(API_ROUTES.USERS.ME);
       return response.data.data as UserProfile;
     },
-  });
-
-  const {
-    register,
-    handleSubmit,
-    control,
-    reset,
-    formState: { errors, isValid, isSubmitting },
-  } = useForm<UpdateUserProfileInput>({
-    resolver: zodResolver(updateUserProfileSchema),
-    mode: "onBlur",
+    refetchInterval: isDirty ? false : 30000,
+    refetchOnWindowFocus: true,
   });
 
   useEffect(() => {
@@ -62,6 +64,7 @@ export default function ProfileSettingsPage() {
       const payload = {
         ...data,
         birthDate: data.birthDate ? data.birthDate : null,
+        gender: data.gender ? data.gender : null,
       };
       const response = await apiClient.put(API_ROUTES.USERS.ME, payload);
       return response.data;
