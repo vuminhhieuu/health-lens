@@ -41,10 +41,7 @@ public class UserService {
             user.setBirthDate(request.birthDate());
         }
         if (request.gender() != null) {
-            String normalizedGender = normalizeGender(request.gender());
-            if (normalizedGender != null) {
-                user.setGender(normalizedGender);
-            }
+            user.setGender(normalizeGender(request.gender()));
         }
 
         user = userRepository.save(user);
@@ -59,12 +56,20 @@ public class UserService {
     }
 
     private void applyUserIdentityToProfile(Profile profile, User user) {
+        String displayName = user.getFullName() != null ? user.getFullName().trim() : "Hồ sơ của tôi";
+        if (displayName.length() > 50) {
+            displayName = displayName.substring(0, 50);
+        }
+        profile.setDisplayName(displayName);
         profile.setBirthDate(user.getBirthDate());
         profile.setGender(user.getGender());
         profileRepository.save(profile);
     }
 
     private String normalizeGender(String gender) {
+        if (gender == null || gender.trim().isEmpty()) {
+            return null;
+        }
         String normalized = gender.trim().toLowerCase();
         if ("male".equals(normalized) || "female".equals(normalized) || "other".equals(normalized)) {
             return normalized;

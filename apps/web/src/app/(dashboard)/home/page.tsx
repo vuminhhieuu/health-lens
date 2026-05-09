@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -30,6 +30,7 @@ import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 type Profile = {
   id: string;
   displayName: string;
+  isDefault: boolean;
 };
 
 type HealthRecord = {
@@ -70,17 +71,21 @@ export default function DashboardHomePage() {
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [invitingProfileId, setInvitingProfileId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
-  const [pendingAccessUpdates, setPendingAccessUpdates] = useState<Record<string, "view" | "edit">>({});
+  useEffect(() => {
+    void apiClient.post(ApiPaths.PROFILES.ENSURE_DEFAULT);
+  }, []);
+
   const { data: profiles = [] } = useQuery({
     queryKey: ["home-profiles"],
     queryFn: async () => {
-      await apiClient.post(ApiPaths.PROFILES.ENSURE_DEFAULT);
       const response = await apiClient.get(ApiPaths.PROFILES.BASE);
       return (response.data?.data ?? []) as Profile[];
     },
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 
-  const primaryProfileId = profiles[0]?.id;
+  const primaryProfileId = profiles.find((p) => p.isDefault)?.id ?? profiles[0]?.id;
 
   const { data: recentRecords = [] } = useQuery({
     queryKey: ["home-recent-records", primaryProfileId],
@@ -98,40 +103,42 @@ export default function DashboardHomePage() {
     return `/profiles/${primaryProfileId}/history`;
   }, [primaryProfileId]);
 
+  const updateAccessMutation = useMutation({
+    mutationFn: async (payload: { profileId: string; email: string; accessLevel: "view" | "edit" }) => {
+      await apiClient.post(ApiPaths.PROFILES.INVITATIONS(payload.profileId), {
+        email: payload.email,
+        accessLevel: payload.accessLevel,
+      });
+    },
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ["profile-shared-members", variables.profileId] });
+      alert(`Đã cập nhật quyền ${variables.accessLevel === "edit" ? "chỉnh sửa" : "chỉ xem"} cho ${variables.email}.`);
+    },
+    onError: (error: unknown) => {
+      alert(extractApiDetail(error, "Không thể cập nhật quyền truy cập."));
+    },
+  });
+
   const inviteMutation = useMutation({
-    mutationFn: async (payload: { email?: string; accessLevel?: "view" | "edit" }) => {
-      if (!invitingProfileId) {
-        throw new Error("Thiếu profile để chia sẻ.");
-      }
+    mutationFn: async (payload: { profileId: string; email?: string; accessLevel?: "view" | "edit" }) => {
       let invitedCount = 0;
       if (payload.email && payload.accessLevel) {
-        await apiClient.post(ApiPaths.PROFILES.INVITATIONS(invitingProfileId), payload);
+        await apiClient.post(ApiPaths.PROFILES.INVITATIONS(payload.profileId), {
+          email: payload.email,
+          accessLevel: payload.accessLevel,
+        });
         invitedCount += 1;
-      }
-      const updates = Object.entries(pendingAccessUpdates);
-      for (const [email, accessLevel] of updates) {
-        await apiClient.post(ApiPaths.PROFILES.INVITATIONS(invitingProfileId), { email, accessLevel });
       }
       return {
         invitedCount,
-        updatedCount: updates.length,
       };
     },
-    onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: ["profile-shared-members", invitingProfileId] });
+    onSuccess: (result, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ["profile-shared-members", variables.profileId] });
       setInviteModalOpen(false);
       setInvitingProfileId(null);
-      setPendingAccessUpdates({});
-      if (result.invitedCount > 0 && result.updatedCount > 0) {
-        alert("Đã gửi lời mời và lưu thay đổi quyền truy cập thành công.");
-        return;
-      }
       if (result.invitedCount > 0) {
         alert("Đã gửi lời mời chia sẻ thành công.");
-        return;
-      }
-      if (result.updatedCount > 0) {
-        alert("Đã lưu thay đổi quyền truy cập thành công.");
       }
     },
     onError: (error: unknown) => {
@@ -155,14 +162,7 @@ export default function DashboardHomePage() {
     },
   });
 
-  const displaySharedMembers = useMemo(
-    () =>
-      sharedMembers.map((member) => ({
-        ...member,
-        accessLevel: pendingAccessUpdates[member.email.toLowerCase()] ?? member.accessLevel,
-      })),
-    [pendingAccessUpdates, sharedMembers]
-  );
+  const displaySharedMembers = sharedMembers;
 
   return (
     <DashboardPageShell
@@ -297,21 +297,29 @@ export default function DashboardHomePage() {
         onClose={() => {
           setInviteModalOpen(false);
           setInvitingProfileId(null);
-          setPendingAccessUpdates({});
         }}
         isLoading={inviteMutation.isPending}
         sharedMembers={displaySharedMembers}
         isSharedMembersLoading={isSharedMembersLoading}
-        hasPendingAccessChanges={Object.keys(pendingAccessUpdates).length > 0}
+        hasPendingAccessChanges={false}
         onChangeAccessLevel={(member) =>
-          setPendingAccessUpdates((prev) => ({
-            ...prev,
-            [member.email.toLowerCase()]: member.accessLevel,
-          }))
+          invitingProfileId &&
+          updateAccessMutation.mutate({
+            profileId: invitingProfileId,
+            email: member.email,
+            accessLevel: member.accessLevel,
+          })
         }
+        isUpdatingAccessLevel={updateAccessMutation.isPending}
         title="Chia sẻ quyền xem kết quả khám"
         description="Nhập email người nhận."
-        onSubmit={(payload) => inviteMutation.mutate(payload)}
+        onSubmit={(payload) =>
+          invitingProfileId &&
+          inviteMutation.mutate({
+            ...payload,
+            profileId: invitingProfileId,
+          })
+        }
       />
       {profilePickerOpen ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm animate-in fade-in duration-200">

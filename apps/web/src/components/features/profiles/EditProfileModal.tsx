@@ -34,6 +34,7 @@ interface EditProfileModalProps {
   onClose: () => void;
   onSubmit: (profileId: string, data: UpdateProfileInput) => void;
   isLoading?: boolean;
+  isReadOnly?: boolean;
 }
 
 export function EditProfileModal({
@@ -42,6 +43,7 @@ export function EditProfileModal({
   onClose,
   onSubmit,
   isLoading,
+  isReadOnly = false,
 }: EditProfileModalProps) {
   const {
     register,
@@ -109,10 +111,12 @@ export function EditProfileModal({
             </div>
             <div>
               <h2 className="text-2xl font-black text-[#121e1c]">
-                Chỉnh sửa hồ sơ
+                {isReadOnly ? "Thông tin hồ sơ" : "Chỉnh sửa hồ sơ"}
               </h2>
               <p className="text-sm font-medium text-[#6d7a77]">
-                Cập nhật tên hiển thị và ghi chú để dễ phân biệt hồ sơ.
+                {isReadOnly 
+                  ? "Thông tin chi tiết về hồ sơ sức khỏe này." 
+                  : "Cập nhật tên hiển thị và ghi chú để dễ phân biệt hồ sơ."}
               </p>
             </div>
           </div>
@@ -130,8 +134,9 @@ export function EditProfileModal({
               </label>
               <input
                 {...register("displayName")}
+                readOnly={isReadOnly}
                 placeholder="Ví dụ: Mẹ, Bố..."
-                className="w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all placeholder:text-[#bcc9c6]"
+                className={`w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all placeholder:text-[#bcc9c6] ${isReadOnly ? "cursor-default" : ""}`}
               />
               {errors.displayName && (
                 <p className="text-xs font-bold text-[#ba1a1a] ml-1">
@@ -149,7 +154,8 @@ export function EditProfileModal({
                   <input
                     type="date"
                     {...register("birthDate")}
-                    className="w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all pr-12"
+                    readOnly={isReadOnly}
+                    className={`w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all pr-12 ${isReadOnly ? "cursor-default" : ""}`}
                   />
                   <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-[#6d7a77] pointer-events-none w-5 h-5" />
                 </div>
@@ -170,8 +176,9 @@ export function EditProfileModal({
                   render={({ field }) => (
                     <select
                       {...field}
+                      disabled={isReadOnly}
                       value={field.value ?? ""}
-                      className="w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all appearance-none cursor-pointer"
+                      className={`w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all appearance-none ${isReadOnly ? "cursor-default" : "cursor-pointer"}`}
                     >
                       <option value="male">Nam</option>
                       <option value="female">Nữ</option>
@@ -188,9 +195,10 @@ export function EditProfileModal({
               </label>
               <textarea
                 {...register("notes")}
+                readOnly={isReadOnly}
                 placeholder="Ví dụ: Tiểu đường type 2, cần theo dõi huyết áp..."
                 rows={4}
-                className="w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all resize-none placeholder:text-[#bcc9c6]"
+                className={`w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all resize-none placeholder:text-[#bcc9c6] ${isReadOnly ? "cursor-default" : ""}`}
               />
               {errors.notes && (
                 <p className="text-xs font-bold text-[#ba1a1a] ml-1">
@@ -215,17 +223,19 @@ export function EditProfileModal({
             onClick={onClose}
             className="px-6 py-3 rounded-xl font-bold text-[#3d4947] hover:bg-[#e9f6f3]/80 transition-colors"
           >
-            Hủy
+            {isReadOnly ? "Đóng" : "Hủy"}
           </button>
-          <button
-            form="edit-profile-form"
-            type="submit"
-            disabled={isLoading}
-            className="px-8 py-3 bg-linear-to-r from-[#00685f] to-[#008378] text-white rounded-xl font-bold shadow-lg shadow-[#00685f]/20 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-70 disabled:pointer-events-none"
-          >
-            {isLoading && <Loader2 size={18} className="animate-spin" />}
-            {isLoading ? "Đang lưu..." : "Lưu thay đổi"}
-          </button>
+          {!isReadOnly && (
+            <button
+              form="edit-profile-form"
+              type="submit"
+              disabled={isLoading}
+              className="px-8 py-3 bg-linear-to-r from-[#00685f] to-[#008378] text-white rounded-xl font-bold shadow-lg shadow-[#00685f]/20 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-70 disabled:pointer-events-none"
+            >
+              {isLoading && <Loader2 size={18} className="animate-spin" />}
+              {isLoading ? "Đang lưu..." : "Lưu thay đổi"}
+            </button>
+          )}
         </div>
       </div>
     </div>

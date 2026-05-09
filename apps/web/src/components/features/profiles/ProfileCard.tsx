@@ -14,6 +14,7 @@ interface ProfileCardProps {
   avatarUrl?: string;
   latestStatus?: HealthStatus;
   lastUpdated?: string | Date;
+  lastRecordAt?: string | Date;
   isSelected?: boolean;
   onPress?: () => void;
   secondaryAction?: {
@@ -48,6 +49,7 @@ export function ProfileCard({
   avatarUrl,
   latestStatus,
   lastUpdated,
+  lastRecordAt,
   isSelected,
   onPress,
   secondaryAction,
@@ -57,6 +59,10 @@ export function ProfileCard({
   const formattedDate = lastUpdated
     ? formatDistanceToNow(new Date(lastUpdated), { addSuffix: true, locale: vi })
     : "Chưa có dữ liệu";
+
+  const isNew = lastRecordAt 
+    ? (new Date().getTime() - new Date(lastRecordAt).getTime()) < 5 * 60 * 1000 
+    : false;
 
   return (
     <div
@@ -68,8 +74,16 @@ export function ProfileCard({
         ${isSelected 
           ? "bg-white border-[#00685f] shadow-lg shadow-[#00685f]/10 -translate-y-1" 
           : "bg-white/60 border-transparent hover:bg-white hover:border-[#bcc9c6]/40 shadow-sm hover:shadow-md hover:-translate-y-0.5"}
+        ${isNew ? "ring-2 ring-[#00685f] ring-offset-2 animate-pulse-short" : ""}
       `}
     >
+      {isNew && (
+        <div className="absolute -top-2 -right-2 z-10">
+          <span className="flex h-8 items-center justify-center rounded-full bg-[#00685f] px-3 text-[10px] font-black uppercase tracking-widest text-white shadow-lg">
+            Mới
+          </span>
+        </div>
+      )}
       <div className="flex items-start justify-between mb-6">
         <div className="flex items-center gap-4">
           <div className="relative">

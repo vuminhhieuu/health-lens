@@ -35,6 +35,9 @@ public interface HealthRecordRepository extends JpaRepository<HealthRecord, UUID
 
     java.util.List<HealthRecord> findAllByUserId(UUID userId);
 
+    @Query("SELECT MAX(h.createdAt) FROM HealthRecord h WHERE h.profileId = :profileId AND h.deletedAt IS NULL")
+    Optional<Instant> findMaxCreatedAtByProfileId(@Param("profileId") UUID profileId);
+
     @Modifying
     @Query("DELETE FROM HealthRecord h WHERE h.userId = :userId")
     int deleteAllByUserId(@Param("userId") UUID userId);

@@ -33,8 +33,10 @@ type Profile = {
   birthDate?: string;
   gender?: string;
   notes?: string;
+  isDefault: boolean;
   createdAt: string;
   updatedAt: string;
+  lastRecordAt?: string;
   latestStatus?: HealthStatus;
 };
 
@@ -63,6 +65,10 @@ type SharedProfile = {
   accessLevel: "view" | "edit" | string;
   latestStatus: string;
   lastUpdated?: string;
+  lastRecordAt?: string;
+  birthDate?: string;
+  gender?: string;
+  notes?: string;
 };
 
 function mapSharedStatusToCardStatus(
@@ -101,20 +107,14 @@ export default function ProfilesPage() {
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { data: currentUser, isLoading: isUserLoading } = useQuery({
-    queryKey: ["currentUser"],
-    queryFn: async () => {
-      const resp = await apiClient.get(API_ROUTES.USERS.ME);
-      return resp.data.data as UserProfile;
-    },
-  });
-
   const { data: otherProfiles = [], isLoading: isProfilesLoading } = useQuery({
     queryKey: ["profiles"],
     queryFn: async () => {
       const resp = await apiClient.get(API_ROUTES.PROFILES.BASE);
       return resp.data.data as Profile[];
     },
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: incomingInvitations = [] } = useQuery({
@@ -131,6 +131,8 @@ export default function ProfilesPage() {
       const resp = await apiClient.get(ApiPaths.SHARED_PROFILES.LIST);
       return (resp.data?.data ?? []) as SharedProfile[];
     },
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 
   const rejectIncomingInvitationMutation = useMutation({
@@ -184,6 +186,7 @@ export default function ProfilesPage() {
     },
     onMutate: async ({ profileId, data }) => {
       await queryClient.cancelQueries({ queryKey: ["profiles"] });
+      await queryClient.cancelQueries({ queryKey: ["shared-profiles"] });
 
       const previousProfiles = queryClient.getQueryData<Profile[]>([
         "profiles",
@@ -205,6 +208,22 @@ export default function ProfilesPage() {
         }),
       );
 
+      queryClient.setQueryData<SharedProfile[]>(["shared-profiles"], (old = []) =>
+        old.map((profile) => {
+          if (profile.profileId !== profileId) {
+            return profile;
+          }
+          return {
+            ...profile,
+            displayName: data.displayName.trim(),
+            birthDate: data.birthDate || undefined,
+            gender: data.gender || undefined,
+            notes: data.notes?.trim() || undefined,
+            lastUpdated: new Date().toISOString(),
+          };
+        }),
+      );
+
       return { previousProfiles };
     },
     onError: (error: unknown, _variables, context) => {
@@ -221,6 +240,7 @@ export default function ProfilesPage() {
         ),
       );
       queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["shared-profiles"] });
       queryClient.invalidateQueries({
         queryKey: ["profile", updatedProfile.id],
       });
@@ -230,15 +250,8 @@ export default function ProfilesPage() {
   });
 
   const allProfiles = useMemo(() => {
-    const normalizedSelfName = currentUser?.fullName.trim().toLowerCase();
-
-    const ownedProfiles = otherProfiles
-      .filter((profile) => {
-        const normalizedProfileName = profile.displayName.trim().toLowerCase();
-        const isSelfProfile =
-          !!normalizedSelfName && normalizedProfileName === normalizedSelfName;
-        return !isSelfProfile;
-      })
+    const familyProfiles = otherProfiles
+      .filter((p) => !p.isDefault)
       .map((profile) => ({
         id: profile.id,
         cardKey: `owned-${profile.id}`,
@@ -247,7 +260,11 @@ export default function ProfilesPage() {
         notes: profile.notes,
         latestStatus: profile.latestStatus,
         lastUpdated: profile.updatedAt,
+        lastRecordAt: profile.lastRecordAt,
         isSharedProfile: false,
+        canEdit: true,
+        birthDate: profile.birthDate,
+        gender: profile.gender,
       }));
 
     const sharedProfileCards = sharedProfiles.map((profile) => ({
@@ -258,29 +275,30 @@ export default function ProfilesPage() {
         profile.accessLevel === "edit"
           ? "Được chia sẻ (chỉnh sửa)"
           : "Được chia sẻ (chỉ xem)",
-      notes:
-        profile.accessLevel === "edit"
-          ? "Bạn có thể chỉnh sửa dữ liệu hồ sơ này."
-          : "Bạn chỉ có quyền xem hồ sơ này.",
+      notes: profile.notes,
       latestStatus: mapSharedStatusToCardStatus(profile.latestStatus),
       lastUpdated: profile.lastUpdated,
+      lastRecordAt: profile.lastRecordAt,
       isSharedProfile: true,
+      canEdit: profile.accessLevel === "edit",
+      birthDate: profile.birthDate,
+      gender: profile.gender,
     }));
 
-    return [...sharedProfileCards, ...ownedProfiles].filter((profile) =>
+    return [...sharedProfileCards, ...familyProfiles].filter((profile) =>
       profile.displayName.toLowerCase().includes(searchQuery.toLowerCase()),
     );
-  }, [currentUser, otherProfiles, searchQuery, sharedProfiles]);
+  }, [otherProfiles, searchQuery, sharedProfiles]);
 
   const editingProfile = useMemo(
     () =>
-      otherProfiles.find((profile) => profile.id === editingProfileId) ?? null,
-    [otherProfiles, editingProfileId],
+      allProfiles.find((profile) => profile.id === editingProfileId) ?? null,
+    [allProfiles, editingProfileId],
   );
 
   const isLimitReached = otherProfiles.length >= 10;
 
-  const isLoading = isUserLoading || isProfilesLoading;
+  const isLoading = isProfilesLoading;
 
   if (isLoading) {
     return (
@@ -392,19 +410,16 @@ export default function ProfilesPage() {
               key={profile.cardKey}
               name={profile.displayName}
               relationship={profile.relationship}
-              notes={profile.notes}
+              lastRecordAt={profile.lastRecordAt}
+              notes={profile.isSharedProfile 
+                 ? (profile.notes || (profile.canEdit ? "Bạn có thể chỉnh sửa dữ liệu hồ sơ này." : "Bạn chỉ có quyền xem hồ sơ này.")) 
+                 : profile.notes}
               latestStatus={profile.latestStatus}
               lastUpdated={profile.lastUpdated}
               onPress={() => {
-                if (profile.isSharedProfile) {
-                  router.push(
-                    `/profiles/${profile.id}/history?displayName=${encodeURIComponent(profile.displayName)}`,
-                  );
-                  return;
-                }
-                setEditingProfileId(profile.id);
-                setIsEditModalOpen(true);
-              }}
+                 setEditingProfileId(profile.id);
+                 setIsEditModalOpen(true);
+               }}
             />
           ))}
         </div>
@@ -457,6 +472,7 @@ export default function ProfilesPage() {
       <EditProfileModal
         isOpen={isEditModalOpen}
         profile={editingProfile}
+        isReadOnly={editingProfile ? !editingProfile.canEdit : false}
         onClose={() => {
           setIsEditModalOpen(false);
           setEditingProfileId(null);

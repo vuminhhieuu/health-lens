@@ -8,6 +8,10 @@ public record SharedProfileResponse(
         String displayName,
         String accessLevel,
         String latestStatus,
-        Instant lastUpdated
+        Instant lastUpdated,
+        Instant lastRecordAt,
+        java.time.LocalDate birthDate,
+        String gender,
+        String notes
 ) {
 }

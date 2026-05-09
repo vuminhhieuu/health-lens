@@ -171,6 +171,7 @@ public class HealthRecordService {
         record.setTestMethod(null);
         record.setLabSite(null);
         healthRecordRepository.save(record);
+        updateProfileLastRecordAt(reservation.profileId());
 
         StreamOperations<String, Object, Object> streamOps = redisTemplate.opsForStream();
         String jobId = UUID.randomUUID().toString();
@@ -495,6 +496,7 @@ public class HealthRecordService {
             record.setSourceType("ocr");
         }
         healthRecordRepository.save(record);
+        updateProfileLastRecordAt(record.getProfileId());
     }
 
     @Transactional
@@ -596,6 +598,7 @@ public class HealthRecordService {
         }
 
         healthRecordRepository.save(record);
+        updateProfileLastRecordAt(record.getProfileId());
     }
 
     @Transactional
@@ -622,6 +625,7 @@ public class HealthRecordService {
             throw new IllegalStateException("Failed to serialize metrics for " + recordId);
         }
         healthRecordRepository.save(record);
+        updateProfileLastRecordAt(record.getProfileId());
 
         String cacheKey = "health-record-status:" + userId + ":" + recordId;
         redisTemplate.delete(cacheKey);
@@ -761,6 +765,15 @@ public class HealthRecordService {
     }
 
     private record RecommendationRiskMetric(MetricDto metric, String priorStatus) {
+    }
+
+    private void updateProfileLastRecordAt(UUID profileId) {
+        profileRepository.findById(profileId).ifPresent(profile -> {
+            Instant maxCreatedAt = healthRecordRepository.findMaxCreatedAtByProfileId(profileId)
+                    .orElse(null);
+            profile.setLastRecordAt(maxCreatedAt);
+            profileRepository.save(profile);
+        });
     }
 
     private MetricDto enrichMetric(MetricDto metric, Profile profile, LocalDate examDate) {
