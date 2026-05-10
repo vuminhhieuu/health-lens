@@ -245,4 +245,14 @@ public class GlobalExceptionHandler {
         problem.setInstance(URI.create(request.getRequestURI()));
         return problem;
     }
+
+    @ExceptionHandler(ProfileAccessRevokedException.class)
+    public ProblemDetail handleProfileAccessRevoked(ProfileAccessRevokedException ex, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        problem.setType(URI.create("https://healthlens.vn/errors/profile-access-revoked"));
+        problem.setTitle("Quyền truy cập hồ sơ đã bị thu hồi");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        problem.setProperty("errorCode", ProfileAccessRevokedException.ERROR_CODE);
+        return problem;
+    }
 }

@@ -58,6 +58,10 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    const errorCode: string | undefined =
+      error?.response?.data?.errorCode ??
+      error?.response?.data?.properties?.errorCode;
+    const problemType: string | undefined = error?.response?.data?.type;
 
     // Only attempt refresh for 401 that is NOT from auth endpoints
     const isCancelDeletion =
@@ -121,6 +125,25 @@ apiClient.interceptors.response.use(
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
+      }
+    }
+
+    // Story 6.3: if a shared member gets revoked while online, the next API call
+    // should fail with 403 and the client should return to dashboard.
+    if (
+      error.response?.status === 403 &&
+      typeof window !== "undefined" &&
+      window.location.pathname !== "/dashboard"
+    ) {
+      const url: string = String(originalRequest?.url ?? "");
+      const isSharedProfileCall =
+        url.includes("/health-records") || url.includes("/shared-profiles");
+      const isRevokedSharedProfileAccess =
+        errorCode === "PROFILE_ACCESS_REVOKED" ||
+        problemType === "https://healthlens.vn/errors/profile-access-revoked";
+
+      if (isSharedProfileCall && isRevokedSharedProfileAccess) {
+        window.location.href = "/dashboard";
       }
     }
 

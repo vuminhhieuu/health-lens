@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public record ProfileInvitationResponse(
         UUID id,
+        UUID viewerId,
         String email,
         String status,
         Instant expiresAt,

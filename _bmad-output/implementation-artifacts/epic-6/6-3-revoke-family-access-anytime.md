@@ -1,6 +1,6 @@
 # Story 6.3: Thu hồi quyền truy cập bất cứ lúc nào
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 
@@ -32,17 +32,17 @@ so that tôi kiểm soát chia sẻ dữ liệu linh hoạt.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: Revoke share endpoint (AC: #1, #2, #3)
-  - [ ] `DELETE /api/v1/profiles/{profileId}/shares/{viewerId}`
-  - [ ] Set `revoked_at = now()` trong `profile_shares`
-  - [ ] Ownership check: chỉ profile owner mới được revoke
-  - [ ] Ghi audit log: "REVOKE_PROFILE_SHARE"
-- [ ] Task 2 — Web: Revoke UI trong invite list (AC: #1)
-  - [ ] Trong invite list (Story 6.1): mỗi accepted member có nút "Thu hồi" (icon X)
-  - [ ] Confirm dialog: "Thu hồi quyền truy cập của {email}?"
-  - [ ] Sau revoke: refresh danh sách members
-- [ ] Task 3 — Tests (AC: #1, #2)
-  - [ ] `ProfileShareServiceTest`: revoke thành công, access blocked sau revoke, non-owner cannot revoke
+- [x] Task 1 — Backend: Revoke share endpoint (AC: #1, #2, #3)
+  - [x] `DELETE /api/v1/profiles/{profileId}/shares/{viewerId}`
+  - [x] Set `revoked_at = now()` trong `profile_shares`
+  - [x] Ownership check: chỉ profile owner mới được revoke
+  - [x] Ghi audit log: "REVOKE_PROFILE_SHARE"
+- [x] Task 2 — Web: Revoke UI trong invite list (AC: #1)
+  - [x] Trong invite list (Story 6.1): mỗi accepted member có nút "Thu hồi" (icon X)
+  - [x] Confirm dialog: "Thu hồi quyền truy cập của {email}?"
+  - [x] Sau revoke: refresh danh sách members
+- [x] Task 3 — Tests (AC: #1, #2)
+  - [x] `ProfileShareServiceTest`: revoke thành công, access blocked sau revoke, non-owner cannot revoke
 
 ## Dev Notes
 
@@ -72,10 +72,30 @@ Không cần invalidate token — 403 xảy ra tức thì khi API gọi tiếp t
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+Codex 5.3
 
 ### Debug Log References
+- `apps/api/gradlew.bat test --tests "com.healthlens.api.service.ProfileShareServiceTest"` ✅
+- `pnpm --filter web lint` ✅ (không có lỗi mới, còn warnings cũ ở `apps/web/src/app/(dashboard)/health-records/page.tsx`)
 
 ### Completion Notes List
+- Thêm endpoint backend `DELETE /api/v1/profiles/{profileId}/shares/{viewerId}` tại `ProfileController` và service `revokeShare(...)` để set `revoked_at`.
+- Bổ sung audit log action `REVOKE_PROFILE_SHARE` (ghi actor + timestamp + profileId làm resource id).
+- Mở rộng `ProfileInvitationResponse` với `viewerId` để UI gọi revoke đúng payload.
+- UI modal chia sẻ: thêm nút `Thu hồi` (icon X), confirm dialog theo yêu cầu, gọi API revoke và refresh danh sách thành viên ngay sau thành công.
+- Bổ sung unit tests cho revoke: thành công, non-owner bị chặn, share đã không còn active thì báo lỗi.
 
 ### File List
+- `apps/api/src/main/java/com/healthlens/api/constants/ApiRoutes.java`
+- `apps/api/src/main/java/com/healthlens/api/controller/ProfileController.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/response/ProfileInvitationResponse.java`
+- `apps/api/src/main/java/com/healthlens/api/service/ProfileShareService.java`
+- `apps/api/src/test/java/com/healthlens/api/service/ProfileShareServiceTest.java`
+- `apps/web/src/app/(dashboard)/health-records/page.tsx`
+- `apps/web/src/app/(dashboard)/home/page.tsx`
+- `apps/web/src/components/features/profiles/InviteMemberModal.tsx`
+- `packages/shared/constants/api.ts`
+
+## Change Log
+
+- 2026-05-09: Hoàn thành implementation Story 6.3 (backend revoke endpoint + audit log + UI revoke + test), chuyển trạng thái sang `review`.
