@@ -8,4 +8,8 @@ import java.util.UUID;
 
 public interface ReferenceMetricAliasRepository extends JpaRepository<ReferenceMetricAlias, UUID> {
     Optional<ReferenceMetricAlias> findByAliasNormalizedAndActiveTrue(String aliasNormalized);
+    java.util.List<ReferenceMetricAlias> findByAliasNormalizedAndActiveTrueAndMetricStatusNotOrderByMetricStatusAsc(
+            String aliasNormalized,
+            String excludedStatus
+    );
 }

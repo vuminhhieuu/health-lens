@@ -9,6 +9,14 @@ import java.util.List;
 import java.util.UUID;
 
 public interface ReferenceRangeRepository extends JpaRepository<ReferenceRange, UUID> {
+    List<ReferenceRange> findAllByMetric_IdOrderByGenderAscMinAgeAscMaxAgeAsc(UUID metricId);
+
+    @Query("""
+        SELECT rr FROM ReferenceRange rr
+        JOIN FETCH rr.metric
+        ORDER BY rr.metric.id ASC, rr.gender ASC, rr.minAge ASC
+        """)
+    List<ReferenceRange> findAllOrderByMetricIdAscGenderAscMinAgeAsc();
 
     @Query("""
         SELECT rr FROM ReferenceRange rr

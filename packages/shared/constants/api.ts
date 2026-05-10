@@ -139,6 +139,13 @@ export const ApiPaths = {
     TOTP_SETUP: `/api/${API_VERSION}/admin/auth/totp/setup`,
     TOTP_VERIFY: `/api/${API_VERSION}/admin/auth/totp/verify`,
   },
+
+  ADMIN_REFERENCE_DATA: {
+    BASE: `/api/${API_VERSION}/admin/reference-data`,
+    METRICS: `/api/${API_VERSION}/admin/reference-data/metrics`,
+    METRIC_BY_ID: (id: string) => `/api/${API_VERSION}/admin/reference-data/metrics/${id}`,
+    REACTIVATE: (id: string) => `/api/${API_VERSION}/admin/reference-data/metrics/${id}/reactivate`,
+  },
 } as const;
 
 /**

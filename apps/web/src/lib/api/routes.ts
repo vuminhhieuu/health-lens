@@ -48,4 +48,5 @@ export const API_ROUTES = {
   },
   PROFILES: ApiPaths.PROFILES,
   ADMIN_AUTH: ApiPaths.ADMIN_AUTH,
+  ADMIN_REFERENCE_DATA: ApiPaths.ADMIN_REFERENCE_DATA,
 } as const;
