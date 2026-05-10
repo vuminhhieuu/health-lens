@@ -2,6 +2,8 @@ package com.healthlens.api.controller;
 
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.AdminReferenceMetricRequest;
+import com.healthlens.api.dto.request.AdminRejectChangeSetRequest;
+import com.healthlens.api.dto.response.AdminChangeSetDetailResponse;
 import com.healthlens.api.dto.response.AdminReferenceChangeSetResponse;
 import com.healthlens.api.dto.response.AdminReferenceMetricResponse;
 import com.healthlens.api.service.ReferenceDataAdminService;
@@ -57,8 +59,11 @@ public class AdminReferenceDataController {
     }
 
     @DeleteMapping("/metrics/{metricId}")
-    public ResponseEntity<Map<String, Object>> deactivateMetric(@PathVariable UUID metricId) {
-        AdminReferenceMetricResponse response = referenceDataAdminService.deactivateMetric(metricId);
+    public ResponseEntity<Map<String, Object>> deactivateMetric(
+            Authentication authentication,
+            @PathVariable UUID metricId) {
+        UUID adminId = UUID.fromString(authentication.getName());
+        AdminReferenceChangeSetResponse response = referenceDataAdminService.deactivateMetric(adminId, metricId);
         return ResponseEntity.ok(Map.of("data", response));
     }
 
@@ -66,5 +71,60 @@ public class AdminReferenceDataController {
     public ResponseEntity<Map<String, Object>> reactivateMetric(@PathVariable UUID metricId) {
         AdminReferenceMetricResponse response = referenceDataAdminService.reactivateMetric(metricId);
         return ResponseEntity.ok(Map.of("data", response));
+    }
+
+    // ========================================================================
+    // Approval Workflow Endpoints (Story 7.4)
+    // ========================================================================
+
+    @GetMapping("/change-sets")
+    public ResponseEntity<Map<String, Object>> listPendingChangeSets() {
+        List<AdminChangeSetDetailResponse> changeSets = referenceDataAdminService.listPendingChangeSets();
+        return ResponseEntity.ok(Map.of("data", changeSets));
+    }
+
+    @PostMapping("/change-sets/{changeSetId}/approve")
+    public ResponseEntity<Map<String, Object>> approveChangeSet(
+            Authentication authentication,
+            @PathVariable UUID changeSetId) {
+        UUID reviewerId = UUID.fromString(authentication.getName());
+        AdminReferenceChangeSetResponse response = referenceDataAdminService.approveChangeSet(changeSetId, reviewerId);
+        return ResponseEntity.ok(Map.of("data", response));
+    }
+
+    @PostMapping("/change-sets/{changeSetId}/reject")
+    public ResponseEntity<Map<String, Object>> rejectChangeSet(
+            Authentication authentication,
+            @PathVariable UUID changeSetId,
+            @Valid @RequestBody AdminRejectChangeSetRequest request) {
+        UUID reviewerId = UUID.fromString(authentication.getName());
+        AdminReferenceChangeSetResponse response = referenceDataAdminService.rejectChangeSet(
+                changeSetId, reviewerId, request.reason());
+        return ResponseEntity.ok(Map.of("data", response));
+    }
+
+    @PostMapping("/change-sets/{changeSetId}/submit")
+    public ResponseEntity<Map<String, Object>> submitChangeSetForApproval(
+            Authentication authentication,
+            @PathVariable UUID changeSetId) {
+        UUID adminId = UUID.fromString(authentication.getName());
+        AdminReferenceChangeSetResponse response = referenceDataAdminService.submitChangeSetForApproval(
+                changeSetId, adminId);
+        return ResponseEntity.ok(Map.of("data", response));
+    }
+
+    @PostMapping("/change-sets/{changeSetId}/publish")
+    public ResponseEntity<Map<String, Object>> publishChangeSet(
+            Authentication authentication,
+            @PathVariable UUID changeSetId) {
+        UUID adminId = UUID.fromString(authentication.getName());
+        AdminReferenceChangeSetResponse response = referenceDataAdminService.publishChangeSet(changeSetId, adminId);
+        return ResponseEntity.ok(Map.of("data", response));
+    }
+
+    @GetMapping("/config")
+    public ResponseEntity<Map<String, Object>> getAdminConfig() {
+        boolean multiAdmin = referenceDataAdminService.isMultiAdminMode();
+        return ResponseEntity.ok(Map.of("data", Map.of("multiAdminMode", multiAdmin)));
     }
 }

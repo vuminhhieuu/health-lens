@@ -4,8 +4,13 @@ import com.healthlens.api.entity.ReferenceDataChangeSet;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ReferenceDataChangeSetRepository extends JpaRepository<ReferenceDataChangeSet, UUID> {
     List<ReferenceDataChangeSet> findAllByEntityIdInAndStatusOrderByCreatedAtDesc(List<UUID> entityIds, String status);
+
+    List<ReferenceDataChangeSet> findAllByStatusOrderByCreatedAtDesc(String status);
+
+    Optional<ReferenceDataChangeSet> findByIdAndStatus(UUID id, String status);
 }

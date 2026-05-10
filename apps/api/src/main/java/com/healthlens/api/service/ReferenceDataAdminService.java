@@ -1,9 +1,11 @@
 package com.healthlens.api.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.request.AdminReferenceMetricRequest;
 import com.healthlens.api.dto.request.AdminReferenceRangeRequest;
+import com.healthlens.api.dto.response.AdminChangeSetDetailResponse;
 import com.healthlens.api.dto.response.AdminPendingChangeSetSummary;
 import com.healthlens.api.dto.response.AdminReferenceChangeSetResponse;
 import com.healthlens.api.dto.response.AdminReferenceMetricResponse;
@@ -11,24 +13,38 @@ import com.healthlens.api.dto.response.AdminReferenceRangeResponse;
 import com.healthlens.api.entity.ReferenceDataChangeSet;
 import com.healthlens.api.entity.ReferenceMetric;
 import com.healthlens.api.entity.ReferenceRange;
+import com.healthlens.api.entity.ReferenceRangeAuditLog;
+import com.healthlens.api.entity.User;
+import com.healthlens.api.entity.UserRole;
+import com.healthlens.api.exception.BusinessException;
 import com.healthlens.api.repository.ReferenceDataChangeSetRepository;
 import com.healthlens.api.repository.ReferenceMetricRepository;
+import com.healthlens.api.repository.ReferenceRangeAuditLogRepository;
 import com.healthlens.api.repository.ReferenceRangeRepository;
+import com.healthlens.api.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.text.Normalizer;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
 public class ReferenceDataAdminService {
+
+    private static final Logger log = LoggerFactory.getLogger(ReferenceDataAdminService.class);
 
     private static final List<String> NON_NEGATIVE_METRICS = List.of(
             "glucose", "hba1c", "cholesterol", "triglycerides", "hdl", "ldl"
@@ -37,17 +53,23 @@ public class ReferenceDataAdminService {
     private final ReferenceMetricRepository referenceMetricRepository;
     private final ReferenceRangeRepository referenceRangeRepository;
     private final ReferenceDataChangeSetRepository referenceDataChangeSetRepository;
+    private final ReferenceRangeAuditLogRepository referenceRangeAuditLogRepository;
+    private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
 
     public ReferenceDataAdminService(
             ReferenceMetricRepository referenceMetricRepository,
             ReferenceRangeRepository referenceRangeRepository,
             ReferenceDataChangeSetRepository referenceDataChangeSetRepository,
+            ReferenceRangeAuditLogRepository referenceRangeAuditLogRepository,
+            UserRepository userRepository,
             ObjectMapper objectMapper
     ) {
         this.referenceMetricRepository = referenceMetricRepository;
         this.referenceRangeRepository = referenceRangeRepository;
         this.referenceDataChangeSetRepository = referenceDataChangeSetRepository;
+        this.referenceRangeAuditLogRepository = referenceRangeAuditLogRepository;
+        this.userRepository = userRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -91,20 +113,24 @@ public class ReferenceDataAdminService {
                     throw new IllegalArgumentException("Tên chỉ số đã tồn tại");
                 });
 
+        boolean isMulti = isMultiAdminMode();
         ReferenceMetric metric = new ReferenceMetric();
         metric.setName(request.name().trim());
         metric.setDisplayNameVi(request.displayNameVi().trim());
         metric.setUnit(request.unit().trim());
-        metric.setStatus("draft");
+        metric.setStatus(isMulti ? "pending" : "active");
         ReferenceMetric savedMetric = referenceMetricRepository.save(metric);
 
+        String status = isMulti ? "pending" : "active";
         List<AdminReferenceRangeResponse> ranges = request.ranges().stream()
-                .map(range -> toRangeEntity(savedMetric, range, "draft"))
+                .map(range -> toRangeEntity(savedMetric, range, status))
                 .map(referenceRangeRepository::save)
                 .map(this::toRangeResponse)
                 .toList();
 
-        persistChangeSet(adminId, savedMetric.getId(), "METRIC", "CREATE", buildSnapshot(savedMetric, request, "draft"));
+        if (isMulti) {
+            persistChangeSet(adminId, savedMetric.getId(), "METRIC", "CREATE", buildSnapshot(savedMetric, request, "pending"), "pending");
+        }
 
         return new AdminReferenceMetricResponse(
                 savedMetric.getId(),
@@ -129,17 +155,21 @@ public class ReferenceDataAdminService {
                     throw new IllegalArgumentException("Tên chỉ số đã tồn tại");
                 });
 
-        if ("draft".equals(metric.getStatus())) {
+        if (!isMultiAdminMode()) {
             metric.setName(request.name().trim());
             metric.setDisplayNameVi(request.displayNameVi().trim());
             metric.setUnit(request.unit().trim());
+            // If it was pending/draft, make it active
+            if (!"active".equals(metric.getStatus())) {
+                metric.setStatus("active");
+            }
             referenceMetricRepository.save(metric);
-            replaceRanges(metric, request.ranges(), "draft");
+            replaceRanges(metric, request.ranges(), "active");
             return new AdminReferenceChangeSetResponse(
                     null,
-                    "draft",
-                    "Đã cập nhật trực tiếp bản nháp của chỉ số.",
-                    "draft-updated"
+                    "active",
+                    "Đã cập nhật chỉ số trực tiếp.",
+                    "updated"
             );
         }
 
@@ -148,42 +178,54 @@ public class ReferenceDataAdminService {
                 metricId,
                 "METRIC",
                 "UPDATE",
-                buildSnapshot(metric, request, "draft")
+                buildSnapshot(metric, request, "pending"),
+                "pending"
         );
 
         return new AdminReferenceChangeSetResponse(
                 changeSetId,
-                "draft",
-                "Đã tạo bản thay đổi nháp. Dữ liệu đang áp dụng chưa bị thay đổi.",
-                "change-set-created"
+                "pending",
+                "Đã gửi yêu cầu thay đổi để phê duyệt.",
+                "change-set-submitted"
         );
     }
 
     @Transactional
-    public AdminReferenceMetricResponse deactivateMetric(UUID metricId) {
+    public AdminReferenceChangeSetResponse deactivateMetric(UUID adminId, UUID metricId) {
         ReferenceMetric metric = referenceMetricRepository.findById(metricId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy chỉ số cần xóa"));
 
-        metric.setStatus("deactivated");
-        ReferenceMetric savedMetric = referenceMetricRepository.save(metric);
-        List<AdminReferenceRangeResponse> ranges = referenceRangeRepository
-                .findAllByMetric_IdOrderByGenderAscMinAgeAscMaxAgeAsc(metricId)
-                .stream()
-                .map(range -> {
-                    range.setStatus("deactivated");
-                    return referenceRangeRepository.save(range);
-                })
-                .map(this::toRangeResponse)
-                .toList();
+        if (!isMultiAdminMode()) {
+            metric.setStatus("deactivated");
+            referenceMetricRepository.save(metric);
+            List<ReferenceRange> ranges = referenceRangeRepository
+                    .findAllByMetric_IdOrderByGenderAscMinAgeAscMaxAgeAsc(metricId);
+            for (ReferenceRange range : ranges) {
+                range.setStatus("deactivated");
+                referenceRangeRepository.save(range);
+            }
+            return new AdminReferenceChangeSetResponse(
+                    null,
+                    "deactivated",
+                    "Đã ngưng áp dụng chỉ số trực tiếp.",
+                    "deactivated"
+            );
+        }
 
-        return new AdminReferenceMetricResponse(
-                savedMetric.getId(),
-                savedMetric.getName(),
-                savedMetric.getDisplayNameVi(),
-                savedMetric.getUnit(),
-                savedMetric.getStatus(),
-                ranges.size(),
-                ranges
+        UUID changeSetId = persistChangeSet(
+                adminId,
+                metricId,
+                "METRIC",
+                "DEACTIVATE",
+                Map.of("status", "deactivated"),
+                "pending"
+        );
+
+        return new AdminReferenceChangeSetResponse(
+                changeSetId,
+                "pending",
+                "Đã gửi yêu cầu ngưng áp dụng chỉ số để phê duyệt.",
+                "change-set-submitted"
         );
     }
 
@@ -313,15 +355,19 @@ public class ReferenceDataAdminService {
         );
     }
 
-    private UUID persistChangeSet(UUID adminId, UUID entityId, String entityType, String operation, Map<String, Object> changes) {
-        ReferenceDataChangeSet changeSet = new ReferenceDataChangeSet();
-        changeSet.setAdminId(adminId);
-        changeSet.setEntityType(entityType);
-        changeSet.setEntityId(entityId);
-        changeSet.setOperation(operation);
-        changeSet.setStatus("draft");
-        changeSet.setChangesJson(writeJson(changes));
-        return referenceDataChangeSetRepository.save(changeSet).getId();
+    private UUID persistChangeSet(UUID adminId, UUID entityId, String entityType, String operation, Map<String, Object> changes, String status) {
+        ReferenceDataChangeSet cs = new ReferenceDataChangeSet();
+        cs.setAdminId(adminId);
+        cs.setEntityId(entityId);
+        cs.setEntityType(entityType);
+        cs.setOperation(operation);
+        try {
+            cs.setChangesJson(objectMapper.writeValueAsString(changes));
+        } catch (JsonProcessingException e) {
+            throw new BusinessException("Không thể serialize thay đổi", e);
+        }
+        cs.setStatus(status);
+        return referenceDataChangeSetRepository.save(cs).getId();
     }
 
     private void replaceRanges(ReferenceMetric metric, List<AdminReferenceRangeRequest> ranges, String status) {
@@ -338,22 +384,42 @@ public class ReferenceDataAdminService {
     private Map<String, Object> buildSnapshot(ReferenceMetric metric, AdminReferenceMetricRequest request, String targetStatus) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("metricId", metric.getId());
-        payload.put("name", request.name().trim());
-        payload.put("displayNameVi", request.displayNameVi().trim());
-        payload.put("unit", request.unit().trim());
-        payload.put("status", targetStatus);
-        payload.put("ranges", request.ranges().stream().map(range -> {
-            Map<String, Object> rangePayload = new LinkedHashMap<>();
-            rangePayload.put("minValue", range.minValue());
-            rangePayload.put("maxValue", range.maxValue());
-            rangePayload.put("attentionMin", range.attentionMin());
-            rangePayload.put("attentionMax", range.attentionMax());
-            rangePayload.put("gender", range.gender());
-            rangePayload.put("minAge", range.minAge());
-            rangePayload.put("maxAge", range.maxAge());
-            rangePayload.put("status", targetStatus);
-            return rangePayload;
-        }).toList());
+        if (request != null) {
+            payload.put("name", request.name().trim());
+            payload.put("displayNameVi", request.displayNameVi().trim());
+            payload.put("unit", request.unit().trim());
+            payload.put("status", targetStatus);
+            payload.put("ranges", request.ranges().stream().map(range -> {
+                Map<String, Object> rangePayload = new LinkedHashMap<>();
+                rangePayload.put("minValue", range.minValue());
+                rangePayload.put("maxValue", range.maxValue());
+                rangePayload.put("attentionMin", range.attentionMin());
+                rangePayload.put("attentionMax", range.attentionMax());
+                rangePayload.put("gender", range.gender());
+                rangePayload.put("minAge", range.minAge());
+                rangePayload.put("maxAge", range.maxAge());
+                rangePayload.put("status", targetStatus);
+                return rangePayload;
+            }).toList());
+        } else {
+            payload.put("name", metric.getName());
+            payload.put("displayNameVi", metric.getDisplayNameVi());
+            payload.put("unit", metric.getUnit());
+            payload.put("status", metric.getStatus());
+            List<ReferenceRange> ranges = referenceRangeRepository.findAllByMetric_IdOrderByGenderAscMinAgeAscMaxAgeAsc(metric.getId());
+            payload.put("ranges", ranges.stream().map(range -> {
+                Map<String, Object> rangePayload = new LinkedHashMap<>();
+                rangePayload.put("minValue", range.getMinValue());
+                rangePayload.put("maxValue", range.getMaxValue());
+                rangePayload.put("attentionMin", range.getAttentionMin());
+                rangePayload.put("attentionMax", range.getAttentionMax());
+                rangePayload.put("gender", range.getGender());
+                rangePayload.put("minAge", range.getMinAge());
+                rangePayload.put("maxAge", range.getMaxAge());
+                rangePayload.put("status", range.getStatus());
+                return rangePayload;
+            }).toList());
+        }
         return payload;
     }
 
@@ -361,7 +427,7 @@ public class ReferenceDataAdminService {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Không thể lưu change set", ex);
+            throw new BusinessException("Không thể lưu change set", ex);
         }
     }
 
@@ -407,5 +473,388 @@ public class ReferenceDataAdminService {
             }
         }
         return result;
+    }
+
+    // ========================================================================
+    // Approval Workflow (Story 7.4)
+    // ========================================================================
+
+    /**
+     * Returns true when there are 2+ admin users, requiring cross-approval.
+     * When false (single admin), the admin can publish drafts directly.
+     */
+    @Transactional(readOnly = true)
+    public boolean isMultiAdminMode() {
+        return userRepository.countByRole(UserRole.ROLE_ADMIN) > 1;
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminChangeSetDetailResponse> listPendingChangeSets() {
+        return referenceDataChangeSetRepository
+                .findAllByStatusOrderByCreatedAtDesc("pending")
+                .stream()
+                .map(this::toChangeSetDetailResponse)
+                .toList();
+    }
+
+    /**
+     * Single-admin mode: directly activate a draft change set without peer review.
+     * Combines submit + approve in one step.
+     */
+    @Transactional
+    public AdminReferenceChangeSetResponse publishChangeSet(UUID changeSetId, UUID adminId) {
+        if (isMultiAdminMode()) {
+            throw new IllegalStateException(
+                    "Chế độ multi-admin: không thể kích hoạt trực tiếp. Vui lòng gửi duyệt để admin khác phê duyệt.");
+        }
+
+        ReferenceDataChangeSet cs = referenceDataChangeSetRepository.findById(changeSetId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Không tìm thấy change set với ID: " + changeSetId));
+
+        if (!List.of("draft", "pending").contains(cs.getStatus())) {
+            throw new IllegalArgumentException("Chỉ có thể kích hoạt change set ở trạng thái draft hoặc pending.");
+        }
+
+        if (!cs.getAdminId().equals(adminId)) {
+            throw new IllegalArgumentException("Chỉ người tạo bản nháp mới có thể kích hoạt trực tiếp.");
+        }
+
+        applyChangesToProduction(cs);
+
+        cs.setStatus("approved");
+        cs.setApprovedAt(Instant.now());
+        cs.setReviewerId(adminId);
+        referenceDataChangeSetRepository.save(cs);
+
+        writeApprovalAuditLog("PUBLISH_CHANGE_SET", changeSetId, adminId, cs.getEntityType(), cs.getEntityId());
+
+        log.info("Change set {} published directly by admin {} (single-admin mode)", changeSetId, adminId);
+
+        return new AdminReferenceChangeSetResponse(
+                changeSetId,
+                "approved",
+                "Đã kích hoạt và áp dụng thay đổi vào dữ liệu sản xuất.",
+                "published"
+        );
+    }
+
+    /**
+     * Multi-admin mode: approve a pending change set. Blocks self-approval.
+     */
+    @Transactional
+    public AdminReferenceChangeSetResponse approveChangeSet(UUID changeSetId, UUID reviewerId) {
+        ReferenceDataChangeSet cs = referenceDataChangeSetRepository.findByIdAndStatus(changeSetId, "pending")
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Không tìm thấy change set đang chờ duyệt với ID: " + changeSetId));
+
+        // Block self-approval in multi-admin mode
+        if (isMultiAdminMode() && cs.getAdminId().equals(reviewerId)) {
+            throw new IllegalArgumentException(
+                    "Không thể phê duyệt change set do chính bạn tạo. Vui lòng nhờ admin khác duyệt.");
+        }
+
+        applyChangesToProduction(cs);
+
+        cs.setStatus("approved");
+        cs.setApprovedAt(Instant.now());
+        cs.setReviewerId(reviewerId);
+        referenceDataChangeSetRepository.save(cs);
+
+        writeApprovalAuditLog("APPROVE_CHANGE_SET", changeSetId, reviewerId, cs.getEntityType(), cs.getEntityId());
+
+        log.info("Change set {} approved by reviewer {}", changeSetId, reviewerId);
+
+        return new AdminReferenceChangeSetResponse(
+                changeSetId,
+                "approved",
+                "Đã phê duyệt và áp dụng thay đổi vào dữ liệu sản xuất.",
+                "approved"
+        );
+    }
+
+    @Transactional
+    public AdminReferenceChangeSetResponse rejectChangeSet(UUID changeSetId, UUID reviewerId, String reason) {
+        if (reason == null || reason.trim().isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng cung cấp lý do từ chối.");
+        }
+
+        ReferenceDataChangeSet cs = referenceDataChangeSetRepository.findByIdAndStatus(changeSetId, "pending")
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Không tìm thấy change set đang chờ duyệt với ID: " + changeSetId));
+
+        // Block self-rejection in multi-admin mode
+        if (isMultiAdminMode() && cs.getAdminId().equals(reviewerId)) {
+            throw new IllegalArgumentException(
+                    "Không thể từ chối change set do chính bạn tạo. Vui lòng nhờ admin khác duyệt.");
+        }
+
+        cs.setStatus("rejected");
+        cs.setReviewerId(reviewerId);
+        cs.setRejectionReason(reason);
+        referenceDataChangeSetRepository.save(cs);
+
+        writeApprovalAuditLog("REJECT_CHANGE_SET", changeSetId, reviewerId, cs.getEntityType(), cs.getEntityId());
+
+        log.info("Change set {} rejected by reviewer {} — reason: {}", changeSetId, reviewerId, reason);
+
+        return new AdminReferenceChangeSetResponse(
+                changeSetId,
+                "rejected",
+                "Đã từ chối change set. Dữ liệu sản xuất không bị thay đổi.",
+                "rejected"
+        );
+    }
+
+    /**
+     * Multi-admin mode: Transition a draft change set to pending status
+     * so it appears in the approval queue for another admin to review.
+     */
+    @Transactional
+    public AdminReferenceChangeSetResponse submitChangeSetForApproval(UUID changeSetId, UUID adminId) {
+        if (!isMultiAdminMode()) {
+            throw new IllegalStateException(
+                    "Chế độ single-admin: vui lòng sử dụng chức năng 'Kích hoạt' thay vì gửi duyệt.");
+        }
+
+        ReferenceDataChangeSet cs = referenceDataChangeSetRepository.findByIdAndStatus(changeSetId, "draft")
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Không tìm thấy change set nháp với ID: " + changeSetId));
+
+        if (!cs.getAdminId().equals(adminId)) {
+            throw new IllegalArgumentException("Chỉ người tạo bản nháp mới có thể gửi duyệt.");
+        }
+
+        cs.setStatus("pending");
+        referenceDataChangeSetRepository.save(cs);
+
+        log.info("Change set {} submitted for approval by admin {}", changeSetId, adminId);
+
+        return new AdminReferenceChangeSetResponse(
+                changeSetId,
+                "pending",
+                "Đã gửi bản thay đổi để duyệt.",
+                "submitted"
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyChangesToProduction(ReferenceDataChangeSet cs) {
+        Map<String, Object> snapshot;
+        try {
+            snapshot = objectMapper.readValue(cs.getChangesJson(), new TypeReference<>() {});
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException("Không thể đọc dữ liệu change set: " + cs.getId(), ex);
+        }
+
+        if ("METRIC".equals(cs.getEntityType())) {
+            applyMetricChanges(cs, snapshot);
+        } else {
+            throw new IllegalStateException("Entity type không được hỗ trợ: " + cs.getEntityType());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyMetricChanges(ReferenceDataChangeSet cs, Map<String, Object> snapshot) {
+        String operation = cs.getOperation();
+
+        if ("CREATE".equals(operation)) {
+            // The metric was already created in draft status by createMetric(), just activate it
+            if (cs.getEntityId() != null) {
+                ReferenceMetric metric = referenceMetricRepository.findById(cs.getEntityId())
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Không tìm thấy metric draft: " + cs.getEntityId()));
+                metric.setName(snapshot.getOrDefault("name", metric.getName()).toString());
+                metric.setDisplayNameVi(snapshot.getOrDefault("displayNameVi", metric.getDisplayNameVi()).toString());
+                metric.setUnit(snapshot.getOrDefault("unit", metric.getUnit()).toString());
+                metric.setStatus("active");
+                referenceMetricRepository.save(metric);
+
+                // Activate all ranges associated with this metric
+                List<ReferenceRange> ranges = referenceRangeRepository
+                        .findAllByMetric_IdOrderByGenderAscMinAgeAscMaxAgeAsc(metric.getId());
+                for (ReferenceRange range : ranges) {
+                    range.setStatus("active");
+                    referenceRangeRepository.save(range);
+                }
+            }
+        } else if ("UPDATE".equals(operation)) {
+            UUID metricId = cs.getEntityId();
+            if (metricId == null) {
+                throw new IllegalStateException("UPDATE change set thiếu entityId");
+            }
+
+            ReferenceMetric metric = referenceMetricRepository.findById(metricId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Không tìm thấy metric cần cập nhật: " + metricId));
+
+            // Apply field updates
+            metric.setName(snapshot.getOrDefault("name", metric.getName()).toString());
+            metric.setDisplayNameVi(snapshot.getOrDefault("displayNameVi", metric.getDisplayNameVi()).toString());
+            metric.setUnit(snapshot.getOrDefault("unit", metric.getUnit()).toString());
+            metric.setStatus("active");
+            referenceMetricRepository.save(metric);
+
+            // Replace ranges from snapshot
+            Object rangesObj = snapshot.get("ranges");
+            if (rangesObj instanceof List<?> rangesList) {
+                List<ReferenceRange> existingRanges = referenceRangeRepository
+                        .findAllByMetric_IdOrderByGenderAscMinAgeAscMaxAgeAsc(metricId);
+
+                Set<String> incomingKeys = new HashSet<>();
+
+                for (Object rangeItem : rangesList) {
+                    if (rangeItem instanceof Map<?, ?> rangeMap) {
+                        String gender = rangeMap.get("gender") != null ? rangeMap.get("gender").toString() : null;
+                        Integer minAge = toInteger(rangeMap.get("minAge"));
+                        Integer maxAge = toInteger(rangeMap.get("maxAge"));
+                        String key = rangeKey(gender, minAge, maxAge);
+                        incomingKeys.add(key);
+
+                        ReferenceRange match = existingRanges.stream()
+                                .filter(r -> Objects.equals(r.getGender(), gender)
+                                        && Objects.equals(r.getMinAge(), minAge)
+                                        && Objects.equals(r.getMaxAge(), maxAge))
+                                .findFirst()
+                                .orElse(null);
+
+                        if (match != null) {
+                            match.setMinValue(toBigDecimal(rangeMap.get("minValue")));
+                            match.setMaxValue(toBigDecimal(rangeMap.get("maxValue")));
+                            match.setAttentionMin(toBigDecimal(rangeMap.get("attentionMin")));
+                            match.setAttentionMax(toBigDecimal(rangeMap.get("attentionMax")));
+                            match.setGender(gender);
+                            match.setMinAge(minAge);
+                            match.setMaxAge(maxAge);
+                            match.setStatus("active");
+                            referenceRangeRepository.save(match);
+                        } else {
+                            ReferenceRange newRange = new ReferenceRange();
+                            newRange.setMetric(metric);
+                            newRange.setMinValue(toBigDecimal(rangeMap.get("minValue")));
+                            newRange.setMaxValue(toBigDecimal(rangeMap.get("maxValue")));
+                            newRange.setAttentionMin(toBigDecimal(rangeMap.get("attentionMin")));
+                            newRange.setAttentionMax(toBigDecimal(rangeMap.get("attentionMax")));
+                            newRange.setGender(gender);
+                            newRange.setMinAge(minAge);
+                            newRange.setMaxAge(maxAge);
+                            newRange.setStatus("active");
+                            referenceRangeRepository.save(newRange);
+                        }
+                    }
+                }
+
+                for (ReferenceRange existing : existingRanges) {
+                    String key = rangeKey(existing.getGender(), existing.getMinAge(), existing.getMaxAge());
+                    if (!incomingKeys.contains(key)) {
+                        referenceRangeRepository.delete(existing);
+                    }
+                }
+            }
+        } else if ("DEACTIVATE".equals(operation)) {
+            UUID metricId = cs.getEntityId();
+            if (metricId != null) {
+                referenceMetricRepository.findById(metricId).ifPresent(metric -> {
+                    metric.setStatus("deactivated");
+                    referenceMetricRepository.save(metric);
+                });
+            }
+        }
+    }
+
+    private void writeApprovalAuditLog(String action, UUID changeSetId, UUID reviewerId,
+                                        String entityType, UUID entityId) {
+        if (entityId == null) {
+            return;
+        }
+
+        UUID referenceRangeId = referenceRangeRepository
+                .findAllByMetric_IdOrderByGenderAscMinAgeAscMaxAgeAsc(entityId)
+                .stream()
+                .findFirst()
+                .map(ReferenceRange::getId)
+                .orElse(null);
+
+        ReferenceRangeAuditLog auditLog = new ReferenceRangeAuditLog();
+        auditLog.setMetricId(entityId);
+        auditLog.setReferenceRangeId(referenceRangeId);
+        auditLog.setProfileId(null);
+        referenceRangeAuditLogRepository.save(auditLog);
+    }
+
+    private AdminChangeSetDetailResponse toChangeSetDetailResponse(ReferenceDataChangeSet cs) {
+        String currentSnapshotJson = null;
+        if ("UPDATE".equals(cs.getOperation()) && cs.getEntityId() != null) {
+            ReferenceMetric metric = referenceMetricRepository.findById(cs.getEntityId()).orElse(null);
+            if (metric != null) {
+                Map<String, Object> current = buildSnapshot(metric, null, metric.getStatus());
+                currentSnapshotJson = writeJson(current);
+            }
+        }
+
+        String adminEmail = null;
+        String adminName = null;
+        if (cs.getAdminId() != null) {
+            User adminUser = userRepository.findById(cs.getAdminId()).orElse(null);
+            if (adminUser != null) {
+                adminEmail = adminUser.getEmail();
+                adminName = adminUser.getFullName();
+            }
+        }
+
+        String reviewerEmail = null;
+        String reviewerName = null;
+        if (cs.getReviewerId() != null) {
+            User reviewerUser = userRepository.findById(cs.getReviewerId()).orElse(null);
+            if (reviewerUser != null) {
+                reviewerEmail = reviewerUser.getEmail();
+                reviewerName = reviewerUser.getFullName();
+            }
+        }
+
+        return new AdminChangeSetDetailResponse(
+                cs.getId(),
+                cs.getAdminId(),
+                adminEmail,
+                adminName,
+                cs.getEntityType(),
+                cs.getEntityId(),
+                cs.getOperation(),
+                cs.getChangesJson(),
+                currentSnapshotJson,
+                cs.getStatus(),
+                cs.getCreatedAt(),
+                cs.getApprovedAt(),
+                cs.getReviewerId(),
+                reviewerEmail,
+                reviewerName,
+                cs.getRejectionReason()
+        );
+    }
+
+    private BigDecimal toBigDecimal(Object value) {
+        if (value == null || value.toString().isBlank()) {
+            return BigDecimal.ZERO;
+        }
+        if (value instanceof Number number) {
+            return BigDecimal.valueOf(number.doubleValue());
+        }
+        return new BigDecimal(value.toString());
+    }
+
+    private Integer toInteger(Object value) {
+        if (value == null || value.toString().isBlank()) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        return Integer.parseInt(value.toString());
+    }
+
+    private static String rangeKey(String gender, Integer minAge, Integer maxAge) {
+        return (gender != null ? gender : "") + "|"
+                + (minAge != null ? minAge : "") + "|"
+                + (maxAge != null ? maxAge : "");
     }
 }

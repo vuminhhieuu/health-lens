@@ -8,9 +8,9 @@ import jakarta.validation.constraints.Pattern;
 import java.time.LocalDate;
 
 public record UpdateUserRequest(
-                @NotBlank(message = "Ho va ten khong duoc de trong") String fullName,
+                @NotBlank(message = "Họ và tên không được để trống") String fullName,
 
-                @Past(message = "Ngay sinh phai la ngay trong qua khu") LocalDate birthDate,
+                @Past(message = "Ngày sinh phải là ngày trong quá khứ") LocalDate birthDate,
 
-                @Pattern(regexp = "^(male|female|other)$", message = "Gioi tinh phai la male, female hoac other") String gender) {
+                @Pattern(regexp = "^(male|female|other)$", message = "Giới tính phải là male, female hoặc other") String gender) {
 }

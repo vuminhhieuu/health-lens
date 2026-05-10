@@ -47,6 +47,12 @@ public class ReferenceDataChangeSet {
     @Column(name = "approved_at")
     private Instant approvedAt;
 
+    @Column(name = "reviewer_id")
+    private UUID reviewerId;
+
+    @Column(name = "rejection_reason")
+    private String rejectionReason;
+
     @PrePersist
     public void prePersist() {
         if (id == null) {

@@ -23,7 +23,7 @@ public class ReferenceRangeAuditLog {
     @Column(name = "metric_id", nullable = false)
     private UUID metricId;
 
-    @Column(name = "reference_range_id", nullable = false)
+    @Column(name = "reference_range_id")
     private UUID referenceRangeId;
 
     @Column(name = "profile_id")

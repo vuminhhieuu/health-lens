@@ -11,7 +11,8 @@ const ADMIN_SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
 const adminNavItems = [
   { name: "Thống kê", href: "/admin", icon: BarChart3, exact: true },
-  { name: "Dữ liệu tham chiếu", href: "/admin/reference-data", icon: Database, exact: false },
+  { name: "Dữ liệu tham chiếu", href: "/admin/reference-data", icon: Database, exact: true },
+  { name: "Phê duyệt", href: "/admin/reference-data/approvals", icon: ShieldCheck, exact: false },
   { name: "Audit Log", href: "/admin/audit-log", icon: ClipboardList, exact: false },
 ];
 
