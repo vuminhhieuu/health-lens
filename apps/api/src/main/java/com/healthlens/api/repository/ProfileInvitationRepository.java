@@ -16,4 +16,5 @@ public interface ProfileInvitationRepository extends JpaRepository<ProfileInvita
     Optional<ProfileInvitation> findTopByProfileIdAndInviteeEmailIgnoreCaseOrderByCreatedAtDesc(UUID profileId, String inviteeEmail);
 
     Optional<ProfileInvitation> findByIdAndProfileId(UUID id, UUID profileId);
+    void deleteAllByProfileIdAndInviteeEmailIgnoreCase(UUID profileId, String inviteeEmail);
 }

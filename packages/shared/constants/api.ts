@@ -53,8 +53,12 @@ export const ApiPaths = {
     INVITATIONS: (id: string) => `/api/${API_VERSION}/profiles/${id}/invitations`,
     INVITATION_BY_ID: (profileId: string, invitationId: string) =>
       `/api/${API_VERSION}/profiles/${profileId}/invitations/${invitationId}`,
+    REVOKE_SHARE: (profileId: string, viewerId: string) =>
+      `/api/${API_VERSION}/profiles/${profileId}/shares/${viewerId}`,
     INVITATION_RESEND: (profileId: string, invitationId: string) =>
       `/api/${API_VERSION}/profiles/${profileId}/invitations/${invitationId}/resend`,
+    SHARE_BY_VIEWER: (profileId: string, viewerId: string) =>
+      `/api/${API_VERSION}/profiles/${profileId}/shares/${viewerId}`,
   },
 
   INVITATIONS: {

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
@@ -38,14 +37,6 @@ type Profile = {
   updatedAt: string;
   lastRecordAt?: string;
   latestStatus?: HealthStatus;
-};
-
-type UserProfile = {
-  id: string;
-  fullName: string;
-  email: string;
-  birthDate: string;
-  gender: string;
 };
 
 type IncomingInvitation = {
@@ -100,7 +91,6 @@ function extractApiDetail(error: unknown, fallback: string): string {
 }
 
 export default function ProfilesPage() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);

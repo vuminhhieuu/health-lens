@@ -43,6 +43,7 @@ type HealthRecord = {
 
 type ProfileInvitation = {
   id: string;
+  viewerId?: string | null;
   email: string;
   status: string;
   accessLevel: "view" | "edit" | string;
@@ -69,8 +70,11 @@ export default function DashboardHomePage() {
   const queryClient = useQueryClient();
   const [profilePickerOpen, setProfilePickerOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
-  const [invitingProfileId, setInvitingProfileId] = useState<string | null>(null);
+  const [invitingProfileId, setInvitingProfileId] = useState<string | null>(
+    null,
+  );
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const [, setPendingAccessUpdates] = useState<Record<string, boolean>>({});
   useEffect(() => {
     void apiClient.post(ApiPaths.PROFILES.ENSURE_DEFAULT);
   }, []);
@@ -91,9 +95,12 @@ export default function DashboardHomePage() {
     queryKey: ["home-recent-records", primaryProfileId],
     enabled: Boolean(primaryProfileId),
     queryFn: async () => {
-      const response = await apiClient.get(ApiPaths.PROFILES.HEALTH_RECORDS(primaryProfileId as string), {
-        params: { page: 0, limit: 3 },
-      });
+      const response = await apiClient.get(
+        ApiPaths.PROFILES.HEALTH_RECORDS(primaryProfileId as string),
+        {
+          params: { page: 0, limit: 3 },
+        },
+      );
       return (response.data?.data ?? []) as HealthRecord[];
     },
   });
@@ -146,6 +153,33 @@ export default function DashboardHomePage() {
     },
   });
 
+  const revokeShareMutation = useMutation({
+    mutationFn: async (payload: { targetId: string; email: string }) => {
+      if (!invitingProfileId) {
+        throw new Error("Thiếu profile để thu hồi quyền.");
+      }
+      await apiClient.delete(ApiPaths.PROFILES.REVOKE_SHARE(invitingProfileId, payload.targetId));
+      return payload.email;
+    },
+    onSuccess: (email) => {
+      queryClient.setQueryData(
+        ["profile-shared-members", invitingProfileId],
+        (previous: Array<{ id: string; viewerId?: string; email: string; accessLevel: string }> | undefined) =>
+          (previous ?? []).filter((member) => member.email.toLowerCase() !== email.toLowerCase())
+      );
+      void queryClient.invalidateQueries({ queryKey: ["profile-shared-members", invitingProfileId] });
+      setPendingAccessUpdates((prev) => {
+        const next = { ...prev };
+        delete next[email.toLowerCase()];
+        return next;
+      });
+      alert("Đã thu hồi quyền truy cập thành công.");
+    },
+    onError: (error: unknown) => {
+      alert(extractApiDetail(error, "Không thể thu hồi quyền truy cập."));
+    },
+  });
+
   const { data: sharedMembers = [], isFetching: isSharedMembersLoading } = useQuery({
     queryKey: ["profile-shared-members", invitingProfileId],
     enabled: inviteModalOpen && Boolean(invitingProfileId),
@@ -156,6 +190,7 @@ export default function DashboardHomePage() {
         .filter((invitation) => invitation.status === "accepted")
         .map((invitation) => ({
           id: invitation.id,
+          viewerId: invitation.viewerId ?? undefined,
           email: invitation.email,
           accessLevel: invitation.accessLevel,
         }));
@@ -170,8 +205,12 @@ export default function DashboardHomePage() {
       subtitle="Đây là tổng quan tình trạng sức khỏe của bạn hôm nay."
       actions={
         <div className="text-left lg:text-right">
-          <p className="text-base font-bold text-[#00685f]">Theo dõi sức khỏe mỗi ngày</p>
-          <p className="text-xs uppercase tracking-wider text-[#6d7a77]">HealthLens Dashboard</p>
+          <p className="text-base font-bold text-[#00685f]">
+            Theo dõi sức khỏe mỗi ngày
+          </p>
+          <p className="text-xs uppercase tracking-wider text-[#6d7a77]">
+            HealthLens Dashboard
+          </p>
         </div>
       }
     >
@@ -209,8 +248,13 @@ export default function DashboardHomePage() {
       <section className="grid grid-cols-1 gap-8 lg:grid-cols-12">
         <div className="lg:col-span-7">
           <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-[#121e1c]">Kết quả gần đây</h2>
-            <Link href={historyHref} className="inline-flex items-center gap-1 text-sm font-bold text-[#00685f] hover:underline">
+            <h2 className="text-2xl font-bold text-[#121e1c]">
+              Kết quả gần đây
+            </h2>
+            <Link
+              href={historyHref}
+              className="inline-flex items-center gap-1 text-sm font-bold text-[#00685f] hover:underline"
+            >
               Xem tất cả
               <ChevronRight className="h-4 w-4" />
             </Link>
@@ -231,15 +275,21 @@ export default function DashboardHomePage() {
                     <Stethoscope className="h-7 w-7" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-lg font-bold text-[#121e1c]">{record.testType || "Phiếu khám bệnh"}</p>
+                    <p className="truncate text-lg font-bold text-[#121e1c]">
+                      {record.testType || "Phiếu khám bệnh"}
+                    </p>
                     <p className="mt-1 flex items-center gap-2 text-sm text-[#6d7a77]">
                       <CalendarDays className="h-4 w-4" />
                       Ngày thực hiện: {record.examDate || "Chưa có ngày khám"}
                     </p>
-                    <p className="mt-1 text-sm text-[#6d7a77]">Số chỉ số bất thường: {record.abnormalCount ?? 0}</p>
+                    <p className="mt-1 text-sm text-[#6d7a77]">
+                      Số chỉ số bất thường: {record.abnormalCount ?? 0}
+                    </p>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${recordStatusClass(record.overallStatus)}`}>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-bold ${recordStatusClass(record.overallStatus)}`}
+                    >
                       {recordStatusLabel(record.overallStatus)}
                     </span>
                     <Link
@@ -257,11 +307,25 @@ export default function DashboardHomePage() {
         </div>
 
         <div className="lg:col-span-5">
-          <h2 className="mb-5 text-2xl font-bold text-[#121e1c]">Thao tác nhanh</h2>
+          <h2 className="mb-5 text-2xl font-bold text-[#121e1c]">
+            Thao tác nhanh
+          </h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <ActionTile icon={<Upload className="h-6 w-6" />} label="Tải kết quả" href={`/health-records?profileId=${primaryProfileId ?? ""}&openUpload=1`} />
-            <ActionTile icon={<CalendarDays className="h-6 w-6" />} label="Đặt lịch khám" disabled />
-            <ActionTile icon={<Eye className="h-6 w-6" />} label="Xem kết quả" href={historyHref} />
+            <ActionTile
+              icon={<Upload className="h-6 w-6" />}
+              label="Tải kết quả"
+              href={`/health-records?profileId=${primaryProfileId ?? ""}&openUpload=1`}
+            />
+            <ActionTile
+              icon={<CalendarDays className="h-6 w-6" />}
+              label="Đặt lịch khám"
+              disabled
+            />
+            <ActionTile
+              icon={<Eye className="h-6 w-6" />}
+              label="Xem kết quả"
+              href={historyHref}
+            />
             <ActionTile
               icon={<Share2 className="h-6 w-6" />}
               label="Chia sẻ"
@@ -271,14 +335,23 @@ export default function DashboardHomePage() {
                 setProfilePickerOpen(true);
               }}
             />
-            <ActionTile icon={<HelpCircle className="h-6 w-6" />} label="Liên hệ bác sĩ" disabled />
-            <ActionTile icon={<ShieldPlus className="h-6 w-6" />} label="Trợ giúp" disabled />
+            <ActionTile
+              icon={<HelpCircle className="h-6 w-6" />}
+              label="Liên hệ bác sĩ"
+              disabled
+            />
+            <ActionTile
+              icon={<ShieldPlus className="h-6 w-6" />}
+              label="Trợ giúp"
+              disabled
+            />
           </div>
 
-          <div className="relative mt-8 overflow-hidden rounded-3xl bg-gradient-to-br from-[#00685f] to-[#008378] p-7 text-white shadow-xl">
+          <div className="relative mt-8 overflow-hidden rounded-3xl bg-linear-to-br from-[#00685f] to-[#008378] p-7 text-white shadow-xl">
             <h3 className="text-xl font-bold">Chăm sóc sức khỏe chủ động</h3>
             <p className="mt-2 max-w-sm text-sm text-[#d8fffa]">
-              Dựa trên kết quả gần nhất, bạn nên duy trì uống đủ nước và theo dõi định kỳ các chỉ số quan trọng.
+              Dựa trên kết quả gần nhất, bạn nên duy trì uống đủ nước và theo
+              dõi định kỳ các chỉ số quan trọng.
             </p>
             <button
               type="button"
@@ -298,10 +371,12 @@ export default function DashboardHomePage() {
           setInviteModalOpen(false);
           setInvitingProfileId(null);
         }}
-        isLoading={inviteMutation.isPending}
+        isLoading={inviteMutation.isPending || revokeShareMutation.isPending}
         sharedMembers={displaySharedMembers}
         isSharedMembersLoading={isSharedMembersLoading}
+        isRevokingMember={revokeShareMutation.isPending}
         hasPendingAccessChanges={false}
+        onRevokeMember={(member) => revokeShareMutation.mutate({ targetId: member.viewerId, email: member.email })}
         onChangeAccessLevel={(member) =>
           invitingProfileId &&
           updateAccessMutation.mutate({
@@ -322,8 +397,8 @@ export default function DashboardHomePage() {
         }
       />
       {profilePickerOpen ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="flex max-h-[78vh] w-full max-w-2xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl shadow-black/20 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="flex max-h-[78vh] w-full max-w-2xl flex-col overflow-hidden rounded-4xl bg-white shadow-2xl shadow-black/20 animate-in zoom-in-95 duration-200">
             <div className="relative p-7 pb-4">
               <button
                 type="button"
@@ -338,7 +413,9 @@ export default function DashboardHomePage() {
                   <UserPlus size={24} />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-black text-[#121e1c]">Chọn hồ sơ để chia sẻ</h3>
+                  <h3 className="text-2xl font-black text-[#121e1c]">
+                    Chọn hồ sơ để chia sẻ
+                  </h3>
                   <p className="mt-1 text-sm font-medium text-[#6d7a77]">
                     Chọn hồ sơ sức khỏe bạn muốn chia sẻ cho người khác xem.
                   </p>
@@ -346,7 +423,10 @@ export default function DashboardHomePage() {
               </div>
             </div>
             <div className="px-7 pb-6">
-              <label className="mb-2 block text-sm font-bold text-[#121e1c]" htmlFor="share-profile-select">
+              <label
+                className="mb-2 block text-sm font-bold text-[#121e1c]"
+                htmlFor="share-profile-select"
+              >
                 Hồ sơ cần chia sẻ <span className="text-red-600">*</span>
               </label>
               <div className="relative">
@@ -362,7 +442,9 @@ export default function DashboardHomePage() {
                     </option>
                   ))}
                 </select>
-                <span className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-[#00685f]">▾</span>
+                <span className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-[#00685f]">
+                  ▾
+                </span>
               </div>
             </div>
             <div className="mt-auto flex items-center justify-end border-t border-[#e8eeec] px-7 py-4">
@@ -416,7 +498,9 @@ function StatCard({
           {status}
         </span>
       </div>
-      <p className="text-4xl font-black tracking-tight text-[#121e1c]">{value}</p>
+      <p className="text-4xl font-black tracking-tight text-[#121e1c]">
+        {value}
+      </p>
       <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-[#6d7a77]">
         {unit} • {label}
       </p>
@@ -450,7 +534,9 @@ function ActionTile({
       >
         <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
           <span className="text-[#00685f] group-hover:text-white">{icon}</span>
-          <span className="text-xs font-bold uppercase tracking-tight">{label}</span>
+          <span className="text-xs font-bold uppercase tracking-tight">
+            {label}
+          </span>
         </div>
       </button>
     );
@@ -460,7 +546,9 @@ function ActionTile({
     <Link href={href} className={commonClass}>
       <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
         <span className="text-[#00685f] group-hover:text-white">{icon}</span>
-        <span className="text-xs font-bold uppercase tracking-tight">{label}</span>
+        <span className="text-xs font-bold uppercase tracking-tight">
+          {label}
+        </span>
       </div>
     </Link>
   );
@@ -470,7 +558,8 @@ function recordStatusClass(status: HealthRecord["overallStatus"]) {
   if (status === "abnormal") return "bg-[#ffdad6] text-[#ba1a1a]";
   if (status === "attention") return "bg-[#ffdbce] text-[#773215]";
   if (status === "normal") return "bg-[#e6f6f2] text-[#00685f]";
-  if (status === "error" || status === "failed" || status === "ocr_failed") return "bg-[#ffe4e6] text-[#be123c]";
+  if (status === "error" || status === "failed" || status === "ocr_failed")
+    return "bg-[#ffe4e6] text-[#be123c]";
   return "bg-[#f1f5f9] text-[#64748b]";
 }
 
@@ -478,6 +567,7 @@ function recordStatusLabel(status: HealthRecord["overallStatus"]) {
   if (status === "abnormal") return "Bất thường";
   if (status === "attention") return "Cần chú ý";
   if (status === "normal") return "Bình thường";
-  if (status === "error" || status === "failed" || status === "ocr_failed") return "Lỗi";
+  if (status === "error" || status === "failed" || status === "ocr_failed")
+    return "Lỗi";
   return "Chưa xác thực";
 }

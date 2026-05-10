@@ -3,6 +3,7 @@ package com.healthlens.api.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,11 +13,13 @@ import com.healthlens.api.dto.response.IncomingProfileInvitationResponse;
 import com.healthlens.api.dto.response.ProfileInvitationResponse;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.ProfileInvitation;
+import com.healthlens.api.entity.ProfileShareAuditLog;
 import com.healthlens.api.entity.ProfileShare;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.ProfileInvitationRepository;
 import com.healthlens.api.repository.ProfileRepository;
+import com.healthlens.api.repository.ProfileShareAuditLogRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
 import com.healthlens.api.repository.UserRepository;
 import java.time.Instant;
@@ -41,6 +44,8 @@ class ProfileShareServiceTest {
     @Mock
     private ProfileInvitationRepository profileInvitationRepository;
     @Mock
+    private ProfileShareAuditLogRepository profileShareAuditLogRepository;
+    @Mock
     private ProfileShareRepository profileShareRepository;
     @Mock
     private UserRepository userRepository;
@@ -54,6 +59,7 @@ class ProfileShareServiceTest {
         profileShareService = new ProfileShareService(
                 profileRepository,
                 profileInvitationRepository,
+                profileShareAuditLogRepository,
                 profileShareRepository,
                 userRepository,
                 emailService
@@ -209,6 +215,80 @@ class ProfileShareServiceTest {
     }
 
     @Test
+    void revokeShare_successfullyRevokesAccessAndWritesAuditLog() {
+        UUID ownerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
+        Profile profile = profile(profileId, ownerId);
+        ProfileShare share = new ProfileShare();
+        share.setId(UUID.randomUUID());
+        share.setProfileId(profileId);
+        share.setOwnerId(ownerId);
+        share.setViewerId(viewerId);
+        share.setAccessLevel("view");
+        User viewer = user(viewerId, "viewer@healthlens.vn");
+
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId))
+            .thenReturn(Optional.of(share));
+        when(userRepository.findById(viewerId)).thenReturn(Optional.of(viewer));
+        when(profileShareAuditLogRepository.save(any(ProfileShareAuditLog.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        profileShareService.revokeShare(ownerId, profileId, viewerId);
+
+        verify(profileShareRepository).save(argThat(s ->
+                s.getId().equals(share.getId()) && s.getRevokedAt() != null
+        ));
+        verify(profileInvitationRepository).deleteAllByProfileIdAndInviteeEmailIgnoreCase(
+                profileId, "viewer@healthlens.vn");
+        verify(profileShareAuditLogRepository).save(any(ProfileShareAuditLog.class));
+    }
+
+    @Test
+    void revokeShare_missingActiveShareThrowsNotFound() {
+        UUID ownerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
+
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile(profileId, ownerId)));
+        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId))
+                .thenReturn(Optional.empty());
+        when(profileShareRepository.findById(viewerId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> profileShareService.revokeShare(ownerId, profileId, viewerId))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void revokeShare_nonOwnerIsForbidden() {
+        UUID ownerId = UUID.randomUUID();
+        UUID strangerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
+
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile(profileId, ownerId)));
+
+        assertThatThrownBy(() -> profileShareService.revokeShare(strangerId, profileId, viewerId))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void listInvitations_doesNotReturnAcceptedInvitationWhenShareRevoked() {
+        UUID ownerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        ProfileInvitation accepted = invitation(profileId, "viewer@healthlens.vn", "accepted");
+
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile(profileId, ownerId)));
+        when(profileInvitationRepository.findAllByProfileIdOrderByCreatedAtDesc(profileId)).thenReturn(List.of(accepted));
+        when(profileShareRepository.findAllByProfileIdAndRevokedAtIsNull(profileId)).thenReturn(List.of());
+
+        List<ProfileInvitationResponse> result = profileShareService.listInvitations(ownerId, profileId);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
     void inviteByEmail_profileNotFound_throwsNotFound() {
         when(profileRepository.findById(any(UUID.class))).thenReturn(Optional.empty());
         assertThatThrownBy(() -> profileShareService.inviteByEmail(UUID.randomUUID(), UUID.randomUUID(), "a@b.com"))
@@ -260,6 +340,81 @@ class ProfileShareServiceTest {
 
         assertThat(invitation.getStatus()).isEqualTo("rejected");
         verify(profileInvitationRepository).save(invitation);
+    }
+
+    @Test
+    void revokeShare_ownerCanRevokeActiveShare_andWritesAuditLog() {
+        UUID ownerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
+        ProfileShare share = new ProfileShare();
+        share.setId(UUID.randomUUID());
+        share.setProfileId(profileId);
+        share.setOwnerId(ownerId);
+        share.setViewerId(viewerId);
+
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile(profileId, ownerId)));
+        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId))
+                .thenReturn(Optional.of(share));
+        when(userRepository.findById(viewerId)).thenReturn(Optional.empty());
+
+        profileShareService.revokeShare(ownerId, profileId, viewerId);
+
+        assertThat(share.getRevokedAt()).isNotNull();
+        verify(profileShareRepository).save(share);
+        verify(profileShareAuditLogRepository).save(any(ProfileShareAuditLog.class));
+    }
+
+    @Test
+    void revokeShare_nonOwner_forbidden() {
+        UUID ownerId = UUID.randomUUID();
+        UUID strangerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile(profileId, ownerId)));
+
+        assertThatThrownBy(() -> profileShareService.revokeShare(strangerId, profileId, UUID.randomUUID()))
+                .isInstanceOf(AccessDeniedException.class);
+        verify(profileShareRepository, never()).save(any(ProfileShare.class));
+    }
+
+    @Test
+    void revokeShare_whenShareNoLongerActive_throwsNotFound() {
+        UUID ownerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
+
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile(profileId, ownerId)));
+        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId))
+                .thenReturn(Optional.empty());
+        when(profileShareRepository.findById(viewerId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> profileShareService.revokeShare(ownerId, profileId, viewerId))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void revokeShare_whenViewerIdMissing_canFallbackToShareId() {
+        UUID ownerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID shareId = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
+        ProfileShare share = new ProfileShare();
+        share.setId(shareId);
+        share.setProfileId(profileId);
+        share.setOwnerId(ownerId);
+        share.setViewerId(viewerId);
+
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile(profileId, ownerId)));
+        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, shareId))
+                .thenReturn(Optional.empty());
+        when(profileShareRepository.findById(shareId)).thenReturn(Optional.of(share));
+        when(userRepository.findById(viewerId)).thenReturn(Optional.empty());
+
+        profileShareService.revokeShare(ownerId, profileId, shareId);
+
+        assertThat(share.getRevokedAt()).isNotNull();
+        verify(profileShareRepository).save(share);
     }
 
     private static Profile profile(UUID profileId, UUID ownerId) {

@@ -5,11 +5,13 @@ import com.healthlens.api.dto.response.IncomingProfileInvitationResponse;
 import com.healthlens.api.dto.response.ProfileInvitationResponse;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.ProfileInvitation;
+import com.healthlens.api.entity.ProfileShareAuditLog;
 import com.healthlens.api.entity.ProfileShare;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.ProfileInvitationRepository;
 import com.healthlens.api.repository.ProfileRepository;
+import com.healthlens.api.repository.ProfileShareAuditLogRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
 import com.healthlens.api.repository.UserRepository;
 import java.net.URLEncoder;
@@ -34,6 +36,7 @@ public class ProfileShareService {
 
     private final ProfileRepository profileRepository;
     private final ProfileInvitationRepository profileInvitationRepository;
+    private final ProfileShareAuditLogRepository profileShareAuditLogRepository;
     private final ProfileShareRepository profileShareRepository;
     private final UserRepository userRepository;
     private final EmailService emailService;
@@ -52,12 +55,14 @@ public class ProfileShareService {
     public ProfileShareService(
             ProfileRepository profileRepository,
             ProfileInvitationRepository profileInvitationRepository,
+            ProfileShareAuditLogRepository profileShareAuditLogRepository,
             ProfileShareRepository profileShareRepository,
             UserRepository userRepository,
             EmailService emailService
     ) {
         this.profileRepository = profileRepository;
         this.profileInvitationRepository = profileInvitationRepository;
+        this.profileShareAuditLogRepository = profileShareAuditLogRepository;
         this.profileShareRepository = profileShareRepository;
         this.userRepository = userRepository;
         this.emailService = emailService;
@@ -75,12 +80,6 @@ public class ProfileShareService {
                 profileInvitationRepository.save(invitation);
             }
         }
-        Map<String, ProfileInvitationResponse> latestByEmail = new LinkedHashMap<>();
-        for (ProfileInvitation invitation : invitations) {
-            String emailKey = invitation.getInviteeEmail().trim().toLowerCase(Locale.ROOT);
-            latestByEmail.putIfAbsent(emailKey, mapToResponse(invitation));
-        }
-
         List<ProfileShare> activeShares = profileShareRepository.findAllByProfileIdAndRevokedAtIsNull(profileId);
         Map<UUID, User> viewersById = userRepository.findAllById(
                         activeShares.stream()
@@ -89,6 +88,25 @@ public class ProfileShareService {
                                 .collect(Collectors.toList()))
                 .stream()
                 .collect(Collectors.toMap(User::getId, user -> user));
+        Map<String, ProfileShare> activeShareByEmail = new LinkedHashMap<>();
+        for (ProfileShare share : activeShares) {
+            User viewer = viewersById.get(share.getViewerId());
+            if (viewer == null || viewer.getEmail() == null || viewer.getEmail().isBlank()) {
+                continue;
+            }
+            String emailKey = viewer.getEmail().trim().toLowerCase(Locale.ROOT);
+            activeShareByEmail.put(emailKey, share);
+        }
+
+        Map<String, ProfileInvitationResponse> latestByEmail = new LinkedHashMap<>();
+        for (ProfileInvitation invitation : invitations) {
+            String emailKey = invitation.getInviteeEmail().trim().toLowerCase(Locale.ROOT);
+            // Không hiển thị accepted đã hết hiệu lực (share đã bị revoke)
+            if ("accepted".equals(invitation.getStatus()) && !activeShareByEmail.containsKey(emailKey)) {
+                continue;
+            }
+            latestByEmail.putIfAbsent(emailKey, mapToResponse(invitation));
+        }
 
         for (ProfileShare share : activeShares) {
             User viewer = viewersById.get(share.getViewerId());
@@ -96,17 +114,15 @@ public class ProfileShareService {
                 continue;
             }
             String emailKey = viewer.getEmail().trim().toLowerCase(Locale.ROOT);
-            ProfileInvitationResponse existing = latestByEmail.get(emailKey);
-            if (existing == null || !"accepted".equals(existing.status())) {
-                latestByEmail.put(emailKey, new ProfileInvitationResponse(
-                        share.getId(),
-                        emailKey,
-                        "accepted",
-                        null,
-                        share.getGrantedAt(),
-                        share.getAccessLevel()
-                ));
-            }
+            latestByEmail.put(emailKey, new ProfileInvitationResponse(
+                    share.getId(),
+                    share.getViewerId(),
+                    emailKey,
+                    "accepted",
+                    null,
+                    share.getGrantedAt(),
+                    share.getAccessLevel()
+            ));
         }
 
         return new ArrayList<>(latestByEmail.values());
@@ -179,6 +195,26 @@ public class ProfileShareService {
             throw new IllegalStateException("Chỉ có thể hủy lời mời đang chờ.");
         }
         profileInvitationRepository.delete(inv);
+    }
+
+    @Transactional
+    public void revokeShare(UUID ownerId, UUID profileId, UUID viewerId) {
+        assertProfileOwner(ownerId, profileId);
+        ProfileShare share = profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId)
+                .orElseGet(() -> profileShareRepository.findById(viewerId)
+                        .filter(found -> profileId.equals(found.getProfileId()))
+                        .filter(found -> found.getRevokedAt() == null)
+                        .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay quyen chia se dang hoat dong")));
+        UUID resolvedViewerId = share.getViewerId();
+        share.setRevokedAt(Instant.now());
+        profileShareRepository.save(share);
+        userRepository.findById(resolvedViewerId)
+                .map(User::getEmail)
+                .filter(email -> email != null && !email.isBlank())
+                .ifPresent(email ->
+                        profileInvitationRepository.deleteAllByProfileIdAndInviteeEmailIgnoreCase(profileId, email.trim())
+                );
+        writeRevokeAuditLog(ownerId, profileId, resolvedViewerId, share.getId());
     }
 
     @Transactional
@@ -304,6 +340,7 @@ public class ProfileShareService {
     private ProfileInvitationResponse mapToResponse(ProfileInvitation inv) {
         return new ProfileInvitationResponse(
                 inv.getId(),
+                null,
                 inv.getInviteeEmail(),
                 inv.getStatus(),
                 inv.getExpiresAt(),
@@ -316,7 +353,7 @@ public class ProfileShareService {
         String base = frontendBaseUrl.endsWith("/")
                 ? frontendBaseUrl.substring(0, frontendBaseUrl.length() - 1)
                 : frontendBaseUrl;
-        return base + FAMILY_PROFILES_PATH;
+        return base + buildAcceptFrontendPath(token);
     }
 
     private static String buildAcceptFrontendPath(String token) {
@@ -370,5 +407,16 @@ public class ProfileShareService {
 
     private static String newToken() {
         return UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private void writeRevokeAuditLog(UUID actorId, UUID profileId, UUID viewerId, UUID shareId) {
+        ProfileShareAuditLog auditLog = new ProfileShareAuditLog();
+        auditLog.setActorId(actorId);
+        auditLog.setProfileId(profileId);
+        auditLog.setViewerId(viewerId);
+        auditLog.setAction("REVOKE_PROFILE_SHARE");
+        auditLog.setResourceType("PROFILE_SHARE");
+        auditLog.setResourceId(shareId);
+        profileShareAuditLogRepository.save(auditLog);
     }
 }

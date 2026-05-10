@@ -245,7 +245,7 @@ class HealthRecordServiceTest {
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get("health-record-upload:" + recordId)).thenReturn(reservationJson);
-        when(healthRecordRepository.findByIdAndUserId(recordId, userId)).thenReturn(Optional.of(existing));
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> healthRecordService.confirmUpload(userId, recordId))
                 .isInstanceOf(IllegalStateException.class)
@@ -435,7 +435,7 @@ class HealthRecordServiceTest {
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
 
         assertThatThrownBy(() -> healthRecordService.confirmRecord(userId, recordId, new ConfirmRecordRequest()))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("quyen xac nhan");
     }
 
@@ -459,9 +459,12 @@ class HealthRecordServiceTest {
                 ))
                 .build();
 
+        UUID profileId = UUID.randomUUID();
+        Profile profile = buildProfile(userId, profileId);
         HealthRecord record = new HealthRecord();
         record.setId(recordId);
         record.setUserId(userId);
+        record.setProfileId(profileId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
         when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
@@ -503,7 +506,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.empty());
+        when(healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> healthRecordService.getMetricExplanation(userId, recordId, "Glucose"))
                 .isInstanceOf(ResourceNotFoundException.class)
@@ -765,7 +768,7 @@ class HealthRecordServiceTest {
         UpdateMetricsRequest request = new UpdateMetricsRequest(List.of());
 
         assertThatThrownBy(() -> healthRecordService.updateMetrics(userId, recordId, request))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("quyen cap nhat");
     }
 
@@ -914,7 +917,7 @@ class HealthRecordServiceTest {
         record.setId(recordId);
         record.setUserId(userId);
 
-        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
+        when(healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)).thenReturn(Optional.of(record));
 
         healthRecordService.deleteHealthRecord(userId, recordId);
 
@@ -932,11 +935,14 @@ class HealthRecordServiceTest {
         record.setId(recordId);
         record.setUserId(ownerId);
 
-        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, requesterId)).thenReturn(Optional.empty());
+        record.setProfileId(ownerId);
+        when(healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)).thenReturn(Optional.of(record));
+        when(profileShareRepository.existsByProfileIdAndViewerIdAndAccessLevelIgnoreCaseAndRevokedAtIsNull(ownerId, requesterId, "edit"))
+                .thenReturn(false);
 
         assertThatThrownBy(() -> healthRecordService.deleteHealthRecord(requesterId, recordId))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("khong ton tai");
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("quyen xoa");
     }
 
     @Test

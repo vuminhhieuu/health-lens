@@ -138,6 +138,17 @@ public class ProfileController {
         return ResponseEntity.noContent().build();
     }
 
+    @DeleteMapping(ApiRoutes.PROFILE_SHARE_BY_VIEWER_REL)
+    public ResponseEntity<Void> revokeShare(
+            Authentication authentication,
+            @PathVariable UUID profileId,
+            @PathVariable UUID viewerId
+    ) {
+        UUID userId = extractUserId(authentication);
+        profileShareService.revokeShare(userId, profileId, viewerId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{profileId}/invitations/{invitationId}/resend")
     public ResponseEntity<Map<String, Object>> resendInvitation(
             Authentication authentication,

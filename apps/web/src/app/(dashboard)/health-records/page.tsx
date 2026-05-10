@@ -7,8 +7,10 @@ import { Loader2, Share2, Users } from "lucide-react";
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
-import { API_ROUTES } from "@/lib/api/routes";
-import { ProfileCard, HealthStatus } from "@/components/features/profiles/ProfileCard";
+import {
+  ProfileCard,
+  HealthStatus,
+} from "@/components/features/profiles/ProfileCard";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { apiClient } from "@/lib/api/apiClient";
 import { InviteMemberModal } from "@/components/features/profiles/InviteMemberModal";
@@ -23,8 +25,9 @@ type Profile = {
   lastRecordAt?: string;
 };
 
-type ProfileInvitation = {
+type SharedMember = {
   id: string;
+  viewerId: string;
   email: string;
   status: string;
   accessLevel: "view" | "edit" | string;
@@ -67,16 +70,12 @@ function extractApiDetail(error: unknown, fallback: string): string {
   return fallback;
 }
 
-type UserProfile = {
-  id: string;
-  fullName: string;
-};
-
 export default function HealthRecordsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [invitingProfileId, setInvitingProfileId] = useState<string | null>(null);
+  const [pendingAccessUpdates, setPendingAccessUpdates] = useState<Record<string, boolean>>({});
   useEffect(() => {
     void apiClient.post(ApiPaths.PROFILES.ENSURE_DEFAULT);
   }, []);
@@ -144,16 +143,44 @@ export default function HealthRecordsPage() {
     },
   });
 
+  const revokeShareMutation = useMutation({
+    mutationFn: async (payload: { viewerId: string; email: string }) => {
+      if (!invitingProfileId) {
+        throw new Error("Thiếu profile để thu hồi quyền.");
+      }
+      await apiClient.delete(ApiPaths.PROFILES.REVOKE_SHARE(invitingProfileId, payload.viewerId));
+      return payload.email;
+    },
+    onSuccess: (email) => {
+      queryClient.setQueryData(
+        ["profile-shared-members", invitingProfileId],
+        (previous: SharedMember[] | undefined) => (previous ?? []).filter((member) => member.email.toLowerCase() !== email.toLowerCase())
+      );
+      void queryClient.invalidateQueries({ queryKey: ["profile-shared-members", invitingProfileId] });
+      void queryClient.invalidateQueries({ queryKey: ["shared-profiles"] });
+      setPendingAccessUpdates((prev) => {
+        const next = { ...prev };
+        delete next[email.toLowerCase()];
+        return next;
+      });
+      alert("Đã thu hồi quyền truy cập thành công.");
+    },
+    onError: (error: unknown) => {
+      alert(extractApiDetail(error, "Không thể thu hồi quyền truy cập."));
+    },
+  });
+
   const { data: sharedMembers = [], isFetching: isSharedMembersLoading } = useQuery({
     queryKey: ["profile-shared-members", invitingProfileId],
     enabled: inviteModalOpen && Boolean(invitingProfileId),
     queryFn: async () => {
       const response = await apiClient.get(ApiPaths.PROFILES.INVITATIONS(invitingProfileId as string));
-      const invitations = (response.data?.data ?? []) as ProfileInvitation[];
+      const invitations = (response.data?.data ?? []) as SharedMember[];
       return invitations
         .filter((invitation) => invitation.status === "accepted")
         .map((invitation) => ({
           id: invitation.id,
+          viewerId: invitation.viewerId,
           email: invitation.email,
           accessLevel: invitation.accessLevel,
         }));
@@ -250,12 +277,16 @@ export default function HealthRecordsPage() {
           })}
         </div>
       ) : (
-        <div className="rounded-[32px] border-2 border-dashed border-[#bcc9c6]/30 bg-white/40 p-16 text-center">
+        <div className="rounded-4xl border-2 border-dashed border-[#bcc9c6]/30 bg-white/40 p-16 text-center">
           <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-[#e9f6f3] text-[#00685f]">
             <Users className="h-10 w-10" />
           </div>
-          <h3 className="text-2xl font-black text-[#121e1c]">Chưa có hồ sơ nào</h3>
-          <p className="mt-2 text-[#6d7a77]">Vui lòng tạo hồ sơ để theo dõi lịch sử khám bệnh.</p>
+          <h3 className="text-2xl font-black text-[#121e1c]">
+            Chưa có hồ sơ nào
+          </h3>
+          <p className="mt-2 text-[#6d7a77]">
+            Vui lòng tạo hồ sơ để theo dõi lịch sử khám bệnh.
+          </p>
         </div>
       )}
       <InviteMemberModal
@@ -264,10 +295,12 @@ export default function HealthRecordsPage() {
           setInviteModalOpen(false);
           setInvitingProfileId(null);
         }}
-        isLoading={inviteMutation.isPending}
+        isLoading={inviteMutation.isPending || revokeShareMutation.isPending}
         sharedMembers={displaySharedMembers}
         isSharedMembersLoading={isSharedMembersLoading}
+        isRevokingMember={revokeShareMutation.isPending}
         hasPendingAccessChanges={false}
+        onRevokeMember={(member) => revokeShareMutation.mutate(member)}
         onChangeAccessLevel={(member) =>
           invitingProfileId &&
           updateAccessMutation.mutate({

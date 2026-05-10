@@ -23,6 +23,7 @@ import com.healthlens.api.annotation.Auditable;
 import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.exception.ProfileAccessRevokedException;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.ProfileRepository;
@@ -122,7 +123,7 @@ public class HealthRecordService {
         boolean canUploadAsOwner = profileOwnerId.equals(userId);
         boolean canUploadAsSharedEditor = hasEditAccess(targetProfileId, userId);
         if (!canUploadAsOwner && !canUploadAsSharedEditor) {
-            throw new AccessDeniedException("Ban khong co quyen tai len cho ho so nay");
+            throw new ProfileAccessRevokedException("Ban khong co quyen tai len cho ho so nay");
         }
 
         UploadFormat uploadFormat = resolveUploadFormat(request.fileType());
@@ -143,7 +144,7 @@ public class HealthRecordService {
             throw new IllegalArgumentException("Record khong thuoc ve nguoi dung hien tai");
         }
 
-        HealthRecord record = healthRecordRepository.findByIdAndUserId(recordId, userId).orElseGet(HealthRecord::new);
+        HealthRecord record = healthRecordRepository.findById(recordId).orElseGet(HealthRecord::new);
         boolean isNewRecord = record.getId() == null;
         if (isNewRecord) {
             Optional<Profile> profileOptional = profileRepository.findById(reservation.profileId());
@@ -155,7 +156,9 @@ public class HealthRecordService {
                     .orElse(userId);
             record.setUserId(recordOwnerId);
             record.setProfileId(reservation.profileId());
-        } else if (!"ocr_failed".equals(record.getStatus())) {
+        } else if (!reservation.profileId().equals(record.getProfileId())) {
+            throw new IllegalStateException("Upload reservation khong khop voi health record da ton tai");
+        } else if (!"ocr_failed".equals(record.getStatus()) && !"processing".equals(record.getStatus())) {
             throw new IllegalStateException("Chi duoc xac nhan upload cho record moi hoac retry OCR that bai");
         }
         record.setFileKey(reservation.fileKey());
@@ -258,7 +261,7 @@ public class HealthRecordService {
         boolean canAccess = profile.getUser().getId().equals(userId)
                 || profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profile.getId(), userId);
         if (!canAccess) {
-            throw new AccessDeniedException("Profile khong thuoc ve nguoi dung");
+            throw new ProfileAccessRevokedException("Profile khong thuoc ve nguoi dung");
         }
         List<MetricDto> metricsList = parseMetrics(record.getMetrics()).stream()
                 .map(metric -> enrichMetric(metric, profile, record.getExamDate()))
@@ -541,7 +544,7 @@ public class HealthRecordService {
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
 
         if (!record.getUserId().equals(userId) && !hasEditAccess(record.getProfileId(), userId)) {
-            throw new IllegalArgumentException("Ban khong co quyen xac nhan health record nay");
+            throw new AccessDeniedException("Ban khong co quyen xac nhan health record nay");
         }
 
         String previousStatus = record.getStatus();
@@ -607,7 +610,7 @@ public class HealthRecordService {
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
 
         if (!record.getUserId().equals(userId) && !hasEditAccess(record.getProfileId(), userId)) {
-            throw new IllegalArgumentException("Ban khong co quyen cap nhat health record nay");
+            throw new AccessDeniedException("Ban khong co quyen cap nhat health record nay");
         }
 
         if (!"review_required".equals(record.getStatus())
@@ -634,7 +637,7 @@ public class HealthRecordService {
     @Transactional
     @Auditable(action = "DELETE_HEALTH_RECORD")
     public void deleteHealthRecord(UUID userId, UUID recordId) {
-        HealthRecord record = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
+        HealthRecord record = healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
 
         if (!record.getUserId().equals(userId) && !hasEditAccess(record.getProfileId(), userId)) {
@@ -1045,7 +1048,7 @@ public class HealthRecordService {
                 .orElseThrow(() -> new ResourceNotFoundException("Health record khong ton tai"));
         boolean shared = profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(record.getProfileId(), userId);
         if (!shared) {
-            throw new AccessDeniedException("Ban khong co quyen truy cap health record nay");
+            throw new ProfileAccessRevokedException("Ban khong co quyen truy cap health record nay");
         }
         boolean canEdit = hasEditAccess(record.getProfileId(), userId);
         return new AccessibleRecord(record, false, true, canEdit);

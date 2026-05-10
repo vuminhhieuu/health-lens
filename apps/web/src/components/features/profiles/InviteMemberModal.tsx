@@ -1,7 +1,7 @@
 "use client";
 
 import React, { FormEvent, useState } from "react";
-import { UserPlus, X, Mail, Shield, Loader2, ArrowRight } from "lucide-react";
+import { UserPlus, Mail, Shield, Loader2, ArrowRight, X } from "lucide-react";
 
 export const INVITE_ACCESS_OPTIONS = [
   { value: "view", label: "Chỉ xem" },
@@ -18,12 +18,16 @@ interface InviteMemberModalProps {
   isLoading?: boolean;
   sharedMembers?: Array<{
     id: string;
+    viewerId?: string;
     email: string;
     accessLevel: "view" | "edit" | string;
+    status?: string;
   }>;
   isSharedMembersLoading?: boolean;
   onChangeAccessLevel?: (member: { id: string; email: string; accessLevel: "view" | "edit" }) => void;
+  onRevokeMember?: (member: { viewerId: string; email: string }) => void;
   isUpdatingAccessLevel?: boolean;
+  isRevokingMember?: boolean;
   hasPendingAccessChanges?: boolean;
   title?: string;
   description?: string;
@@ -37,7 +41,9 @@ export function InviteMemberModal({
   sharedMembers = [],
   isSharedMembersLoading = false,
   onChangeAccessLevel,
+  onRevokeMember,
   isUpdatingAccessLevel = false,
+  isRevokingMember = false,
   hasPendingAccessChanges = false,
   title = "Chia sẻ hồ sơ",
   description = "Nhập email người nhận.",
@@ -46,6 +52,7 @@ export function InviteMemberModal({
   const [accessLevel, setAccessLevel] = useState<"view" | "edit">("view");
   const [error, setError] = useState<string | null>(null);
   const [showInviteError, setShowInviteError] = useState(false);
+  const [pendingRevokeMember, setPendingRevokeMember] = useState<{ viewerId: string; email: string } | null>(null);
 
   if (!isOpen) return null;
 
@@ -63,6 +70,7 @@ export function InviteMemberModal({
     setAccessLevel("view");
     setError(null);
     setShowInviteError(false);
+    setPendingRevokeMember(null);
     onClose();
   };
 
@@ -82,9 +90,9 @@ export function InviteMemberModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm animate-in fade-in duration-200">
       <div
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl shadow-black/20 animate-in zoom-in-95 duration-200"
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-4xl bg-white shadow-2xl shadow-black/20 animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative p-8 pb-4">
@@ -102,8 +110,12 @@ export function InviteMemberModal({
               <UserPlus size={24} />
             </div>
             <div className="pr-14">
-              <h2 className="text-2xl font-black leading-tight text-[#121e1c]">{title}</h2>
-              <p className="text-sm font-medium text-[#6d7a77]">{description}</p>
+              <h2 className="text-2xl font-black leading-tight text-[#121e1c]">
+                {title}
+              </h2>
+              <p className="text-sm font-medium text-[#6d7a77]">
+                {description}
+              </p>
             </div>
           </div>
         </div>
@@ -111,11 +123,14 @@ export function InviteMemberModal({
         <form onSubmit={handleFormSubmit} className="flex flex-1 flex-col">
           <div className="space-y-5 overflow-y-auto px-8 pb-6">
             <div>
-              <label className="mb-2 block text-sm font-bold text-[#121e1c]" htmlFor="invite-email">
+              <label
+                className="mb-2 block text-sm font-bold text-[#121e1c]"
+                htmlFor="invite-email"
+              >
                 Địa chỉ Email <span className="text-red-600">*</span>
               </label>
               <div className="relative">
-                <Mail className="absolute top-1/2 left-4 h-[18px] w-[18px] -translate-y-1/2 text-[#9ba9a6]" />
+                <Mail className="absolute top-1/2 left-4 h-4.5 w-4.5 -translate-y-1/2 text-[#9ba9a6]" />
                 <input
                   id="invite-email"
                   type="email"
@@ -133,11 +148,14 @@ export function InviteMemberModal({
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-bold text-[#121e1c]" htmlFor="invite-access">
+              <label
+                className="mb-2 block text-sm font-bold text-[#121e1c]"
+                htmlFor="invite-access"
+              >
                 Quyền truy cập <span className="text-red-600">*</span>
               </label>
               <div className="relative">
-                <Shield className="pointer-events-none absolute top-1/2 left-4 h-[18px] w-[18px] -translate-y-1/2 text-[#00685f]" />
+                <Shield className="pointer-events-none absolute top-1/2 left-4 h-4.5 w-4.5 -translate-y-1/2 text-[#00685f]" />
                 <select
                   id="invite-access"
                   value={accessLevel}
@@ -154,27 +172,33 @@ export function InviteMemberModal({
                     </option>
                   ))}
                 </select>
-                <span className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-[#00685f]">▾</span>
+                <span className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-[#00685f]">
+                  ▾
+                </span>
               </div>
             </div>
 
-            {showInviteError && error ? <p className="text-sm font-medium text-[#ba1a1a]">{error}</p> : null}
+            {showInviteError && error ? (
+              <p className="text-sm font-medium text-[#ba1a1a]">{error}</p>
+            ) : null}
 
             <div className="rounded-2xl border border-[#d6ece7] bg-[#f7fcfa] p-4">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-sm font-bold text-[#121e1c]">Người đã được chia sẻ</p>
-                {isSharedMembersLoading ? (
+                {isSharedMembersLoading || isRevokingMember ? (
                   <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#6d7a77]">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Đang tải
+                    {isRevokingMember ? "Đang thu hồi..." : "Đang tải"}
                   </span>
                 ) : null}
               </div>
 
               {sharedMembers.length === 0 ? (
-                <p className="text-sm text-[#6d7a77]">Chưa có ai được cấp quyền truy cập.</p>
+                <p className="text-sm text-[#6d7a77]">
+                  Chưa có ai được cấp quyền truy cập.
+                </p>
               ) : (
-                <ul className="max-h-[170px] space-y-2 overflow-y-auto pr-1">
+                <ul className="max-h-42.5 space-y-2 overflow-y-auto pr-1">
                   {sharedMembers.map((member) => (
                     <li
                       key={member.id}
@@ -183,22 +207,31 @@ export function InviteMemberModal({
                       <p className="truncate pr-3 text-sm font-medium text-[#23312f]">{member.email}</p>
                       <div className="relative shrink-0">
                         <select
-                          disabled={isUpdatingAccessLevel}
+                          disabled={isUpdatingAccessLevel || isRevokingMember}
                           value={member.accessLevel === "edit" ? "edit" : "view"}
                           onChange={(event) => {
-                            const nextAccessLevel = event.target.value as "view" | "edit";
+                            const nextAction = event.target.value as "view" | "edit" | "revoke";
                             setError(null);
                             setShowInviteError(false);
+                            if (nextAction === "revoke") {
+                              if (!member.viewerId) {
+                                setError("Thiếu thông tin viewer để thu hồi quyền.");
+                                return;
+                              }
+                              setPendingRevokeMember({ viewerId: member.viewerId, email: member.email });
+                              return;
+                            }
                             onChangeAccessLevel?.({
                               id: member.id,
                               email: member.email,
-                              accessLevel: nextAccessLevel,
+                              accessLevel: nextAction,
                             });
                           }}
                           className="h-8 cursor-pointer appearance-none rounded-full border border-[#d2ebe6] bg-[#e7f5f2] px-3 pr-7 text-xs font-bold text-[#00685f] outline-none transition hover:brightness-95 disabled:opacity-60"
                         >
                           <option value="view">Chỉ xem</option>
                           <option value="edit">Có thể chỉnh sửa</option>
+                          <option value="revoke">Thu hồi quyền truy cập</option>
                         </select>
                         <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-[#00685f]">
                           ▾
@@ -232,6 +265,42 @@ export function InviteMemberModal({
           </div>
         </form>
       </div>
+      {pendingRevokeMember ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-black text-[#121e1c]">Xác nhận thu hồi quyền</h3>
+            <p className="mt-2 text-sm text-[#3d4947]">
+              Thu hồi quyền truy cập của <span className="font-bold">{pendingRevokeMember.email}</span>?
+            </p>
+            <p className="mt-1 text-xs text-[#6d7a77]">
+              Sau khi thu hồi, người này sẽ không còn thấy hồ sơ được chia sẻ nữa.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                disabled={isRevokingMember}
+                onClick={() => setPendingRevokeMember(null)}
+                className="rounded-xl border border-[#c5dfd9] px-4 py-2 text-sm font-bold text-[#3d4947] transition hover:bg-[#f6fbfa] disabled:opacity-60"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={isRevokingMember}
+                onClick={() => {
+                  const target = pendingRevokeMember;
+                  setPendingRevokeMember(null);
+                  if (!target) return;
+                  onRevokeMember?.(target);
+                }}
+                className="rounded-xl bg-[#ba1a1a] px-4 py-2 text-sm font-bold text-white transition hover:brightness-110 disabled:opacity-60"
+              >
+                {isRevokingMember ? "Đang thu hồi..." : "Thu hồi quyền"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
