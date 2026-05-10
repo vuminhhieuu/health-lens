@@ -39,7 +39,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ProblemDetail> handleAccountLocked(AccountLockedException ex, HttpServletRequest request) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
         problem.setType(URI.create("https://healthlens.vn/errors/account-locked"));
-        problem.setTitle("Tai khoan bi khoa tam thoi");
+        problem.setTitle("Tài khoản bị khóa tạm thời");
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("retryAfterSeconds", ex.getRetryAfterSeconds());
         
@@ -79,9 +79,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(EmailAlreadyExistsException.class)
     public ProblemDetail handleEmailExists(EmailAlreadyExistsException ex, HttpServletRequest request) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Email nay da duoc dang ky");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Email này đã được đăng ký");
         problem.setType(URI.create("https://healthlens.vn/errors/email-already-exists"));
-        problem.setTitle("Email da ton tai");
+        problem.setTitle("Email đã tồn tại");
         problem.setInstance(URI.create(request.getRequestURI()));
         return problem;
     }
@@ -92,13 +92,13 @@ public class GlobalExceptionHandler {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                     HttpStatus.CONFLICT, "Đã có lời mời đang chờ cho email này.");
             problem.setType(URI.create("https://healthlens.vn/errors/invitation-pending-exists"));
-            problem.setTitle("Loi moi dang cho");
+            problem.setTitle("Lời mời đang chờ");
             problem.setInstance(URI.create(request.getRequestURI()));
             return problem;
         }
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Email nay da duoc dang ky");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Email này đã được đăng ký");
         problem.setType(URI.create("https://healthlens.vn/errors/email-already-exists"));
-        problem.setTitle("Email da ton tai");
+        problem.setTitle("Email đã tồn tại");
         problem.setInstance(URI.create(request.getRequestURI()));
         return problem;
     }
@@ -146,7 +146,7 @@ public class GlobalExceptionHandler {
                 .map(this::toFieldError)
                 .toList();
 
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Du lieu dau vao khong hop le");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Dữ liệu đầu vào không hợp lệ");
         problem.setType(URI.create("https://healthlens.vn/errors/validation-error"));
         problem.setTitle("Validation error");
         problem.setInstance(URI.create(request.getRequestURI()));
@@ -164,7 +164,7 @@ public class GlobalExceptionHandler {
                 ))
                 .toList();
 
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Du lieu dau vao khong hop le");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Dữ liệu đầu vào không hợp lệ");
         problem.setType(URI.create("https://healthlens.vn/errors/validation-error"));
         problem.setTitle("Validation error");
         problem.setInstance(URI.create(request.getRequestURI()));
@@ -177,6 +177,15 @@ public class GlobalExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problem.setType(URI.create("https://healthlens.vn/errors/validation-error"));
         problem.setTitle("Validation error");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        return problem;
+    }
+
+    @ExceptionHandler(BusinessException.class)
+    public ProblemDetail handleBusinessException(BusinessException ex, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setType(URI.create("https://healthlens.vn/errors/business-error"));
+        problem.setTitle("Lỗi xử lý nghiệp vụ");
         problem.setInstance(URI.create(request.getRequestURI()));
         return problem;
     }

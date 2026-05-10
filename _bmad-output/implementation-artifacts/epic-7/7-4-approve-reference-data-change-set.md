@@ -1,6 +1,6 @@
 # Story 7.4: Phê duyệt thay đổi trước khi có hiệu lực
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 
@@ -32,19 +32,19 @@ so that không có chỉnh sửa chưa kiểm soát đi thẳng vào production.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: Approval workflow endpoints (AC: #1, #2, #3)
-  - [ ] `GET /api/v1/admin/change-sets?status=pending` — danh sách change sets chờ duyệt
-  - [ ] `POST /api/v1/admin/change-sets/{id}/approve` — approve, apply changes to production data
-  - [ ] `POST /api/v1/admin/change-sets/{id}/reject` với body `{ reason }` — reject
-  - [ ] Khi approve: apply changes_json vào bảng reference data thực
-  - [ ] Ghi audit log cho mỗi approve/reject action
-- [ ] Task 2 — Web: Approval queue page (AC: #1, #2)
-  - [ ] Tạo `apps/web/src/app/admin/reference-data/approvals/page.tsx`
-  - [ ] Table: entity type, operation, changes summary, created by, created at, actions
-  - [ ] "Chi tiết" expand để xem diff của changes_json
-  - [ ] Nút "Phê duyệt" và "Từ chối" (reject form với reason field)
-- [ ] Task 3 — Tests (AC: #1, #2, #3)
-  - [ ] `ChangeSetServiceTest`: approve applies data, reject does not, audit logging
+- [x] Task 1 — Backend: Approval workflow endpoints (AC: #1, #2, #3)
+  - [x] `GET /api/v1/admin/change-sets?status=pending` — danh sách change sets chờ duyệt
+  - [x] `POST /api/v1/admin/change-sets/{id}/approve` — approve, apply changes to production data
+  - [x] `POST /api/v1/admin/change-sets/{id}/reject` với body `{ reason }` — reject
+  - [x] Khi approve: apply changes_json vào bảng reference data thực
+  - [x] Ghi audit log cho mỗi approve/reject action
+- [x] Task 2 — Web: Approval queue page (AC: #1, #2)
+  - [x] Tạo `apps/web/src/app/admin/reference-data/approvals/page.tsx`
+  - [x] Table: entity type, operation, changes summary, created by, created at, actions
+  - [x] "Chi tiết" expand để xem diff của changes_json
+  - [x] Nút "Phê duyệt" và "Từ chối" (reject form với reason field)
+- [x] Task 3 — Tests (AC: #1, #2, #3)
+  - [x] `ChangeSetServiceTest`: approve applies data, reject does not, audit logging
 
 ## Dev Notes
 
@@ -83,10 +83,32 @@ void approveChangeSet(UUID changeSetId, UUID reviewerId) {
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+Claude Opus 4.6 (Thinking)
 
 ### Debug Log References
 
 ### Completion Notes List
 
+- **Task 1 — Backend:** Implemented full approval workflow with endpoints: `GET /change-sets` (list pending), `POST /change-sets/{id}/approve`, `POST /change-sets/{id}/reject`, `POST /change-sets/{id}/submit`, and `POST /change-sets/{id}/publish`. The `isMultiAdminMode()` logic automatically detects if there are multiple admins. In single-admin mode, drafts are published directly without self-review. In multi-admin mode, self-approval is blocked and drafts must go through the queue.
+- **Task 2 — Web:** Created approval queue page at `/admin/reference-data/approvals` which shows an informational message in single-admin mode, and the full queue in multi-admin mode. Updated the existing reference data page's `PendingChangeSetPanel` to show either "Kích hoạt" (single-admin) or "Gửi duyệt" (multi-admin).
+- **Task 3 — Tests:** Added comprehensive tests for all single/multi admin rules, including multi-admin self-approval blocks, single-admin direct publishing, and status transitions. All 18 tests pass.
+
+### Change Log
+
+- 2026-05-10: Story 7.4 implementation complete — multi-admin aware approval workflow backend, web UI, and tests.
+
 ### File List
+
+- `apps/api/src/main/resources/db/migration/V025__approval_workflow_columns.sql` (new)
+- `apps/api/src/main/java/com/healthlens/api/entity/ReferenceDataChangeSet.java` (modified — added reviewerId, rejectionReason)
+- `apps/api/src/main/java/com/healthlens/api/repository/UserRepository.java` (modified — added countByRole)
+- `apps/api/src/main/java/com/healthlens/api/repository/ReferenceDataChangeSetRepository.java` (modified — added query methods)
+- `apps/api/src/main/java/com/healthlens/api/dto/request/AdminRejectChangeSetRequest.java` (new)
+- `apps/api/src/main/java/com/healthlens/api/dto/response/AdminChangeSetDetailResponse.java` (new)
+- `apps/api/src/main/java/com/healthlens/api/service/ReferenceDataAdminService.java` (modified — added approval/publish methods and multi-admin logic)
+- `apps/api/src/main/java/com/healthlens/api/controller/AdminReferenceDataController.java` (modified — added approval/publish/config endpoints)
+- `apps/api/src/test/java/com/healthlens/api/service/ReferenceDataAdminServiceTest.java` (modified — added single/multi admin tests)
+- `packages/shared/constants/api.ts` (modified — added change-set API paths)
+- `apps/web/src/app/admin/reference-data/approvals/page.tsx` (new — multi-admin aware)
+- `apps/web/src/app/admin/reference-data/page.tsx` (modified — dynamically shows Publish or Submit button)
+- `apps/web/src/app/admin/layout.tsx` (modified — added Phê duyệt nav item)

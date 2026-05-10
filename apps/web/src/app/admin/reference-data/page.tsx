@@ -39,6 +39,7 @@ type PendingChangeSet = {
   proposedDisplayNameVi: string;
   proposedUnit: string;
   proposedRangesCount: number;
+  status: string;
 };
 
 type ReferenceMetric = {
@@ -182,6 +183,15 @@ export default function ReferenceDataPage() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
+  const { data: adminConfig } = useQuery<{ multiAdminMode: boolean }>({
+    queryKey: ["admin-config"],
+    queryFn: async () => {
+      const response = await adminApiClient.get(API_ROUTES.ADMIN_REFERENCE_DATA.CONFIG);
+      return response.data.data;
+    },
+    staleTime: 60_000,
+  });
+
   const { data: metrics = [], isLoading, isFetching } = useQuery<ReferenceMetric[]>({
     queryKey: ["admin-reference-metrics"],
     queryFn: async () => {
@@ -189,6 +199,8 @@ export default function ReferenceDataPage() {
       return response.data.data;
     },
   });
+
+  const isMultiAdmin = adminConfig?.multiAdminMode ?? false;
 
   const groupedMetrics = useMemo(
     () => ({
@@ -209,7 +221,12 @@ export default function ReferenceDataPage() {
       return response.data.data as ReferenceMetric;
     },
     onSuccess: async () => {
-      setNotice({ type: "success", message: "Đã tạo chỉ số mới ở trạng thái bản nháp." });
+      setNotice({
+        type: "success",
+        message: adminConfig?.multiAdminMode
+          ? "Đã gửi yêu cầu tạo chỉ số mới để phê duyệt."
+          : "Đã tạo chỉ số mới thành công."
+      });
       closeEditor();
       await reloadList();
     },
@@ -236,10 +253,10 @@ export default function ReferenceDataPage() {
   const deactivateMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await adminApiClient.delete(API_ROUTES.ADMIN_REFERENCE_DATA.METRIC_BY_ID(id));
-      return response.data.data as ReferenceMetric;
+      return response.data.data as { message: string };
     },
-    onSuccess: async () => {
-      setNotice({ type: "success", message: "Đã ngưng áp dụng chỉ số. Bạn có thể kích hoạt lại bất cứ lúc nào." });
+    onSuccess: async (data) => {
+      setNotice({ type: "success", message: data.message });
       setConfirmState(null);
       await reloadList();
     },
@@ -310,24 +327,30 @@ export default function ReferenceDataPage() {
             Dữ liệu tham chiếu
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-500">
-            Quản lý chỉ số và ngưỡng tham chiếu cho hệ thống diễn giải. Chỉ số mới
-            được tạo dưới dạng bản nháp, chỉnh sửa chỉ số đang áp dụng sẽ sinh bản
-            nháp thay đổi để duyệt ở Story 7.4.
+            Quản lý chỉ số và ngưỡng tham chiếu cho hệ thống diễn giải.
+            {adminConfig?.multiAdminMode
+              ? " Mọi thay đổi sẽ được gửi vào hàng đợi phê duyệt trước khi áp dụng."
+              : " Các thay đổi sẽ được áp dụng trực tiếp vào hệ thống."}
           </p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 text-sm">
-          <StatusCard label="Đang áp dụng" value={groupedMetrics.active.length} tone="active" />
-          <StatusCard label="Bản nháp" value={groupedMetrics.draft.length} tone="draft" />
-          <StatusCard label="Ngưng áp dụng" value={groupedMetrics.deactivated.length} tone="deactivated" />
+        <div className="flex gap-4">
+          <div className="rounded-2xl bg-emerald-50 px-4 py-2 ring-1 ring-emerald-100">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Đang áp dụng</div>
+            <div className="text-xl font-bold text-emerald-700">{groupedMetrics.active.length}</div>
+          </div>
+          <div className="rounded-2xl bg-slate-100 px-4 py-2 ring-1 ring-slate-200">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Ngưng áp dụng</div>
+            <div className="text-xl font-bold text-slate-600">{groupedMetrics.deactivated.length}</div>
+          </div>
         </div>
       </div>
 
       {notice ? (
         <div
           className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm ${notice.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : "border-rose-200 bg-rose-50 text-rose-800"
+            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+            : "border-rose-200 bg-rose-50 text-rose-800"
             }`}
         >
           {notice.type === "success" ? (
@@ -343,9 +366,6 @@ export default function ReferenceDataPage() {
         <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Danh mục chỉ số xét nghiệm</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Hỗ trợ nhiều ngưỡng theo giới tính và độ tuổi, cùng flow ngưng áp dụng và kích hoạt lại.
-            </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
@@ -385,16 +405,6 @@ export default function ReferenceDataPage() {
             />
 
             <MetricSection
-              title="Bản nháp"
-              description="Các chỉ số mới hoặc bản nháp đang chờ được duyệt / áp dụng."
-              metrics={groupedMetrics.draft}
-              expandedMetricId={expandedMetricId}
-              onToggleExpanded={setExpandedMetricId}
-              onEdit={openEditModal}
-              onDeactivate={(metric) => setConfirmState({ kind: "deactivate", metric })}
-            />
-
-            <MetricSection
               title="Ngưng áp dụng"
               description="Các chỉ số đã soft delete. Có thể kích hoạt lại để tiếp tục sử dụng."
               metrics={groupedMetrics.deactivated}
@@ -415,6 +425,7 @@ export default function ReferenceDataPage() {
         metric={selectedMetric}
         initialForm={form}
         formError={formError}
+        adminConfig={adminConfig}
         onClose={closeEditor}
         onSubmitPayload={async (payload) => {
           setFormError("");
@@ -512,7 +523,7 @@ function MetricSection({
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2">
                           <span className={statusBadge(metric.status)}>{statusLabel(metric.status)}</span>
-                          {metric.pendingChangeSet ? (
+                          {metric.pendingChangeSet && metric.status === "draft" ? (
                             <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-700">
                               <FileEdit className="h-3 w-3" />
                               Đang chờ duyệt
@@ -579,10 +590,6 @@ function MetricSection({
                               ))}
                             </div>
                           </div>
-
-                          {metric.pendingChangeSet ? (
-                            <PendingChangeSetPanel metric={metric} pendingChangeSet={metric.pendingChangeSet} />
-                          ) : null}
                         </td>
                       </tr>
                     ) : null}
@@ -603,6 +610,7 @@ function MetricEditorModal({
   metric,
   initialForm,
   formError,
+  adminConfig,
   onClose,
   onSubmitPayload,
   isPending,
@@ -612,6 +620,7 @@ function MetricEditorModal({
   metric: ReferenceMetric | null;
   initialForm: MetricFormState;
   formError: string;
+  adminConfig?: { multiAdminMode: boolean };
   onClose: () => void;
   onSubmitPayload: (payload: MetricPayload) => Promise<void>;
   isPending: boolean;
@@ -671,7 +680,9 @@ function MetricEditorModal({
       : "Tạo bản chỉnh sửa nháp";
 
   const description = mode === "create"
-    ? "Chỉ số mới sẽ được lưu ở trạng thái bản nháp và hiển thị ở nhóm Bản nháp."
+    ? (adminConfig?.multiAdminMode
+      ? "Yêu cầu tạo chỉ số mới sẽ được gửi tới hàng đợi phê duyệt."
+      : "Chỉ số mới sẽ được tạo và áp dụng ngay lập tức.")
     : isDraftEditing
       ? "Bạn đang chỉnh sửa trực tiếp bản nháp hiện có của chỉ số này."
       : "Bạn đang chỉnh sửa chỉ số đang áp dụng. Hệ thống sẽ tạo bản thay đổi nháp thay vì sửa trực tiếp.";
@@ -936,75 +947,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function PendingChangeSetPanel({
-  metric,
-  pendingChangeSet,
-}: {
-  metric: ReferenceMetric;
-  pendingChangeSet: PendingChangeSet;
-}) {
-  const diffs: Array<{ label: string; current: string; proposed: string }> = [];
-
-  if (metric.name !== pendingChangeSet.proposedName) {
-    diffs.push({ label: "Tên chỉ số", current: metric.name, proposed: pendingChangeSet.proposedName });
-  }
-  if (metric.displayNameVi !== pendingChangeSet.proposedDisplayNameVi) {
-    diffs.push({ label: "Tên hiển thị", current: metric.displayNameVi, proposed: pendingChangeSet.proposedDisplayNameVi });
-  }
-  if (metric.unit !== pendingChangeSet.proposedUnit) {
-    diffs.push({ label: "Đơn vị", current: metric.unit, proposed: pendingChangeSet.proposedUnit });
-  }
-  if (metric.rangesCount !== pendingChangeSet.proposedRangesCount) {
-    diffs.push({ label: "Số ngưỡng", current: String(metric.rangesCount), proposed: String(pendingChangeSet.proposedRangesCount) });
-  }
-
-  const createdDate = new Date(pendingChangeSet.createdAt).toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  return (
-    <div className="mt-4 rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <FileEdit className="h-4 w-4 text-indigo-600" />
-        <span className="text-sm font-semibold text-indigo-800">
-          Bản chỉnh sửa đang chờ duyệt
-        </span>
-        <span className="text-xs text-indigo-500">• {createdDate}</span>
-      </div>
-
-      {diffs.length === 0 ? (
-        <p className="text-sm text-indigo-600">
-          Chỉ thay đổi chi tiết ngưỡng tham chiếu (số ngưỡng giữ nguyên).
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {diffs.map((diff) => (
-            <div key={diff.label} className="grid grid-cols-3 gap-3 rounded-xl bg-white px-3 py-2 text-sm ring-1 ring-indigo-100">
-              <div className="font-medium text-slate-700">{diff.label}</div>
-              <div className="text-slate-500">
-                <span className="text-xs uppercase tracking-wide text-slate-400">Hiện tại: </span>
-                <span className="line-through decoration-slate-300">{diff.current}</span>
-              </div>
-              <div className="text-indigo-700 font-medium">
-                <span className="text-xs uppercase tracking-wide text-indigo-400">Đề xuất: </span>
-                {diff.proposed}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <p className="mt-3 text-xs text-indigo-500">
-        Dữ liệu đang áp dụng chưa bị thay đổi. Bản chỉnh sửa này sẽ được xử lý ở quy trình duyệt (Story 7.4).
-      </p>
-    </div>
-  );
-}
-
 function InfoCell({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -1014,33 +956,10 @@ function InfoCell({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StatusCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: "active" | "draft" | "deactivated";
-}) {
-  const palette =
-    tone === "active"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : tone === "draft"
-        ? "border-amber-200 bg-amber-50 text-amber-700"
-        : "border-slate-200 bg-slate-100 text-slate-600";
-
-  return (
-    <div className={`rounded-2xl border px-4 py-3 ${palette}`}>
-      <div className="text-xs font-semibold uppercase tracking-wide">{label}</div>
-      <div className="mt-2 text-2xl font-bold">{value}</div>
-    </div>
-  );
-}
 
 function statusLabel(status: string) {
   if (status === "active") return "Đang áp dụng";
-  if (status === "draft") return "Bản nháp";
+  if (status === "pending") return "Chờ phê duyệt";
   return "Ngưng áp dụng";
 }
 
@@ -1048,8 +967,8 @@ function statusBadge(status: string) {
   if (status === "active") {
     return "inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700";
   }
-  if (status === "draft") {
-    return "inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700";
+  if (status === "pending") {
+    return "inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700";
   }
   return "inline-flex rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700";
 }

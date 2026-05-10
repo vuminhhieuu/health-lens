@@ -145,6 +145,12 @@ export const ApiPaths = {
     METRICS: `/api/${API_VERSION}/admin/reference-data/metrics`,
     METRIC_BY_ID: (id: string) => `/api/${API_VERSION}/admin/reference-data/metrics/${id}`,
     REACTIVATE: (id: string) => `/api/${API_VERSION}/admin/reference-data/metrics/${id}/reactivate`,
+    CHANGE_SETS: `/api/${API_VERSION}/admin/reference-data/change-sets`,
+    APPROVE_CHANGE_SET: (id: string) => `/api/${API_VERSION}/admin/reference-data/change-sets/${id}/approve`,
+    REJECT_CHANGE_SET: (id: string) => `/api/${API_VERSION}/admin/reference-data/change-sets/${id}/reject`,
+    SUBMIT_CHANGE_SET: (id: string) => `/api/${API_VERSION}/admin/reference-data/change-sets/${id}/submit`,
+    PUBLISH_CHANGE_SET: (id: string) => `/api/${API_VERSION}/admin/reference-data/change-sets/${id}/publish`,
+    CONFIG: `/api/${API_VERSION}/admin/reference-data/config`,
   },
 } as const;
 
