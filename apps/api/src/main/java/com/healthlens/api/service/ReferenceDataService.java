@@ -295,12 +295,22 @@ public class ReferenceDataService {
 
     private Optional<ReferenceMetric> resolveMetric(String metricName) {
         String trimmedName = metricName.trim();
-        Optional<ReferenceMetric> byName = referenceMetricRepository.findByNameIgnoreCase(trimmedName);
+        Optional<ReferenceMetric> byName = referenceMetricRepository.findNonDraftByName(trimmedName).stream().findFirst();
+        if (byName.isEmpty()) {
+            byName = referenceMetricRepository.findByNameIgnoreCase(trimmedName)
+                    .filter(metric -> !"draft".equalsIgnoreCase(metric.getStatus()));
+        }
         if (byName.isPresent()) {
             return byName;
         }
         String normalized = normalizeMetricName(trimmedName);
-        return referenceMetricAliasRepository.findByAliasNormalizedAndActiveTrue(normalized)
+        return referenceMetricAliasRepository
+                .findByAliasNormalizedAndActiveTrueAndMetricStatusNotOrderByMetricStatusAsc(normalized, "draft")
+                .stream()
+                .findFirst()
+                .or(() -> referenceMetricAliasRepository.findByAliasNormalizedAndActiveTrue(normalized)
+                        .filter(alias -> alias.getMetric() == null
+                                || !"draft".equalsIgnoreCase(alias.getMetric().getStatus())))
                 .map(ReferenceMetricAlias::getMetric);
     }
 
@@ -344,7 +354,7 @@ public class ReferenceDataService {
     }
 
     public java.util.List<MetricNameDto> getAllMetricNames() {
-        return referenceMetricRepository.findAllByOrderByNameAsc().stream()
+        return referenceMetricRepository.findAllByStatusOrderByNameAsc("active").stream()
                 .map(m -> new MetricNameDto(m.getName(), m.getDisplayNameVi(), m.getUnit()))
                 .collect(java.util.stream.Collectors.toList());
     }

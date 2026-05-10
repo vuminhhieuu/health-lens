@@ -178,3 +178,5 @@ _bmad/*
 !_bmad/.keep
 .agents/*
 !.agents/.keep
+.codex/*
+!.codex/.keep

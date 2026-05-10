@@ -1,6 +1,6 @@
 # Story 7.2: CRUD chỉ số y tế và ngưỡng tham chiếu
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 
@@ -33,21 +33,21 @@ so that hệ thống diễn giải kết quả đúng chuẩn.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: Reference data CRUD endpoints (AC: #1, #2, #3, #4)
-  - [ ] Thêm cột `status` (`active`/`draft`/`deactivated`) vào `reference_metrics`
-  - [ ] Thêm bảng `reference_data_change_sets(id, admin_id, changes_json, status, created_at, approved_at)` (Flyway V016)
-  - [ ] `GET /api/v1/admin/reference-data/metrics` — danh sách tất cả metrics (kể cả draft)
-  - [ ] `POST /api/v1/admin/reference-data/metrics` — tạo metric draft
-  - [ ] `PUT /api/v1/admin/reference-data/metrics/{id}` — update → tạo change set draft
-  - [ ] `DELETE /api/v1/admin/reference-data/metrics/{id}` → set status `deactivated`
-  - [ ] Validate: minValue < maxValue, không negative cho các chỉ số như Glucose
-- [ ] Task 2 — Web: Admin Reference Data page (AC: #1, #2, #3, #4)
-  - [ ] Tạo `apps/web/src/app/admin/reference-data/page.tsx`
-  - [ ] Table với columns: tên, đơn vị, số ranges, status, actions
-  - [ ] "Thêm chỉ số" form, "Sửa" inline hoặc modal, "Xóa" có confirm
-  - [ ] Edit range trong expandable row
-- [ ] Task 3 — Tests (AC: #1, #2, #4)
-  - [ ] `ReferenceDataAdminServiceTest`: CRUD, validation, deactivation
+- [x] Task 1 — Backend: Reference data CRUD endpoints (AC: #1, #2, #3, #4)
+  - [x] Thêm cột `status` (`active`/`draft`/`deactivated`) vào `reference_metrics`
+  - [x] Thêm bảng `reference_data_change_sets(id, admin_id, changes_json, status, created_at, approved_at)` (Flyway V016)
+  - [x] `GET /api/v1/admin/reference-data/metrics` — danh sách tất cả metrics (kể cả draft)
+  - [x] `POST /api/v1/admin/reference-data/metrics` — tạo metric draft
+  - [x] `PUT /api/v1/admin/reference-data/metrics/{id}` — update → tạo change set draft
+  - [x] `DELETE /api/v1/admin/reference-data/metrics/{id}` → set status `deactivated`
+  - [x] Validate: minValue < maxValue, không negative cho các chỉ số như Glucose
+- [x] Task 2 — Web: Admin Reference Data page (AC: #1, #2, #3, #4)
+  - [x] Tạo `apps/web/src/app/admin/reference-data/page.tsx`
+  - [x] Table với columns: tên, đơn vị, số ranges, status, actions
+  - [x] "Thêm chỉ số" form, "Sửa" inline hoặc modal, "Xóa" có confirm
+  - [x] Edit range trong expandable row
+- [x] Task 3 — Tests (AC: #1, #2, #4)
+  - [x] `ReferenceDataAdminServiceTest`: CRUD, validation, deactivation
 
 ## Dev Notes
 
@@ -89,10 +89,48 @@ void validateRange(ReferenceRange range) {
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+GPT-5
 
 ### Debug Log References
 
+- `./gradlew test --tests com.healthlens.api.service.ReferenceDataAdminServiceTest --tests com.healthlens.api.service.ReferenceDataServiceTest`
+- `pnpm lint src/app/admin/reference-data/page.tsx`
+- `pnpm exec eslint src/app/admin/reference-data/page.tsx src/lib/api/adminApiClient.ts`
+
 ### Completion Notes List
 
+- Thêm migration `V024__admin_reference_data_drafts.sql` để mở rộng `reference_metrics.status` và tạo bảng `reference_data_change_sets`. Dùng `V024` thay cho `V016` vì project đã có migration đến `V022`.
+- Bổ sung `ReferenceDataAdminService` và `AdminReferenceDataController` cho flow list/create/update draft/deactivate metric dành cho admin.
+- Cập nhật `ReferenceDataService` để loại trừ metric draft khỏi luồng reference-data public nhưng vẫn giữ tương thích với test/mock cũ.
+- Sửa mapping `jsonb` cho `reference_data_change_sets.changes_json` để tránh lỗi runtime với PostgreSQL khi create/update change set.
+- Hoàn thiện flow admin: metric draft được sửa trực tiếp, metric deactivated có thể kích hoạt lại, và màn hình admin tách riêng admin API client để redirect đúng về `/admin/login`.
+- Thay placeholder admin page bằng màn hình quản lý metric hoàn chỉnh: modal tạo/sửa, hỗ trợ nhiều ranges, popup xác nhận thay cho `window.confirm`, Việt hóa UI và nhóm chỉ số theo trạng thái.
+
 ### File List
+
+- apps/api/src/main/java/com/healthlens/api/constants/ApiRoutes.java
+- apps/api/src/main/java/com/healthlens/api/controller/AdminReferenceDataController.java
+- apps/api/src/main/java/com/healthlens/api/dto/request/AdminReferenceMetricRequest.java
+- apps/api/src/main/java/com/healthlens/api/dto/request/AdminReferenceRangeRequest.java
+- apps/api/src/main/java/com/healthlens/api/dto/response/AdminReferenceChangeSetResponse.java
+- apps/api/src/main/java/com/healthlens/api/dto/response/AdminReferenceMetricResponse.java
+- apps/api/src/main/java/com/healthlens/api/dto/response/AdminReferenceRangeResponse.java
+- apps/api/src/main/java/com/healthlens/api/entity/ReferenceDataChangeSet.java
+- apps/api/src/main/java/com/healthlens/api/entity/ReferenceMetric.java
+- apps/api/src/main/java/com/healthlens/api/repository/ReferenceDataChangeSetRepository.java
+- apps/api/src/main/java/com/healthlens/api/repository/ReferenceMetricAliasRepository.java
+- apps/api/src/main/java/com/healthlens/api/repository/ReferenceMetricRepository.java
+- apps/api/src/main/java/com/healthlens/api/repository/ReferenceRangeRepository.java
+- apps/api/src/main/java/com/healthlens/api/service/ReferenceDataAdminService.java
+- apps/api/src/main/java/com/healthlens/api/service/ReferenceDataService.java
+- apps/api/src/main/resources/db/migration/V023__admin_reference_data_drafts.sql
+- apps/api/src/test/java/com/healthlens/api/service/ReferenceDataAdminServiceTest.java
+- apps/web/src/app/admin/reference-data/page.tsx
+- apps/web/src/lib/api/adminApiClient.ts
+- apps/web/src/lib/api/routes.ts
+- packages/shared/constants/api.ts
+
+### Change Log
+
+- 2026-05-09: Implemented Story 7.2 admin reference-data CRUD, draft change sets, deactivation flow, and admin UI integration.
+- 2026-05-10: Completed Story 7.2 flow hardening with JSONB persistence fix, multi-range admin editing, admin-specific API client, confirmation popup, and metric reactivation flow.

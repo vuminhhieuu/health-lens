@@ -122,6 +122,8 @@ public final class ApiRoutes {
     // =========================================
     public static final String ADMIN_BASE = API_V1 + "/admin";
     public static final String ADMIN_AUTH_BASE = ADMIN_BASE + "/auth";
+    public static final String ADMIN_REFERENCE_DATA_BASE = ADMIN_BASE + "/reference-data";
+    public static final String ADMIN_REFERENCE_DATA_REACTIVATE = ADMIN_REFERENCE_DATA_BASE + "/metrics/{metricId}/reactivate";
     public static final String ADMIN_AUTH_LOGIN = ADMIN_AUTH_BASE + "/login";
     public static final String ADMIN_AUTH_TOTP_SETUP = ADMIN_AUTH_BASE + "/totp/setup";
     public static final String ADMIN_AUTH_TOTP_VERIFY = ADMIN_AUTH_BASE + "/totp/verify";
