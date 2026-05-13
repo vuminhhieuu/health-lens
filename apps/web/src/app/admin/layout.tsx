@@ -9,9 +9,24 @@ import {
 
 const ADMIN_SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
-const adminNavItems = [
+type AdminNavItem = {
+  name: string;
+  href: string;
+  icon: typeof BarChart3;
+  exact: boolean;
+  /** Pathname bắt đầu bằng một trong các chuỗi này vẫn coi mục này là active (vd. /import dưới reference-data, không gồm /approvals). */
+  alsoActiveWhenPathnameStartsWith?: string[];
+};
+
+const adminNavItems: AdminNavItem[] = [
   { name: "Thống kê", href: "/admin", icon: BarChart3, exact: true },
-  { name: "Dữ liệu tham chiếu", href: "/admin/reference-data", icon: Database, exact: true },
+  {
+    name: "Dữ liệu tham chiếu",
+    href: "/admin/reference-data",
+    icon: Database,
+    exact: true,
+    alsoActiveWhenPathnameStartsWith: ["/admin/reference-data/import"],
+  },
   { name: "Phê duyệt", href: "/admin/reference-data/approvals", icon: ShieldCheck, exact: false },
   { name: "Audit Log", href: "/admin/audit-log", icon: ClipboardList, exact: false },
 ];
@@ -131,9 +146,15 @@ export default function AdminLayout({
           <nav className="flex flex-col gap-1 flex-grow">
             {adminNavItems.map((item) => {
               const Icon = item.icon;
-              const isActive = item.exact
-                ? pathname === item.href
-                : pathname === item.href || pathname?.startsWith(`${item.href}/`);
+              const alsoActive = item.alsoActiveWhenPathnameStartsWith?.some(
+                (prefix) =>
+                  pathname === prefix || (pathname != null && pathname.startsWith(`${prefix}/`)),
+              );
+              const isActive = alsoActive
+                ? true
+                : item.exact
+                  ? pathname === item.href
+                  : pathname === item.href || pathname?.startsWith(`${item.href}/`);
 
               return (
                 <Link

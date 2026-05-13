@@ -20,12 +20,13 @@ import {
   ScanLine,
   PenLine,
   Trash2,
-  Share2,
   FileDown,
+  Share2,
   Building2,
-  Info,
   Heart,
   Apple,
+  Sparkles,
+  ShieldAlert,
 } from "lucide-react";
 import { z } from "zod";
 
@@ -670,43 +671,50 @@ export default function ReviewRecordPage() {
                 <Building2 className="h-3.5 w-3.5" />
                 {displayHospitalName}
               </div>
+              <p className="mt-2 text-xs text-[#6d7a77]">
+                Hồ sơ của: <span className="font-semibold text-[#3d4947]">{profileOwnerLabel}</span>
+              </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {canEdit ? (
                 <button
                   type="button"
+                  title="Chỉnh sửa kết quả"
+                  aria-label="Chỉnh sửa kết quả"
                   onClick={() => setEditMode(true)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#00685f] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#00685f] text-white transition hover:brightness-110"
                 >
                   <Edit2 className="h-4 w-4" />
-                  Chỉnh sửa kết quả
                 </button>
               ) : null}
               <button
                 type="button"
+                title="Chia sẻ"
+                aria-label="Chia sẻ"
                 disabled
-                className="inline-flex items-center gap-2 rounded-xl bg-[#e9f6f3] px-4 py-2 text-sm font-semibold text-[#3d4947]"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#e9f6f3] text-[#3d4947] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Share2 className="h-4 w-4" />
-                Chia sẻ
               </button>
               <button
                 type="button"
+                title="Tải PDF"
+                aria-label="Tải PDF"
                 disabled
-                className="inline-flex items-center gap-2 rounded-xl bg-[#e9f6f3] px-4 py-2 text-sm font-semibold text-[#3d4947]"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#e9f6f3] text-[#3d4947] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <FileDown className="h-4 w-4" />
-                Tải PDF
               </button>
               {canEdit ? (
                 <button
                   type="button"
+                  title="Xóa kết quả"
+                  aria-label="Xóa kết quả"
                   onClick={() => setShowDeleteRecordModal(true)}
                   disabled={isDeletingRecord}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#ffdad6] px-4 py-2 text-sm font-semibold text-[#ba1a1a] disabled:cursor-not-allowed disabled:opacity-70"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#ffdad6] text-[#ba1a1a] disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {isDeletingRecord ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                  {isDeletingRecord ? "Đang xóa..." : "Xóa"}
                 </button>
               ) : null}
             </div>
@@ -715,15 +723,16 @@ export default function ReviewRecordPage() {
             <div className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]">{deleteRecordError}</div>
           ) : null}
 
-          <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-            <article className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#00685f] to-[#008378] p-7 text-white shadow-md lg:col-span-2">
+          {/* ── Zone 1: Status Summary (Gradient Card) ── */}
+          <section>
+            <article className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#00685f] to-[#008378] p-7 text-white shadow-md">
               <div className="relative z-10">
                 <span className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-sm font-bold">
                   <CheckCircle className="h-4 w-4" />
                   {overallSummary}
                 </span>
                 <h2 className="mt-4 text-2xl font-bold">Tổng quan kết quả xét nghiệm</h2>
-                <p className="mt-2 max-w-2xl text-white/85">
+                <p className="mt-2 max-w-2xl text-white/90">
                   {overallSummary === "Bình thường"
                     ? "Các chỉ số chính đang trong ngưỡng an toàn. Tiếp tục duy trì lối sống lành mạnh."
                     : "Một số chỉ số cần theo dõi thêm. Bạn nên xem kỹ phần giải thích và khuyến nghị bên dưới."}
@@ -731,17 +740,53 @@ export default function ReviewRecordPage() {
               </div>
               <div className="pointer-events-none absolute -right-10 -bottom-12 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
             </article>
-            <article className="rounded-[28px] bg-white p-6 shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-wider text-[#3d4947]">Nguồn dữ liệu</p>
-              <p className="mt-2 text-lg font-bold text-[#121e1c]">{displayHospitalName}</p>
-              <p className="mt-5 text-xs text-[#6d7a77]">
-                Mã hồ sơ: <span className="font-mono font-semibold text-[#121e1c]">{recordId}</span>
-              </p>
-              <p className="mt-2 text-xs text-[#6d7a77]">
-                Hồ sơ của: <span className="font-semibold text-[#121e1c]">{profileOwnerLabel}</span>
-              </p>
-            </article>
           </section>
+
+          {/* ── Zone 2: AI Recommendations (White Cards) ── */}
+          {recommendationsData && recommendationGroups.length > 0 && (
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-[#00685f]" />
+                <h3 className="text-sm font-bold uppercase tracking-wider text-[#3d4947]">Khuyến nghị từ AI</h3>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {recommendationGroups.map((group) => {
+                  const GroupIcon = recommendationIcon(group.category);
+                  return (
+                    <article key={group.category} className="rounded-2xl border border-[#bcc9c6]/20 bg-white p-5 shadow-sm">
+                      <div className="mb-3 flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#e9f6f3]">
+                          <GroupIcon className="h-4 w-4 text-[#00685f]" />
+                        </div>
+                        <h4 className="text-sm font-bold text-[#121e1c]">{group.title}</h4>
+                      </div>
+                      <ul className="space-y-2">
+                        {group.items.map((item, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm leading-relaxed text-[#3d4947]">
+                            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#00685f]/40" />
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-start gap-3 rounded-xl border border-[#e8c86e]/40 bg-[#fffbeb] px-4 py-3.5">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#fef3c7]">
+                  <ShieldAlert className="h-4 w-4 text-[#92700e]" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-[#92700e]">Lưu ý quan trọng</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[#78650d]">
+                    {recommendationsData.disclaimer ?? "Thông tin trên được tạo bởi AI, chỉ mang tính tham khảo và không thay thế tư vấn của bác sĩ chuyên khoa."}
+                  </p>
+                </div>
+              </div>
+            </section>
+          )}
 
           <section className="space-y-4">
             <div className="flex items-center justify-between">
@@ -778,45 +823,6 @@ export default function ReviewRecordPage() {
                     <div className="mt-3 flex items-center justify-between text-xs font-extrabold uppercase tracking-wide">
                       <span className="text-[#4e6360]">Ngưỡng: {metricRangeText}</span>
                       <span className={isNormal ? "text-[#00685f]" : "text-[#773215]"}>{recordStatusLabel(metric.status)}</span>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="rounded-[28px] bg-[#e9f6f3] p-7">
-            <div className="mb-4 flex items-center gap-2">
-              <div className="rounded-xl bg-[#d8e5e2] p-2 text-[#00685f]">
-                <Info className="h-4 w-4" />
-              </div>
-              <h3 className="text-2xl font-black tracking-tight text-[#121e1c]">Khuyến nghị từ AI</h3>
-            </div>
-            <div className="mb-5 rounded-2xl bg-[#ffdbce]/50 px-4 py-3 text-sm text-[#773215]">
-              {recommendationsData?.disclaimer ??
-                "Thông tin này chỉ mang tính tham khảo và không thay thế tư vấn của bác sĩ chuyên khoa."}
-            </div>
-            <div className="space-y-3">
-              {recommendationGroups.map((group) => {
-                const GroupIcon = recommendationIcon(group.category);
-                return (
-                  <article key={group.category} className="rounded-3xl bg-white p-5">
-                    <div className="mb-3 flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#deebe8] text-[#00685f]">
-                        <GroupIcon className="h-4 w-4" />
-                      </div>
-                      <h4 className="font-bold text-[#121e1c]">{group.title}</h4>
-                    </div>
-                    <div className="space-y-2">
-                      {group.items.length ? (
-                        group.items.map((item, idx) => (
-                          <p key={`${group.category}-${idx}`} className="text-sm text-[#3d4947]">
-                            - {item}
-                          </p>
-                        ))
-                      ) : (
-                        <p className="text-sm text-[#6d7a77]">Chưa có khuyến nghị cho nhóm này.</p>
-                      )}
                     </div>
                   </article>
                 );

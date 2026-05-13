@@ -16,6 +16,9 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
@@ -253,6 +256,46 @@ public class GlobalExceptionHandler {
         problem.setTitle("Quyền truy cập hồ sơ đã bị thu hồi");
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("errorCode", ProfileAccessRevokedException.ERROR_CODE);
+        return problem;
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ProblemDetail handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex, HttpServletRequest request) {
+        log.warn("Upload too large at {}: {}", request.getRequestURI(), ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.PAYLOAD_TOO_LARGE,
+                "File vượt quá giới hạn upload của máy chủ. Vui lòng chọn file nhỏ hơn (tối đa 10MB)."
+        );
+        problem.setType(URI.create("https://healthlens.vn/errors/payload-too-large"));
+        problem.setTitle("File quá lớn");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        return problem;
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ProblemDetail handleMissingServletRequestPart(
+            MissingServletRequestPartException ex,
+            HttpServletRequest request) {
+        log.warn("Missing multipart part at {}: {}", request.getRequestURI(), ex.getRequestPartName());
+        String detail = "Thiếu phần upload \"%s\". Gửi multipart/form-data với field tên \"file\" chứa file CSV/JSON."
+                .formatted(ex.getRequestPartName() != null ? ex.getRequestPartName() : "file");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
+        problem.setType(URI.create("https://healthlens.vn/errors/missing-part"));
+        problem.setTitle("Thiếu file upload");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        return problem;
+    }
+
+    @ExceptionHandler(MultipartException.class)
+    public ProblemDetail handleMultipartException(MultipartException ex, HttpServletRequest request) {
+        log.warn("Multipart error at {}: {}", request.getRequestURI(), ex.getMessage());
+        String detail = ex.getMessage() != null && !ex.getMessage().isBlank()
+                ? ex.getMessage()
+                : "Không đọc được dữ liệu upload. Kiểm tra gửi đúng multipart (field \"file\").";
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
+        problem.setType(URI.create("https://healthlens.vn/errors/multipart"));
+        problem.setTitle("Lỗi upload");
+        problem.setInstance(URI.create(request.getRequestURI()));
         return problem;
     }
 }

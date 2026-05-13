@@ -89,7 +89,7 @@ apiClient.interceptors.response.use(
         const payload = refreshResponse.data?.data;
         const newAccessToken = payload?.accessToken;
         const refreshedUser = payload?.user as
-          | { id: string; email: string; role: string }
+          | { id: string; email: string; role: string; fullName?: string }
           | undefined;
         const consent: SessionConsent = {
           consentGiven: Boolean(payload?.consentGiven),
@@ -101,7 +101,12 @@ apiClient.interceptors.response.use(
 
         if (newAccessToken) {
           const { user: currentUser } = useAuthStore.getState();
-          const userToPersist = refreshedUser ?? currentUser;
+          // Merge refreshed data with current user to preserve fields like fullName
+          // that may not be present in every refresh response
+          const mergedUser = currentUser
+            ? { ...currentUser, ...refreshedUser, fullName: refreshedUser?.fullName ?? currentUser.fullName }
+            : refreshedUser;
+          const userToPersist = mergedUser ?? currentUser;
           if (userToPersist) {
             useAuthStore.getState().setAuth(userToPersist, newAccessToken, consent);
             await syncActiveConsentVersion();

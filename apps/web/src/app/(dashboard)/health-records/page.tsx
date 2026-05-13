@@ -75,7 +75,6 @@ export default function HealthRecordsPage() {
   const queryClient = useQueryClient();
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [invitingProfileId, setInvitingProfileId] = useState<string | null>(null);
-  const [pendingAccessUpdates, setPendingAccessUpdates] = useState<Record<string, boolean>>({});
   useEffect(() => {
     void apiClient.post(ApiPaths.PROFILES.ENSURE_DEFAULT);
   }, []);
@@ -158,11 +157,6 @@ export default function HealthRecordsPage() {
       );
       void queryClient.invalidateQueries({ queryKey: ["profile-shared-members", invitingProfileId] });
       void queryClient.invalidateQueries({ queryKey: ["shared-profiles"] });
-      setPendingAccessUpdates((prev) => {
-        const next = { ...prev };
-        delete next[email.toLowerCase()];
-        return next;
-      });
       alert("Đã thu hồi quyền truy cập thành công.");
     },
     onError: (error: unknown) => {
