@@ -202,7 +202,7 @@ public class AuthService {
 
         LoginResponse response = new LoginResponse(
                 accessToken,
-                new LoginResponse.UserInfo(user.getId(), user.getEmail(), user.getRole().name()));
+                new LoginResponse.UserInfo(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName()));
 
         return new LoginResult(response, rawRefreshToken);
     }
@@ -251,7 +251,7 @@ public class AuthService {
 
         RefreshResponse response = new RefreshResponse(
                 newAccessToken,
-                new RefreshResponse.UserInfo(user.getId(), user.getEmail(), user.getRole().name()),
+                new RefreshResponse.UserInfo(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName()),
                 consentStatus.isConsentGiven(),
                 consentStatus.getConsentVersion()
         );
@@ -300,7 +300,7 @@ public class AuthService {
 
         LoginResponse response = new LoginResponse(
                 newAccessToken,
-                new LoginResponse.UserInfo(user.getId(), user.getEmail(), user.getRole().name()));
+                new LoginResponse.UserInfo(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName()));
 
         return new LoginResult(response, newRawRefreshToken);
     }

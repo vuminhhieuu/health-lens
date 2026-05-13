@@ -141,7 +141,7 @@ class AuthControllerTest {
                 UUID userId = UUID.randomUUID();
                 LoginResponse response = new LoginResponse(
                                 "eyJhbGciOiJIUzI1NiJ9.test",
-                                new LoginResponse.UserInfo(userId, "user@example.com", "ROLE_USER"));
+                                new LoginResponse.UserInfo(userId, "user@example.com", "ROLE_USER", "Test User"));
                 AuthService.LoginResult result = new AuthService.LoginResult(response, "refresh-token-value");
 
                 when(authService.login(any(LoginRequest.class))).thenReturn(result);
@@ -228,7 +228,7 @@ class AuthControllerTest {
                 UUID userId = UUID.randomUUID();
                 com.healthlens.api.dto.response.RefreshResponse response = new com.healthlens.api.dto.response.RefreshResponse(
                         "new-access-token",
-                        new com.healthlens.api.dto.response.RefreshResponse.UserInfo(userId, "user@example.com", "ROLE_USER"),
+                        new com.healthlens.api.dto.response.RefreshResponse.UserInfo(userId, "user@example.com", "ROLE_USER", "Test User"),
                         true,
                         "1.0"
                 );
@@ -254,7 +254,7 @@ class AuthControllerTest {
                 UUID userId = UUID.randomUUID();
                 com.healthlens.api.dto.response.RefreshResponse response = new com.healthlens.api.dto.response.RefreshResponse(
                         "new-access-token",
-                        new com.healthlens.api.dto.response.RefreshResponse.UserInfo(userId, "user@example.com", "ROLE_USER"),
+                        new com.healthlens.api.dto.response.RefreshResponse.UserInfo(userId, "user@example.com", "ROLE_USER", "Test User"),
                         false,
                         null
                 );
