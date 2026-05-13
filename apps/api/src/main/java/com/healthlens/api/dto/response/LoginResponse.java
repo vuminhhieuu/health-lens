@@ -6,6 +6,6 @@ public record LoginResponse(
         String accessToken,
         UserInfo user
 ) {
-    public record UserInfo(UUID id, String email, String role) {
+    public record UserInfo(UUID id, String email, String role, String fullName) {
     }
 }

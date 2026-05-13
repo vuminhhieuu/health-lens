@@ -13,6 +13,6 @@ public record RefreshResponse(
         boolean consentGiven,
         String consentVersion
 ) {
-    public record UserInfo(UUID id, String email, String role) {
+    public record UserInfo(UUID id, String email, String role, String fullName) {
     }
 }
