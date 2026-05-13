@@ -28,6 +28,8 @@ import {
   Apple,
   Sparkles,
   ShieldAlert,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { z } from "zod";
 
@@ -36,6 +38,7 @@ import { ALLOWED_FILE_TYPES, ApiPaths, UPLOAD_MAX_SIZE_BYTES } from "@healthlens
 import { HealthMetricCard } from "@/components/ui/HealthMetricCard";
 import { OcrFailureScreen } from "@/components/features/upload/OcrFailureScreen";
 import { DeleteRecordModal } from "@/components/features/health-records/DeleteRecordModal";
+import { toThreeLineExplanation } from "@/lib/utils/explanationFormatter";
 
 type MetricDto = {
   name: string;
@@ -154,6 +157,7 @@ export default function ReviewRecordPage() {
   const [showFullDoc, setShowFullDoc] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [selectedMetricIndex, setSelectedMetricIndex] = useState<number | null>(null);
   const [isKeepingPartial, setIsKeepingPartial] = useState(false);
   const [isRetryUploading, setIsRetryUploading] = useState(false);
   const [retryUploadError, setRetryUploadError] = useState<string | null>(null);
@@ -211,6 +215,23 @@ export default function ReviewRecordPage() {
     () => groupRecommendations(recommendationsData?.recommendations ?? []),
     [recommendationsData?.recommendations]
   );
+
+  const selectedMetric = selectedMetricIndex !== null ? metrics[selectedMetricIndex] : null;
+  const selectedMetricStaticExplanation = selectedMetric?.explanation?.trim() || "";
+  const { data: popupExplanationData, isLoading: isExplanationLoading } = useQuery({
+    queryKey: ["metric-explanation", recordId, selectedMetric?.name, selectedMetric?.value, selectedMetric?.status],
+    queryFn: async () => {
+      if (!recordId || !selectedMetric) return { explanation: "", source: "fallback" };
+      const res = await apiClient.get(ApiPaths.HEALTH_RECORDS.EXPLANATION(recordId, selectedMetric.name));
+      const payload = res.data?.data;
+      return {
+        explanation: (payload?.explanation as string | undefined) ?? "",
+        source: (payload?.source as string | undefined) ?? "fallback",
+      };
+    },
+    enabled: selectedMetricIndex !== null && !selectedMetricStaticExplanation && Boolean(recordId),
+    staleTime: 7 * 24 * 60 * 60 * 1000,
+  });
 
   const initialized = useRef(false);
   const initialSnapshotRef = useRef<string>("");
@@ -804,7 +825,19 @@ export default function ReviewRecordPage() {
                 const metricPercent = compactMetricPercent(metric);
                 const isNormal = (metric.status ?? "no_data") === "normal";
                 return (
-                  <article key={`${metric.name}-${idx}`} className="rounded-3xl bg-white p-5 shadow-sm">
+                  <article
+                    key={`${metric.name}-${idx}`}
+                    role="button"
+                    tabIndex={0}
+                    className="group cursor-pointer rounded-3xl bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:ring-2 hover:ring-[#00685f]/15"
+                    onClick={() => setSelectedMetricIndex(idx)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedMetricIndex(idx);
+                      }
+                    }}
+                  >
                     <div className="mb-5 flex items-start justify-between gap-2">
                       <span className="line-clamp-2 text-xs font-extrabold tracking-wide text-[#3d4947] uppercase">
                         {metric.displayNameVi || metric.name}
@@ -831,25 +864,148 @@ export default function ReviewRecordPage() {
             </div>
           </section>
 
-          <section className="space-y-3">
-            <h4 className="text-sm font-bold uppercase tracking-wide text-[#3d4947]">Giải thích chi tiết từng chỉ số</h4>
-            {metrics.map((metric, idx) => (
-              <HealthMetricCard
-                key={`${metric.name}-detail-${idx}`}
-                recordId={recordId}
-                metricName={metric.name}
-                displayNameVi={metric.displayNameVi}
-                value={metric.value}
-                unit={metric.unit}
-                referenceRange={metric.referenceRange}
-                rangeContext={metric.rangeContext}
-                referenceRangeSource={metric.referenceRangeSource}
-                status={metric.status ?? "no_data"}
-                critical={metric.critical}
-                explanation={metric.explanation}
-              />
-            ))}
-          </section>
+          {/* Metric Detail Popup */}
+          {selectedMetricIndex !== null && metrics[selectedMetricIndex] && (() => {
+            const m = metrics[selectedMetricIndex];
+            const mValue = m.value?.trim() || "--";
+            const mUnit = m.unit?.trim() || "";
+            const mPercent = compactMetricPercent(m);
+            const mIsNormal = (m.status ?? "no_data") === "normal";
+            const mDisplayRef = m.referenceRange
+              ? `${m.referenceRange.min} - ${m.referenceRange.max} ${m.referenceRange.unit ?? m.unit}`
+              : "Không có dữ liệu tham chiếu";
+            const mRangeCtx = m.rangeContext;
+            const mCtxNote = mRangeCtx && (mRangeCtx.gender || mRangeCtx.ageRange)
+              ? `Ngưỡng áp dụng cho: ${[mRangeCtx.gender === "female" ? "Nữ" : mRangeCtx.gender === "male" ? "Nam" : null, mRangeCtx.ageRange ? `${mRangeCtx.ageRange} tuổi` : null].filter(Boolean).join(", ")}`
+              : null;
+            return (
+              <div
+                className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+                onClick={() => setSelectedMetricIndex(null)}
+              >
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="metric-detail-title"
+                  className="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Header */}
+                  <div className="relative overflow-hidden bg-gradient-to-br from-[#00685f] to-[#008378] px-6 pt-6 pb-5 text-white">
+                    <div className="relative z-10">
+                      <div className="flex items-start justify-between gap-3">
+                        <h3 id="metric-detail-title" className="text-lg font-bold leading-snug">
+                          {m.displayNameVi || m.name}
+                        </h3>
+                        <button
+                          type="button"
+                          aria-label="Đóng chi tiết chỉ số"
+                          onClick={() => setSelectedMetricIndex(null)}
+                          className="-mr-1 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 transition hover:bg-white/30"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="mt-4 flex items-end gap-2">
+                        <span className="text-4xl font-black tracking-tight">{mValue}</span>
+                        <span className="pb-0.5 text-sm font-semibold text-white/80">{mUnit}</span>
+                      </div>
+                      <div className="mt-3 h-1.5 w-full rounded-full bg-white/20">
+                        <div className="h-full rounded-full bg-white/80 transition-all" style={{ width: `${mPercent}%` }} />
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-xs font-bold">
+                        <span className="text-white/70">Ngưỡng: {compactRangeText(m)}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                          mIsNormal ? "bg-white/20 text-white" : "bg-[#ffdad6] text-[#ba1a1a]"
+                        }`}>
+                          {recordStatusLabel(m.status)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="pointer-events-none absolute -right-8 -bottom-10 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
+                  </div>
+
+                  {/* Detail Body */}
+                  <div className="px-6 py-5 space-y-3">
+                    <div className="rounded-xl bg-[#f7fbfa] p-4 text-sm leading-relaxed text-[#35514c] space-y-2.5">
+                      <p>
+                        <span className="font-semibold">Ngưỡng tham chiếu: </span>
+                        {mDisplayRef}
+                      </p>
+                      {m.referenceRangeSource && m.referenceRangeSource !== "none" ? (
+                        <p>
+                          <span className="font-semibold">Nguồn ngưỡng: </span>
+                          {m.referenceRangeSource === "document" ? "Theo phiếu xét nghiệm" : "Theo hệ thống tham chiếu"}
+                        </p>
+                      ) : null}
+                      {m.referenceRangeSource === "system" ? (
+                        <p>
+                          <span className="font-semibold">Ngữ cảnh ngưỡng: </span>
+                          {mCtxNote ?? "Ngưỡng tham chiếu chung"}
+                        </p>
+                      ) : null}
+                      {m.critical ? (
+                        <p className="rounded-lg bg-[#fff2f2] px-3 py-2 text-[#ba1a1a]">
+                          Chỉ số có dấu hiệu vượt ngưỡng nguy cấp, nên liên hệ bác sĩ để được tư vấn sớm.
+                      </p>
+                      ) : null}
+                      {(() => {
+                        const staticExp = m.explanation?.trim() || "";
+                        const explanationText = staticExp
+                          ? toThreeLineExplanation(staticExp)
+                          : !isExplanationLoading
+                            ? toThreeLineExplanation(popupExplanationData?.explanation)
+                            : "";
+                        const showSkeleton = !staticExp && isExplanationLoading;
+                        return (
+                          <>
+                            {showSkeleton ? (
+                              <div className="space-y-2 pt-1">
+                                <div className="h-3 w-full animate-pulse rounded bg-[#d4e7e3]" />
+                                <div className="h-3 w-4/5 animate-pulse rounded bg-[#d4e7e3]" />
+                                <div className="h-3 w-3/5 animate-pulse rounded bg-[#d4e7e3]" />
+                              </div>
+                            ) : null}
+                            {explanationText ? (
+                              <p className="whitespace-pre-line">
+                                <span className="font-semibold">Giải thích: </span>
+                                {explanationText}
+                              </p>
+                            ) : null}
+                          </>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Navigation arrows */}
+                    <div className="flex items-center justify-between pt-1">
+                      <button
+                        type="button"
+                        disabled={selectedMetricIndex <= 0}
+                        onClick={() => setSelectedMetricIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev))}
+                        className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold text-[#00685f] transition hover:bg-[#e9f6f3] disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <ChevronUp className="h-3.5 w-3.5 -rotate-90" />
+                        Trước
+                      </button>
+                      <span className="text-xs text-[#6d7a77]">
+                        {selectedMetricIndex + 1} / {metrics.length}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={selectedMetricIndex >= metrics.length - 1}
+                        onClick={() => setSelectedMetricIndex((prev) => (prev !== null && prev < metrics.length - 1 ? prev + 1 : prev))}
+                        className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold text-[#00685f] transition hover:bg-[#e9f6f3] disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Sau
+                        <ChevronDown className="h-3.5 w-3.5 -rotate-90" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {!canEdit ? (
             <p className="rounded-xl border border-[#d7e5e1] bg-white px-4 py-3 text-sm text-[#4e6360]">
@@ -1443,6 +1599,8 @@ function recordStatusLabel(status?: MetricDto["status"]): string {
   if (status === "normal") return "Bình thường";
   return "Không rõ";
 }
+
+
 
 function recommendationCategory(item: string): RecommendationCategory {
   const content = item.toLowerCase();
