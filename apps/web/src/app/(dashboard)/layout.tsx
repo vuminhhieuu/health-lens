@@ -26,6 +26,7 @@ export default function DashboardLayout({
   const user = useAuthStore((s) => s.user);
 
   const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,6 +48,32 @@ export default function DashboardLayout({
       router.replace(`/login?returnUrl=${encodeURIComponent(returnPath || "/home")}`);
     }
   }, [isLoading, isAuthenticated, router]);
+
+  // Derive display name: prefer auth store fullName, fallback to /users/me API
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // Fast path: use fullName already in auth store (from login/refresh)
+    if (user?.fullName) {
+      const parts = user.fullName.trim().split(/\s+/);
+      setDisplayName(parts.slice(-2).join(" "));
+      return;
+    }
+
+    // Slow path: fetch from API only when store lacks fullName
+    let cancelled = false;
+    apiClient.get(API_ROUTES.USERS.ME)
+      .then((res) => {
+        if (cancelled) return;
+        const fullName: string | undefined = res.data?.data?.fullName;
+        if (fullName) {
+          const parts = fullName.trim().split(/\s+/);
+          setDisplayName(parts.slice(-2).join(" "));
+        }
+      })
+      .catch(() => { /* ignore — will fall back to email */ });
+    return () => { cancelled = true; };
+  }, [isAuthenticated, user?.fullName]);
 
   if (isLoading) {
     return (
@@ -188,8 +215,9 @@ export default function DashboardLayout({
                 <User className="w-6 h-6" />
               </div>
               <div>
-                <h4 className="font-bold text-[#005049] line-clamp-1">{user?.email || "Người dùng"}</h4>
-                <p className="text-xs text-[#6d7a77]">Vai trò: {user?.role || "USER"}</p>
+                <h4 className="font-bold text-[#005049] line-clamp-1">
+                  {displayName || user?.email || "Người dùng"}
+                </h4>
               </div>
             </div>
           </div>

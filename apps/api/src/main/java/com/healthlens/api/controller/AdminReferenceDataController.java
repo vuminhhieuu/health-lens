@@ -2,14 +2,18 @@ package com.healthlens.api.controller;
 
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.AdminReferenceMetricRequest;
+import com.healthlens.api.dto.request.AdminReferenceImportConfirmRequest;
 import com.healthlens.api.dto.request.AdminRejectChangeSetRequest;
 import com.healthlens.api.dto.response.AdminChangeSetDetailResponse;
 import com.healthlens.api.dto.response.AdminReferenceChangeSetResponse;
+import com.healthlens.api.dto.response.AdminReferenceImportConfirmResponse;
+import com.healthlens.api.dto.response.AdminReferenceImportPreviewResponse;
 import com.healthlens.api.dto.response.AdminReferenceMetricResponse;
 import com.healthlens.api.service.ReferenceDataAdminService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,6 +22,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -37,6 +42,22 @@ public class AdminReferenceDataController {
     public ResponseEntity<Map<String, Object>> getMetrics() {
         List<AdminReferenceMetricResponse> metrics = referenceDataAdminService.listMetrics();
         return ResponseEntity.ok(Map.of("data", metrics));
+    }
+
+    @PostMapping("/import/preview")
+    public ResponseEntity<Map<String, Object>> previewImport(@RequestParam("file") MultipartFile file) {
+        AdminReferenceImportPreviewResponse response = referenceDataAdminService.previewImport(file);
+        return ResponseEntity.ok(Map.of("data", response));
+    }
+
+    @PostMapping("/import/confirm")
+    public ResponseEntity<Map<String, Object>> confirmImport(
+            Authentication authentication,
+            @Valid @RequestBody AdminReferenceImportConfirmRequest request
+    ) {
+        UUID adminId = UUID.fromString(authentication.getName());
+        AdminReferenceImportConfirmResponse response = referenceDataAdminService.confirmImport(adminId, request.importId());
+        return ResponseEntity.ok(Map.of("data", response));
     }
 
     @PostMapping("/metrics")

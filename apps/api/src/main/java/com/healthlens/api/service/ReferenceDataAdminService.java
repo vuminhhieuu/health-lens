@@ -5,6 +5,10 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.request.AdminReferenceMetricRequest;
 import com.healthlens.api.dto.request.AdminReferenceRangeRequest;
+import com.healthlens.api.dto.response.AdminReferenceImportConfirmResponse;
+import com.healthlens.api.dto.response.AdminReferenceImportErrorRowResponse;
+import com.healthlens.api.dto.response.AdminReferenceImportPreviewResponse;
+import com.healthlens.api.dto.response.AdminReferenceImportPreviewRowResponse;
 import com.healthlens.api.dto.response.AdminChangeSetDetailResponse;
 import com.healthlens.api.dto.response.AdminPendingChangeSetSummary;
 import com.healthlens.api.dto.response.AdminReferenceChangeSetResponse;
@@ -26,11 +30,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,6 +48,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -49,6 +59,8 @@ public class ReferenceDataAdminService {
     private static final List<String> NON_NEGATIVE_METRICS = List.of(
             "glucose", "hba1c", "cholesterol", "triglycerides", "hdl", "ldl"
     );
+    private static final long IMPORT_FILE_MAX_BYTES = 5L * 1024 * 1024;
+    private static final Set<String> SUPPORTED_IMPORT_EXTENSIONS = Set.of("csv", "json");
 
     private final ReferenceMetricRepository referenceMetricRepository;
     private final ReferenceRangeRepository referenceRangeRepository;
@@ -56,6 +68,7 @@ public class ReferenceDataAdminService {
     private final ReferenceRangeAuditLogRepository referenceRangeAuditLogRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final Map<UUID, ImportPreviewSession> importPreviewSessions = new ConcurrentHashMap<>();
 
     public ReferenceDataAdminService(
             ReferenceMetricRepository referenceMetricRepository,
@@ -257,6 +270,110 @@ public class ReferenceDataAdminService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public AdminReferenceImportPreviewResponse previewImport(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng chọn file CSV hoặc JSON để import.");
+        }
+        if (file.getSize() > IMPORT_FILE_MAX_BYTES) {
+            throw new IllegalArgumentException("File vượt quá 5MB. Vui lòng chọn file nhỏ hơn.");
+        }
+
+        String extension = resolveExtension(file.getOriginalFilename());
+        if (!SUPPORTED_IMPORT_EXTENSIONS.contains(extension)) {
+            throw new IllegalArgumentException("Chỉ hỗ trợ định dạng CSV hoặc JSON.");
+        }
+
+        List<ImportRowEnvelope> rawRows = parseImportFileRaw(file, extension);
+        if (rawRows.isEmpty()) {
+            throw new IllegalArgumentException("File import không có dữ liệu.");
+        }
+
+        List<AdminReferenceImportPreviewRowResponse> validRows = new ArrayList<>();
+        List<AdminReferenceImportErrorRowResponse> errorRows = new ArrayList<>();
+
+        for (ImportRowEnvelope raw : rawRows) {
+            try {
+                ImportRowCandidate candidate = ImportRowCandidate.fromMap(raw.line(), raw.data());
+                AdminReferenceRangeRequest range = candidate.toRangeRequest();
+                validateRange(candidate.metricName(), range);
+                validRows.add(candidate.toPreviewRow());
+            } catch (Exception ex) {
+                errorRows.add(new AdminReferenceImportErrorRowResponse(raw.line(), ex.getMessage()));
+            }
+        }
+
+        UUID importId = UUID.randomUUID();
+        importPreviewSessions.put(importId, new ImportPreviewSession(importId, validRows, errorRows));
+        return new AdminReferenceImportPreviewResponse(importId, validRows, errorRows);
+    }
+
+    @Transactional
+    public AdminReferenceImportConfirmResponse confirmImport(UUID adminId, UUID importId) {
+        ImportPreviewSession session = importPreviewSessions.get(importId);
+        if (session == null) {
+            throw new IllegalArgumentException("Không tìm thấy import preview hoặc preview đã hết hạn.");
+        }
+        if (session.validRows().isEmpty()) {
+            throw new IllegalStateException("Không có dòng hợp lệ để tạo change set.");
+        }
+
+        Map<MetricKey, List<AdminReferenceImportPreviewRowResponse>> groupedRows = session.validRows()
+                .stream()
+                .collect(Collectors.groupingBy(
+                        row -> new MetricKey(row.metricName(), row.displayNameVi(), row.unit()),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+
+        List<UUID> changeSetIds = new ArrayList<>();
+        for (Map.Entry<MetricKey, List<AdminReferenceImportPreviewRowResponse>> entry : groupedRows.entrySet()) {
+            MetricKey key = entry.getKey();
+            List<AdminReferenceRangeRequest> ranges = entry.getValue().stream()
+                    .map(row -> new AdminReferenceRangeRequest(
+                            row.minValue(),
+                            row.maxValue(),
+                            row.minValue(),
+                            row.maxValue(),
+                            row.gender(),
+                            row.minAge(),
+                            row.maxAge()
+                    ))
+                    .toList();
+
+            validateRangesNoOverlap(ranges);
+            AdminReferenceMetricRequest request = new AdminReferenceMetricRequest(
+                    key.metricName(),
+                    key.displayNameVi(),
+                    key.unit(),
+                    ranges
+            );
+            validateMetricRequest(request);
+
+            UUID metricId = referenceMetricRepository
+                    .findByNameIgnoreCase(key.metricName().trim())
+                    .map(ReferenceMetric::getId)
+                    .orElse(null);
+            UUID changeSetId = persistChangeSet(
+                    adminId,
+                    metricId,
+                    "METRIC",
+                    metricId == null ? "CREATE" : "UPDATE",
+                    buildSnapshotForImport(metricId, request),
+                    "draft"
+            );
+            changeSetIds.add(changeSetId);
+        }
+
+        importPreviewSessions.remove(importId);
+        return new AdminReferenceImportConfirmResponse(
+                importId,
+                changeSetIds.size(),
+                changeSetIds,
+                "Đã tạo change set nháp từ dữ liệu import."
+        );
+    }
+
     private void validateMetricRequest(AdminReferenceMetricRequest request) {
         String metricName = request.name().trim();
         request.ranges().forEach(range -> validateRange(metricName, range));
@@ -438,6 +555,236 @@ public class ReferenceDataAdminService {
                 .replace("Đ", "D")
                 .toLowerCase(Locale.ROOT)
                 .replaceAll("[^a-z0-9]", "");
+    }
+
+    private List<ImportRowEnvelope> parseImportFileRaw(MultipartFile file, String extension) {
+        try {
+            if ("json".equals(extension)) {
+                return parseJsonImportRaw(file);
+            }
+            return parseCsvImportRaw(file);
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("Không thể đọc nội dung file import.");
+        }
+    }
+
+    private List<ImportRowEnvelope> parseJsonImportRaw(MultipartFile file) throws IOException {
+        List<Map<String, Object>> rows = objectMapper.readValue(file.getBytes(), new TypeReference<>() {});
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+        List<ImportRowEnvelope> result = new ArrayList<>();
+        int line = 1;
+        for (Map<String, Object> row : rows) {
+            result.add(new ImportRowEnvelope(line, row == null ? Map.of() : row));
+            line++;
+        }
+        return result;
+    }
+
+    private List<ImportRowEnvelope> parseCsvImportRaw(MultipartFile file) {
+        String content;
+        try {
+            content = new String(file.getBytes(), StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("Không thể đọc nội dung file CSV.");
+        }
+        String[] lines = content.split("\\r?\\n");
+        if (lines.length < 2) {
+            return List.of();
+        }
+
+        List<String> headers = parseCsvLine(lines[0]).stream()
+                .map(this::normalizeHeader)
+                .toList();
+        List<ImportRowEnvelope> result = new ArrayList<>();
+
+        for (int i = 1; i < lines.length; i++) {
+            if (lines[i].isBlank()) {
+                continue;
+            }
+            List<String> values = parseCsvLine(lines[i]);
+            Map<String, Object> row = new LinkedHashMap<>();
+            for (int col = 0; col < headers.size(); col++) {
+                String value = col < values.size() ? values.get(col) : "";
+                row.put(headers.get(col), value);
+            }
+            result.add(new ImportRowEnvelope(i + 1, row));
+        }
+        return result;
+    }
+
+    private record ImportRowEnvelope(int line, Map<String, Object> data) {}
+
+    private List<String> parseCsvLine(String line) {
+        if (line == null || line.isEmpty()) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i = 0; i < line.length(); i++) {
+            char ch = line.charAt(i);
+            if (ch == '"') {
+                if (inQuotes && i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    current.append('"');
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (ch == ',' && !inQuotes) {
+                result.add(current.toString().trim());
+                current.setLength(0);
+            } else {
+                current.append(ch);
+            }
+        }
+        result.add(current.toString().trim());
+        return result;
+    }
+
+    private String normalizeHeader(String header) {
+        return header == null ? "" : header.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String resolveExtension(String filename) {
+        if (filename == null || !filename.contains(".")) {
+            return "";
+        }
+        String[] parts = filename.toLowerCase(Locale.ROOT).split("\\.");
+        return parts[parts.length - 1];
+    }
+
+    private String asString(Object value) {
+        return value == null ? "" : value.toString().trim();
+    }
+
+    private Map<String, Object> buildSnapshotForImport(UUID metricId, AdminReferenceMetricRequest request) {
+        if (metricId != null) {
+            ReferenceMetric metric = referenceMetricRepository.findById(metricId)
+                    .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy metric hiện hữu để cập nhật."));
+            return buildSnapshot(metric, request, "pending");
+        }
+        ReferenceMetric transientMetric = new ReferenceMetric();
+        transientMetric.setId(UUID.randomUUID());
+        transientMetric.setName(request.name());
+        transientMetric.setDisplayNameVi(request.displayNameVi());
+        transientMetric.setUnit(request.unit());
+        transientMetric.setStatus("pending");
+        return buildSnapshot(transientMetric, request, "pending");
+    }
+
+    private record ImportPreviewSession(
+            UUID importId,
+            List<AdminReferenceImportPreviewRowResponse> validRows,
+            List<AdminReferenceImportErrorRowResponse> errorRows
+    ) {
+    }
+
+    private record MetricKey(String metricName, String displayNameVi, String unit) {
+    }
+
+    private record ImportRowCandidate(
+            int line,
+            String metricName,
+            String displayNameVi,
+            String unit,
+            BigDecimal minValue,
+            BigDecimal maxValue,
+            String gender,
+            Integer minAge,
+            Integer maxAge
+    ) {
+        private static final Set<String> MALE_VALUES = Set.of("male", "m", "nam");
+        private static final Set<String> FEMALE_VALUES = Set.of("female", "f", "nu", "nữ");
+
+        static ImportRowCandidate fromMap(int line, Map<String, Object> row) {
+            String metricName = pickFirst(row, "metricname", "metric_name");
+            String displayNameVi = pickFirst(row, "displaynamevi", "display_name_vi", "displayname");
+            String unit = pickFirst(row, "unit");
+            BigDecimal minValue = toDecimal(pickFirst(row, "minvalue", "min"));
+            BigDecimal maxValue = toDecimal(pickFirst(row, "maxvalue", "max"));
+            String gender = normalizeGender(pickFirst(row, "gender"));
+            Integer minAge = toIntegerValue(pickFirst(row, "minage", "agemin"));
+            Integer maxAge = toIntegerValue(pickFirst(row, "maxage", "agemax"));
+
+            if (metricName.isBlank()) {
+                throw new IllegalArgumentException("Thiếu metricName.");
+            }
+            if (displayNameVi.isBlank()) {
+                throw new IllegalArgumentException("Thiếu displayNameVi.");
+            }
+            if (unit.isBlank()) {
+                throw new IllegalArgumentException("Thiếu unit.");
+            }
+            if (minValue == null || maxValue == null) {
+                throw new IllegalArgumentException("Thiếu minValue hoặc maxValue.");
+            }
+            return new ImportRowCandidate(line, metricName, displayNameVi, unit, minValue, maxValue, gender, minAge, maxAge);
+        }
+
+        AdminReferenceRangeRequest toRangeRequest() {
+            return new AdminReferenceRangeRequest(minValue, maxValue, minValue, maxValue, gender, minAge, maxAge);
+        }
+
+        AdminReferenceImportPreviewRowResponse toPreviewRow() {
+            return new AdminReferenceImportPreviewRowResponse(
+                    line, metricName, displayNameVi, unit, minValue, maxValue, gender, minAge, maxAge
+            );
+        }
+
+        private static String pickFirst(Map<String, Object> row, String... keys) {
+            for (String key : keys) {
+                if (row.containsKey(key)) {
+                    Object value = row.get(key);
+                    return value == null ? "" : value.toString().trim();
+                }
+            }
+            for (Map.Entry<String, Object> entry : row.entrySet()) {
+                String normalizedKey = entry.getKey() == null ? "" : entry.getKey().trim().toLowerCase(Locale.ROOT);
+                if (Arrays.asList(keys).contains(normalizedKey)) {
+                    Object value = entry.getValue();
+                    return value == null ? "" : value.toString().trim();
+                }
+            }
+            return "";
+        }
+
+        private static BigDecimal toDecimal(String value) {
+            if (value == null || value.isBlank()) {
+                return null;
+            }
+            try {
+                return new BigDecimal(value);
+            } catch (NumberFormatException ex) {
+                throw new IllegalArgumentException("Giá trị số không hợp lệ: " + value);
+            }
+        }
+
+        private static Integer toIntegerValue(String value) {
+            if (value == null || value.isBlank()) {
+                return null;
+            }
+            try {
+                return Integer.parseInt(value);
+            } catch (NumberFormatException ex) {
+                throw new IllegalArgumentException("Giá trị tuổi không hợp lệ: " + value);
+            }
+        }
+
+        private static String normalizeGender(String value) {
+            if (value == null || value.isBlank()) {
+                return null;
+            }
+            String normalized = value.trim().toLowerCase(Locale.ROOT);
+            if (MALE_VALUES.contains(normalized)) {
+                return "male";
+            }
+            if (FEMALE_VALUES.contains(normalized)) {
+                return "female";
+            }
+            throw new IllegalArgumentException("Giá trị gender không hợp lệ: " + value);
+        }
     }
 
     @SuppressWarnings("unchecked")

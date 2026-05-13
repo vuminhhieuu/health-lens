@@ -12,7 +12,6 @@ import {
   FileEdit,
   Loader2,
   RefreshCcw,
-  Send,
   ShieldCheck,
   X,
   XCircle,
@@ -170,6 +169,9 @@ export default function ApprovalsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [rejectDialogId, setRejectDialogId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [bulkRejectOpen, setBulkRejectOpen] = useState(false);
+  const [bulkRejectReason, setBulkRejectReason] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState<{
     type: "success" | "error";
     message: string;
@@ -211,15 +213,45 @@ export default function ApprovalsPage() {
     });
   }, [queryClient]);
 
-  const approveMutation = useMutation({
-    mutationFn: async (changeSetId: string) => {
-      const response = await adminApiClient.post(
-        API_ROUTES.ADMIN_REFERENCE_DATA.APPROVE_CHANGE_SET(changeSetId)
+  const approveManyMutation = useMutation({
+    mutationFn: async (changeSetIds: string[]) => {
+      await Promise.all(
+        changeSetIds.map((changeSetId) =>
+          adminApiClient.post(API_ROUTES.ADMIN_REFERENCE_DATA.APPROVE_CHANGE_SET(changeSetId)),
+        ),
       );
-      return response.data.data as { message: string };
+      return { approvedCount: changeSetIds.length };
     },
     onSuccess: async (data) => {
-      setNotice({ type: "success", message: data.message });
+      setNotice({
+        type: "success",
+        message: `Đã phê duyệt ${data.approvedCount} change set.`,
+      });
+      setSelectedIds(new Set());
+      await reloadList();
+    },
+    onError: (error) => {
+      setNotice({ type: "error", message: parseApiError(error) });
+    },
+  });
+
+  const rejectManyMutation = useMutation({
+    mutationFn: async ({ changeSetIds, reason }: { changeSetIds: string[]; reason: string }) => {
+      await Promise.all(
+        changeSetIds.map((changeSetId) =>
+          adminApiClient.post(API_ROUTES.ADMIN_REFERENCE_DATA.REJECT_CHANGE_SET(changeSetId), { reason }),
+        ),
+      );
+      return { rejectedCount: changeSetIds.length };
+    },
+    onSuccess: async (data) => {
+      setNotice({
+        type: "success",
+        message: `Đã từ chối ${data.rejectedCount} change set.`,
+      });
+      setBulkRejectOpen(false);
+      setBulkRejectReason("");
+      setSelectedIds(new Set());
       await reloadList();
     },
     onError: (error) => {
@@ -253,6 +285,14 @@ export default function ApprovalsPage() {
   });
 
   const pendingCount = changeSets.length;
+  const selectableIds = useMemo(
+    () => changeSets.filter((cs) => adminIdentity?.id !== cs.adminId).map((cs) => cs.id),
+    [adminIdentity?.id, changeSets],
+  );
+  const allSelected =
+    selectableIds.length > 0 && selectedIds.size === selectableIds.length;
+  const selectedCount = selectedIds.size;
+  const isBulkActionPending = approveManyMutation.isPending || rejectManyMutation.isPending;
 
   if (isConfigLoading) {
     return (
@@ -314,25 +354,52 @@ export default function ApprovalsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
-            <Clock className="h-4 w-4 text-amber-600" />
-            <span className="font-semibold text-amber-700">
-              {pendingCount}
-            </span>
-            <span className="text-amber-600">đang chờ duyệt</span>
-          </div>
+        <div className="w-full lg:w-auto">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:w-[440px]">
+            <div className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 text-sm">
+              <Clock className="h-4 w-4 text-amber-600" />
+              <span className="font-semibold text-amber-700">{pendingCount}</span>
+              <span className="text-amber-600">đang chờ duyệt</span>
+            </div>
 
-          <button
-            type="button"
-            onClick={() => void reloadList()}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-teal-200 hover:text-teal-700"
-          >
-            <RefreshCcw
-              className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}
-            />
-            Làm mới
-          </button>
+            <button
+              type="button"
+              onClick={() => void reloadList()}
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 shadow-sm transition hover:border-teal-200 hover:text-teal-700"
+            >
+              <RefreshCcw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+              Làm mới
+            </button>
+
+            <button
+              type="button"
+              disabled={isBulkActionPending || selectedCount === 0}
+              onClick={() => void approveManyMutation.mutateAsync(Array.from(selectedIds))}
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+              title={selectedCount === 0 ? "Chọn change set để phê duyệt." : undefined}
+            >
+              {approveManyMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+              Phê duyệt {selectedCount > 0 ? `(${selectedCount})` : ""}
+            </button>
+
+            <button
+              type="button"
+              disabled={isBulkActionPending || selectedCount === 0}
+              onClick={() => {
+                setBulkRejectOpen(true);
+                setBulkRejectReason("");
+              }}
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-white px-4 text-sm font-semibold text-rose-600 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+              title={selectedCount === 0 ? "Chọn change set để từ chối." : undefined}
+            >
+              <XCircle className="h-4 w-4" />
+              Từ chối {selectedCount > 0 ? `(${selectedCount})` : ""}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -384,7 +451,23 @@ export default function ApprovalsPage() {
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-slate-500">
                 <tr>
-                  <th className="w-10 px-4 py-3"></th>
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-200"
+                      checked={allSelected}
+                      disabled={approveManyMutation.isPending || selectableIds.length === 0}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setSelectedIds(checked ? new Set(selectableIds) : new Set());
+                      }}
+                      title={
+                        selectableIds.length === 0
+                          ? "Không có change set nào có thể chọn (không thể tự phê duyệt)."
+                          : "Chọn tất cả"
+                      }
+                    />
+                  </th>
                   <th className="px-4 py-3 font-medium">Loại</th>
                   <th className="px-4 py-3 font-medium">Thao tác</th>
                   <th className="px-4 py-3 font-medium">Tóm tắt thay đổi</th>
@@ -399,23 +482,48 @@ export default function ApprovalsPage() {
                   const expanded = expandedId === cs.id;
                   const snapshot = tryParseSnapshot(cs.changesJson);
                   const isSelfChange = adminIdentity?.id === cs.adminId;
+                  const canSelect = !isSelfChange;
+                  const isSelected = selectedIds.has(cs.id);
                   return (
                     <Fragment key={cs.id}>
                       <tr className="transition hover:bg-slate-50/50">
                         <td className="px-4 py-4">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setExpandedId(expanded ? null : cs.id)
-                            }
-                            className="text-slate-400 transition hover:text-slate-700"
-                          >
-                            {expanded ? (
-                              <ChevronDown className="h-4 w-4" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4" />
-                            )}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-200 disabled:opacity-50"
+                              checked={isSelected}
+                              disabled={approveManyMutation.isPending || !canSelect}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setSelectedIds((current) => {
+                                  const next = new Set(current);
+                                  if (checked) next.add(cs.id);
+                                  else next.delete(cs.id);
+                                  return next;
+                                });
+                              }}
+                              title={
+                                !canSelect
+                                  ? "Bạn không thể tự phê duyệt change set do mình tạo."
+                                  : "Chọn để phê duyệt"
+                              }
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedId(expanded ? null : cs.id)
+                              }
+                              className="text-slate-400 transition hover:text-slate-700"
+                              title={expanded ? "Thu gọn" : "Mở rộng"}
+                            >
+                              {expanded ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </button>
+                          </div>
                         </td>
                         <td className="px-4 py-4">
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-700">
@@ -452,22 +560,6 @@ export default function ApprovalsPage() {
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex flex-wrap justify-end gap-2">
-                            <button
-                              type="button"
-                              disabled={approveMutation.isPending || isSelfChange}
-                              onClick={() =>
-                                void approveMutation.mutateAsync(cs.id)
-                              }
-                              title={isSelfChange ? "Bạn không thể tự phê duyệt thay đổi do mình tạo." : undefined}
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-50"
-                            >
-                              {approveMutation.isPending ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Check className="h-3.5 w-3.5" />
-                              )}
-                              Phê duyệt
-                            </button>
                             <button
                               type="button"
                               disabled={rejectMutation.isPending || isSelfChange}
@@ -572,6 +664,79 @@ export default function ApprovalsPage() {
                 className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {rejectMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <XCircle className="h-4 w-4" />
+                )}
+                Xác nhận từ chối
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Bulk Reject Dialog */}
+      {bulkRejectOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-[28px] bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Từ chối {selectedCount} change set
+                </h3>
+                <p className="mt-2 text-sm text-slate-500">
+                  Vui lòng cung cấp lý do từ chối để admin tạo thay đổi có thể sửa lại.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkRejectOpen(false);
+                  setBulkRejectReason("");
+                }}
+                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-5">
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Lý do từ chối <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                value={bulkRejectReason}
+                onChange={(e) => setBulkRejectReason(e.target.value)}
+                placeholder="Nhập lý do từ chối..."
+                rows={4}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100"
+              />
+            </div>
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkRejectOpen(false);
+                  setBulkRejectReason("");
+                }}
+                disabled={rejectManyMutation.isPending}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={!bulkRejectReason.trim() || rejectManyMutation.isPending}
+                onClick={() =>
+                  void rejectManyMutation.mutateAsync({
+                    changeSetIds: Array.from(selectedIds),
+                    reason: bulkRejectReason.trim(),
+                  })
+                }
+                className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {rejectManyMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <XCircle className="h-4 w-4" />

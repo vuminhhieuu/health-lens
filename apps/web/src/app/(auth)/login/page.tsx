@@ -69,7 +69,7 @@ function LoginContent() {
       const { accessToken, user } = response.data.data;
 
       setAuth(
-        { id: String(user.id), email: user.email, role: user.role },
+        { id: String(user.id), email: user.email, role: user.role, fullName: user.fullName ?? undefined },
         accessToken,
       );
 

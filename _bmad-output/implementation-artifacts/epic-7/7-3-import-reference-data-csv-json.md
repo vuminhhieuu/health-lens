@@ -1,6 +1,6 @@
 # Story 7.3: Import reference data từ CSV/JSON
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 
@@ -32,19 +32,19 @@ so that cập nhật danh mục nhanh và nhất quán.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: Import parse + validate endpoint (AC: #1, #2)
-  - [ ] `POST /api/v1/admin/reference-data/import/preview` (multipart upload)
-  - [ ] Support CSV và JSON format
-  - [ ] Parse → validate từng row (metricName, unit, min, max, gender, ageMin, ageMax)
-  - [ ] Trả về: `{ validRows: [...], errorRows: [{ line, error }] }`
-- [ ] Task 2 — Backend: Confirm import (AC: #3)
-  - [ ] `POST /api/v1/admin/reference-data/import/confirm` với body `{ importId }`
-  - [ ] Tạo change set draft cho mỗi valid row
-- [ ] Task 3 — Web: Import UI (AC: #1, #2, #3, #4)
-  - [ ] Trang `apps/web/src/app/admin/reference-data/import/page.tsx`
-  - [ ] Drag-and-drop file upload hoặc file picker
-  - [ ] Preview table: valid rows (xanh) + error rows (đỏ)
-  - [ ] "Xác nhận import" button → call confirm endpoint
+- [x] Task 1 — Backend: Import parse + validate endpoint (AC: #1, #2)
+  - [x] `POST /api/v1/admin/reference-data/import/preview` (multipart upload)
+  - [x] Support CSV và JSON format
+  - [x] Parse → validate từng row (metricName, unit, min, max, gender, ageMin, ageMax)
+  - [x] Trả về: `{ validRows: [...], errorRows: [{ line, error }] }`
+- [x] Task 2 — Backend: Confirm import (AC: #3)
+  - [x] `POST /api/v1/admin/reference-data/import/confirm` với body `{ importId }`
+  - [x] Tạo change set draft cho mỗi valid row
+- [x] Task 3 — Web: Import UI (AC: #1, #2, #3, #4)
+  - [x] Trang `apps/web/src/app/admin/reference-data/import/page.tsx`
+  - [x] Drag-and-drop file upload hoặc file picker
+  - [x] Preview table: valid rows (xanh) + error rows (đỏ)
+  - [x] "Xác nhận import" button → call confirm endpoint
 
 ## Dev Notes
 
@@ -74,10 +74,30 @@ HbA1c,HbA1c,%,0,5.7,,,
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+Codex 5.3
 
 ### Debug Log References
 
+- Added backend import preview/confirm APIs in `AdminReferenceDataController` and `ReferenceDataAdminService`.
+- Added frontend import page and wired routes/constants.
+- Added draft change-set creation flow from import preview confirmation.
 ### Completion Notes List
 
+- Client-side validation rejects unsupported file extension and files > 5MB before upload.
+- Server-side parser supports CSV/JSON and returns row-level error diagnostics.
+- Confirm import groups rows by metric identity and creates draft change sets (CREATE/UPDATE).
+- Added quick navigation entry from admin reference data to import page.
 ### File List
+
+- `apps/api/src/main/java/com/healthlens/api/controller/AdminReferenceDataController.java`
+- `apps/api/src/main/java/com/healthlens/api/service/ReferenceDataAdminService.java`
+- `apps/api/src/main/java/com/healthlens/api/constants/ApiRoutes.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/request/AdminReferenceImportConfirmRequest.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/response/AdminReferenceImportConfirmResponse.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/response/AdminReferenceImportErrorRowResponse.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/response/AdminReferenceImportPreviewResponse.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/response/AdminReferenceImportPreviewRowResponse.java`
+- `apps/web/src/app/admin/layout.tsx`
+- `apps/web/src/app/admin/reference-data/page.tsx`
+- `apps/web/src/app/admin/reference-data/import/page.tsx`
+- `packages/shared/constants/api.ts`

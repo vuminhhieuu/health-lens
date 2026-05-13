@@ -13,8 +13,10 @@ import {
   RefreshCcw,
   RotateCcw,
   Trash2,
+  UploadCloud,
   X,
 } from "lucide-react";
+import Link from "next/link";
 
 import { adminApiClient } from "@/lib/api/adminApiClient";
 import { API_ROUTES } from "@/lib/api/routes";
@@ -369,6 +371,13 @@ export default function ReferenceDataPage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
+            <Link
+              href="/admin/reference-data/import"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-teal-200 hover:text-teal-700"
+            >
+              <UploadCloud className="h-4 w-4" />
+              Import CSV/JSON
+            </Link>
             <button
               type="button"
               onClick={() => void reloadList()}
