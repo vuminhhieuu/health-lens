@@ -582,6 +582,7 @@ function statusLabel(status: string): string {
       return "Lỗi";
     case "unverified":
     case "pending":
+    case "processing":
     case "review_required":
       return "Chưa xác thực";
     default:
@@ -599,9 +600,15 @@ function resolveHistoryStatus(item: HistoryItem): string {
     fallbackStatus.recordStatus ??
     fallbackStatus.verificationStatus
   )?.toLowerCase();
+
   if (recordStatus === "done") {
-    return item.overallStatus ?? "normal";
+    // Nếu đã xác nhận, ưu tiên hiển thị bất thường/chú ý, còn lại mặc định là bình thường
+    if (item.overallStatus === "abnormal" || item.overallStatus === "attention") {
+      return item.overallStatus;
+    }
+    return "normal";
   }
+
   if (
     recordStatus === "review_required" ||
     recordStatus === "processing" ||
@@ -609,6 +616,7 @@ function resolveHistoryStatus(item: HistoryItem): string {
   ) {
     return "unverified";
   }
+
   if (
     recordStatus === "ocr_failed" ||
     recordStatus === "failed" ||
@@ -616,10 +624,13 @@ function resolveHistoryStatus(item: HistoryItem): string {
   ) {
     return "error";
   }
-  // Fallback for old API payloads that don't include record status.
-  const looksLikeIncompleteRecord = !item.examDate;
-  if (looksLikeIncompleteRecord) {
-    return item.sourceType === "ocr_partial" ? "unverified" : "error";
+
+  // Fallback cho dữ liệu cũ hoặc không xác định
+  if (!item.examDate && item.sourceType === "ocr_partial") {
+    return "unverified";
   }
-  return item.overallStatus ?? "unverified";
+
+  return item.overallStatus === "abnormal" || item.overallStatus === "attention"
+    ? item.overallStatus
+    : "unverified";
 }

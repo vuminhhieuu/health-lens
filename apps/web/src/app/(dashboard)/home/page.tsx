@@ -35,6 +35,7 @@ type Profile = {
 
 type HealthRecord = {
   id: string;
+  status?: string | null;
   testType?: string | null;
   examDate?: string | null;
   overallStatus?: "normal" | "attention" | "abnormal" | string;
@@ -288,9 +289,9 @@ export default function DashboardHomePage() {
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <span
-                      className={`rounded-full px-3 py-1 text-xs font-bold ${recordStatusClass(record.overallStatus)}`}
+                      className={`rounded-full px-3 py-1 text-xs font-bold ${recordStatusClass(resolveHomeRecordStatus(record))}`}
                     >
-                      {recordStatusLabel(record.overallStatus)}
+                      {recordStatusLabel(resolveHomeRecordStatus(record))}
                     </span>
                     <Link
                       href={`/health-records/review/${record.id}`}
@@ -570,4 +571,31 @@ function recordStatusLabel(status: HealthRecord["overallStatus"]) {
   if (status === "error" || status === "failed" || status === "ocr_failed")
     return "Lỗi";
   return "Chưa xác thực";
+}
+
+function resolveHomeRecordStatus(record: HealthRecord): string {
+  const recordStatus = record.status?.toLowerCase();
+  if (recordStatus === "done") {
+    if (record.overallStatus === "abnormal" || record.overallStatus === "attention") {
+      return record.overallStatus;
+    }
+    return "normal";
+  }
+  if (
+    recordStatus === "review_required" ||
+    recordStatus === "processing" ||
+    recordStatus === "pending"
+  ) {
+    return "unverified";
+  }
+  if (
+    recordStatus === "ocr_failed" ||
+    recordStatus === "failed" ||
+    recordStatus === "error"
+  ) {
+    return "error";
+  }
+  return record.overallStatus === "abnormal" || record.overallStatus === "attention"
+    ? record.overallStatus
+    : "unverified";
 }

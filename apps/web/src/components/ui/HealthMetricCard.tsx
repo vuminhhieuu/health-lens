@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Info, XCircle } fr
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/apiClient";
 import { ApiPaths } from "@healthlens/shared/constants";
+import { toThreeLineExplanation } from "@/lib/utils/explanationFormatter";
 
 type MetricStatus = "normal" | "attention" | "abnormal" | "no_data";
 
@@ -58,25 +59,7 @@ const STATUS_META: Record<MetricStatus, { label: string; color: string; icon: ty
   },
 };
 
-const UI_FALLBACK_EXPLANATION = [
-  "Chỉ số này là gì: Đây là một chỉ số xét nghiệm phản ánh tình trạng sức khỏe hiện tại.",
-  "Chỉ số này liên quan đến: Cân bằng chuyển hóa, miễn dịch hoặc chức năng cơ quan tùy loại xét nghiệm.",
-  "Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng: Bạn nên theo dõi thêm và trao đổi với bác sĩ để được tư vấn phù hợp.",
-].join("\n");
 
-function toThreeLineExplanation(raw: string | undefined): string {
-  if (!raw || !raw.trim()) {
-    return UI_FALLBACK_EXPLANATION;
-  }
-  const lines = raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (lines.length >= 3) {
-    return lines.slice(0, 3).join("\n");
-  }
-  return UI_FALLBACK_EXPLANATION;
-}
 
 export function HealthMetricCard({
   recordId,
