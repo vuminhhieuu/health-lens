@@ -11,6 +11,7 @@ import com.healthlens.api.dto.response.HealthRecordHistoryItemResponse;
 import com.healthlens.api.dto.response.HealthRecordHistoryPageResponse;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
 import com.healthlens.api.dto.response.RecommendationsResponse;
+import com.healthlens.api.dto.response.SharedHealthRecordResponse;
 import com.healthlens.api.dto.response.HealthRecordStatusResponse;
 import com.healthlens.api.dto.response.PaginationResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
@@ -21,11 +22,13 @@ import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.healthlens.api.annotation.Auditable;
 import com.healthlens.api.entity.HealthRecord;
+import com.healthlens.api.entity.HealthRecordShare;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ProfileAccessRevokedException;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
+import com.healthlens.api.repository.HealthRecordShareRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -70,6 +73,7 @@ public class HealthRecordService {
     private final StorageService storageService;
     private final ProfileRepository profileRepository;
     private final HealthRecordRepository healthRecordRepository;
+    private final HealthRecordShareRepository healthRecordShareRepository;
     private final ProfileShareRepository profileShareRepository;
     private final ReferenceDataService referenceDataService;
     private final MetricExplanationRetrievalService metricExplanationRetrievalService;
@@ -82,6 +86,7 @@ public class HealthRecordService {
             StorageService storageService,
             ProfileRepository profileRepository,
             HealthRecordRepository healthRecordRepository,
+            HealthRecordShareRepository healthRecordShareRepository,
             ProfileShareRepository profileShareRepository,
             ReferenceDataService referenceDataService,
             MetricExplanationRetrievalService metricExplanationRetrievalService,
@@ -93,6 +98,7 @@ public class HealthRecordService {
         this.storageService = storageService;
         this.profileRepository = profileRepository;
         this.healthRecordRepository = healthRecordRepository;
+        this.healthRecordShareRepository = healthRecordShareRepository;
         this.profileShareRepository = profileShareRepository;
         this.referenceDataService = referenceDataService;
         this.metricExplanationRetrievalService = metricExplanationRetrievalService;
@@ -258,11 +264,6 @@ public class HealthRecordService {
         }
         Profile profile = profileRepository.findById(recordProfileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
-        boolean canAccess = profile.getUser().getId().equals(userId)
-                || profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profile.getId(), userId);
-        if (!canAccess) {
-            throw new ProfileAccessRevokedException("Profile khong thuoc ve nguoi dung");
-        }
         List<MetricDto> metricsList = parseMetrics(record.getMetrics()).stream()
                 .map(metric -> enrichMetric(metric, profile, record.getExamDate()))
                 .collect(Collectors.toList());
@@ -270,8 +271,10 @@ public class HealthRecordService {
         return new HealthRecordDetailResponse(
                 record.getId(),
                 record.getProfileId(),
+                profile.getDisplayName(),
                 accessibleRecord.isOwner(),
                 accessibleRecord.canEdit(),
+                accessibleRecord.shareScope(),
                 record.getStatus(),
                 metricsList,
                 record.getExamDate() != null ? record.getExamDate().toString() : null,
@@ -283,6 +286,65 @@ public class HealthRecordService {
                 record.getLabSite(),
                 storageService.generateDownloadUrl(record.getFileKey(), Duration.ofHours(1))
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<SharedHealthRecordResponse> getSharedHealthRecords(UUID userId) {
+        List<com.healthlens.api.entity.HealthRecordShare> shares =
+                healthRecordShareRepository.findAllByViewerIdAndRevokedAtIsNull(userId);
+        if (shares.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> profileIds = shares.stream()
+                .map(com.healthlens.api.entity.HealthRecordShare::getProfileId)
+                .distinct()
+                .toList();
+        List<UUID> recordIds = shares.stream()
+                .map(com.healthlens.api.entity.HealthRecordShare::getHealthRecordId)
+                .distinct()
+                .toList();
+
+        Map<UUID, Profile> profilesById = profileRepository.findAllById(profileIds).stream()
+                .collect(Collectors.toMap(Profile::getId, profile -> profile));
+        Map<UUID, HealthRecord> recordsById = healthRecordRepository.findAllById(recordIds).stream()
+                .filter(record -> record.getDeletedAt() == null)
+                .collect(Collectors.toMap(HealthRecord::getId, record -> record));
+
+        List<SharedHealthRecordResponse> responses = new ArrayList<>();
+        for (com.healthlens.api.entity.HealthRecordShare share : shares) {
+            if (profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(share.getProfileId(), userId)) {
+                continue;
+            }
+
+            Profile profile = profilesById.get(share.getProfileId());
+            HealthRecord record = recordsById.get(share.getHealthRecordId());
+            if (profile == null || record == null) {
+                continue;
+            }
+
+            String overallStatus = parseMetrics(record.getMetrics()).stream()
+                    .map(MetricDto::getStatus)
+                    .filter(Objects::nonNull)
+                    .map(status -> status.toLowerCase(Locale.ROOT))
+                    .max(Comparator.comparingInt(this::statusPriority))
+                    .orElse("normal");
+
+            responses.add(new SharedHealthRecordResponse(
+                    record.getId(),
+                    profile.getId(),
+                    profile.getDisplayName(),
+                    record.getRecordType(),
+                    record.getExamDate(),
+                    record.getHospitalName(),
+                    overallStatus,
+                    record.getUpdatedAt(),
+                    share.getGrantedAt()
+            ));
+        }
+
+        responses.sort(Comparator.comparing(SharedHealthRecordResponse::sharedAt).reversed());
+        return responses;
     }
 
     @Transactional(readOnly = true)
@@ -395,7 +457,7 @@ public class HealthRecordService {
     public java.util.List<HealthRecordStatusResponse> getRecordsByProfile(UUID userId, UUID profileId) {
         Profile profile = profileRepository.findById(profileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
-        if (!canAccessProfileHistory(profile, userId)) {
+        if (!hasFullProfileHistoryAccess(profile, userId)) {
             throw new AccessDeniedException("Profile khong thuoc ve nguoi dung");
         }
         boolean isOwner = profile.getUser().getId().equals(userId);
@@ -437,7 +499,9 @@ public class HealthRecordService {
     public HealthRecordHistoryPageResponse getProfileHistory(UUID userId, UUID profileId, int page, int limit) {
         Profile profile = profileRepository.findById(profileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
-        if (!canAccessProfileHistory(profile, userId)) {
+        boolean hasFullProfileAccess = hasFullProfileHistoryAccess(profile, userId);
+        boolean hasRecordLevelAccess = hasRecordLevelHistoryAccess(profile.getId(), userId);
+        if (!hasFullProfileAccess && !hasRecordLevelAccess) {
             throw new AccessDeniedException("Profile khong thuoc ve nguoi dung");
         }
 
@@ -448,19 +512,56 @@ public class HealthRecordService {
         );
         UUID profileOwnerId = profile.getUser().getId();
         boolean canDelete = profileOwnerId.equals(userId) || hasEditAccess(profileId, userId);
-        Page<HealthRecord> records = healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNull(profileId, profileOwnerId, pageable);
 
-        List<HealthRecordHistoryItemResponse> items = records.getContent().stream()
-            .map(record -> toHistoryItem(record, profile, canDelete))
-                .collect(Collectors.toList());
+        List<HealthRecordHistoryItemResponse> items;
+        long totalItems;
+        int totalPages;
+        int currentPage;
+        int pageSize;
+
+        if (hasFullProfileAccess) {
+            Page<HealthRecord> records = healthRecordRepository.findAllByProfileIdAndUserIdAndDeletedAtIsNull(
+                    profileId, profileOwnerId, pageable);
+            items = records.getContent().stream()
+                    .map(record -> toHistoryItem(record, profile, canDelete))
+                    .collect(Collectors.toList());
+            totalItems = records.getTotalElements();
+            totalPages = records.getTotalPages();
+            currentPage = records.getNumber();
+            pageSize = records.getSize();
+        } else {
+            List<HealthRecordShare> shares = healthRecordShareRepository
+                    .findAllByViewerIdAndProfileIdAndRevokedAtIsNull(userId, profileId);
+            List<UUID> sharedRecordIds = shares.stream()
+                    .map(HealthRecordShare::getHealthRecordId)
+                    .distinct()
+                    .toList();
+            List<HealthRecord> sharedRecords = healthRecordRepository.findAllById(sharedRecordIds).stream()
+                    .filter(record -> record.getDeletedAt() == null)
+                    .sorted(Comparator
+                            .comparing(HealthRecord::getExamDate, Comparator.nullsLast(Comparator.reverseOrder()))
+                            .thenComparing(HealthRecord::getCreatedAt, Comparator.reverseOrder()))
+                    .toList();
+
+            pageSize = pageable.getPageSize();
+            currentPage = pageable.getPageNumber();
+            totalItems = sharedRecords.size();
+            totalPages = totalItems == 0 ? 0 : (int) Math.ceil((double) totalItems / pageSize);
+
+            int fromIndex = Math.min(currentPage * pageSize, sharedRecords.size());
+            int toIndex = Math.min(fromIndex + pageSize, sharedRecords.size());
+            items = sharedRecords.subList(fromIndex, toIndex).stream()
+                    .map(record -> toHistoryItem(record, profile, false))
+                    .collect(Collectors.toList());
+        }
 
         return new HealthRecordHistoryPageResponse(
                 items,
                 new PaginationResponse(
-                        records.getNumber(),
-                        records.getSize(),
-                        records.getTotalElements(),
-                        records.getTotalPages()
+                        currentPage,
+                        pageSize,
+                        totalItems,
+                        totalPages
                 )
         );
     }
@@ -543,7 +644,7 @@ public class HealthRecordService {
         HealthRecord record = healthRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
 
-        if (!record.getUserId().equals(userId) && !hasEditAccess(record.getProfileId(), userId)) {
+        if (!canEditRecord(userId, record)) {
             throw new AccessDeniedException("Ban khong co quyen xac nhan health record nay");
         }
 
@@ -609,7 +710,7 @@ public class HealthRecordService {
         HealthRecord record = healthRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
 
-        if (!record.getUserId().equals(userId) && !hasEditAccess(record.getProfileId(), userId)) {
+        if (!canEditRecord(userId, record)) {
             throw new AccessDeniedException("Ban khong co quyen cap nhat health record nay");
         }
 
@@ -1031,27 +1132,39 @@ public class HealthRecordService {
         return "Xét nghiệm - " + firstMetricName;
     }
 
-    private boolean canAccessProfileHistory(Profile profile, UUID userId) {
+    private boolean hasFullProfileHistoryAccess(Profile profile, UUID userId) {
         if (profile.getUser().getId().equals(userId)) {
             return true;
         }
         return profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profile.getId(), userId);
     }
 
+    private boolean hasRecordLevelHistoryAccess(UUID profileId, UUID userId) {
+        return !healthRecordShareRepository.findAllByViewerIdAndProfileIdAndRevokedAtIsNull(userId, profileId).isEmpty();
+    }
+
     private AccessibleRecord loadAccessibleRecord(UUID userId, UUID recordId) {
         HealthRecord ownedRecord = healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)
                 .orElse(null);
         if (ownedRecord != null) {
-            return new AccessibleRecord(ownedRecord, true, false, true);
+            return new AccessibleRecord(ownedRecord, true, false, true, "owner");
         }
         HealthRecord record = healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)
                 .orElseThrow(() -> new ResourceNotFoundException("Health record khong ton tai"));
-        boolean shared = profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(record.getProfileId(), userId);
-        if (!shared) {
+        boolean profileShared = profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(record.getProfileId(), userId);
+        if (profileShared) {
+            boolean canEdit = hasEditAccess(record.getProfileId(), userId);
+            return new AccessibleRecord(record, false, true, canEdit, "profile");
+        }
+        boolean recordShared = healthRecordShareRepository.existsByHealthRecordIdAndViewerIdAndRevokedAtIsNull(recordId, userId);
+        if (!recordShared) {
             throw new ProfileAccessRevokedException("Ban khong co quyen truy cap health record nay");
         }
-        boolean canEdit = hasEditAccess(record.getProfileId(), userId);
-        return new AccessibleRecord(record, false, true, canEdit);
+        HealthRecordShare share = healthRecordShareRepository
+                .findByHealthRecordIdAndViewerIdAndRevokedAtIsNull(recordId, userId)
+                .orElseThrow(() -> new ProfileAccessRevokedException("Ban khong co quyen truy cap health record nay"));
+        boolean canEdit = "edit".equalsIgnoreCase(share.getAccessLevel());
+        return new AccessibleRecord(record, false, true, canEdit, "record");
     }
 
     private boolean hasEditAccess(UUID profileId, UUID userId) {
@@ -1059,7 +1172,20 @@ public class HealthRecordService {
                 profileId, userId, "edit");
     }
 
+    private boolean canEditRecord(UUID userId, HealthRecord record) {
+        if (record.getUserId() != null && record.getUserId().equals(userId)) {
+            return true;
+        }
+        if (record.getProfileId() != null && hasEditAccess(record.getProfileId(), userId)) {
+            return true;
+        }
+        return healthRecordShareRepository.findByHealthRecordIdAndViewerIdAndRevokedAtIsNull(record.getId(), userId)
+                .map(HealthRecordShare::getAccessLevel)
+                .filter(accessLevel -> accessLevel != null && "edit".equalsIgnoreCase(accessLevel))
+                .isPresent();
+    }
+
     private record UploadFormat(String extension, String contentType) {}
     private record UploadReservation(UUID userId, UUID profileId, String fileKey) {}
-    private record AccessibleRecord(HealthRecord record, boolean isOwner, boolean isShared, boolean canEdit) {}
+    private record AccessibleRecord(HealthRecord record, boolean isOwner, boolean isShared, boolean canEdit, String shareScope) {}
 }

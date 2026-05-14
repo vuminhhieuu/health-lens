@@ -78,6 +78,9 @@ public final class ApiRoutes {
     public static final String HEALTH_RECORD_METRIC_EXPLANATION = HEALTH_RECORDS_BASE
             + "/{recordId}/metrics/{metricName}/explanation";
     public static final String HEALTH_RECORD_RECOMMENDATIONS = HEALTH_RECORDS_BASE + "/{recordId}/recommendations";
+    public static final String HEALTH_RECORD_INVITATIONS_BASE = API_V1 + "/health-record-invitations";
+    public static final String HEALTH_RECORD_INVITATIONS_ACCEPT = API_V1 + "/health-record-invitations/accept";
+    public static final String HEALTH_RECORD_INVITATIONS_INCOMING = API_V1 + "/health-record-invitations/incoming";
 
     // =========================================
     // Document Paths (Frontend: ApiPaths.DOCUMENTS)
@@ -138,6 +141,7 @@ public final class ApiRoutes {
     public static final String DEV_PATTERN = DEV_BASE + "/**";
     public static final String USERS_DELETION_PATTERN = USERS_DELETION_BASE + "/**";
     public static final String INVITATIONS_ACCEPT_PATTERN = INVITATIONS_ACCEPT + "/**";
+    public static final String HEALTH_RECORD_INVITATIONS_ACCEPT_PATTERN = HEALTH_RECORD_INVITATIONS_ACCEPT + "/**";
     public static final String SWAGGER_UI_PATTERN = "/swagger-ui/**";
     public static final String SWAGGER_HTML = "/swagger-ui.html";
     public static final String API_DOCS_PATTERN = "/v3/api-docs/**";

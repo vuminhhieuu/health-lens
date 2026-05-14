@@ -76,6 +76,7 @@ export const ApiPaths = {
   HEALTH_RECORDS: {
     BASE: `/api/${API_VERSION}/health-records`,
     LIST: `/api/${API_VERSION}/health-records`,
+    SHARED: `/api/${API_VERSION}/health-records/shared`,
     GET: (id: string) => `/api/${API_VERSION}/health-records/${id}`,
     CREATE: `/api/${API_VERSION}/health-records`,
     UPDATE: (id: string) => `/api/${API_VERSION}/health-records/${id}`,
@@ -99,6 +100,14 @@ export const ApiPaths = {
     UPLOAD_IMAGE: (id: string) => `/api/${API_VERSION}/health-records/${id}/image`,
     ANALYZE: (id: string) => `/api/${API_VERSION}/health-records/${id}/analyze`,
     GET_ANALYSIS: (id: string) => `/api/${API_VERSION}/health-records/${id}/analysis`,
+    INVITATIONS: (id: string) => `/api/${API_VERSION}/health-records/${id}/invitations`,
+    REVOKE_SHARE: (id: string, viewerId: string) => `/api/${API_VERSION}/health-records/${id}/shares/${viewerId}`,
+  },
+
+  HEALTH_RECORD_INVITATIONS: {
+    ACCEPT: (token: string) =>
+      `/api/${API_VERSION}/health-record-invitations/accept?token=${encodeURIComponent(token)}`,
+    INCOMING: `/api/${API_VERSION}/health-record-invitations/incoming`,
   },
 
   /** Document management endpoints */

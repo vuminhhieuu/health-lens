@@ -3,14 +3,18 @@ package com.healthlens.api.controller;
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.request.ConfirmRecordRequest;
+import com.healthlens.api.dto.request.InviteHealthRecordRequest;
 import com.healthlens.api.dto.request.UpdateMetricsRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
+import com.healthlens.api.dto.response.HealthRecordInvitationResponse;
 import com.healthlens.api.dto.response.HealthRecordDetailResponse;
 import com.healthlens.api.dto.response.HealthRecordStatusResponse;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
 import com.healthlens.api.dto.response.RecommendationsResponse;
+import com.healthlens.api.dto.response.SharedHealthRecordResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
 import com.healthlens.api.service.HealthRecordService;
+import com.healthlens.api.service.HealthRecordShareService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -33,9 +37,14 @@ import java.util.UUID;
 public class HealthRecordController {
 
     private final HealthRecordService healthRecordService;
+    private final HealthRecordShareService healthRecordShareService;
 
-    public HealthRecordController(HealthRecordService healthRecordService) {
+    public HealthRecordController(
+            HealthRecordService healthRecordService,
+            HealthRecordShareService healthRecordShareService
+    ) {
         this.healthRecordService = healthRecordService;
+        this.healthRecordShareService = healthRecordShareService;
     }
 
     @PostMapping("/upload-url")
@@ -148,6 +157,40 @@ public class HealthRecordController {
         return ResponseEntity.ok(buildResponseBody(Map.of("message", "Deleted successfully")));
     }
 
+    @PostMapping("/{recordId}/invitations")
+    public ResponseEntity<Map<String, Object>> inviteHealthRecordViewer(
+            Authentication authentication,
+            @PathVariable UUID recordId,
+            @Valid @RequestBody InviteHealthRecordRequest request
+    ) {
+        UUID userId = UUID.fromString(authentication.getName());
+        HealthRecordInvitationResponse response =
+                healthRecordShareService.inviteByEmail(userId, recordId, request.email(), request.accessLevel());
+        return ResponseEntity.status(201).body(buildResponseBody(response));
+    }
+
+    @GetMapping("/{recordId}/invitations")
+    public ResponseEntity<Map<String, Object>> getHealthRecordInvitations(
+            Authentication authentication,
+            @PathVariable UUID recordId
+    ) {
+        UUID userId = UUID.fromString(authentication.getName());
+        java.util.List<HealthRecordInvitationResponse> response =
+                healthRecordShareService.listInvitations(userId, recordId);
+        return ResponseEntity.ok(buildResponseBody(response));
+    }
+
+    @DeleteMapping("/{recordId}/shares/{viewerId}")
+    public ResponseEntity<Void> revokeHealthRecordShare(
+            Authentication authentication,
+            @PathVariable UUID recordId,
+            @PathVariable UUID viewerId
+    ) {
+        UUID userId = UUID.fromString(authentication.getName());
+        healthRecordShareService.revokeShare(userId, recordId, viewerId);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/profiles/{profileId}")
     public ResponseEntity<Map<String, Object>> getRecordsByProfile(
             Authentication authentication,
@@ -155,6 +198,13 @@ public class HealthRecordController {
     ) {
         UUID userId = UUID.fromString(authentication.getName());
         java.util.List<HealthRecordStatusResponse> response = healthRecordService.getRecordsByProfile(userId, profileId);
+        return ResponseEntity.ok(buildResponseBody(response));
+    }
+
+    @GetMapping("/shared")
+    public ResponseEntity<Map<String, Object>> getSharedHealthRecords(Authentication authentication) {
+        UUID userId = UUID.fromString(authentication.getName());
+        java.util.List<SharedHealthRecordResponse> response = healthRecordService.getSharedHealthRecords(userId);
         return ResponseEntity.ok(buildResponseBody(response));
     }
 

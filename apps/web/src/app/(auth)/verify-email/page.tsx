@@ -9,6 +9,7 @@ import { API_ROUTES } from "@/lib/api/routes";
 import { apiClient } from "@/lib/api/apiClient";
 
 type VerifyStatus = "loading" | "success" | "error";
+const POST_REGISTER_RETURN_URL_KEY = "post-register-return-url";
 
 export default function VerifyEmailPage() {
   return (
@@ -21,6 +22,13 @@ export default function VerifyEmailPage() {
 function VerifyEmailContent() {
   const params = useSearchParams();
   const token = params.get("token");
+  const [loginHref] = useState(() => {
+    if (typeof window === "undefined") {
+      return "/login";
+    }
+    const storedReturnUrl = window.localStorage.getItem(POST_REGISTER_RETURN_URL_KEY);
+    return storedReturnUrl ? `/login?returnUrl=${encodeURIComponent(storedReturnUrl)}` : "/login";
+  });
 
   const [status, setStatus] = useState<VerifyStatus>("loading");
   const [title, setTitle] = useState("Đang xác thực email...");
@@ -85,7 +93,7 @@ function VerifyEmailContent() {
 
         <div className="flex flex-col items-center gap-4">
           <Link
-            href="/login"
+            href={loginHref}
             className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#10B981] px-7 text-sm font-semibold text-white transition hover:brightness-110"
           >
             Đến trang đăng nhập

@@ -15,6 +15,7 @@ import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
+import com.healthlens.api.repository.HealthRecordShareRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,6 +58,7 @@ class HealthRecordServiceTest {
     @Mock private StorageService storageService;
     @Mock private ProfileRepository profileRepository;
     @Mock private HealthRecordRepository healthRecordRepository;
+    @Mock private HealthRecordShareRepository healthRecordShareRepository;
     @Mock private ProfileShareRepository profileShareRepository;
     @Mock private ReferenceDataService referenceDataService;
     @Mock private MetricExplanationRetrievalService metricExplanationRetrievalService;
@@ -73,6 +75,7 @@ class HealthRecordServiceTest {
                 storageService,
                 profileRepository,
                 healthRecordRepository,
+                healthRecordShareRepository,
                 profileShareRepository,
                 referenceDataService,
                 metricExplanationRetrievalService,

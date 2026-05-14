@@ -7,6 +7,7 @@ import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
 import com.healthlens.api.security.LoginRateLimiter;
 import com.healthlens.api.service.HealthRecordService;
+import com.healthlens.api.service.HealthRecordShareService;
 import com.healthlens.api.util.JwtUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,6 +42,9 @@ class HealthRecordControllerTest {
 
     @MockitoBean
     private HealthRecordService healthRecordService;
+
+    @MockitoBean
+    private HealthRecordShareService healthRecordShareService;
 
     @MockitoBean
     private JwtAuthenticationFilter jwtAuthenticationFilter;

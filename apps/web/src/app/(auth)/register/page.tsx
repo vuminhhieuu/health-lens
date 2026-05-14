@@ -10,6 +10,8 @@ import { z } from "zod";
 
 import { apiBaseUrl } from "@/lib/api";
 
+const POST_REGISTER_RETURN_URL_KEY = "post-register-return-url";
+
 const registerPageSchema = registerSchema.extend({
   fullName: z.string().min(1, "Vui lòng nhập họ và tên"),
   birthDate: z.string().min(1, "Vui lòng chọn ngày sinh"),
@@ -49,6 +51,14 @@ export default function RegisterPage() {
     setSubmitError("");
 
     try {
+      if (typeof window !== "undefined") {
+        if (returnUrl) {
+          window.localStorage.setItem(POST_REGISTER_RETURN_URL_KEY, returnUrl);
+        } else {
+          window.localStorage.removeItem(POST_REGISTER_RETURN_URL_KEY);
+        }
+      }
+
       await axios.post(`${apiBaseUrl}/api/v1/auth/register`, {
         fullName: data.fullName,
         email: data.email,
@@ -56,7 +66,11 @@ export default function RegisterPage() {
         password: data.password,
       });
 
-      setSuccessMessage("Tài khoản đã tạo. Vui lòng kiểm tra email của bạn để xác thực.");
+      setSuccessMessage(
+        returnUrl
+          ? "Tài khoản đã tạo. Vui lòng xác thực email, sau đó đăng nhập để tiếp tục lời mời đang chờ."
+          : "Tài khoản đã tạo. Vui lòng kiểm tra email của bạn để xác thực."
+      );
     } catch {
       setSubmitError("Đăng ký thất bại. Vui lòng thử lại.");
     }

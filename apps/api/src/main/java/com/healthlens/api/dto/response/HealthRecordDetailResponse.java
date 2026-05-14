@@ -10,8 +10,10 @@ import java.util.UUID;
 public record HealthRecordDetailResponse(
         UUID id,
         UUID profileId,
+        String profileDisplayName,
         Boolean isOwner,
         Boolean canEdit,
+        String shareScope,
         String status,
         List<MetricDto> metrics,
         String examDate,

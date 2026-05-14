@@ -54,6 +54,7 @@ public class SecurityConfig {
                     .requestMatchers(ApiRoutes.DEV_PATTERN).permitAll()
                     .requestMatchers(ApiRoutes.USERS_DELETION_PATTERN).permitAll()
                     .requestMatchers(ApiRoutes.INVITATIONS_ACCEPT).permitAll()
+                    .requestMatchers(ApiRoutes.HEALTH_RECORD_INVITATIONS_ACCEPT).permitAll()
                     // Avoid masking app errors as 401 due to forwarding to /error.
                     .requestMatchers("/error").permitAll()
                     .requestMatchers(ApiRoutes.SWAGGER_UI_PATTERN, ApiRoutes.SWAGGER_HTML, ApiRoutes.API_DOCS_PATTERN).permitAll()
