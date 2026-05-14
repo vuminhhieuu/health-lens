@@ -229,6 +229,53 @@ public class EmailService {
         }
     }
 
+    public void sendHealthRecordInvitationEmail(User inviter, String inviteeEmail, String invitationLink) {
+        if (mailSender == null) {
+            log.error("[EmailService] JavaMailSender is not configured! Cannot send health record invitation to {}", inviteeEmail);
+            return;
+        }
+
+        String inviterName = inviter.getFullName() == null || inviter.getFullName().isBlank()
+                ? "Một thành viên"
+                : inviter.getFullName();
+        String htmlContent = """
+                <html>
+                  <body style="font-family: Segoe UI, Arial, sans-serif; color: #111827; background: #f3f4f6; padding: 24px;">
+                    <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden;">
+                      <div style="background: #00685f; padding: 24px; text-align: center;">
+                        <h1 style="color: #ffffff; margin: 0; font-size: 26px;">HealthLens</h1>
+                      </div>
+                      <div style="padding: 28px;">
+                        <h2 style="margin-top: 0;">Lời mời xem một kết quả khám</h2>
+                        <p>Xin chào,</p>
+                        <p><strong>%s</strong> muốn chia sẻ riêng một kết quả khám với bạn trên HealthLens.</p>
+                        <p>Bạn chỉ có quyền xem lần khám này, không phải toàn bộ lịch sử hồ sơ.</p>
+                        <div style="text-align: center; margin: 24px 0;">
+                          <a href="%s" style="display: inline-block; background: #00685f; color: #ffffff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700;">
+                            Xem kết quả khám
+                          </a>
+                        </div>
+                        <p style="font-size: 14px; color: #6b7280;">Lời mời có hiệu lực trong 7 ngày.</p>
+                      </div>
+                    </div>
+                  </body>
+                </html>
+                """.formatted(inviterName, invitationLink);
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(inviteeEmail);
+            helper.setSubject("[HealthLens] " + inviterName + " muốn chia sẻ một kết quả khám với bạn");
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+        } catch (MessagingException e) {
+            log.error("[EmailService] Failed to send health record invitation to {}", inviteeEmail, e);
+            throw new IllegalStateException("Gui email moi chia se ket qua kham that bai", e);
+        }
+    }
+
     private String renderProfileInvitationTemplate(String inviterName, String invitationLink) {
         if (templateEngine == null) {
             return """

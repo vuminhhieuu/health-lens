@@ -3,7 +3,7 @@
 import { type ChangeEvent, type ReactNode, useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import {
   Loader2,
@@ -23,13 +23,15 @@ import {
   FileDown,
   Share2,
   Building2,
-  Info,
   Heart,
   Apple,
   Sparkles,
   ShieldAlert,
+  Shield,
   ChevronDown,
   ChevronUp,
+  Mail,
+  UserPlus,
 } from "lucide-react";
 import { z } from "zod";
 
@@ -98,8 +100,10 @@ type ReviewRecordStatus = "processing" | "review_required" | "done" | "ocr_faile
 
 type ReviewRecordData = {
   profileId?: string;
+  profileDisplayName?: string;
   isOwner?: boolean;
   canEdit?: boolean;
+  shareScope?: "owner" | "profile" | "record";
   status: ReviewRecordStatus;
   fileUrl?: string;
   metrics?: MetricDto[];
@@ -118,6 +122,18 @@ type RecommendationsData = {
   recommendations: string[];
   disclaimer: string;
   allNormal: boolean;
+};
+
+type HealthRecordSharedMember = {
+  id: string;
+  viewerId?: string;
+  email: string;
+  status: "pending" | "accepted" | "expired" | "revoked" | string;
+  shareScope?: "record" | "profile" | string;
+  accessLevel?: "view" | "edit" | string;
+  expiresAt?: string | null;
+  createdAt?: string | null;
+  acceptedAt?: string | null;
 };
 
 type RecommendationCategory = "nutrition" | "lifestyle";
@@ -141,6 +157,7 @@ const metricSchema = z.object({
 export default function ReviewRecordPage() {
   const params = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const recordId = params.recordId as string;
   const manualMode = searchParams.get("mode") === "manual";
@@ -164,6 +181,11 @@ export default function ReviewRecordPage() {
   const [isDeletingRecord, setIsDeletingRecord] = useState(false);
   const [deleteRecordError, setDeleteRecordError] = useState<string | null>(null);
   const [showDeleteRecordModal, setShowDeleteRecordModal] = useState(false);
+  const [showRecordShareModal, setShowRecordShareModal] = useState(false);
+  const [recordShareEmail, setRecordShareEmail] = useState("");
+  const [recordShareAccessLevel, setRecordShareAccessLevel] = useState<"view" | "edit">("view");
+  const [recordShareError, setRecordShareError] = useState<string | null>(null);
+  const [pendingRecordShareRevoke, setPendingRecordShareRevoke] = useState<HealthRecordSharedMember | null>(null);
   const retryFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -210,6 +232,100 @@ export default function ReviewRecordPage() {
     },
     enabled: Boolean(recordId && data?.status === "done"),
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: recordSharedMembers = [], isFetching: isRecordSharedMembersLoading } = useQuery<
+    HealthRecordSharedMember[]
+  >({
+    queryKey: ["health-record-shared-members", recordId],
+    queryFn: async () => {
+      const response = await apiClient.get(ApiPaths.HEALTH_RECORDS.INVITATIONS(recordId));
+      return ((response.data?.data ?? []) as HealthRecordSharedMember[]).filter(
+        (member) => member.status !== "revoked" && member.status !== "expired"
+      );
+    },
+    enabled: showRecordShareModal,
+  });
+
+  const inviteRecordMutation = useMutation({
+    mutationFn: async (payload: { email: string; accessLevel: "view" | "edit" }) => {
+      const response = await apiClient.post(ApiPaths.HEALTH_RECORDS.INVITATIONS(recordId), {
+        email: payload.email,
+        accessLevel: payload.accessLevel,
+      });
+      return response.data?.data as HealthRecordSharedMember;
+    },
+    onSuccess: async () => {
+      setRecordShareEmail("");
+      setRecordShareError(null);
+      await queryClient.invalidateQueries({ queryKey: ["health-record-shared-members", recordId] });
+    },
+    onError: () => {
+      setRecordShareError("Gửi lời mời thất bại. Vui lòng kiểm tra email và thử lại.");
+    },
+  });
+
+  const revokeRecordShareMutation = useMutation({
+    mutationFn: async (member: HealthRecordSharedMember) => {
+      const viewerId = member.viewerId ?? member.id;
+      if (member.shareScope === "profile") {
+        if (!data?.profileId) {
+          throw new Error("Missing profile id");
+        }
+        await apiClient.delete(ApiPaths.PROFILES.REVOKE_SHARE(data.profileId, viewerId));
+        return member;
+      }
+      await apiClient.delete(ApiPaths.HEALTH_RECORDS.REVOKE_SHARE(recordId, viewerId));
+      return member;
+    },
+    onSuccess: async (member) => {
+      setPendingRecordShareRevoke(null);
+      setRecordShareError(null);
+      queryClient.setQueryData(
+        ["health-record-shared-members", recordId],
+        (previous: HealthRecordSharedMember[] | undefined) =>
+          (previous ?? []).filter((item) => item.id !== member.id && item.email.toLowerCase() !== member.email.toLowerCase())
+      );
+      await queryClient.invalidateQueries({ queryKey: ["health-record-shared-members", recordId] });
+    },
+    onError: () => {
+      setRecordShareError("Thu hồi quyền thất bại. Vui lòng thử lại.");
+    },
+  });
+
+  const updateRecordShareAccessMutation = useMutation({
+    mutationFn: async (payload: { member: HealthRecordSharedMember; accessLevel: "view" | "edit" }) => {
+      if (payload.member.shareScope === "profile") {
+        if (!data?.profileId) {
+          throw new Error("Missing profile id");
+        }
+        await apiClient.post(ApiPaths.PROFILES.INVITATIONS(data.profileId), {
+          email: payload.member.email,
+          accessLevel: payload.accessLevel,
+        });
+        return;
+      }
+      await apiClient.post(ApiPaths.HEALTH_RECORDS.INVITATIONS(recordId), {
+        email: payload.member.email,
+        accessLevel: payload.accessLevel,
+      });
+    },
+    onSuccess: async (_, variables) => {
+      setRecordShareError(null);
+      queryClient.setQueryData(
+        ["health-record-shared-members", recordId],
+        (previous: HealthRecordSharedMember[] | undefined) =>
+          (previous ?? []).map((item) =>
+            item.id === variables.member.id || item.email.toLowerCase() === variables.member.email.toLowerCase()
+              ? { ...item, accessLevel: variables.accessLevel }
+              : item
+          )
+      );
+      await queryClient.invalidateQueries({ queryKey: ["health-record-shared-members", recordId] });
+    },
+    onError: () => {
+      setRecordShareError("Cập nhật quyền thất bại. Vui lòng thử lại.");
+    },
   });
   const recommendationGroups = useMemo(
     () => groupRecommendations(recommendationsData?.recommendations ?? []),
@@ -526,6 +642,19 @@ export default function ReviewRecordPage() {
     }
   };
 
+  const handleInviteRecordShare = () => {
+    const trimmedEmail = recordShareEmail.trim().toLowerCase();
+    if (!trimmedEmail) {
+      setRecordShareError("Vui lòng nhập địa chỉ email.");
+      return;
+    }
+    setRecordShareError(null);
+    inviteRecordMutation.mutate({
+      email: trimmedEmail,
+      accessLevel: recordShareAccessLevel,
+    });
+  };
+
   const historyHref = data?.profileId ? `/profiles/${data.profileId}/history` : null;
   const deleteRecordModal = (
     <DeleteRecordModal
@@ -533,6 +662,51 @@ export default function ReviewRecordPage() {
       onCancel={() => setShowDeleteRecordModal(false)}
       onConfirm={() => void handleDeleteRecord()}
       isPending={isDeletingRecord}
+    />
+  );
+  const recordShareModal = (
+    <RecordShareModal
+      open={showRecordShareModal}
+      email={recordShareEmail}
+      accessLevel={recordShareAccessLevel}
+      members={recordSharedMembers}
+      error={recordShareError}
+      isLoadingMembers={isRecordSharedMembersLoading}
+      isInviting={inviteRecordMutation.isPending}
+      isRevoking={revokeRecordShareMutation.isPending}
+      isUpdatingAccess={updateRecordShareAccessMutation.isPending}
+      pendingRevokeMember={pendingRecordShareRevoke}
+      onEmailChange={(nextEmail) => {
+        setRecordShareEmail(nextEmail);
+        setRecordShareError(null);
+      }}
+      onAccessLevelChange={(nextAccessLevel) => {
+        setRecordShareAccessLevel(nextAccessLevel);
+      }}
+      onInvite={handleInviteRecordShare}
+      onClose={() => {
+        if (inviteRecordMutation.isPending || revokeRecordShareMutation.isPending || updateRecordShareAccessMutation.isPending) return;
+        setShowRecordShareModal(false);
+        setRecordShareEmail("");
+        setRecordShareAccessLevel("view");
+        setRecordShareError(null);
+        setPendingRecordShareRevoke(null);
+      }}
+      onUpdateMemberAccess={(member, nextAccessLevel) => {
+        const currentAccess = member.accessLevel === "edit" ? "edit" : "view";
+        if (currentAccess === nextAccessLevel) return;
+        updateRecordShareAccessMutation.mutate({
+          member,
+          accessLevel: nextAccessLevel,
+        });
+      }}
+      onAskRevoke={setPendingRecordShareRevoke}
+      onCancelRevoke={() => setPendingRecordShareRevoke(null)}
+      onConfirmRevoke={() => {
+        if (pendingRecordShareRevoke) {
+          revokeRecordShareMutation.mutate(pendingRecordShareRevoke);
+        }
+      }}
     />
   );
 
@@ -635,6 +809,9 @@ export default function ReviewRecordPage() {
   const canToggleEditResults = data?.status === "done" || (data?.status === "ocr_failed" && manualMode);
   const isOwner = data.isOwner ?? true;
   const canEdit = data.canEdit ?? isOwner;
+  const shareScope = data.shareScope ?? (isOwner ? "owner" : "profile");
+  const canShareRecord = isOwner;
+  const canDeleteRecord = isOwner;
   const showMetricCards = !editMode;
   const showEditableTable = editMode;
   const showConfidenceColumn = canConfirm;
@@ -648,9 +825,9 @@ export default function ReviewRecordPage() {
   const attentionMetrics = metrics.filter((metric) => metric.status === "attention").length;
   const overallSummary =
     abnormalMetrics > 0 ? "Cần theo dõi" : attentionMetrics > 0 ? "Cần chú ý" : "Bình thường";
-  const profileDisplayName = data.profileId
-    ? profiles.find((profile) => profile.id === data.profileId)?.displayName
-    : undefined;
+  const profileDisplayName =
+    data.profileDisplayName ??
+    (data.profileId ? profiles.find((profile) => profile.id === data.profileId)?.displayName : undefined);
   const profileOwnerLabel = profileDisplayName ?? (isOwner ? "Tôi" : "Thành viên gia đình");
 
   if (isDoneView) {
@@ -694,7 +871,7 @@ export default function ReviewRecordPage() {
                 {displayHospitalName}
               </div>
               <p className="mt-2 text-xs text-[#6d7a77]">
-                Hồ sơ của: <span className="font-semibold text-[#3d4947]">{profileOwnerLabel}</span>
+                Kết quả khám của: <span className="font-semibold text-[#3d4947]">{profileOwnerLabel}</span>
               </p>
             </div>
             <div className="flex items-center gap-1.5">
@@ -709,15 +886,17 @@ export default function ReviewRecordPage() {
                   <Edit2 className="h-4 w-4" />
                 </button>
               ) : null}
-              <button
-                type="button"
-                title="Chia sẻ"
-                aria-label="Chia sẻ"
-                disabled
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#e9f6f3] text-[#3d4947] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Share2 className="h-4 w-4" />
-              </button>
+              {canShareRecord ? (
+                <button
+                  type="button"
+                  title="Chia sẻ kết quả"
+                  aria-label="Chia sẻ kết quả"
+                  onClick={() => setShowRecordShareModal(true)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#e9f6f3] text-[#00685f] transition hover:brightness-95"
+                >
+                  <Share2 className="h-4 w-4" />
+                </button>
+              ) : null}
               <button
                 type="button"
                 title="Tải PDF"
@@ -727,7 +906,7 @@ export default function ReviewRecordPage() {
               >
                 <FileDown className="h-4 w-4" />
               </button>
-              {canEdit ? (
+              {canDeleteRecord ? (
                 <button
                   type="button"
                   title="Xóa kết quả"
@@ -1015,6 +1194,7 @@ export default function ReviewRecordPage() {
           </div>
         </div>
         {deleteRecordModal}
+        {recordShareModal}
       </main>
     );
   }
@@ -1425,6 +1605,7 @@ export default function ReviewRecordPage() {
       )}
 
       {deleteRecordModal}
+      {recordShareModal}
 
       {/* Add Metric Dialog */}
       {showAddDialog && (
@@ -1551,6 +1732,230 @@ export default function ReviewRecordPage() {
       )}
     </div>
   );
+}
+
+function RecordShareModal({
+  open,
+  email,
+  accessLevel,
+  members,
+  error,
+  isLoadingMembers,
+  isInviting,
+  isRevoking,
+  isUpdatingAccess,
+  pendingRevokeMember,
+  onEmailChange,
+  onAccessLevelChange,
+  onInvite,
+  onClose,
+  onUpdateMemberAccess,
+  onAskRevoke,
+  onCancelRevoke,
+  onConfirmRevoke,
+}: {
+  open: boolean;
+  email: string;
+  accessLevel: "view" | "edit";
+  members: HealthRecordSharedMember[];
+  error: string | null;
+  isLoadingMembers: boolean;
+  isInviting: boolean;
+  isRevoking: boolean;
+  isUpdatingAccess: boolean;
+  pendingRevokeMember: HealthRecordSharedMember | null;
+  onEmailChange: (email: string) => void;
+  onAccessLevelChange: (accessLevel: "view" | "edit") => void;
+  onInvite: () => void;
+  onClose: () => void;
+  onUpdateMemberAccess: (member: HealthRecordSharedMember, accessLevel: "view" | "edit") => void;
+  onAskRevoke: (member: HealthRecordSharedMember) => void;
+  onCancelRevoke: () => void;
+  onConfirmRevoke: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="relative p-7 pb-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-5 top-5 rounded-full p-2 text-[#6d7a77] transition hover:bg-[#e9f6f3]"
+            aria-label="Đóng"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <div className="flex items-start gap-4 pr-12">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#e9f6f3] text-[#00685f]">
+              <UserPlus className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black leading-tight text-[#121e1c]">Chia sẻ kết quả khám</h2>
+              <p className="mt-1 text-sm font-medium text-[#6d7a77]">
+                Người nhận chỉ được cấp quyền trên kết quả này, không áp dụng cho toàn bộ lịch sử hồ sơ.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-5 overflow-y-auto px-7 pb-6">
+          <div>
+            <label className="mb-2 block text-sm font-bold text-[#121e1c]" htmlFor="record-share-email">
+              Địa chỉ email
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-[#9ba9a6]" />
+              <input
+                id="record-share-email"
+                type="email"
+                autoComplete="email"
+                placeholder="ví dụ: email@vidu.com"
+                value={email}
+                onChange={(event) => onEmailChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    onInvite();
+                  }
+                }}
+                className="h-12 w-full rounded-2xl border border-[#c5dfd9] pl-12 pr-4 text-sm text-[#3d4947] outline-none focus:border-[#008378]"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-bold text-[#121e1c]" htmlFor="record-share-access-level">
+              Quyền truy cập <span className="text-[#ba1a1a]">*</span>
+            </label>
+            <div className="relative">
+              <Shield className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#00685f]" />
+              <select
+                id="record-share-access-level"
+                value={accessLevel}
+                onChange={(event) => onAccessLevelChange(event.target.value === "edit" ? "edit" : "view")}
+                className="h-12 w-full appearance-none rounded-[28px] border border-[#9ad9cf] bg-[#deebe8] pl-14 pr-12 text-base font-semibold text-[#2d3a38] outline-none focus:border-[#008378]"
+              >
+                <option value="view">Chỉ xem</option>
+                <option value="edit">Có thể chỉnh sửa</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#00685f]" />
+            </div>
+          </div>
+
+          {error ? <p className="text-sm font-medium text-[#ba1a1a]">{error}</p> : null}
+
+          <section className="rounded-2xl border border-[#d6ece7] bg-[#f7fcfa] p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-bold text-[#121e1c]">Người đã được chia sẻ</p>
+              {isLoadingMembers || isRevoking || isUpdatingAccess ? (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#6d7a77]">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  {isRevoking ? "Đang thu hồi..." : isUpdatingAccess ? "Đang cập nhật quyền..." : "Đang tải"}
+                </span>
+              ) : null}
+            </div>
+            {members.length === 0 ? (
+              <p className="text-sm text-[#6d7a77]">Chưa có ai được cấp quyền xem kết quả này.</p>
+            ) : (
+              <ul className="max-h-52 space-y-2 overflow-y-auto pr-1">
+                {members.map((member) => (
+                  (() => {
+                    return (
+                  <li
+                    key={member.id}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-[#e2efeb] bg-white px-3 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-[#23312f]">{member.email}</p>
+                      <p className="text-xs text-[#6d7a77]">{recordShareStatusLabel(member.status)}</p>
+                    </div>
+                    <div className="ml-auto flex shrink-0 items-center gap-2">
+                      <div className="relative">
+                        <select
+                          disabled={isUpdatingAccess || isRevoking || member.status === "revoked" || member.status === "expired"}
+                          value={member.accessLevel === "edit" ? "edit" : "view"}
+                          onChange={(event) => {
+                            const nextAction = event.target.value as "view" | "edit" | "revoke";
+                            if (nextAction === "revoke") {
+                              onAskRevoke(member);
+                              return;
+                            }
+                            onUpdateMemberAccess(member, nextAction);
+                          }}
+                          className="h-8 appearance-none rounded-full border border-[#b7e8e0] bg-[#d7e5e2] px-3 pr-7 text-left text-xs font-bold text-[#00685f] outline-none disabled:cursor-not-allowed disabled:opacity-70"
+                        >
+                          <option value="view">Chỉ xem</option>
+                          <option value="edit">Có thể chỉnh sửa</option>
+                          {member.status === "accepted" ? <option value="revoke">Thu hồi quyền truy cập</option> : null}
+                        </select>
+                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-[#00685f]">
+                          ▾
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                    );
+                  })()
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+
+        <div className="mt-auto flex items-center justify-end border-t border-[#e8eeec] px-7 py-5">
+          <button
+            type="button"
+            onClick={onInvite}
+            disabled={isInviting}
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#008378] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110 disabled:opacity-70"
+          >
+            {isInviting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Gửi lời mời
+          </button>
+        </div>
+      </div>
+
+      {pendingRevokeMember ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-black text-[#121e1c]">Xác nhận thu hồi quyền</h3>
+            <p className="mt-2 text-sm text-[#3d4947]">
+              Thu hồi quyền xem kết quả của <span className="font-bold">{pendingRevokeMember.email}</span>?
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={onCancelRevoke}
+                disabled={isRevoking}
+                className="rounded-xl border border-[#d7e5e1] px-4 py-2 text-sm font-bold text-[#4e6360] hover:bg-[#f7fbfa] disabled:opacity-60"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmRevoke}
+                disabled={isRevoking}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#ba1a1a] px-4 py-2 text-sm font-bold text-white hover:brightness-110 disabled:opacity-70"
+              >
+                {isRevoking ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Thu hồi
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function recordShareStatusLabel(status: string): string {
+  if (status === "accepted") return "Đã chấp nhận";
+  if (status === "pending") return "Đang chờ";
+  if (status === "expired") return "Đã hết hạn";
+  if (status === "revoked") return "Đã thu hồi";
+  return status;
 }
 
 function SourceBadge({ source }: { source: string }) {
