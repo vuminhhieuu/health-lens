@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.request.UpdateMetricsRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
+import com.healthlens.api.dto.response.DownloadHealthRecordPdfResponse;
 import com.healthlens.api.dto.response.HealthRecordDetailResponse;
 import com.healthlens.api.dto.response.HealthRecordHistoryItemResponse;
 import com.healthlens.api.dto.response.HealthRecordHistoryPageResponse;
@@ -22,12 +23,14 @@ import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.healthlens.api.annotation.Auditable;
 import com.healthlens.api.entity.HealthRecord;
+import com.healthlens.api.entity.HealthRecordAuditLog;
 import com.healthlens.api.entity.HealthRecordShare;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ProfileAccessRevokedException;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
+import com.healthlens.api.repository.HealthRecordAuditLogRepository;
 import com.healthlens.api.repository.HealthRecordShareRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
@@ -47,7 +50,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Period;
 import java.time.temporal.ChronoUnit;
+import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -78,6 +83,8 @@ public class HealthRecordService {
     private final ReferenceDataService referenceDataService;
     private final MetricExplanationRetrievalService metricExplanationRetrievalService;
     private final LlmService llmService;
+    private final HealthRecordPdfService healthRecordPdfService;
+    private final HealthRecordAuditLogRepository healthRecordAuditLogRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final String ocrStreamName;
@@ -91,6 +98,8 @@ public class HealthRecordService {
             ReferenceDataService referenceDataService,
             MetricExplanationRetrievalService metricExplanationRetrievalService,
             LlmService llmService,
+            HealthRecordPdfService healthRecordPdfService,
+            HealthRecordAuditLogRepository healthRecordAuditLogRepository,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper,
             @Value("${app.stream.ocr-events:ocr.events}") String ocrStreamName
@@ -103,6 +112,8 @@ public class HealthRecordService {
         this.referenceDataService = referenceDataService;
         this.metricExplanationRetrievalService = metricExplanationRetrievalService;
         this.llmService = llmService;
+        this.healthRecordPdfService = healthRecordPdfService;
+        this.healthRecordAuditLogRepository = healthRecordAuditLogRepository;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.ocrStreamName = ocrStreamName;
@@ -288,6 +299,31 @@ public class HealthRecordService {
         );
     }
 
+    @Transactional
+    public DownloadHealthRecordPdfResponse downloadHealthRecordPdf(UUID userId, UUID recordId) {
+        AccessibleRecord accessibleRecord = loadAccessibleRecord(userId, recordId);
+        HealthRecord record = accessibleRecord.record();
+        Profile profile = profileRepository.findById(record.getProfileId())
+                .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
+        List<MetricDto> metrics = parseMetrics(record.getMetrics()).stream()
+                .map(metric -> enrichMetric(metric, profile, record.getExamDate(), false))
+                .collect(Collectors.toList());
+        Map<String, String> explanations = safeMetricExplanations(metrics);
+        RecommendationsResponse recommendations = safeRecommendations(userId, recordId);
+
+        byte[] bytes = healthRecordPdfService.generatePdf(new HealthRecordPdfContext(
+                record,
+                profile,
+                metrics,
+                explanations,
+                recommendations.recommendations(),
+                recommendations.disclaimer(),
+                Instant.now()
+        ));
+        writePdfDownloadAudit(userId, record, accessibleRecord.shareScope());
+        return new DownloadHealthRecordPdfResponse(bytes, buildPdfFilename(profile, record));
+    }
+
     @Transactional(readOnly = true)
     public List<SharedHealthRecordResponse> getSharedHealthRecords(UUID userId) {
         List<com.healthlens.api.entity.HealthRecordShare> shares =
@@ -451,6 +487,65 @@ public class HealthRecordService {
             sb.append("Kết luận/ghi chú trên phiếu (chỉ là ngữ cảnh, không thay chẩn đoán): ").append(d);
         }
         return sb.toString();
+    }
+
+    private Map<String, String> safeMetricExplanations(List<MetricDto> metrics) {
+        Map<String, String> explanations = new LinkedHashMap<>();
+        for (MetricDto metric : metrics) {
+            String metricLabel = firstNonBlank(metric.getDisplayNameVi(), metric.getName());
+            if (metricLabel == null || metricLabel.isBlank()) {
+                continue;
+            }
+            String staticExplanation = metric.getExplanation();
+            if (staticExplanation != null && !staticExplanation.isBlank()) {
+                explanations.put(metricLabel, staticExplanation.trim());
+            }
+        }
+        return explanations;
+    }
+
+    private RecommendationsResponse safeRecommendations(UUID userId, UUID recordId) {
+        try {
+            return getRecommendations(userId, recordId);
+        } catch (RuntimeException ex) {
+            log.warn("Failed to load recommendations for record {} while generating PDF", recordId, ex);
+            return new RecommendationsResponse(
+                    List.of("Chưa có khuyến nghị tại thời điểm tải xuống."),
+                    RECOMMENDATIONS_DISCLAIMER,
+                    false
+            );
+        }
+    }
+
+    private void writePdfDownloadAudit(UUID actorId, HealthRecord record, String shareScope) {
+        HealthRecordAuditLog auditLog = new HealthRecordAuditLog();
+        auditLog.setId(UUID.randomUUID());
+        auditLog.setUserId(actorId);
+        auditLog.setAction("DOWNLOAD_HEALTH_RECORD_PDF");
+        auditLog.setRecordId(record.getId());
+        auditLog.setProfileId(record.getProfileId());
+        auditLog.setViewerId(actorId);
+        auditLog.setShareScope(shareScope);
+        auditLog.setResourceType("HEALTH_RECORD");
+        healthRecordAuditLogRepository.save(auditLog);
+    }
+
+    private String buildPdfFilename(Profile profile, HealthRecord record) {
+        String recordType = slugify(record.getRecordType() != null ? record.getRecordType() : "kham");
+        return "healthlens-ket-qua-%s.pdf".formatted(recordType);
+    }
+
+    private String slugify(String value) {
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("^-|-$", "");
+        return normalized.isBlank() ? "ho-so" : normalized;
+    }
+
+    private String firstNonBlank(String first, String second) {
+        return first != null && !first.isBlank() ? first : second;
     }
 
     @Transactional(readOnly = true)
