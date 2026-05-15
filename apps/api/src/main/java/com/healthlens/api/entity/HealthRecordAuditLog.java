@@ -28,6 +28,18 @@ public class HealthRecordAuditLog {
     @Column(name = "record_id", nullable = false)
     private UUID recordId;
 
+    @Column(name = "profile_id")
+    private UUID profileId;
+
+    @Column(name = "viewer_id")
+    private UUID viewerId;
+
+    @Column(name = "share_scope", length = 20)
+    private String shareScope;
+
+    @Column(name = "resource_type", length = 50)
+    private String resourceType;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 

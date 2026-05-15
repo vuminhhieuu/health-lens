@@ -1,6 +1,7 @@
 package com.healthlens.api.controller;
 
 import com.healthlens.api.config.SecurityConfig;
+import com.healthlens.api.dto.response.DownloadHealthRecordPdfResponse;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
 import com.healthlens.api.exception.GlobalExceptionHandler;
 import com.healthlens.api.security.CustomUserDetailsService;
@@ -30,6 +31,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -108,5 +111,32 @@ class HealthRecordControllerTest {
                 .andExpect(jsonPath("$.data.message").value("Deleted successfully"));
 
         verify(healthRecordService).deleteHealthRecord(userId, recordId);
+    }
+
+    @Test
+    @DisplayName("GET health record PDF trả binary PDF attachment")
+    void downloadHealthRecordPdf_returnsPdfAttachment() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        byte[] pdfBytes = "%PDF-1.4\n% HealthLens\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        when(healthRecordService.downloadHealthRecordPdf(eq(userId), eq(recordId)))
+                .thenReturn(new DownloadHealthRecordPdfResponse(
+                        pdfBytes,
+                        "healthlens-ket-qua-xet-nghiem-mau.pdf"
+                ));
+
+        mockMvc.perform(get("/api/v1/health-records/{recordId}/pdf", recordId)
+                        .with(SecurityMockMvcRequestPostProcessors.user(userId.toString()))
+                        .accept(MediaType.APPLICATION_PDF))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andExpect(header().string(
+                        "Content-Disposition",
+                        "attachment; filename=\"healthlens-ket-qua-xet-nghiem-mau.pdf\""
+                ))
+                .andExpect(content().bytes(pdfBytes));
+
+        verify(healthRecordService).downloadHealthRecordPdf(userId, recordId);
     }
 }

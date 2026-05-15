@@ -6,6 +6,7 @@ import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.healthlens.api.dto.request.InviteHealthRecordRequest;
 import com.healthlens.api.dto.request.UpdateMetricsRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
+import com.healthlens.api.dto.response.DownloadHealthRecordPdfResponse;
 import com.healthlens.api.dto.response.HealthRecordInvitationResponse;
 import com.healthlens.api.dto.response.HealthRecordDetailResponse;
 import com.healthlens.api.dto.response.HealthRecordStatusResponse;
@@ -17,6 +18,8 @@ import com.healthlens.api.service.HealthRecordService;
 import com.healthlens.api.service.HealthRecordShareService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -86,6 +89,19 @@ public class HealthRecordController {
         UUID userId = UUID.fromString(authentication.getName());
         HealthRecordDetailResponse response = healthRecordService.getDetail(userId, recordId, profileId);
         return ResponseEntity.ok(buildResponseBody(response));
+    }
+
+    @GetMapping(value = "/{recordId}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> downloadPdf(
+            Authentication authentication,
+            @PathVariable UUID recordId
+    ) {
+        UUID userId = UUID.fromString(authentication.getName());
+        DownloadHealthRecordPdfResponse response = healthRecordService.downloadHealthRecordPdf(userId, recordId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + response.filename() + "\"")
+                .body(response.bytes());
     }
 
     /**

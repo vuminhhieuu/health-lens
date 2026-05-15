@@ -6,16 +6,19 @@ import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
 import com.healthlens.api.dto.response.RecommendationsResponse;
+import com.healthlens.api.dto.response.DownloadHealthRecordPdfResponse;
 import com.healthlens.api.dto.request.UpdateMetricsRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.entity.HealthRecord;
+import com.healthlens.api.entity.HealthRecordAuditLog;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.HealthRecordShareRepository;
+import com.healthlens.api.repository.HealthRecordAuditLogRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,10 +62,12 @@ class HealthRecordServiceTest {
     @Mock private ProfileRepository profileRepository;
     @Mock private HealthRecordRepository healthRecordRepository;
     @Mock private HealthRecordShareRepository healthRecordShareRepository;
+    @Mock private HealthRecordAuditLogRepository healthRecordAuditLogRepository;
     @Mock private ProfileShareRepository profileShareRepository;
     @Mock private ReferenceDataService referenceDataService;
     @Mock private MetricExplanationRetrievalService metricExplanationRetrievalService;
     @Mock private LlmService llmService;
+    @Mock private HealthRecordPdfService healthRecordPdfService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private StreamOperations<String, Object, Object> streamOperations;
@@ -80,6 +85,8 @@ class HealthRecordServiceTest {
                 referenceDataService,
                 metricExplanationRetrievalService,
                 llmService,
+                healthRecordPdfService,
+                healthRecordAuditLogRepository,
                 redisTemplate,
                 new ObjectMapper(),
                 "ocr.events"
@@ -949,6 +956,135 @@ class HealthRecordServiceTest {
     }
 
     @Test
+    @DisplayName("downloadHealthRecordPdf owner tạo PDF và ghi audit")
+    void downloadHealthRecordPdf_ownerSuccess() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        Profile profile = buildProfile(userId, profileId);
+        profile.setDisplayName("Nguyễn Văn A");
+        HealthRecord record = buildDoneRecord(userId, profileId, recordId);
+        record.setRecordType("Xét nghiệm máu");
+
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+        when(referenceDataService.classifyMetricWithoutAudit(anyString(), anyString(), eq(profile), eq(LocalDate.of(2026, 5, 15))))
+                .thenReturn(new com.healthlens.api.dto.MetricClassificationDto("normal", null, "Glucose", null));
+        when(healthRecordPdfService.generatePdf(any())).thenReturn("%PDF-1.4".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        DownloadHealthRecordPdfResponse response = healthRecordService.downloadHealthRecordPdf(userId, recordId);
+
+        assertThat(response.bytes()).startsWith("%PDF".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertThat(response.filename()).isEqualTo("healthlens-ket-qua-xet-nghiem-mau.pdf");
+        verify(healthRecordPdfService).generatePdf(any());
+        ArgumentCaptor<HealthRecordAuditLog> auditCaptor = ArgumentCaptor.forClass(HealthRecordAuditLog.class);
+        verify(healthRecordAuditLogRepository).save(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().getAction()).isEqualTo("DOWNLOAD_HEALTH_RECORD_PDF");
+        assertThat(auditCaptor.getValue().getRecordId()).isEqualTo(recordId);
+        assertThat(auditCaptor.getValue().getProfileId()).isEqualTo(profileId);
+        assertThat(auditCaptor.getValue().getViewerId()).isEqualTo(userId);
+        assertThat(auditCaptor.getValue().getShareScope()).isEqualTo("owner");
+        assertThat(auditCaptor.getValue().getResourceType()).isEqualTo("HEALTH_RECORD");
+        verify(metricExplanationRetrievalService, never()).retrieve(anyString(), anyString(), any(), anyString());
+        verify(llmService, never()).generateExplanationResult(anyString(), anyString(), anyString(), any(), anyString(), nullable(String.class));
+    }
+
+    @Test
+    @DisplayName("downloadHealthRecordPdf record-level viewer được phép tải")
+    void downloadHealthRecordPdf_recordShareViewerSuccess() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        Profile profile = buildProfile(ownerId, profileId);
+        HealthRecord record = buildDoneRecord(ownerId, profileId, recordId);
+        com.healthlens.api.entity.HealthRecordShare share = new com.healthlens.api.entity.HealthRecordShare();
+        share.setHealthRecordId(recordId);
+        share.setProfileId(profileId);
+        share.setOwnerId(ownerId);
+        share.setViewerId(viewerId);
+        share.setAccessLevel("view");
+
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, viewerId)).thenReturn(Optional.empty());
+        when(healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)).thenReturn(Optional.of(record));
+        when(profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId)).thenReturn(false);
+        when(healthRecordShareRepository.existsByHealthRecordIdAndViewerIdAndRevokedAtIsNull(recordId, viewerId)).thenReturn(true);
+        when(healthRecordShareRepository.findByHealthRecordIdAndViewerIdAndRevokedAtIsNull(recordId, viewerId)).thenReturn(Optional.of(share));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+        when(referenceDataService.classifyMetricWithoutAudit(anyString(), anyString(), eq(profile), eq(LocalDate.of(2026, 5, 15))))
+                .thenReturn(new com.healthlens.api.dto.MetricClassificationDto("normal", null, "Glucose", null));
+        when(healthRecordPdfService.generatePdf(any())).thenReturn("%PDF-1.4".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        DownloadHealthRecordPdfResponse response = healthRecordService.downloadHealthRecordPdf(viewerId, recordId);
+
+        assertThat(response.bytes()).isNotEmpty();
+        verify(healthRecordAuditLogRepository).save(any());
+    }
+
+    @Test
+    @DisplayName("downloadHealthRecordPdf profile shared viewer được phép tải")
+    void downloadHealthRecordPdf_profileShareViewerSuccess() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        Profile profile = buildProfile(ownerId, profileId);
+        HealthRecord record = buildDoneRecord(ownerId, profileId, recordId);
+
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, viewerId)).thenReturn(Optional.empty());
+        when(healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)).thenReturn(Optional.of(record));
+        when(profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId)).thenReturn(true);
+        when(profileShareRepository.existsByProfileIdAndViewerIdAndAccessLevelIgnoreCaseAndRevokedAtIsNull(profileId, viewerId, "edit"))
+                .thenReturn(false);
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+        when(referenceDataService.classifyMetricWithoutAudit(anyString(), anyString(), eq(profile), eq(LocalDate.of(2026, 5, 15))))
+                .thenReturn(new com.healthlens.api.dto.MetricClassificationDto("normal", null, "Glucose", null));
+        when(healthRecordPdfService.generatePdf(any())).thenReturn("%PDF-1.4".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        DownloadHealthRecordPdfResponse response = healthRecordService.downloadHealthRecordPdf(viewerId, recordId);
+
+        assertThat(response.bytes()).isNotEmpty();
+        ArgumentCaptor<HealthRecordAuditLog> auditCaptor = ArgumentCaptor.forClass(HealthRecordAuditLog.class);
+        verify(healthRecordAuditLogRepository).save(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().getShareScope()).isEqualTo("profile");
+    }
+
+    @Test
+    @DisplayName("downloadHealthRecordPdf không tạo PDF khi không có quyền")
+    void downloadHealthRecordPdf_forbiddenDoesNotGeneratePdf() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        HealthRecord record = buildDoneRecord(ownerId, profileId, recordId);
+
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, requesterId)).thenReturn(Optional.empty());
+        when(healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)).thenReturn(Optional.of(record));
+        when(profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, requesterId)).thenReturn(false);
+        when(healthRecordShareRepository.existsByHealthRecordIdAndViewerIdAndRevokedAtIsNull(recordId, requesterId)).thenReturn(false);
+
+        assertThatThrownBy(() -> healthRecordService.downloadHealthRecordPdf(requesterId, recordId))
+                .isInstanceOf(com.healthlens.api.exception.ProfileAccessRevokedException.class);
+        verify(healthRecordPdfService, never()).generatePdf(any());
+        verify(healthRecordAuditLogRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("downloadHealthRecordPdf không tạo PDF khi record đã soft-delete")
+    void downloadHealthRecordPdf_softDeletedDoesNotGeneratePdf() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.empty());
+        when(healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> healthRecordService.downloadHealthRecordPdf(userId, recordId))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(healthRecordPdfService, never()).generatePdf(any());
+        verify(healthRecordAuditLogRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("getRecommendations tra ve thong diep khich le khi tat ca chi so normal")
     void getRecommendations_allNormal_returnsPositiveMessage() throws Exception {
         UUID userId = UUID.randomUUID();
@@ -1123,5 +1259,25 @@ class HealthRecordServiceTest {
         profile.setId(profileId);
         profile.setUser(user);
         return profile;
+    }
+
+    private HealthRecord buildDoneRecord(UUID userId, UUID profileId, UUID recordId) throws Exception {
+        MetricDto metric = MetricDto.builder()
+                .name("Glucose")
+                .value("5.4")
+                .unit("mmol/L")
+                .status("normal")
+                .build();
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setProfileId(profileId);
+        record.setStatus("done");
+        record.setSourceType("ocr");
+        record.setFileKey("health-records/%s/%s/%s/original.pdf".formatted(userId, profileId, recordId));
+        record.setExamDate(LocalDate.of(2026, 5, 15));
+        record.setRecordType("Xét nghiệm máu");
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
+        return record;
     }
 }

@@ -1,6 +1,6 @@
 # Story 6.5: Chia sẻ một kết quả khám trong hồ sơ
 
-Status: review
+Status: done
 
 ## Execution scope
 

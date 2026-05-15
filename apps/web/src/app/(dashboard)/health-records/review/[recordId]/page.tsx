@@ -154,6 +154,27 @@ const metricSchema = z.object({
   source: z.enum(["ocr", "manual"]),
 });
 
+function extractFilename(contentDisposition: unknown): string | null {
+  if (typeof contentDisposition !== "string") return null;
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1].trim().replace(/^"|"$/g, ""));
+  }
+  const asciiMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+  return asciiMatch?.[1]?.trim() ?? null;
+}
+
+function slugifyFilenamePart(value: string | null | undefined): string {
+  if (!value) return "kham";
+  const slug = value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "kham";
+}
+
 export default function ReviewRecordPage() {
   const params = useParams();
   const router = useRouter();
@@ -180,6 +201,8 @@ export default function ReviewRecordPage() {
   const [retryUploadError, setRetryUploadError] = useState<string | null>(null);
   const [isDeletingRecord, setIsDeletingRecord] = useState(false);
   const [deleteRecordError, setDeleteRecordError] = useState<string | null>(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [pdfDownloadError, setPdfDownloadError] = useState<string | null>(null);
   const [showDeleteRecordModal, setShowDeleteRecordModal] = useState(false);
   const [showRecordShareModal, setShowRecordShareModal] = useState(false);
   const [recordShareEmail, setRecordShareEmail] = useState("");
@@ -642,6 +665,34 @@ export default function ReviewRecordPage() {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    if (!recordId || isDownloadingPdf) return;
+    try {
+      setIsDownloadingPdf(true);
+      setPdfDownloadError(null);
+      const response = await apiClient.get(ApiPaths.HEALTH_RECORDS.DOWNLOAD_PDF(recordId), {
+        responseType: "blob",
+        headers: { Accept: "application/pdf" },
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const objectUrl = URL.createObjectURL(blob);
+      const filename =
+        extractFilename(response.headers["content-disposition"]) ??
+        `healthlens-ket-qua-${slugifyFilenamePart(data?.recordType)}.pdf`;
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setPdfDownloadError("Tải PDF thất bại. Vui lòng thử lại.");
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
   const handleInviteRecordShare = () => {
     const trimmedEmail = recordShareEmail.trim().toLowerCase();
     if (!trimmedEmail) {
@@ -809,7 +860,6 @@ export default function ReviewRecordPage() {
   const canToggleEditResults = data?.status === "done" || (data?.status === "ocr_failed" && manualMode);
   const isOwner = data.isOwner ?? true;
   const canEdit = data.canEdit ?? isOwner;
-  const shareScope = data.shareScope ?? (isOwner ? "owner" : "profile");
   const canShareRecord = isOwner;
   const canDeleteRecord = isOwner;
   const showMetricCards = !editMode;
@@ -901,10 +951,11 @@ export default function ReviewRecordPage() {
                 type="button"
                 title="Tải PDF"
                 aria-label="Tải PDF"
-                disabled
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#e9f6f3] text-[#3d4947] disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void handleDownloadPdf()}
+                disabled={isDownloadingPdf}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#e9f6f3] text-[#3d4947] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <FileDown className="h-4 w-4" />
+                {isDownloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
               </button>
               {canDeleteRecord ? (
                 <button
@@ -922,6 +973,9 @@ export default function ReviewRecordPage() {
           </section>
           {deleteRecordError ? (
             <div className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]">{deleteRecordError}</div>
+          ) : null}
+          {pdfDownloadError ? (
+            <div className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]">{pdfDownloadError}</div>
           ) : null}
 
           {/* ── Zone 1: Status Summary (Gradient Card) ── */}
