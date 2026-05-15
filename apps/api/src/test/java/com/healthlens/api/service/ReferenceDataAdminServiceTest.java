@@ -5,6 +5,8 @@ import com.healthlens.api.dto.request.AdminReferenceMetricRequest;
 import com.healthlens.api.dto.request.AdminReferenceRangeRequest;
 import com.healthlens.api.dto.response.AdminChangeSetDetailResponse;
 import com.healthlens.api.dto.response.AdminReferenceChangeSetResponse;
+import com.healthlens.api.dto.response.AdminReferenceImportConfirmResponse;
+import com.healthlens.api.dto.response.AdminReferenceImportPreviewResponse;
 import com.healthlens.api.dto.response.AdminReferenceMetricResponse;
 import com.healthlens.api.entity.ReferenceDataChangeSet;
 import com.healthlens.api.entity.ReferenceMetric;
@@ -24,9 +26,15 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,6 +45,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -62,6 +71,8 @@ class ReferenceDataAdminServiceTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    private final Clock clock = Clock.fixed(Instant.parse("2026-06-01T12:00:00Z"), ZoneOffset.UTC);
+
     @BeforeEach
     void setUp() {
         referenceDataAdminService = new ReferenceDataAdminService(
@@ -70,7 +81,8 @@ class ReferenceDataAdminServiceTest {
                 referenceDataChangeSetRepository,
                 referenceRangeAuditLogRepository,
                 userRepository,
-                objectMapper
+                objectMapper,
+                clock
         );
     }
 
@@ -242,7 +254,7 @@ class ReferenceDataAdminServiceTest {
 
         assertThatThrownBy(() -> referenceDataAdminService.createMetric(UUID.randomUUID(), request))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Giá trị tối thiểu phải nhỏ hơn giá trị tối đa");
+                .hasMessageContaining("Giá trị cột Ngưỡng min phải nhỏ hơn cột Ngưỡng max");
     }
 
     @Test
@@ -265,7 +277,7 @@ class ReferenceDataAdminServiceTest {
 
         assertThatThrownBy(() -> referenceDataAdminService.createMetric(UUID.randomUUID(), request))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Không cho phép ngưỡng âm");
+                .hasMessageContaining("Cột Ngưỡng min và Ngưỡng max không được âm");
     }
 
     // ========================================================================
@@ -422,7 +434,8 @@ class ReferenceDataAdminServiceTest {
 
             assertThatThrownBy(() -> referenceDataAdminService.approveChangeSet(changeSetId, reviewerId))
                     .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("Không tìm thấy change set đang chờ duyệt");
+                    .hasMessageContaining("Không tìm thấy tập dữ liệu thay đổi")
+                    .hasMessageContaining("đang chờ duyệt");
         }
 
         @Test
@@ -436,7 +449,8 @@ class ReferenceDataAdminServiceTest {
 
             assertThatThrownBy(() -> referenceDataAdminService.rejectChangeSet(changeSetId, reviewerId, "lý do"))
                     .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("Không tìm thấy change set đang chờ duyệt");
+                    .hasMessageContaining("Không tìm thấy tập dữ liệu thay đổi")
+                    .hasMessageContaining("đang chờ duyệt");
         }
 
         @Test
@@ -567,6 +581,79 @@ class ReferenceDataAdminServiceTest {
         }
 
         @Test
+        @DisplayName("approveChangeSet with CREATE and null entityId creates metric from import snapshot")
+        void approveChangeSet_createWithNullEntityId_createsMetricFromSnapshot() throws Exception {
+            UUID changeSetId = UUID.randomUUID();
+            UUID reviewerId = UUID.randomUUID();
+
+            Map<String, Object> rangePayload = new LinkedHashMap<>();
+            rangePayload.put("minValue", 3.9);
+            rangePayload.put("maxValue", 5.6);
+            rangePayload.put("attentionMin", 3.9);
+            rangePayload.put("attentionMax", 5.6);
+            rangePayload.put("gender", "male");
+            rangePayload.put("minAge", 18);
+            rangePayload.put("maxAge", null);
+            rangePayload.put("status", "pending");
+
+            Map<String, Object> snapshot = new LinkedHashMap<>();
+            snapshot.put("name", "ImportNewMetric");
+            snapshot.put("displayNameVi", "Chỉ số import mới");
+            snapshot.put("unit", "mg/dL");
+            snapshot.put("status", "pending");
+            snapshot.put("ranges", List.of(rangePayload));
+
+            ReferenceDataChangeSet cs = new ReferenceDataChangeSet();
+            cs.setId(changeSetId);
+            cs.setAdminId(UUID.randomUUID());
+            cs.setEntityType("METRIC");
+            cs.setEntityId(null);
+            cs.setOperation("CREATE");
+            cs.setChangesJson(objectMapper.writeValueAsString(snapshot));
+            cs.setStatus("pending");
+            cs.setCreatedAt(Instant.now());
+
+            when(referenceDataChangeSetRepository.findByIdAndStatus(changeSetId, "pending"))
+                    .thenReturn(Optional.of(cs));
+            when(referenceMetricRepository.findByNameIgnoreCase("ImportNewMetric"))
+                    .thenReturn(Optional.empty());
+            when(referenceMetricRepository.save(any(ReferenceMetric.class)))
+                    .thenAnswer(invocation -> {
+                        ReferenceMetric metric = invocation.getArgument(0);
+                        if (metric.getId() == null) {
+                            metric.setId(UUID.randomUUID());
+                        }
+                        return metric;
+                    });
+            when(referenceRangeRepository.save(any(ReferenceRange.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
+            when(referenceDataChangeSetRepository.save(any(ReferenceDataChangeSet.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
+            when(referenceRangeRepository.findAllByMetric_IdOrderByGenderAscMinAgeAscMaxAgeAsc(any()))
+                    .thenReturn(List.of());
+            when(referenceRangeAuditLogRepository.save(any(ReferenceRangeAuditLog.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
+
+            AdminReferenceChangeSetResponse response = referenceDataAdminService.approveChangeSet(changeSetId, reviewerId);
+
+            assertThat(response.status()).isEqualTo("approved");
+
+            ArgumentCaptor<ReferenceMetric> metricCaptor = ArgumentCaptor.forClass(ReferenceMetric.class);
+            verify(referenceMetricRepository).save(metricCaptor.capture());
+            assertThat(metricCaptor.getValue().getName()).isEqualTo("ImportNewMetric");
+            assertThat(metricCaptor.getValue().getStatus()).isEqualTo("active");
+
+            ArgumentCaptor<ReferenceRange> rangeCaptor = ArgumentCaptor.forClass(ReferenceRange.class);
+            verify(referenceRangeRepository).save(rangeCaptor.capture());
+            assertThat(rangeCaptor.getValue().getStatus()).isEqualTo("active");
+            assertThat(rangeCaptor.getValue().getGender()).isEqualTo("male");
+
+            ArgumentCaptor<ReferenceDataChangeSet> csCaptor = ArgumentCaptor.forClass(ReferenceDataChangeSet.class);
+            verify(referenceDataChangeSetRepository).save(csCaptor.capture());
+            assertThat(csCaptor.getValue().getEntityId()).isEqualTo(metricCaptor.getValue().getId());
+        }
+
+        @Test
         @DisplayName("publishChangeSet directly activates draft in single-admin mode")
         void publishChangeSet_activatesDraftInSingleAdminMode() throws Exception {
             UUID changeSetId = UUID.randomUUID();
@@ -654,7 +741,8 @@ class ReferenceDataAdminServiceTest {
 
             assertThatThrownBy(() -> referenceDataAdminService.approveChangeSet(changeSetId, adminId))
                     .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("Không thể phê duyệt change set do chính bạn tạo");
+                    .hasMessageContaining("Không thể phê duyệt tập dữ liệu thay đổi")
+                    .hasMessageContaining("do chính bạn tạo");
         }
 
         @Test
@@ -684,6 +772,104 @@ class ReferenceDataAdminServiceTest {
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("single-admin");
         }
+    }
+
+    @Test
+    @DisplayName("previewImport CSV co UTF-8 BOM van nhan dung cot metricName")
+    void previewImport_csvWithUtf8Bom_parsesHeaders() {
+        String csv = "\uFEFFmetricName,displayNameVi,unit,minValue,maxValue,gender\n"
+                + "bommetric,Test BOM,mg,1,50,male\n";
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "ref.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8));
+
+        AdminReferenceImportPreviewResponse preview =
+                referenceDataAdminService.previewImport(UUID.randomUUID(), file);
+
+        assertThat(preview.errorRows()).isEmpty();
+        assertThat(preview.validRows()).hasSize(1);
+        assertThat(preview.validRows().get(0).metricName()).isEqualTo("bommetric");
+    }
+
+    @Test
+    @DisplayName("confirmImport tu choi khi xac nhan trung importId lan hai")
+    void confirmImport_rejectsDuplicateConfirm() {
+        UUID adminId = UUID.randomUUID();
+        AdminReferenceImportPreviewResponse preview =
+                referenceDataAdminService.previewImport(adminId, singleRowImportCsv());
+
+        when(referenceMetricRepository.findByNameIgnoreCase("importadmintestmetric")).thenReturn(Optional.empty());
+        when(referenceDataChangeSetRepository.save(any(ReferenceDataChangeSet.class)))
+                .thenAnswer(invocation -> {
+                    ReferenceDataChangeSet cs = invocation.getArgument(0);
+                    if (cs.getId() == null) {
+                        cs.setId(UUID.randomUUID());
+                    }
+                    return cs;
+                });
+
+        AdminReferenceImportConfirmResponse first =
+                referenceDataAdminService.confirmImport(adminId, preview.importId());
+        assertThat(first.draftChangeSetCount()).isEqualTo(1);
+
+        assertThatThrownBy(() -> referenceDataAdminService.confirmImport(adminId, preview.importId()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Không tìm thấy nhập dữ liệu hoặc nhập dữ liệu đã hết hạn");
+
+        verify(referenceDataChangeSetRepository, times(1)).save(any(ReferenceDataChangeSet.class));
+    }
+
+    @Test
+    @DisplayName("confirmImport chi cho phep admin da preview xac nhan")
+    void confirmImport_rejectsDifferentAdmin() {
+        UUID ownerId = UUID.randomUUID();
+        UUID otherId = UUID.randomUUID();
+        MockMultipartFile file = singleRowImportCsv();
+
+        AdminReferenceImportPreviewResponse preview = referenceDataAdminService.previewImport(ownerId, file);
+
+        assertThatThrownBy(() -> referenceDataAdminService.confirmImport(otherId, preview.importId()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Không tìm thấy nhập dữ liệu hoặc nhập dữ liệu đã hết hạn");
+
+        verify(referenceDataChangeSetRepository, never()).save(any(ReferenceDataChangeSet.class));
+    }
+
+    @Test
+    @DisplayName("confirmImport tu choi khi preview het han")
+    void confirmImport_rejectsExpiredSession() {
+        Instant base = Instant.parse("2026-07-01T10:00:00Z");
+        Clock mockClock = mock(Clock.class);
+        when(mockClock.instant()).thenReturn(base);
+
+        ReferenceDataAdminService svc = new ReferenceDataAdminService(
+                referenceMetricRepository,
+                referenceRangeRepository,
+                referenceDataChangeSetRepository,
+                referenceRangeAuditLogRepository,
+                userRepository,
+                objectMapper,
+                mockClock
+        );
+
+        UUID adminId = UUID.randomUUID();
+        AdminReferenceImportPreviewResponse preview = svc.previewImport(adminId, singleRowImportCsv());
+
+        Instant afterTtl = base.plus(Duration.ofHours(1)).plusSeconds(1);
+        when(mockClock.instant()).thenReturn(afterTtl);
+
+        assertThatThrownBy(() -> svc.confirmImport(adminId, preview.importId()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Không tìm thấy nhập dữ liệu hoặc nhập dữ liệu đã hết hạn");
+
+        verify(referenceDataChangeSetRepository, never()).save(any(ReferenceDataChangeSet.class));
+    }
+
+    private static MockMultipartFile singleRowImportCsv() {
+        String csv = """
+                metricName,displayNameVi,unit,minValue,maxValue,gender
+                importadmintestmetric,Test display,mg,1,50,male
+                """;
+        return new MockMultipartFile("file", "ref.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8));
     }
 
     private AdminReferenceMetricRequest buildRequest(String name) {

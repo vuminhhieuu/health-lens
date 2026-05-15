@@ -157,6 +157,8 @@ export const ApiPaths = {
   ADMIN_REFERENCE_DATA: {
     BASE: `/api/${API_VERSION}/admin/reference-data`,
     METRICS: `/api/${API_VERSION}/admin/reference-data/metrics`,
+    IMPORT_PREVIEW: `/api/${API_VERSION}/admin/reference-data/import/preview`,
+    IMPORT_CONFIRM: `/api/${API_VERSION}/admin/reference-data/import/confirm`,
     METRIC_BY_ID: (id: string) => `/api/${API_VERSION}/admin/reference-data/metrics/${id}`,
     REACTIVATE: (id: string) => `/api/${API_VERSION}/admin/reference-data/metrics/${id}/reactivate`,
     CHANGE_SETS: `/api/${API_VERSION}/admin/reference-data/change-sets`,
