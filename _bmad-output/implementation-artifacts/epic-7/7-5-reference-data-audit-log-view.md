@@ -1,6 +1,6 @@
 # Story 7.5: Audit log đầy đủ cho reference data
 
-Status: ready-for-dev
+Status: review
 
 ## Execution scope
 
@@ -32,22 +32,22 @@ so that tôi truy vết ai đã sửa gì và khi nào.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: Audit log table + query endpoint (AC: #1, #2)
-  - [ ] Flyway migration `V017__create_audit_logs_table.sql`
-  - [ ] Schema: id, actor_id, action, resource_type, resource_id, old_value_json, new_value_json, ip_address, timestamp
-  - [ ] `GET /api/v1/admin/audit-logs?resourceType=REFERENCE_DATA&from={date}&to={date}&page=0&limit=50`
-  - [ ] Spring AOP nghiêng `@Auditable` tự động ghi audit khi có annotation
-- [ ] Task 2 — Backend: Export CSV (AC: #4)
-  - [ ] `GET /api/v1/admin/audit-logs/export?...` → stream CSV download
-  - [ ] Dùng Apache Commons CSV hoặc OpenCSV
-- [ ] Task 3 — Web: Audit log page (AC: #1, #2, #3, #4)
-  - [ ] Tạo `apps/web/src/app/admin/audit-log/page.tsx`
-  - [ ] Date range picker, filter by resource type
-  - [ ] Table: actor email, action, entity, timestamp, IP, [Chi tiết]
-  - [ ] Detail modal: before/after diff (JSON diff view)
-  - [ ] "Export CSV" button
-- [ ] Task 4 — Tests (AC: #1, #2)
-  - [ ] `AuditLogServiceTest`: query with filters, pagination
+- [x] Task 1 — Backend: Audit log table + query endpoint (AC: #1, #2)
+  - [x] Flyway migration `V021__create_audit_logs_table.sql`
+  - [x] Schema: id, actor_id, action, resource_type, resource_id, old_value_json, new_value_json, ip_address, timestamp
+  - [x] `GET /api/v1/admin/audit-logs?resourceType=REFERENCE_DATA&from={date}&to={date}&page=0&limit=50`
+  - [x] Spring AOP mở rộng `@Auditable` để ghi audit khi có annotation + unified resource type
+- [x] Task 2 — Backend: Export CSV (AC: #4)
+  - [x] `GET /api/v1/admin/audit-logs/export?...` → stream CSV download
+  - [x] Dùng Apache Commons CSV
+- [x] Task 3 — Web: Audit log page (AC: #1, #2, #3, #4)
+  - [x] Tạo `apps/web/src/app/admin/audit-log/page.tsx`
+  - [x] Date range picker, filter by resource type + metric resourceId + actor email
+  - [x] Table: actor email, action, entity, timestamp, IP, [Chi tiết]
+  - [x] Detail modal: before/after diff (JSON diff view)
+  - [x] "Export CSV" button
+- [x] Task 4 — Tests (AC: #1, #2)
+  - [x] `AdminAuditLogServiceTest`: query with filters, pagination + date boundary helpers
 
 ## Dev Notes
 
@@ -96,10 +96,62 @@ public class AuditAspect {
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
+Auto (Cursor)
 
 ### Debug Log References
 
+- `./gradlew.bat test --tests "com.healthlens.api.aspect.AuditableAspectTest" --tests "com.healthlens.api.service.admin.AdminAuditLogServiceTest" --no-daemon` ✅
+- `pnpm --filter web lint` ✅ (chỉ còn warning cũ ở `src/app/(dashboard)/health-records/page.tsx`, không thuộc story này)
+
 ### Completion Notes List
 
+- Added unified admin audit foundation:
+  - migration `V021__create_audit_logs_table.sql`
+  - `AuditLog` entity + repository + admin DTOs + `AdminAuditLogService`
+  - `AdminAuditLogController` list/export endpoints with date filters, resource filters, pagination, and CSV streaming.
+- Extended annotation/aspect flow:
+  - `@Auditable` supports `unifiedResourceType`
+  - `AuditableAspect` now supports both legacy health-record audit and unified `audit_logs` writes using `SecurityContext` actor + request IP/User-Agent.
+  - Added `UnifiedAuditSnapshot` thread-local payload for old/new JSON snapshots.
+- Added admin reference metric mutation endpoint to generate real `REFERENCE_DATA` audit rows:
+  - `PATCH /api/v1/admin/reference-metrics/{metricId}/display`
+  - `GET /api/v1/admin/reference-metrics` for web filter options.
+- Added web admin UI according to Stitch story:
+  - new admin layout guard + role guidance
+  - audit log page with date/resource/metric/actor filters, table, detail modal with before/after JSON, CSV export button.
+- Security and routes:
+  - `ApiRoutes.ADMIN_*` constants
+  - `SecurityConfig` now enforces `ROLE_ADMIN` for `/api/v1/admin/**`
+  - shared frontend API constants include admin endpoints.
+
 ### File List
+
+- `apps/api/src/main/resources/db/migration/V021__create_audit_logs_table.sql`
+- `apps/api/build.gradle.kts`
+- `apps/api/src/main/java/com/healthlens/api/constants/ApiRoutes.java`
+- `apps/api/src/main/java/com/healthlens/api/config/SecurityConfig.java`
+- `apps/api/src/main/java/com/healthlens/api/entity/UserRole.java`
+- `apps/api/src/main/java/com/healthlens/api/annotation/Auditable.java`
+- `apps/api/src/main/java/com/healthlens/api/aspect/AuditableAspect.java`
+- `apps/api/src/main/java/com/healthlens/api/entity/AuditLog.java`
+- `apps/api/src/main/java/com/healthlens/api/repository/AuditLogRepository.java`
+- `apps/api/src/main/java/com/healthlens/api/audit/AuditActions.java`
+- `apps/api/src/main/java/com/healthlens/api/audit/AuditResourceTypes.java`
+- `apps/api/src/main/java/com/healthlens/api/audit/UnifiedAuditSnapshot.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/admin/AuditLogEntryDto.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/admin/AuditLogPageDto.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/admin/ReferenceMetricAdminDto.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/request/UpdateReferenceMetricDisplayRequest.java`
+- `apps/api/src/main/java/com/healthlens/api/service/admin/AdminAuditLogService.java`
+- `apps/api/src/main/java/com/healthlens/api/service/admin/AdminReferenceMetricService.java`
+- `apps/api/src/main/java/com/healthlens/api/controller/admin/AdminAuditLogController.java`
+- `apps/api/src/main/java/com/healthlens/api/controller/admin/AdminReferenceMetricController.java`
+- `apps/api/src/test/java/com/healthlens/api/aspect/AuditableAspectTest.java`
+- `apps/api/src/test/java/com/healthlens/api/service/admin/AdminAuditLogServiceTest.java`
+- `apps/web/src/app/admin/layout.tsx`
+- `apps/web/src/app/admin/audit-log/page.tsx`
+- `packages/shared/constants/api.ts`
+
+### Change Log
+
+- 2026-05-10: Completed Story 7.5 implementation (backend audit infrastructure + admin APIs + web audit page + tests), status moved to `review`.

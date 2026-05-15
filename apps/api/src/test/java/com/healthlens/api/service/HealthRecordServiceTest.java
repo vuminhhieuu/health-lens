@@ -63,6 +63,7 @@ class HealthRecordServiceTest {
     @Mock private HealthRecordRepository healthRecordRepository;
     @Mock private HealthRecordShareRepository healthRecordShareRepository;
     @Mock private HealthRecordAuditLogRepository healthRecordAuditLogRepository;
+    @Mock private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
     @Mock private ProfileShareRepository profileShareRepository;
     @Mock private ReferenceDataService referenceDataService;
     @Mock private MetricExplanationRetrievalService metricExplanationRetrievalService;
@@ -87,6 +88,7 @@ class HealthRecordServiceTest {
                 llmService,
                 healthRecordPdfService,
                 healthRecordAuditLogRepository,
+                auditEventRecorder,
                 redisTemplate,
                 new ObjectMapper(),
                 "ocr.events"
@@ -271,9 +273,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
 
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
@@ -295,9 +295,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("processing"); // invalid status
 
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
@@ -333,9 +331,7 @@ class HealthRecordServiceTest {
     void confirmRecord_allowOcrFailedWhenKeepPartial() {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("ocr_failed");
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
 
@@ -355,9 +351,7 @@ class HealthRecordServiceTest {
     void confirmRecord_allowOcrFailedManualRecovery() {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("ocr_failed");
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
 
@@ -379,9 +373,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("done");
 
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
@@ -402,9 +394,7 @@ class HealthRecordServiceTest {
     void confirmRecord_setsSourceTypePartialWhenKeepPartialRequested() {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
 
@@ -430,9 +420,7 @@ class HealthRecordServiceTest {
     void confirmRecord_recomputesSourceTypeWhenNotKeepPartial() {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
         record.setSourceType("ocr_partial");
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
@@ -495,9 +483,7 @@ class HealthRecordServiceTest {
 
         UUID profileId = UUID.randomUUID();
         Profile profile = buildProfile(userId, profileId);
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setProfileId(profileId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
@@ -554,9 +540,7 @@ class HealthRecordServiceTest {
         UUID recordId = UUID.randomUUID();
 
         MetricDto metric = MetricDto.builder().name("HbA1c").build();
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
         when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
 
@@ -671,9 +655,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
         record.setSourceType("ocr");
 
@@ -705,9 +687,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
         record.setSourceType("manual");
 
@@ -731,9 +711,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("done");
         record.setSourceType("ocr");
 
@@ -758,9 +736,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
         record.setSourceType("ocr");
 
@@ -812,9 +788,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("processing");
 
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
@@ -832,9 +806,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
         record.setSourceType("ocr");
 
@@ -869,9 +841,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
 
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
@@ -949,9 +919,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("done");
         record.setSourceType("ocr");
 
@@ -971,9 +939,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
         record.setSourceType("ocr");
 
@@ -1004,9 +970,7 @@ class HealthRecordServiceTest {
     void deleteHealthRecord_success() {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
 
         when(healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)).thenReturn(Optional.of(record));
 
@@ -1190,9 +1154,7 @@ class HealthRecordServiceTest {
                 ))
                 .build();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setProfileId(profileId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
@@ -1231,9 +1193,7 @@ class HealthRecordServiceTest {
                 ))
                 .build();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setProfileId(profileId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
@@ -1274,9 +1234,7 @@ class HealthRecordServiceTest {
                 ))
                 .build();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setProfileId(profileId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
@@ -1316,9 +1274,7 @@ class HealthRecordServiceTest {
                 ))
                 .build();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setProfileId(profileId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
@@ -1331,6 +1287,14 @@ class HealthRecordServiceTest {
 
         assertThat(response.allNormal()).isFalse();
         verify(llmService).generateRecommendations(any(), any(), eq("female"), any());
+    }
+
+    private HealthRecord newOwnedRecord(UUID userId, UUID recordId) {
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setProfileId(UUID.randomUUID());
+        return record;
     }
 
     private Profile buildProfile(UUID userId, UUID profileId) {
@@ -1349,9 +1313,7 @@ class HealthRecordServiceTest {
                 .unit("mmol/L")
                 .status("normal")
                 .build();
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setProfileId(profileId);
         record.setStatus("done");
         record.setSourceType("ocr");

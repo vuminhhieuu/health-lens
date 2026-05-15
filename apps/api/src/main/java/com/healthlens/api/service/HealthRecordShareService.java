@@ -1,5 +1,8 @@
 package com.healthlens.api.service;
 
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditEventRecorder;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.dto.response.AcceptHealthRecordInvitationResultResponse;
 import com.healthlens.api.dto.response.HealthRecordInvitationResponse;
 import com.healthlens.api.dto.response.IncomingHealthRecordInvitationResponse;
@@ -45,6 +48,7 @@ public class HealthRecordShareService {
     private final ProfileShareAuditLogRepository auditLogRepository;
     private final UserRepository userRepository;
     private final EmailService emailService;
+    private final AuditEventRecorder auditEventRecorder;
 
     @Value("${app.frontend.base-url:http://localhost:3000}")
     private String frontendBaseUrl;
@@ -57,7 +61,8 @@ public class HealthRecordShareService {
             ProfileShareRepository profileShareRepository,
             ProfileShareAuditLogRepository auditLogRepository,
             UserRepository userRepository,
-            EmailService emailService
+            EmailService emailService,
+            AuditEventRecorder auditEventRecorder
     ) {
         this.healthRecordRepository = healthRecordRepository;
         this.healthRecordInvitationRepository = healthRecordInvitationRepository;
@@ -67,6 +72,7 @@ public class HealthRecordShareService {
         this.auditLogRepository = auditLogRepository;
         this.userRepository = userRepository;
         this.emailService = emailService;
+        this.auditEventRecorder = auditEventRecorder;
     }
 
     @Transactional
@@ -109,7 +115,7 @@ public class HealthRecordShareService {
         }
 
         healthRecordInvitationRepository.save(invitation);
-        writeAuditLog(requesterId, record.getProfileId(), null, "INVITE_HEALTH_RECORD_SHARE", "HEALTH_RECORD_INVITATION", invitation.getId());
+        writeAuditLog(requesterId, record.getProfileId(), null, AuditActions.INVITE_HEALTH_RECORD_SHARE, "HEALTH_RECORD_INVITATION", invitation.getId());
 
         if (!"accepted".equals(invitation.getStatus())) {
             emailService.sendHealthRecordInvitationEmail(inviter, normalizedEmail, buildInvitationLink(invitation.getToken()));
@@ -302,7 +308,7 @@ public class HealthRecordShareService {
         invitation.setStatus("accepted");
         invitation.setAcceptedAt(now);
         healthRecordInvitationRepository.save(invitation);
-        writeAuditLog(userId, record.getProfileId(), viewer.getId(), "ACCEPT_HEALTH_RECORD_SHARE", "HEALTH_RECORD_SHARE", share.getId());
+        writeAuditLog(userId, record.getProfileId(), viewer.getId(), AuditActions.ACCEPT_HEALTH_RECORD_SHARE, "HEALTH_RECORD_SHARE", share.getId());
 
         return new AcceptHealthRecordInvitationResultResponse(
                 "accepted",
@@ -342,7 +348,7 @@ public class HealthRecordShareService {
                     }
                     healthRecordInvitationRepository.saveAll(invitations);
                 });
-        writeAuditLog(requesterId, record.getProfileId(), resolvedViewerId, "REVOKE_HEALTH_RECORD_SHARE", "HEALTH_RECORD_SHARE", share.getId());
+        writeAuditLog(requesterId, record.getProfileId(), resolvedViewerId, AuditActions.REVOKE_HEALTH_RECORD_SHARE, "HEALTH_RECORD_SHARE", share.getId());
     }
 
     private HealthRecord loadRecord(UUID recordId) {
@@ -432,5 +438,13 @@ public class HealthRecordShareService {
         auditLog.setResourceType(resourceType);
         auditLog.setResourceId(resourceId);
         auditLogRepository.save(auditLog);
+
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("profileId", profileId.toString());
+        details.put("resourceType", resourceType);
+        if (viewerId != null) {
+            details.put("viewerId", viewerId.toString());
+        }
+        auditEventRecorder.recordEvent(actorId, action, AuditResourceTypes.HEALTH_RECORD, resourceId, details);
     }
 }

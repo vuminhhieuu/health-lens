@@ -161,4 +161,11 @@ public final class ApiRoutes {
     public static final String ACTUATOR_HEALTH_PATTERN = "/actuator/health/**";
     public static final String ADMIN_AUTH_PATTERN = ADMIN_AUTH_BASE + "/**";
     public static final String ADMIN_PATTERN = ADMIN_BASE + "/**";
+
+    // =========================================
+    // Admin paths (JWT must carry ROLE_ADMIN)
+    // =========================================
+    public static final String ADMIN_AUDIT_LOGS = ADMIN_BASE + "/audit-logs";
+    public static final String ADMIN_AUDIT_LOGS_EXPORT = ADMIN_AUDIT_LOGS + "/export";
+    public static final String ADMIN_REFERENCE_METRICS_BASE = ADMIN_BASE + "/reference-metrics";
 }

@@ -30,6 +30,9 @@ class ConsentServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
+
     private ConsentService consentService;
 
     private final UUID userId = UUID.randomUUID();
@@ -38,7 +41,7 @@ class ConsentServiceTest {
 
     @BeforeEach
     void setUp() {
-        consentService = new ConsentService(consentLogRepository, userRepository);
+        consentService = new ConsentService(consentLogRepository, userRepository, auditEventRecorder);
         mockUser = new User();
         mockUser.setId(userId);
     }

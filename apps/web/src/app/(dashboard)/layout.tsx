@@ -9,7 +9,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Search, Bell, HelpCircle,
-  Home, FileText, User, Users, Settings, LogOut
+  Home, FileText, User, Users, Settings, LogOut, Shield
 } from "lucide-react";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
@@ -94,6 +94,7 @@ export default function DashboardLayout({
     { name: "Hồ sơ gia đình", href: "/profiles", icon: Users, exact: false },
     { name: "Cài đặt", href: "/settings", icon: Settings, exact: true },
   ];
+  const isAdmin = user?.role === "ROLE_ADMIN";
 
   const isProfileHistoryRoute = /^\/profiles\/[^/]+\/history(?:\/.*)?$/.test(pathname ?? "");
   const isNavItemActive = (item: { href: string; exact: boolean }) => {
@@ -225,6 +226,15 @@ export default function DashboardLayout({
                 </h4>
               </div>
             </div>
+            {isAdmin ? (
+              <Link
+                href="/admin/audit-log"
+                className="inline-flex w-full items-center gap-2 rounded-xl border border-[#89f5e7]/70 bg-[#ecfdfa] px-3 py-2 text-sm font-semibold text-[#00685f] hover:bg-[#e1faf5]"
+              >
+                <Shield className="h-4 w-4" />
+                Khu vực quản trị
+              </Link>
+            ) : null}
           </div>
 
           <nav className="flex flex-col gap-2 flex-grow">

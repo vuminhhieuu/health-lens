@@ -19,6 +19,9 @@ import com.healthlens.api.exception.AccountPendingDeletionException;
 import com.healthlens.api.repository.EmailVerificationTokenRepository;
 import com.healthlens.api.repository.PasswordResetTokenRepository;
 import com.healthlens.api.repository.RefreshTokenRepository;
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditEventRecorder;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.constants.ConsentConstants;
 import com.healthlens.api.repository.UserRepository;
 import com.healthlens.api.security.ForgotPasswordRateLimiter;
@@ -62,6 +65,7 @@ public class AuthService {
     private final ForgotPasswordRateLimiter forgotPasswordRateLimiter;
     private final StringRedisTemplate redisTemplate;
     private final ConsentService consentService;
+    private final AuditEventRecorder auditEventRecorder;
     private final String emailEventStream;
 
     public AuthService(
@@ -76,6 +80,7 @@ public class AuthService {
             ForgotPasswordRateLimiter forgotPasswordRateLimiter,
             StringRedisTemplate redisTemplate,
             ConsentService consentService,
+            AuditEventRecorder auditEventRecorder,
             @Value("${app.stream.email-events:email.events}") String emailEventStream
     ) {
         this.userRepository = userRepository;
@@ -89,6 +94,7 @@ public class AuthService {
         this.forgotPasswordRateLimiter = forgotPasswordRateLimiter;
         this.redisTemplate = redisTemplate;
         this.consentService = consentService;
+        this.auditEventRecorder = auditEventRecorder;
         this.emailEventStream = emailEventStream;
     }
 
@@ -127,6 +133,14 @@ public class AuthService {
 
         publishVerificationEmailEvent(savedUser, tokenValue);
 
+        auditEventRecorder.recordEvent(
+                savedUser.getId(),
+                AuditActions.REGISTER,
+                AuditResourceTypes.AUTH,
+                savedUser.getId(),
+                Map.of("email", normalizedEmail)
+        );
+
         return savedUser.getId();
     }
 
@@ -145,6 +159,14 @@ public class AuthService {
 
         verificationToken.setUsedAt(Instant.now());
         tokenRepository.save(verificationToken);
+
+        auditEventRecorder.recordEvent(
+                user.getId(),
+                AuditActions.VERIFY_EMAIL,
+                AuditResourceTypes.AUTH,
+                user.getId(),
+                Map.of("email", user.getEmail())
+        );
     }
 
     /**
@@ -176,12 +198,25 @@ public class AuthService {
                 // Also record failure for non-existent emails to prevent timing attacks
                 rateLimiter.recordFailure(normalizedEmail);
             }
-            throw new BadCredentialsException("Email hoặc mật khẩu không đúng.");
+            auditEventRecorder.recordAnonymous(
+                    AuditActions.LOGIN_FAILED,
+                    AuditResourceTypes.AUTH,
+                    null,
+                    Map.of("email", normalizedEmail, "reason", "bad_credentials")
+            );
+            throw new BadCredentialsException("Email hoac mat khau khong dung");
         }
 
         // Check email verified (AC #1: "đã xác thực email")
         if (!user.isEmailVerified()) {
-            throw new BadCredentialsException("Vui lòng xác thực email trước khi đăng nhập.");
+            auditEventRecorder.recordEvent(
+                    user.getId(),
+                    AuditActions.LOGIN_FAILED,
+                    AuditResourceTypes.AUTH,
+                    user.getId(),
+                    Map.of("email", normalizedEmail, "reason", "email_not_verified")
+            );
+            throw new BadCredentialsException("Vui long xac thuc email truoc khi dang nhap");
         }
 
         // Reset rate limiter on success
@@ -203,6 +238,14 @@ public class AuthService {
         LoginResponse response = new LoginResponse(
                 accessToken,
                 new LoginResponse.UserInfo(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName()));
+
+        auditEventRecorder.recordEvent(
+                user.getId(),
+                AuditActions.LOGIN,
+                AuditResourceTypes.AUTH,
+                user.getId(),
+                Map.of("email", user.getEmail(), "role", user.getRole().name())
+        );
 
         return new LoginResult(response, rawRefreshToken);
     }
@@ -256,6 +299,14 @@ public class AuthService {
                 consentStatus.getConsentVersion()
         );
 
+        auditEventRecorder.recordEvent(
+                user.getId(),
+                AuditActions.REFRESH_TOKEN,
+                AuditResourceTypes.AUTH,
+                user.getId(),
+                Map.of("email", user.getEmail())
+        );
+
         return new RefreshResult(response, newRawRefreshToken);
     }
 
@@ -302,6 +353,14 @@ public class AuthService {
                 newAccessToken,
                 new LoginResponse.UserInfo(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName()));
 
+        auditEventRecorder.recordEvent(
+                user.getId(),
+                AuditActions.REFRESH_TOKEN,
+                AuditResourceTypes.AUTH,
+                user.getId(),
+                Map.of("email", user.getEmail())
+        );
+
         return new LoginResult(response, newRawRefreshToken);
     }
 
@@ -312,6 +371,7 @@ public class AuthService {
      */
     @Transactional
     public void logout(String accessToken) {
+        UUID userId = null;
         try {
             String jti = jwtUtil.extractJti(accessToken);
             long remainingMs = jwtUtil.getRemainingExpiry(accessToken);
@@ -325,16 +385,28 @@ public class AuthService {
             }
 
             // Revoke all refresh tokens for this user
-            String userId = jwtUtil.extractSubject(accessToken);
-            refreshTokenRepository.revokeAllByUserId(UUID.fromString(userId), Instant.now());
+            String userIdStr = jwtUtil.extractSubject(accessToken);
+            userId = UUID.fromString(userIdStr);
+            refreshTokenRepository.revokeAllByUserId(userId, Instant.now());
         } catch (Exception e) {
             // If Redis is unavailable, still revoke refresh tokens
             try {
-                String userId = jwtUtil.extractSubject(accessToken);
-                refreshTokenRepository.revokeAllByUserId(UUID.fromString(userId), Instant.now());
+                String userIdStr = jwtUtil.extractSubject(accessToken);
+                userId = UUID.fromString(userIdStr);
+                refreshTokenRepository.revokeAllByUserId(userId, Instant.now());
             } catch (Exception ignored) {
                 // Token may be expired/invalid at logout — acceptable
             }
+        }
+
+        if (userId != null) {
+            auditEventRecorder.recordEvent(
+                    userId,
+                    AuditActions.LOGOUT,
+                    AuditResourceTypes.AUTH,
+                    userId,
+                    Map.of()
+            );
         }
     }
 
@@ -365,6 +437,13 @@ public class AuthService {
 
                 // Send email
                 emailService.sendPasswordResetEmail(user, tokenValue);
+                auditEventRecorder.recordEvent(
+                        user.getId(),
+                        AuditActions.FORGOT_PASSWORD,
+                        AuditResourceTypes.AUTH,
+                        user.getId(),
+                        Map.of("email", normalizedEmail)
+                );
             } else {
                 log.info("[AuthService] User NOT found for email: {}. Skipping email for security reasons.", normalizedEmail);
             }
@@ -401,6 +480,14 @@ public class AuthService {
 
         // AC #6: Revoke all refresh tokens
         refreshTokenRepository.revokeAllByUserId(user.getId(), Instant.now());
+
+        auditEventRecorder.recordEvent(
+                user.getId(),
+                AuditActions.RESET_PASSWORD,
+                AuditResourceTypes.AUTH,
+                user.getId(),
+                Map.of("email", user.getEmail())
+        );
     }
 
     private void validatePasswordPolicy(String password) {

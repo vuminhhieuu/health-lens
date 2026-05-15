@@ -58,6 +58,7 @@ class DataDeletionServiceTest {
     @Mock private StorageService storageService;
     @Mock private AccountStatusCache accountStatusCache;
     @Mock private DataDeletionService selfProxy;
+    @Mock private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
 
     private DataDeletionService dataDeletionService;
     private UUID userId;
@@ -78,6 +79,7 @@ class DataDeletionServiceTest {
                 consentLogRepository,
                 storageService,
                 accountStatusCache,
+                auditEventRecorder,
                 selfProxy,
                 "http://localhost:3000/cancel-deletion"
         );

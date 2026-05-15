@@ -1,5 +1,6 @@
 package com.healthlens.api.service;
 
+import com.healthlens.api.audit.AuditEventRecorder;
 import com.healthlens.api.dto.request.UpdateUserRequest;
 import com.healthlens.api.dto.response.UserResponse;
 import com.healthlens.api.entity.Profile;
@@ -32,6 +33,9 @@ class UserServiceTest {
 
     @Mock
     private ProfileRepository profileRepository;
+
+    @Mock
+    private AuditEventRecorder auditEventRecorder;
 
     @InjectMocks
     private UserService userService;

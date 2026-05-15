@@ -1,6 +1,7 @@
 package com.healthlens.api.config;
 
 import com.healthlens.api.constants.ApiRoutes;
+import com.healthlens.api.entity.UserRole;
 import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
@@ -61,6 +62,8 @@ public class SecurityConfig {
                     .requestMatchers(ApiRoutes.ADMIN_AUTH_LOGIN).permitAll()
                     .requestMatchers(ApiRoutes.ADMIN_AUTH_TOTP_SETUP, ApiRoutes.ADMIN_AUTH_TOTP_VERIFY).authenticated()
                     .requestMatchers(ApiRoutes.ADMIN_PATTERN).hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(ApiRoutes.ADMIN_PATTERN)
+                    .hasAuthority(UserRole.ROLE_ADMIN.name())
                     .anyRequest().authenticated()
             )
             // Return 401 (not 403) for missing/invalid auth so frontend can trigger refresh flow.

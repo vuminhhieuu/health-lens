@@ -50,6 +50,7 @@ class AdminAuthServiceTest {
     @Mock private org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private GoogleAuthenticator googleAuth;
+    @Mock private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
 
     private AdminAuthService adminAuthService;
 
@@ -57,7 +58,7 @@ class AdminAuthServiceTest {
     void setUp() {
         adminAuthService = new AdminAuthService(
                 userRepository, totpSecretRepository, passwordEncoder,
-                jwtUtil, cryptoService, rateLimiter, redisTemplate, googleAuth
+                jwtUtil, cryptoService, rateLimiter, redisTemplate, googleAuth, auditEventRecorder
         );
     }
 

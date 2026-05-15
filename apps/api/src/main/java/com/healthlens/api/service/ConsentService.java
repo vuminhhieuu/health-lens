@@ -1,5 +1,8 @@
 package com.healthlens.api.service;
 
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditEventRecorder;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.dto.request.ConsentRequest;
 import com.healthlens.api.dto.response.ConsentResponse;
 import com.healthlens.api.entity.ConsentLog;
@@ -12,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Isolation;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,10 +24,16 @@ public class ConsentService {
 
     private final ConsentLogRepository consentLogRepository;
     private final UserRepository userRepository;
+    private final AuditEventRecorder auditEventRecorder;
 
-    public ConsentService(ConsentLogRepository consentLogRepository, UserRepository userRepository) {
+    public ConsentService(
+            ConsentLogRepository consentLogRepository,
+            UserRepository userRepository,
+            AuditEventRecorder auditEventRecorder
+    ) {
         this.consentLogRepository = consentLogRepository;
         this.userRepository = userRepository;
+        this.auditEventRecorder = auditEventRecorder;
     }
 
     @Transactional(readOnly = true)
@@ -54,6 +64,13 @@ public class ConsentService {
                 if (consent.getRevokedAt() == null) {
                     consent.setRevokedAt(Instant.now());
                     consentLogRepository.save(consent);
+                    auditEventRecorder.recordEvent(
+                            userId,
+                            AuditActions.REVOKE_CONSENT,
+                            AuditResourceTypes.CONSENT,
+                            consent.getId(),
+                            Map.of("version", consent.getConsentVersion())
+                    );
                 }
             });
             return;
@@ -69,6 +86,14 @@ public class ConsentService {
         log.setUserAgent(userAgent);
 
         consentLogRepository.save(log);
+
+        auditEventRecorder.recordEvent(
+                userId,
+                AuditActions.RECORD_CONSENT,
+                AuditResourceTypes.CONSENT,
+                log.getId(),
+                Map.of("version", request.getVersion())
+        );
     }
     
     @Transactional(readOnly = true)

@@ -1,5 +1,8 @@
 package com.healthlens.api.service;
 
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditEventRecorder;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.dto.request.UpdateUserRequest;
 import com.healthlens.api.dto.response.UserResponse;
 import com.healthlens.api.entity.Profile;
@@ -10,6 +13,7 @@ import com.healthlens.api.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -17,10 +21,16 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
+    private final AuditEventRecorder auditEventRecorder;
 
-    public UserService(UserRepository userRepository, ProfileRepository profileRepository) {
+    public UserService(
+            UserRepository userRepository,
+            ProfileRepository profileRepository,
+            AuditEventRecorder auditEventRecorder
+    ) {
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
+        this.auditEventRecorder = auditEventRecorder;
     }
 
     @Transactional(readOnly = true)
@@ -46,6 +56,17 @@ public class UserService {
 
         user = userRepository.save(user);
         syncDefaultProfile(userId, user);
+
+        auditEventRecorder.recordEvent(
+                userId,
+                AuditActions.UPDATE_USER,
+                AuditResourceTypes.USER,
+                userId,
+                Map.of(
+                        "email", user.getEmail(),
+                        "fullName", user.getFullName()
+                )
+        );
 
         return mapToResponse(user);
     }

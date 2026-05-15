@@ -45,6 +45,8 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
+	implementation("org.springframework:spring-aop")
+	implementation("org.aspectj:aspectjweaver")
 	implementation("org.flywaydb:flyway-database-postgresql")
 
 	// Spring AI - OpenAI (Compatible with Groq)
@@ -68,6 +70,7 @@ dependencies {
 
 	// TOTP (Google Authenticator compatible)
 	implementation("com.warrenstrange:googleauth:1.4.0")
+	implementation("org.apache.commons:commons-csv:1.14.1")
 
 	compileOnly("org.projectlombok:lombok")
 	developmentOnly("org.springframework.boot:spring-boot-devtools")
