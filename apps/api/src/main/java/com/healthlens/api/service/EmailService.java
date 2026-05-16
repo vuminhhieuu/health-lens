@@ -2,6 +2,8 @@ package com.healthlens.api.service;
 
 import com.healthlens.api.entity.User;
 import com.healthlens.api.entity.DataDeletionRequest;
+import com.healthlens.api.entity.FollowUpReminder;
+import com.healthlens.api.entity.Profile;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +12,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.HtmlUtils;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
@@ -36,6 +39,9 @@ public class EmailService {
 
     @Value("${app.frontend.reset-password-url:http://localhost:3000/reset-password}")
     private String resetPasswordBaseUrl;
+
+    @Value("${app.frontend.base-url:http://localhost:3000}")
+    private String frontendBaseUrl;
 
     public EmailService(ObjectProvider<JavaMailSender> mailSenderProvider, ObjectProvider<TemplateEngine> templateEngineProvider) {
         this.mailSender = mailSenderProvider.getIfAvailable();
@@ -273,6 +279,70 @@ public class EmailService {
         } catch (MessagingException e) {
             log.error("[EmailService] Failed to send health record invitation to {}", inviteeEmail, e);
             throw new IllegalStateException("Gui email moi chia se ket qua kham that bai", e);
+        }
+    }
+
+    public boolean sendFollowUpReminderEmail(FollowUpReminder reminder) {
+        Profile profile = reminder.getProfile();
+        User user = profile.getUser();
+        String recipient = user.getEmail();
+        if (mailSender == null) {
+            log.error("[EmailService] JavaMailSender is not configured! Cannot send follow-up reminder to {}", recipient);
+            return false;
+        }
+
+        String displayName = user.getFullName() == null || user.getFullName().isBlank()
+                ? "bạn"
+                : HtmlUtils.htmlEscape(user.getFullName());
+        String profileName = profile.getDisplayName() == null || profile.getDisplayName().isBlank()
+                ? "hồ sơ sức khỏe"
+                : HtmlUtils.htmlEscape(profile.getDisplayName());
+        String reminderType = HtmlUtils.htmlEscape(reminder.getReminderType());
+        String reminderDate = DateTimeFormatter.ofPattern("dd/MM/yyyy").format(reminder.getReminderDate());
+        String remindersUrl = HtmlUtils.htmlEscape(frontendBaseUrl + "/follow-up-reminders?profileId=" + profile.getId());
+        String htmlContent = """
+                <html>
+                  <body style="font-family: Segoe UI, Arial, sans-serif; color: #111827; background: #f3f4f6; padding: 24px;">
+                    <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden;">
+                      <div style="background: #00685f; padding: 24px; text-align: center;">
+                        <h1 style="color: #ffffff; margin: 0; font-size: 26px;">HealthLens</h1>
+                      </div>
+                      <div style="padding: 28px;">
+                        <h2 style="margin-top: 0;">Nhắc lịch tái khám</h2>
+                        <p>Chào %s,</p>
+                        <p>Bạn có một nhắc lịch <strong>%s</strong> cho <strong>%s</strong> vào ngày <strong>%s</strong>.</p>
+                        <p>HealthLens chỉ nhắc lịch cá nhân, không đặt lịch trực tiếp với bệnh viện.</p>
+                        <div style="text-align: center; margin: 24px 0;">
+                          <a href="%s" style="display: inline-block; background: #00685f; color: #ffffff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700;">
+                            Mở nhắc lịch
+                          </a>
+                        </div>
+                        <p style="font-size: 14px; color: #6b7280;">Email này không chứa ghi chú cá nhân hoặc chỉ số sức khỏe để bảo vệ quyền riêng tư của bạn.</p>
+                      </div>
+                    </div>
+                  </body>
+                </html>
+                """.formatted(
+                displayName,
+                reminderType,
+                profileName,
+                reminderDate,
+                remindersUrl
+        );
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(recipient);
+            helper.setSubject("[HealthLens] Nhắc lịch tái khám hôm nay");
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            log.info("[EmailService] Follow-up reminder email sent successfully to: {}", recipient);
+            return true;
+        } catch (MessagingException e) {
+            log.error("[EmailService] Failed to send follow-up reminder to {}", recipient, e);
+            return false;
         }
     }
 

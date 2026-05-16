@@ -59,6 +59,10 @@ export const ApiPaths = {
       `/api/${API_VERSION}/profiles/${profileId}/invitations/${invitationId}/resend`,
     SHARE_BY_VIEWER: (profileId: string, viewerId: string) =>
       `/api/${API_VERSION}/profiles/${profileId}/shares/${viewerId}`,
+    FOLLOW_UP_REMINDERS: (profileId: string) =>
+      `/api/${API_VERSION}/profiles/${profileId}/follow-up-reminders`,
+    FOLLOW_UP_REMINDER_BY_ID: (profileId: string, reminderId: string) =>
+      `/api/${API_VERSION}/profiles/${profileId}/follow-up-reminders/${reminderId}`,
   },
 
   INVITATIONS: {

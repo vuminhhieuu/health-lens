@@ -1,6 +1,6 @@
 # Story 10.2: Thay thế thao tác nhanh chưa khả dụng bằng hành động tự phục vụ
 
-Status: review
+Status: done
 
 ## Execution scope
 

@@ -55,6 +55,9 @@ public final class ApiRoutes {
     public static final String PROFILE_ENSURE_DEFAULT = PROFILES_BASE + "/ensure-default";
     public static final String PROFILE_SET_DEFAULT = PROFILES_BASE + "/{id}/set-default";
     public static final String PROFILE_INVITATIONS = PROFILES_BASE + "/{profileId}/invitations";
+    public static final String PROFILE_FOLLOW_UP_REMINDERS = PROFILES_BASE + "/{profileId}/follow-up-reminders";
+    public static final String PROFILE_FOLLOW_UP_REMINDER_BY_ID =
+            PROFILE_FOLLOW_UP_REMINDERS + "/{reminderId}";
     public static final String PROFILE_SHARE_BY_VIEWER = PROFILES_BASE + "/{profileId}/shares/{viewerId}";
     // Relative variants (for controllers already annotated with @RequestMapping(PROFILES_BASE))
     public static final String PROFILE_SHARE_BY_VIEWER_REL = "/{profileId}/shares/{viewerId}";
