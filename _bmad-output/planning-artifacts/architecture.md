@@ -2168,3 +2168,18 @@ docker-compose -f docker-compose.dev.yml up -d
 8. Web Dashboard (Next.js, TanStack Query)
 9. Mobile App (Expo, offline sync)
 10. Admin Panel (dữ liệu tham chiếu, MFA)
+
+## Phụ Lục: Production Review Alignment
+
+Bộ artifact production review mới được chốt để dùng làm input triển khai:
+
+- [_bmad-output/planning-artifacts/review-source/production-review/p0-gates-checklist.md](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/_bmad-output/planning-artifacts/review-source/production-review/p0-gates-checklist.md)
+- [_bmad-output/planning-artifacts/review-source/production-review/audit-logging-mini-adr.md](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/_bmad-output/planning-artifacts/review-source/production-review/audit-logging-mini-adr.md)
+- [_bmad-output/planning-artifacts/review-source/production-review/epic-8-analytics-spec.md](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/_bmad-output/planning-artifacts/review-source/production-review/epic-8-analytics-spec.md)
+
+### Kiến Trúc Cần Giữ Nguyên Khi Triển Khai
+
+- OCR phải được thiết kế provider-agnostic, có router theo `mimeType`, output contract chuẩn hóa, và kill-switch cho provider ngoài.
+- Audit phải đi qua một spine thống nhất với `correlation_id` thật từ ingress, không dùng `requestId` sinh mới mỗi response làm trace chính.
+- Analytics Epic 8 phải đọc từ event/data source rõ ràng, không suy luận từ placeholder UI hoặc audit tables.
+- P0 go-live gate phải chặn mọi release nếu còn thiếu file preview/original view, token hygiene, right-to-delete purge, telemetry, backup/restore, hoặc admin RBAC/MFA.

@@ -1,0 +1,88 @@
+# HealthLens Architecture
+
+**Last updated:** 2026-05-16
+
+## Executive Summary
+
+HealthLens is a monorepo composed of a Next.js web app, an Expo mobile app, a Spring Boot API, a FastAPI OCR microservice, and a shared TypeScript contracts package. The architecture is service-oriented at the repository level and layered inside the API.
+
+```mermaid
+flowchart LR
+    User[User] --> Web[Next.js Web]
+    User --> Mobile[Expo Mobile]
+    Web --> API[Spring Boot API]
+    Mobile --> API
+    API --> DB[(PostgreSQL)]
+    API --> Redis[(Redis)]
+    API --> Storage[(MinIO / S3-compatible storage)]
+    API --> Qdrant[(Qdrant)]
+    API --> Groq[Groq / OpenAI-compatible chat]
+    API --> OCR[FastAPI EasyOCR service]
+    Web --> OCRProxy[/API OCR endpoints/]
+```
+
+## Architectural Parts
+
+### Web App
+
+- Uses Next.js App Router under `apps/web/src/app`.
+- Uses Axios API client with JWT bearer header injection and refresh retry behavior.
+- Uses HttpOnly cookie support through `withCredentials`.
+- Uses Zustand for auth state and TanStack Query for server-state dependencies.
+- Pulls shared route constants from `@healthlens/shared/constants`.
+
+### API
+
+- Uses Spring Boot 4 and Java 21.
+- Controllers expose REST endpoints under `/api/v1` plus OCR proxy routes under `/api/ocr`.
+- Services own domain behavior for auth, profiles, health records, reference data, OCR, storage, email, AI, and sharing.
+- Repositories use Spring Data JPA.
+- Flyway migrations define the relational schema.
+- Security uses JWT, Spring Security, rate limiters, account status cache, and special public routes for auth/dev/cancel flows.
+
+### OCR Service
+
+- FastAPI service with `GET /health` and `POST /ocr`.
+- Lazily initializes EasyOCR with Vietnamese and English languages.
+- Accepts image URLs, validates scheme/content type/size/dimensions, and returns extracted text, confidence, detected language, processing time, and block count.
+
+### Shared Package
+
+- Centralizes frontend-consumed constants and Zod schemas.
+- `packages/shared/constants/api.ts` is the frontend single source of truth for route paths.
+- Backend keeps a mirrored route registry in `ApiRoutes.java`; these two files must stay synchronized.
+
+## Data Architecture
+
+- PostgreSQL is the primary relational store.
+- Flyway migrations `V001` through `V027` define users, auth tokens, consent logs, deletion requests, profiles, health records, reference data, invitations, sharing, admin TOTP, approval workflows, and audit logs.
+- Redis is used for cache and stream-style event settings for email/OCR consumers.
+- Qdrant is configured as a vector store for explanation retrieval.
+- MinIO is used locally for S3-compatible object storage; staging/production use managed S3-compatible storage.
+
+## Security Architecture
+
+- JWT access tokens are attached by the web client unless the route is public cancellation.
+- Refresh-token flow retries eligible `401` responses and clears auth state on refresh failure.
+- Admin authentication has separate `/api/v1/admin/auth` routes and TOTP setup/verify flows.
+- Consent behavior is enforced through API-side consent annotations/aspects and user consent endpoints.
+- Data deletion uses a public email token cancel endpoint outside `/users/me`.
+
+## Integration Points
+
+| From | To | Integration |
+| --- | --- | --- |
+| Web | API | REST over Axios using `NEXT_PUBLIC_API_BASE_URL` |
+| Mobile | API | Intended REST client usage through shared/mobile API layer |
+| API | PostgreSQL | JPA/Flyway |
+| API | Redis | Cache and event stream configuration |
+| API | MinIO/S3 | Presigned upload and file access |
+| API | OCR service | HTTP call to `OCR_SERVICE_URL` |
+| API | Groq/OpenAI-compatible chat | Spring AI OpenAI client configuration |
+| API | Qdrant | Spring AI vector store |
+| API | SMTP/Mailhog | Email verification, deletion, invitation templates |
+
+## Deployment Architecture
+
+Local development uses Docker Compose. Staging docs reference Vercel for web, Render for API/OCR, Neon for PostgreSQL, Upstash for Redis, Cloudflare R2 for storage, and managed Qdrant.
+

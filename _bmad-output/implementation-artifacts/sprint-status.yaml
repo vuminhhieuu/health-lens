@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-05-15T16:58:00+07:00
+last_updated: 2026-05-16T00:00:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -172,11 +172,100 @@ development_status:
   epic-9-retrospective: optional
 
 # =====================================================
-# EPIC 10: HELP & SUPPORT (Phase 1 - Web MVP)
+# EPIC CORE IMPROVEMENTS: REVIEW FINDINGS CONSOLIDATION
+# Canonical location:
+# _bmad-output/implementation-artifacts/epic-core-improvements/
+# Supersedes old: epic-3/3-7, epic-7/7-6, epic-8/8-4, epic-10/*
 # =====================================================
-  epic-10: in-progress
-  10-1-help-and-questions-pages: done
-  epic-10-retrospective: optional
+  epic-core-improvements: in-progress
+  core-1-1-mime-aware-ocr-router-for-pdf-and-image: ready-for-dev
+  core-1-2-provider-agnostic-ocr-result-contract: ready-for-dev
+  core-1-3-ocr-queue-retry-idempotency-and-dlq: ready-for-dev
+  core-1-4-parser-confidence-gates-and-review-required-state: ready-for-dev
+  core-1-5-paddleocr-adapter-and-healthlens-benchmark: ready-for-dev
+  core-1-6-external-ocr-fallback-consent-retention-and-kill-switch: ready-for-dev
+  core-2-1-generic-ai-chat-provider-configuration: ready-for-dev
+  core-2-2-ocr-provider-registry-and-capability-routing: ready-for-dev
+  core-2-3-embedding-and-vector-store-config-validation: ready-for-dev
+  core-2-4-provider-switching-documentation-and-runbook: ready-for-dev
+  core-3-1-externalized-versioned-llm-prompt-templates: ready-for-dev
+  core-3-2-structured-llm-output-schema-and-validation: ready-for-dev
+  core-3-3-rag-corpus-governance-and-admin-review-workflow: ready-for-dev
+  core-3-4-hybrid-curated-plus-internal-live-rag: ready-for-dev
+  core-3-5-trusted-online-rag-source-adapter-with-citation-and-cache: ready-for-dev
+  core-4-1-unified-correlation-id-and-audit-spine: ready-for-dev
+  core-4-2-observability-metrics-and-alerting-baseline: ready-for-dev
+  core-4-3-production-deploy-topology-and-rollback-hardening: ready-for-dev
+  core-4-4-backup-restore-and-operational-runbook: ready-for-dev
+  core-5-1-security-config-fail-fast-hardening: ready-for-dev
+  core-5-2-ssrf-protection-for-ocr-and-remote-file-fetching: ready-for-dev
+  core-5-3-admin-session-storage-hardening: ready-for-dev
+  core-5-4-right-to-delete-race-and-cleanup-correctness: ready-for-dev
+  core-6-1-global-toast-notification-foundation: ready-for-dev
+  core-6-2-replace-browser-alerts-and-local-toasts: ready-for-dev
+  core-6-3-vietnamese-language-normalization-and-message-catalog: ready-for-dev
+  core-6-4-standard-loading-empty-and-error-state-components: ready-for-dev
+  core-6-5-medical-copy-and-disclaimer-review: ready-for-dev
+  core-7-1-backend-ai-ocr-rag-package-boundary-refactor: ready-for-dev
+  core-7-2-split-health-record-review-page-into-feature-components-and-hooks: ready-for-dev
+  core-7-3-extract-shared-profile-sharing-hook: ready-for-dev
+  core-7-4-email-template-cleanup: ready-for-dev
+  core-8-1-ci-security-scan-baseline: ready-for-dev
+  core-8-2-ai-ocr-regression-test-corpus-in-ci: ready-for-dev
+  core-8-3-release-smoke-tests-for-provider-and-infrastructure-config: ready-for-dev
+  epic-core-improvements-retrospective: optional
+
+# =====================================================
+# REMAINING PRODUCTION REVIEW: REVIEW FINDINGS OUTSIDE CORE IMPROVEMENTS
+# Canonical location:
+# _bmad-output/implementation-artifacts/remaining-production-review/
+# Planning source:
+# _bmad-output/planning-artifacts/remaining-production-review-epics-and-stories.md
+# =====================================================
+  remaining-production-review: in-progress
+
+  # Epic 1: Web Production Readiness & Screen Correctness
+  remaining-1-web-production-readiness: in-progress
+  remaining-1-1-dashboard-uses-real-latest-health-data: ready-for-dev
+  remaining-1-2-health-record-review-detail-state-and-preview-correctness: ready-for-dev
+  remaining-1-3-health-records-hub-mapping-sorting-and-status-fixes: ready-for-dev
+  remaining-1-4-profile-and-history-screen-type-safety-and-edge-cases: ready-for-dev
+  remaining-1-retrospective: optional
+
+  # Epic 2: Auth Token And Email-Link Hardening
+  remaining-2-auth-token-email-link-hardening: in-progress
+  remaining-2-1-verify-email-token-hygiene-and-rate-limiting: ready-for-dev
+  remaining-2-2-verify-email-frontend-resilience-and-accessibility: ready-for-dev
+  remaining-2-3-cancel-deletion-link-and-token-flow-hardening: ready-for-dev
+  remaining-2-4-public-auth-endpoint-rate-limit-and-error-semantics: ready-for-dev
+  remaining-2-5-refresh-token-rotation-race-hardening: ready-for-dev
+  remaining-2-retrospective: optional
+
+  # Epic 3: Family Sharing Lifecycle Correctness
+  remaining-3-family-sharing-lifecycle: in-progress
+  remaining-3-1-invitation-accept-token-and-storage-hygiene: ready-for-dev
+  remaining-3-2-accept-revoke-race-and-share-enforcement: ready-for-dev
+  remaining-3-3-sharing-lifecycle-audit-and-owner-notification: ready-for-dev
+  remaining-3-retrospective: optional
+
+  # Epic 4: Admin Analytics Instrumentation
+  remaining-4-admin-analytics-instrumentation: in-progress
+  remaining-4-1-product-event-instrumentation-for-admin-analytics: ready-for-dev
+  remaining-4-2-admin-analytics-dashboard-db-backed-charts: ready-for-dev
+  remaining-4-retrospective: optional
+
+  # Epic 5: Mobile Deferred Readiness
+  remaining-5-mobile-deferred-readiness: in-progress
+  remaining-5-1-mobile-scope-decision-and-deferred-work-tracking: ready-for-dev
+  remaining-5-2-mobile-minimum-functional-surface: ready-for-dev
+  remaining-5-retrospective: optional
+
+  # Epic 6: Cleanup, Accessibility & Frontend Maintainability
+  remaining-6-cleanup-accessibility-maintainability: in-progress
+  remaining-6-1-frontend-dead-code-and-export-cleanup: ready-for-dev
+  remaining-6-2-accessibility-and-shared-ui-components-cleanup: ready-for-dev
+  remaining-6-3-frontend-bundle-and-image-rule-cleanup: ready-for-dev
+  remaining-6-retrospective: optional
 
 # =====================================================
 # SPRINT SUMMARY
