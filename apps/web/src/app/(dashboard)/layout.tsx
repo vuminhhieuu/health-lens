@@ -158,9 +158,14 @@ export default function DashboardLayout({
             <Bell className="w-5 h-5" />
             <span className="absolute top-2 right-2 w-2 h-2 bg-[#924628] rounded-full"></span>
           </button>
-          <button className="p-2 text-[#3d4947] hover:bg-[#e9f6f3] transition-colors rounded-full">
+          <Link
+            href="/questions"
+            title="Mở trang thắc mắc"
+            aria-label="Mở trang thắc mắc"
+            className="flex min-h-12 min-w-12 items-center justify-center rounded-full p-2 text-[#3d4947] transition-colors hover:bg-[#e9f6f3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00685f]"
+          >
             <HelpCircle className="w-5 h-5" />
-          </button>
+          </Link>
           <div className="relative" ref={avatarMenuRef}>
             <button
               onClick={() => setIsAvatarMenuOpen(!isAvatarMenuOpen)}
