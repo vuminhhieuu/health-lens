@@ -121,7 +121,7 @@ export default function DashboardLayout({
   return (
     <div className="bg-[#effcf9] text-[#121e1c] min-h-screen">
       {/* Top Navigation Bar */}
-      <header className="fixed top-0 w-full z-50 bg-[#e9f6f3]/80 backdrop-blur-md flex justify-between items-center px-6 py-3 shadow-sm border-b border-[#bcc9c6]/20">
+      <header className="fixed top-0 w-full z-50 bg-[#e9f6f3]/80 backdrop-blur-md flex justify-between items-center px-6 py-3 shadow-sm border-b border-[#bcc9c6]/20 print:hidden">
         <div className="flex items-center gap-8">
           <span className="text-xl font-bold tracking-tight text-[#005049]">HealthLens</span>
 
@@ -210,9 +210,9 @@ export default function DashboardLayout({
         </div>
       </header>
 
-      <div className="flex pt-16 min-h-screen">
+      <div className="flex pt-16 min-h-screen print:block print:pt-0">
         {/* Sidebar Navigation */}
-        <aside className="hidden md:flex h-screen w-72 flex-col fixed left-0 bg-gradient-to-b from-[#e9f6f3] to-transparent p-6 gap-2 border-r border-[#bcc9c6]/20">
+        <aside className="hidden md:flex h-screen w-72 flex-col fixed left-0 bg-gradient-to-b from-[#e9f6f3] to-transparent p-6 gap-2 border-r border-[#bcc9c6]/20 print:hidden">
           <div className="mb-8 px-2">
             <p className="text-xs font-bold uppercase tracking-widest text-[#6d7a77] mb-4">Tài khoản</p>
             <div className="flex items-center gap-3 mb-6 bg-white p-3 rounded-2xl shadow-sm border border-[#bcc9c6]/20">
@@ -262,13 +262,13 @@ export default function DashboardLayout({
         </aside>
 
         {/* Main Content Area */}
-        <div className="flex-grow md:ml-72 flex flex-col w-full h-full">
+        <div className="flex-grow md:ml-72 flex flex-col w-full h-full print:ml-0 print:block">
           {children}
         </div>
       </div>
 
       {/* Mobile Navigation Shell */}
-      <nav className="md:hidden fixed bottom-0 w-full bg-white/95 backdrop-blur-lg px-6 py-4 flex justify-between items-center shadow-[0_-8px_32px_rgba(18,30,28,0.06)] z-50 border-t border-[#bcc9c6]/20">
+      <nav className="md:hidden fixed bottom-0 w-full bg-white/95 backdrop-blur-lg px-6 py-4 flex justify-between items-center shadow-[0_-8px_32px_rgba(18,30,28,0.06)] z-50 border-t border-[#bcc9c6]/20 print:hidden">
         <Link href="/home" className="flex flex-col items-center gap-1 text-[#6d7a77]">
           <Home className="w-5 h-5" />
           <span className="text-[10px] font-bold">Trang chủ</span>

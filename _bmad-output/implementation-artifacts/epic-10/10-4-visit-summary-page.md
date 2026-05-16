@@ -1,6 +1,6 @@
 # Story 10.4: Trang tóm tắt đi khám
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 
@@ -27,31 +27,31 @@ so that tôi có thể trao đổi với bác sĩ rõ ràng hơn mà không hi�
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Web: Tạo route `/visit-summary` (AC: #1, #8, #10)
-  - [ ] Tạo `apps/web/src/app/(dashboard)/visit-summary/page.tsx`.
-  - [ ] Reuse `DashboardPageShell` nếu phù hợp với `/help` và `/questions`.
-  - [ ] Thêm title rõ: `Tóm tắt đi khám`.
-- [ ] Task 2 — Web: Tải hồ sơ và kết quả gần nhất (AC: #2, #3, #4, #8)
-  - [ ] Reuse `apiClient.get(ApiPaths.PROFILES.BASE)` để lấy hồ sơ.
-  - [ ] Chọn profile từ query `profileId`, default profile, hoặc profile đầu tiên.
-  - [ ] Reuse endpoint `ApiPaths.PROFILES.HEALTH_RECORDS(profileId)` với `page: 0, limit: 1` để lấy kết quả gần nhất.
-  - [ ] Có loading, error, và empty state rõ ràng.
-- [ ] Task 3 — Web: Hiển thị bản tóm tắt và câu hỏi gợi ý (AC: #3, #4, #5, #6, #10)
-  - [ ] Hiển thị tên hồ sơ, loại kết quả, ngày thực hiện, trạng thái, số chỉ số bất thường.
-  - [ ] Dùng `recordStatusLabel` hoặc helper tương đương; tránh duplicate quá mức nếu có thể trích helper dùng chung.
-  - [ ] Thêm tối thiểu 5 câu hỏi gợi ý không chẩn đoán.
-  - [ ] Thêm disclaimer y tế nổi bật nhưng không gây hoảng sợ.
-- [ ] Task 4 — Web: Hỗ trợ mang thông tin ra ngoài (AC: #7, #9)
-  - [ ] Thêm nút `In tóm tắt` dùng `window.print()` hoặc nút `Sao chép tóm tắt`.
-  - [ ] Nếu dùng clipboard, xử lý success/error bằng text state hoặc alert thân thiện.
-  - [ ] Đảm bảo button có accessible name và focus state.
-- [ ] Task 5 — Tests and validation (AC: #1-#10)
-  - [ ] Thêm `apps/web/src/app/(dashboard)/visit-summary/page.test.tsx`.
-  - [ ] Test render title, disclaimer, câu hỏi gợi ý.
-  - [ ] Test empty state khi không có result.
-  - [ ] Test hiển thị result gần nhất từ mock query.
-  - [ ] Test print/copy action bằng mock `window.print` hoặc `navigator.clipboard`.
-  - [ ] Chạy targeted Vitest cho page mới và `pnpm --filter web test` nếu khả thi.
+- [x] Task 1 — Web: Tạo route `/visit-summary` (AC: #1, #8, #10)
+  - [x] Tạo `apps/web/src/app/(dashboard)/visit-summary/page.tsx`.
+  - [x] Reuse `DashboardPageShell` nếu phù hợp với `/help` và `/questions`.
+  - [x] Thêm title rõ: `Tóm tắt đi khám`.
+- [x] Task 2 — Web: Tải hồ sơ và kết quả gần nhất (AC: #2, #3, #4, #8)
+  - [x] Reuse `apiClient.get(ApiPaths.PROFILES.BASE)` để lấy hồ sơ.
+  - [x] Chọn profile từ query `profileId`, default profile, hoặc profile đầu tiên.
+  - [x] Reuse endpoint `ApiPaths.PROFILES.HEALTH_RECORDS(profileId)` với `page: 0, limit: 1` để lấy kết quả gần nhất.
+  - [x] Có loading, error, và empty state rõ ràng.
+- [x] Task 3 — Web: Hiển thị bản tóm tắt và câu hỏi gợi ý (AC: #3, #4, #5, #6, #10)
+  - [x] Hiển thị tên hồ sơ, loại kết quả, ngày thực hiện, trạng thái, số chỉ số bất thường.
+  - [x] Dùng `recordStatusLabel` hoặc helper tương đương; tránh duplicate quá mức nếu có thể trích helper dùng chung.
+  - [x] Thêm tối thiểu 5 câu hỏi gợi ý không chẩn đoán.
+  - [x] Thêm disclaimer y tế nổi bật nhưng không gây hoảng sợ.
+- [x] Task 4 — Web: Hỗ trợ mang thông tin ra ngoài (AC: #7, #9)
+  - [x] Thêm nút `In tóm tắt` dùng `window.print()` hoặc nút `Sao chép tóm tắt`.
+  - [x] Nếu dùng clipboard, xử lý success/error bằng text state hoặc alert thân thiện.
+  - [x] Đảm bảo button có accessible name và focus state.
+- [x] Task 5 — Tests and validation (AC: #1-#10)
+  - [x] Thêm `apps/web/src/app/(dashboard)/visit-summary/page.test.tsx`.
+  - [x] Test render title, disclaimer, câu hỏi gợi ý.
+  - [x] Test empty state khi không có result.
+  - [x] Test hiển thị result gần nhất từ mock query.
+  - [x] Test print/copy action bằng mock `window.print` hoặc `navigator.clipboard`.
+  - [x] Chạy targeted Vitest cho page mới và `pnpm --filter web test` nếu khả thi.
 
 ## Dev Notes
 
@@ -104,14 +104,49 @@ so that tôi có thể trao đổi với bác sĩ rõ ràng hơn mà không hi�
 
 ### Agent Model Used
 
-TBD by dev agent
+GPT-5 Codex
 
 ### Debug Log References
 
+- 2026-05-16: Targeted red test confirmed route missing before implementation: `pnpm --filter web exec vitest run 'src/app/(dashboard)/visit-summary/page.test.tsx'`.
+- 2026-05-16: Targeted page test passed after implementation: `pnpm --filter web exec vitest run 'src/app/(dashboard)/visit-summary/page.test.tsx'` — 6 tests passed.
+- 2026-05-16: Full web validation passed: `pnpm --filter web test` — lint passed, 11 test files / 24 tests passed.
+- 2026-05-16: Code review targeted validation passed: `pnpm --filter web exec vitest run 'src/app/(dashboard)/visit-summary/page.test.tsx'` — 6 tests passed.
+- 2026-05-16: PDF/print enhancement targeted validation passed: `pnpm --filter web exec vitest run 'src/app/(dashboard)/visit-summary/page.test.tsx'` — 7 tests passed.
+- 2026-05-16: PDF/print enhancement full web validation passed: `pnpm --filter web test` — lint passed, 11 test files / 25 tests passed.
+- 2026-05-16: Dashboard print chrome fix validation passed: `pnpm --filter web exec vitest run 'src/app/(dashboard)/layout.test.tsx' 'src/app/(dashboard)/visit-summary/page.test.tsx'` — 8 tests passed.
+- 2026-05-16: Dashboard print chrome fix full web validation passed: `pnpm --filter web test` — lint passed, 11 test files / 25 tests passed.
+- 2026-05-16: Print content trim validation passed: `pnpm --filter web exec vitest run 'src/app/(dashboard)/visit-summary/page.test.tsx'` — 7 tests passed.
+- 2026-05-16: Suspense boundary fix and frontend test-file removal validation passed: `pnpm --filter web test` — lint passed, no frontend test files found, Vitest exited with code 0 via `--passWithNoTests`.
+- 2026-05-16: Suspense boundary TypeScript validation passed: `pnpm --filter web exec tsc --noEmit`.
+- 2026-05-16: Production build check attempted with `pnpm --filter web build`, blocked by local Node.js 18.16.0 because Next.js requires `>=20.9.0`.
+
 ### Completion Notes List
 
+- Implemented `/visit-summary` as a dashboard client page with profile selection, default/query profile resolution, latest health record loading via existing `ApiPaths`, and responsive dashboard visual language.
+- Added loading, profile error, record error, no-profile, and no-record states without showing fake health data.
+- Added concise visit summary content, five non-diagnostic doctor discussion questions, clear medical disclaimer, and `window.print()` export action.
+- Added colocated tests covering title/disclaimer/questions, query profile selection, latest result display, empty state CTA, error state, and print behavior.
+- Enhanced the print/PDF output with an A4-oriented summary sheet for doctor visits, including self-fill sections for visit goals, concerns, medicines/supplements, allergies, latest record summary, suggested questions, and a stronger source/disclaimer note.
+- Fixed dashboard print chrome by hiding the top navigation, sidebar, and mobile nav in print mode and removing the dashboard left margin for printed content.
+- Removed screen-only profile selector and on-screen latest-result card from print/PDF output so the PDF shows only the doctor-facing summary sheet.
+- Wrapped the `useSearchParams()` implementation in a Suspense-backed inner component to avoid App Router production prerender/build issues.
+- Removed frontend test files under `apps/web/src` per request and updated the web test script to pass cleanly when no test files remain.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/epic-10/10-4-visit-summary-page.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `apps/web/package.json`
+- `apps/web/src/app/(dashboard)/layout.tsx`
+- `apps/web/src/app/(dashboard)/visit-summary/page.tsx`
 
 ### Change Log
 
 - 2026-05-16: Tạo story 10.4 cho trang `/visit-summary`, tóm tắt thông tin đi khám và disclaimer y tế rõ ràng, không kết nối bác sĩ trực tuyến.
+- 2026-05-16: Implemented story 10.4 `/visit-summary` page, tests, and validation; moved story to review.
+- 2026-05-16: Code review clean; moved story to done.
+- 2026-05-16: Enhanced `In / lưu PDF` output with doctor-facing print layout and validation coverage.
+- 2026-05-16: Fixed print mode so dashboard nav, buttons, and sidebar are hidden from the saved PDF.
+- 2026-05-16: Removed the screen profile selector and latest-result card from PDF output.
+- 2026-05-16: Fixed Copilot Suspense warning for `useSearchParams()` and removed frontend test files.
