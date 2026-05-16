@@ -174,8 +174,8 @@ development_status:
   # Epic 10: UX Improvements
   epic-10: in-progress
   10-1-help-and-questions-pages: done
-  10-2-home-quick-actions-self-service: review
-  10-3-follow-up-reminders-page: ready-for-dev
+  10-2-home-quick-actions-self-service: done
+  10-3-follow-up-reminders-page: done
   10-4-visit-summary-page: ready-for-dev
   epic-10-retrospective: optional
 
