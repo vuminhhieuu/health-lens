@@ -149,7 +149,7 @@ public class HealthRecordService {
                 .formatted(userId, targetProfileId, recordId, uploadFormat.extension());
         String uploadUrl = storageService.generateUploadUrl(fileKey, UPLOAD_URL_TTL, uploadFormat.contentType());
 
-        persistUploadReservation(recordId, userId, targetProfileId, fileKey);
+        persistUploadReservation(recordId, userId, targetProfileId, fileKey, uploadFormat.contentType());
 
         return new UploadUrlResponse(uploadUrl, recordId, fileKey);
     }
@@ -195,10 +195,15 @@ public class HealthRecordService {
 
         StreamOperations<String, Object, Object> streamOps = redisTemplate.opsForStream();
         String jobId = UUID.randomUUID().toString();
+        String mimeType = reservation.mimeType() == null || reservation.mimeType().isBlank()
+                ? deriveMimeTypeFromFileKey(reservation.fileKey())
+                : reservation.mimeType();
         streamOps.add(ocrStreamName, Map.of(
                 "jobId", jobId,
+                "correlationId", jobId,
                 "recordId", recordId.toString(),
                 "fileKey", reservation.fileKey(),
+                "mimeType", mimeType,
                 "profileId", reservation.profileId().toString()
         ));
         redisTemplate.delete(uploadReservationKey(recordId));
@@ -712,8 +717,8 @@ public class HealthRecordService {
         healthRecordRepository.save(record);
     }
 
-    private void persistUploadReservation(UUID recordId, UUID userId, UUID profileId, String fileKey) {
-        UploadReservation reservation = new UploadReservation(userId, profileId, fileKey);
+    private void persistUploadReservation(UUID recordId, UUID userId, UUID profileId, String fileKey, String mimeType) {
+        UploadReservation reservation = new UploadReservation(userId, profileId, fileKey, mimeType);
         try {
             String json = objectMapper.writeValueAsString(reservation);
             redisTemplate.opsForValue().set(uploadReservationKey(recordId), json, UPLOAD_RESERVATION_TTL);
@@ -879,23 +884,31 @@ public class HealthRecordService {
         for (int i = 0; i < metrics.size(); i++) {
             MetricDto m = metrics.get(i);
             if (m == null) {
-                throw new IllegalArgumentException("Metric[" + i + "]: không được null");
+                throw new IllegalArgumentException(metricValidationPrefix(null, i) + "không được null");
             }
             if (m.getName() == null || m.getName().isBlank()) {
-                throw new IllegalArgumentException("Metric[" + i + "]: tên chỉ số không được để trống");
+                throw new IllegalArgumentException(metricValidationPrefix(m, i) + "tên chỉ số không được để trống");
             }
             if (m.getValue() == null || m.getValue().isBlank()) {
-                throw new IllegalArgumentException("Metric[" + i + "]: giá trị không được để trống");
+                throw new IllegalArgumentException(metricValidationPrefix(m, i) + "giá trị không được để trống");
             }
             if (m.getUnit() == null || m.getUnit().isBlank()) {
-                throw new IllegalArgumentException("Metric[" + i + "]: đơn vị không được để trống");
+                throw new IllegalArgumentException(metricValidationPrefix(m, i) + "đơn vị không được để trống");
             }
             if (m.getSource() != null && !VALID_SOURCES.contains(m.getSource())) {
                 throw new IllegalArgumentException(
-                        "Metric[" + i + "]: source '" + m.getSource() + "' không hợp lệ"
+                        metricValidationPrefix(m, i) + "source '" + m.getSource() + "' không hợp lệ"
                 );
             }
         }
+    }
+
+    private String metricValidationPrefix(MetricDto metric, int index) {
+        String name = metric != null && metric.getName() != null ? metric.getName().trim() : "";
+        if (!name.isBlank()) {
+            return "Chỉ số \"" + name + "\": ";
+        }
+        return "Chỉ số #" + (index + 1) + ": ";
     }
 
     /**
@@ -1132,6 +1145,23 @@ public class HealthRecordService {
         };
     }
 
+    private String deriveMimeTypeFromFileKey(String fileKey) {
+        if (fileKey == null) {
+            return "application/octet-stream";
+        }
+        String normalized = fileKey.toLowerCase(Locale.ROOT);
+        if (normalized.endsWith(".pdf")) {
+            return "application/pdf";
+        }
+        if (normalized.endsWith(".png")) {
+            return "image/png";
+        }
+        if (normalized.endsWith(".jpg") || normalized.endsWith(".jpeg")) {
+            return "image/jpeg";
+        }
+        return "application/octet-stream";
+    }
+
     private boolean containsLowConfidenceMetrics(List<MetricDto> metrics) {
         if (metrics == null || metrics.isEmpty()) {
             return false;
@@ -1281,6 +1311,6 @@ public class HealthRecordService {
     }
 
     private record UploadFormat(String extension, String contentType) {}
-    private record UploadReservation(UUID userId, UUID profileId, String fileKey) {}
+    private record UploadReservation(UUID userId, UUID profileId, String fileKey, String mimeType) {}
     private record AccessibleRecord(HealthRecord record, boolean isOwner, boolean isShared, boolean canEdit, String shareScope) {}
 }

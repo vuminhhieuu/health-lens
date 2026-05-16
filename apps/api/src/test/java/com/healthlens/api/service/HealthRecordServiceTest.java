@@ -201,7 +201,8 @@ class HealthRecordServiceTest {
         String reservationJson = new ObjectMapper().writeValueAsString(Map.of(
                 "userId", userId,
                 "profileId", profileId,
-                "fileKey", fileKey
+                "fileKey", fileKey,
+                "mimeType", "image/jpeg"
         ));
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
@@ -217,8 +218,10 @@ class HealthRecordServiceTest {
         verify(streamOperations).add(eq("ocr.events"), payloadCaptor.capture());
         verify(redisTemplate).delete("health-record-upload:" + recordId);
         Map<String, String> payload = payloadCaptor.getValue();
-        assertThat(payload).containsKeys("jobId", "recordId", "fileKey", "profileId");
+        assertThat(payload).containsKeys("jobId", "recordId", "fileKey", "profileId", "mimeType", "correlationId");
         assertThat(payload.get("recordId")).isEqualTo(recordId.toString());
+        assertThat(payload.get("mimeType")).isEqualTo("image/jpeg");
+        assertThat(payload.get("correlationId")).isEqualTo(payload.get("jobId"));
     }
 
     @Test
@@ -859,6 +862,63 @@ class HealthRecordServiceTest {
         assertThatThrownBy(() -> healthRecordService.confirmRecord(userId, recordId, request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("không được null");
+        verify(healthRecordRepository, never()).save(record);
+    }
+
+    @Test
+    @DisplayName("confirmRecord chap nhan gia tri dang chu")
+    void confirmRecord_textualMetricValue_success() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setProfileId(UUID.randomUUID());
+        record.setStatus("review_required");
+        record.setSourceType("ocr");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        ConfirmRecordRequest request = ConfirmRecordRequest.builder()
+                .metrics(List.of(MetricDto.builder()
+                        .name("HBsAg")
+                        .value("Negative")
+                        .unit("mg/L")
+                        .source("manual")
+                        .build()))
+                .build();
+
+        healthRecordService.confirmRecord(userId, recordId, request);
+
+        assertThat(record.getStatus()).isEqualTo("done");
+        verify(healthRecordRepository).save(record);
+    }
+
+    @Test
+    @DisplayName("confirmRecord bao loi don vi bang ten chi so")
+    void confirmRecord_missingUnit_usesMetricNameInMessage() {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setStatus("review_required");
+
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        ConfirmRecordRequest request = ConfirmRecordRequest.builder()
+                .metrics(List.of(MetricDto.builder()
+                        .name("HBsAg")
+                        .value("Negative")
+                        .unit("")
+                        .build()))
+                .build();
+
+        assertThatThrownBy(() -> healthRecordService.confirmRecord(userId, recordId, request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Chỉ số \"HBsAg\": đơn vị không được để trống");
         verify(healthRecordRepository, never()).save(record);
     }
 

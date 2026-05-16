@@ -2,6 +2,8 @@ package com.healthlens.api.service;
 
 import com.healthlens.api.dto.OcrResult;
 import com.healthlens.api.exception.OcrProcessingException;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +19,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.healthlens.api.dto.MetricDto;
 import com.healthlens.api.dto.ReferenceRangeDto;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.ImageType;
+import org.apache.pdfbox.rendering.PDFRenderer;
+import org.apache.pdfbox.text.PDFTextStripper;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.Base64;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -66,6 +78,14 @@ public class OcrService {
     private float highConfidenceThreshold = 0.85f;
     @Value("${app.ocr.confidence.medium-threshold:0.50}")
     private float mediumConfidenceThreshold = 0.50f;
+    @Value("${app.ocr.pdf.rendered-images.max-pages:10}")
+    private int pdfRenderedImagesMaxPages = 10;
+    @Value("${app.ocr.pdf.rendered-images.dpi:150}")
+    private int pdfRenderedImagesDpi = 150;
+    @Value("${app.ocr.pdf.rendered-images.max-total-bytes:31457280}")
+    private int pdfRenderedImagesMaxTotalBytes = 30 * 1024 * 1024;
+    @Value("${app.ocr.pdf.rendered-images.min-text-chars-before-stop:120}")
+    private int pdfRenderedImagesMinTextCharsBeforeStop = 120;
 
     // =========================================
     // EasyOCR Response DTO (inner class)
@@ -76,6 +96,20 @@ public class OcrService {
             String hospitalName,
             String diagnosis,
             List<MetricDto> metrics
+    ) {}
+
+    public record OcrPageResult(
+            int pageNumber,
+            String provider,
+            float confidence
+    ) {}
+
+    public record OcrProcessingResult(
+            OcrResult result,
+            String route,
+            String provider,
+            String mimeType,
+            List<OcrPageResult> pages
     ) {}
 
     /**
@@ -92,7 +126,19 @@ public class OcrService {
     /**
      * Request DTO for EasyOCR FastAPI /ocr endpoint.
      */
-    record EasyOcrRequest(String image_url) {}
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record EasyOcrRequest(
+            @JsonProperty("image_url") String imageUrl,
+            @JsonProperty("image_base64") String imageBase64
+    ) {
+        static EasyOcrRequest fromUrl(String imageUrl) {
+            return new EasyOcrRequest(imageUrl, null);
+        }
+
+        static EasyOcrRequest fromBase64(String imageBase64) {
+            return new EasyOcrRequest(null, imageBase64);
+        }
+    }
 
     public OcrService(
             @Qualifier("ocrRestTemplate") RestTemplate ocrRestTemplate,
@@ -177,6 +223,271 @@ public class OcrService {
         return buildAllProvidersFailedResult();
     }
 
+    public OcrProcessingResult processDocument(String documentUrl, String mimeTypeRaw) {
+        String mimeType = normalizeMimeType(mimeTypeRaw);
+        if (mimeType.startsWith("image/")) {
+            OcrResult result = processImage(documentUrl);
+            return new OcrProcessingResult(
+                    result,
+                    "image",
+                    result.getSource(),
+                    mimeType,
+                    List.of()
+            );
+        }
+        if ("application/pdf".equals(mimeType)) {
+            return processPdf(documentUrl, mimeType);
+        }
+        throw new OcrProcessingException("Unsupported OCR MIME type: " + mimeType);
+    }
+
+    public OcrProcessingResult processPdfBytes(byte[] pdfBytes, String documentUrl, String mimeTypeRaw) {
+        String mimeType = normalizeMimeType(mimeTypeRaw);
+        if (!"application/pdf".equals(mimeType)) {
+            throw new OcrProcessingException("Unsupported OCR MIME type: " + mimeType);
+        }
+        return processPdfBytes(pdfBytes, documentUrl, mimeType, System.nanoTime());
+    }
+
+    private OcrProcessingResult processPdf(String documentUrl, String mimeType) {
+        long started = System.nanoTime();
+        try {
+            byte[] pdfBytes = downloadDocumentBytes(documentUrl);
+            return processPdfBytes(pdfBytes, documentUrl, mimeType, started);
+        } catch (Exception ex) {
+            log.warn("ocr_route_selected route=pdf-document provider=pdf-text-layer mimeType={} success=false errorType={}",
+                    mimeType,
+                    ex.getClass().getSimpleName());
+            return failedPdfResult(mimeType, List.of());
+        }
+    }
+
+    private OcrProcessingResult processPdfBytes(byte[] pdfBytes, String documentUrl, String mimeType, long started) {
+        OcrProcessingResult textLayerResult = emptyPdfStageResult("pdf-text-layer", "pdfbox", mimeType);
+        try {
+            textLayerResult = extractPdfTextLayer(pdfBytes, mimeType, started);
+            if (!textLayerResult.result().getText().isBlank()) {
+                return textLayerResult;
+            }
+        } catch (Exception ex) {
+            log.warn("ocr_route_selected route=pdf-text-layer provider=pdfbox mimeType={} success=false errorType={}",
+                    mimeType,
+                    ex.getClass().getSimpleName());
+        }
+
+        OcrProcessingResult renderedImageResult = emptyPdfStageResult("pdf-rendered-images", "easyocr", mimeType);
+        try {
+            renderedImageResult = extractScannedPdfWithEasyOcr(pdfBytes, mimeType, started);
+            if (!renderedImageResult.result().getText().isBlank()) {
+                return renderedImageResult;
+            }
+        } catch (Exception ex) {
+            log.warn("ocr_route_selected route=pdf-rendered-images provider=easyocr mimeType={} success=false errorType={}",
+                    mimeType,
+                    ex.getClass().getSimpleName());
+        }
+
+        try {
+            OcrResult result = textractClient.extract(documentUrl);
+            if ("textract-stub".equals(result.getSource())) {
+                log.warn("ocr_route_selected route=pdf-document provider=textract-stub mimeType={} success=false reason=provider-disabled",
+                        mimeType);
+                return failedPdfResult(mimeType, renderedImageResult.pages());
+            }
+            String provider = result.getSource() == null || result.getSource().isBlank()
+                    ? "document-ocr"
+                    : result.getSource();
+            log.info("ocr_route_selected route=pdf-document provider={} mimeType={} success=true totalLatencyMs={}",
+                    provider,
+                    mimeType,
+                    elapsedMs(started));
+            return new OcrProcessingResult(
+                    result,
+                    "pdf-document",
+                    provider,
+                    mimeType,
+                    buildProviderPages(
+                            renderedImageResult.pages().isEmpty() ? textLayerResult.pages() : renderedImageResult.pages(),
+                            provider,
+                            result.getConfidence()
+                    )
+            );
+        } catch (Exception ex) {
+            log.warn("ocr_route_selected route=pdf-document provider=textract mimeType={} success=false errorType={}",
+                    mimeType,
+                    ex.getClass().getSimpleName());
+            return failedPdfResult(
+                    mimeType,
+                    renderedImageResult.pages().isEmpty() ? textLayerResult.pages() : renderedImageResult.pages()
+            );
+        }
+    }
+
+    private byte[] downloadDocumentBytes(String documentUrl) {
+        byte[] bytes = ocrRestTemplate.getForObject(documentUrl, byte[].class);
+        if (bytes == null || bytes.length == 0) {
+            throw new OcrProcessingException("PDF download returned empty body");
+        }
+        return bytes;
+    }
+
+    private OcrProcessingResult extractPdfTextLayer(byte[] pdfBytes, String mimeType, long started) throws IOException {
+        try (PDDocument document = Loader.loadPDF(pdfBytes)) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            StringBuilder combinedText = new StringBuilder();
+            List<OcrPageResult> pages = new ArrayList<>();
+            int pageCount = document.getNumberOfPages();
+            for (int page = 1; page <= pageCount; page++) {
+                stripper.setStartPage(page);
+                stripper.setEndPage(page);
+                String pageText = stripper.getText(document).trim();
+                if (!pageText.isBlank()) {
+                    if (!combinedText.isEmpty()) {
+                        combinedText.append("\n\n");
+                    }
+                    combinedText.append(pageText);
+                }
+                pages.add(new OcrPageResult(page, "pdf-text-layer", pageText.isBlank() ? 0.0f : 1.0f));
+            }
+            String text = combinedText.toString();
+            float confidence = text.isBlank() ? 0.0f : 1.0f;
+            log.info("ocr_route_selected route=pdf-text-layer provider=pdfbox mimeType={} success={} pages={} totalLatencyMs={}",
+                    mimeType,
+                    !text.isBlank(),
+                    pageCount,
+                    elapsedMs(started));
+            return new OcrProcessingResult(
+                    OcrResult.builder()
+                            .text(text)
+                            .confidence(confidence)
+                            .source(text.isBlank() ? "pdf-text-layer-empty" : "pdf-text-layer")
+                            .language("unknown")
+                            .processingTimeMs((int) elapsedMs(started))
+                            .build(),
+                    "pdf-text-layer",
+                    "pdfbox",
+                    mimeType,
+                    pages
+            );
+        }
+    }
+
+    private OcrProcessingResult extractScannedPdfWithEasyOcr(byte[] pdfBytes, String mimeType, long started) throws IOException {
+        try (PDDocument document = Loader.loadPDF(pdfBytes)) {
+            PDFRenderer renderer = new PDFRenderer(document);
+            StringBuilder combinedText = new StringBuilder();
+            List<OcrPageResult> pages = new ArrayList<>();
+            float confidenceSum = 0.0f;
+            int recognizedPages = 0;
+            int pageCount = document.getNumberOfPages();
+            int maxPages = Math.max(1, Math.min(pageCount, pdfRenderedImagesMaxPages));
+            long renderedBytes = 0L;
+
+            for (int pageIndex = 0; pageIndex < maxPages; pageIndex++) {
+                OcrResult pageResult;
+                String pageText = "";
+                try {
+                    byte[] pagePngBytes = renderPdfPageToPngBytes(renderer, pageIndex);
+                    renderedBytes += pagePngBytes.length;
+                    if (renderedBytes > pdfRenderedImagesMaxTotalBytes) {
+                        log.warn("PDF rendered page OCR aborted due to render byte budget. page={} renderedBytes={} budget={}",
+                                pageIndex + 1,
+                                renderedBytes,
+                                pdfRenderedImagesMaxTotalBytes);
+                        break;
+                    }
+                    pageResult = callEasyOcrBase64(Base64.getEncoder().encodeToString(pagePngBytes));
+                    pageText = pageResult.getText() == null ? "" : pageResult.getText().trim();
+                } catch (OcrProcessingException ex) {
+                    log.warn("PDF rendered page OCR failed. page={} error={}", pageIndex + 1, ex.getMessage());
+                    pageResult = OcrResult.builder()
+                            .text("")
+                            .confidence(0.0f)
+                            .source("easyocr")
+                            .language("unknown")
+                            .processingTimeMs(0)
+                            .build();
+                }
+                if (!pageText.isBlank()) {
+                    if (!combinedText.isEmpty()) {
+                        combinedText.append("\n\n");
+                    }
+                    combinedText.append(pageText);
+                    confidenceSum += pageResult.getConfidence();
+                    recognizedPages++;
+                }
+                pages.add(new OcrPageResult(pageIndex + 1, "easyocr", pageText.isBlank() ? 0.0f : pageResult.getConfidence()));
+                if (combinedText.length() >= pdfRenderedImagesMinTextCharsBeforeStop) {
+                    break;
+                }
+            }
+
+            String text = combinedText.toString();
+            float confidence = recognizedPages == 0 ? 0.0f : confidenceSum / recognizedPages;
+            log.info("ocr_route_selected route=pdf-rendered-images provider=easyocr mimeType={} success={} pages={} totalLatencyMs={}",
+                    mimeType,
+                    !text.isBlank(),
+                    pages.size(),
+                    elapsedMs(started));
+            return new OcrProcessingResult(
+                    OcrResult.builder()
+                            .text(text)
+                            .confidence(confidence)
+                            .source(text.isBlank() ? "pdf-rendered-images-empty" : "easyocr")
+                            .language("unknown")
+                            .processingTimeMs((int) elapsedMs(started))
+                            .build(),
+                    "pdf-rendered-images",
+                    "easyocr",
+                    mimeType,
+                    pages
+            );
+        }
+    }
+
+    private byte[] renderPdfPageToPngBytes(PDFRenderer renderer, int pageIndex) throws IOException {
+        BufferedImage image = renderer.renderImageWithDPI(pageIndex, pdfRenderedImagesDpi, ImageType.RGB);
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            ImageIO.write(image, "png", out);
+            return out.toByteArray();
+        }
+    }
+
+    private OcrProcessingResult emptyPdfStageResult(String route, String provider, String mimeType) {
+        return new OcrProcessingResult(
+                OcrResult.builder()
+                        .text("")
+                        .confidence(0.0f)
+                        .source(provider + "-empty")
+                        .language("unknown")
+                        .processingTimeMs(0)
+                        .build(),
+                route,
+                provider,
+                mimeType,
+                List.of()
+        );
+    }
+
+    private List<OcrPageResult> buildProviderPages(List<OcrPageResult> sourcePages, String provider, float confidence) {
+        if (sourcePages == null || sourcePages.isEmpty()) {
+            return List.of(new OcrPageResult(1, provider, confidence));
+        }
+        return sourcePages.stream()
+                .map(page -> new OcrPageResult(page.pageNumber(), provider, confidence))
+                .toList();
+    }
+
+    private OcrProcessingResult failedPdfResult(String mimeType, List<OcrPageResult> pages) {
+        return new OcrProcessingResult(
+                buildAllProvidersFailedResult(),
+                "pdf-document",
+                "textract",
+                mimeType,
+                buildProviderPages(pages, "textract", 0.0f)
+        );
+    }
+
     /**
      * Gọi EasyOCR microservice qua REST API.
      *
@@ -185,10 +496,18 @@ public class OcrService {
      * @throws OcrProcessingException nếu EasyOCR service fail
      */
     OcrResult callEasyOcr(String imageUrl) {
+        return callEasyOcrRequest(EasyOcrRequest.fromUrl(imageUrl));
+    }
+
+    OcrResult callEasyOcrBase64(String imageBase64) {
+        return callEasyOcrRequest(EasyOcrRequest.fromBase64(imageBase64));
+    }
+
+    private OcrResult callEasyOcrRequest(EasyOcrRequest request) {
         try {
             EasyOcrResponse response = ocrRestTemplate.postForObject(
                     ocrServiceUrl + "/ocr",
-                    new EasyOcrRequest(imageUrl),
+                    request,
                     EasyOcrResponse.class
             );
 
@@ -223,12 +542,24 @@ public class OcrService {
             log.error("EasyOCR service unreachable: {}", e.getMessage());
             throw new OcrProcessingException("EasyOCR service unavailable", e);
         } catch (HttpClientErrorException | HttpServerErrorException e) {
-            log.error("EasyOCR service returned error: {} {}", e.getStatusCode(), e.getStatusText());
+            log.error("EasyOCR service returned error: {} {} body={}",
+                    e.getStatusCode(),
+                    e.getStatusText(),
+                    summarizeOcrErrorBody(e.getResponseBodyAsString()));
             throw new OcrProcessingException("EasyOCR service error: " + e.getStatusCode(), e);
         } catch (IllegalArgumentException e) {
             log.error("EasyOCR malformed response: {}", e.getMessage());
             throw new OcrProcessingException("EasyOCR malformed response", e);
         }
+    }
+
+    private String summarizeOcrErrorBody(String body) {
+        if (body == null || body.isBlank()) {
+            return "";
+        }
+        String sanitized = body.replaceAll("\"image_base64\"\\s*:\\s*\"[^\"]+\"", "\"image_base64\":\"<redacted>\"");
+        int maxLength = 1_000;
+        return sanitized.length() <= maxLength ? sanitized : sanitized.substring(0, maxLength) + "...<truncated>";
     }
 
     /**
@@ -293,6 +624,15 @@ public class OcrService {
             return "";
         }
         return provider.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeMimeType(String mimeType) {
+        if (mimeType == null) {
+            return "";
+        }
+        int parametersIndex = mimeType.indexOf(';');
+        String baseType = parametersIndex >= 0 ? mimeType.substring(0, parametersIndex) : mimeType;
+        return baseType.trim().toLowerCase(Locale.ROOT);
     }
 
     private OcrResult buildAllProvidersFailedResult() {

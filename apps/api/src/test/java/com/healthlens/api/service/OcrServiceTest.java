@@ -17,9 +17,18 @@ import org.springframework.ai.chat.client.ChatClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.healthlens.api.dto.MetricDto;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -268,6 +277,230 @@ class OcrServiceTest {
             verify(googleCloudVisionClient).extract(TEST_IMAGE_URL);
             verify(textractClient).extract(TEST_IMAGE_URL);
             verifyNoInteractions(ocrRestTemplate);
+        }
+    }
+
+    @Nested
+    @DisplayName("MIME-aware document routing")
+    class MimeAwareRoutingTests {
+
+        @Test
+        @DisplayName("image/* dùng image OCR pipeline hiện có")
+        void processDocument_imageMime_usesImagePipeline() {
+            OcrService.EasyOcrResponse mockResponse = new OcrService.EasyOcrResponse(
+                    "Glucose 5.4 mmol/L",
+                    0.92f,
+                    "vi",
+                    500,
+                    2
+            );
+            when(ocrRestTemplate.postForObject(
+                    eq(OCR_SERVICE_URL + "/ocr"),
+                    any(),
+                    eq(OcrService.EasyOcrResponse.class)
+            )).thenReturn(mockResponse);
+
+            OcrService.OcrProcessingResult result = ocrService.processDocument(TEST_IMAGE_URL, "image/png");
+
+            assertThat(result.route()).isEqualTo("image");
+            assertThat(result.provider()).isEqualTo("easyocr");
+            assertThat(result.mimeType()).isEqualTo("image/png");
+            assertThat(result.result().getText()).contains("Glucose");
+            assertThat(result.pages()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("application/pdf có text layer dùng PDFBox trước provider fallback")
+        void processDocument_pdfTextLayer_usesPdfBoxBeforeProviderFallback() throws Exception {
+            when(ocrRestTemplate.getForObject("https://example.com/report.pdf", byte[].class))
+                    .thenReturn(buildPdf("HbA1c 5.6", "Glucose 5.4"));
+
+            OcrService.OcrProcessingResult result = ocrService.processDocument("https://example.com/report.pdf", "application/pdf");
+
+            assertThat(result.route()).isEqualTo("pdf-text-layer");
+            assertThat(result.provider()).isEqualTo("pdfbox");
+            assertThat(result.mimeType()).isEqualTo("application/pdf");
+            assertThat(result.result().getSource()).isEqualTo("pdf-text-layer");
+            assertThat(result.result().getText()).contains("HbA1c 5.6", "Glucose 5.4");
+            assertThat(result.pages()).containsExactly(
+                    new OcrService.OcrPageResult(1, "pdf-text-layer", 1.0f),
+                    new OcrService.OcrPageResult(2, "pdf-text-layer", 1.0f)
+            );
+            verifyNoInteractions(textractClient);
+        }
+
+        @Test
+        @DisplayName("PDF bytes path dùng PDFBox trực tiếp, không tải lại presigned URL")
+        void processPdfBytes_pdfTextLayer_usesProvidedBytes() throws Exception {
+            OcrService.OcrProcessingResult result = ocrService.processPdfBytes(
+                    buildPdf("HbA1c 5.6"),
+                    "https://example.com/report.pdf",
+                    "application/pdf"
+            );
+
+            assertThat(result.route()).isEqualTo("pdf-text-layer");
+            assertThat(result.provider()).isEqualTo("pdfbox");
+            assertThat(result.result().getText()).contains("HbA1c 5.6");
+            verify(ocrRestTemplate, never()).getForObject(any(String.class), eq(byte[].class));
+            verifyNoInteractions(textractClient);
+        }
+
+        @Test
+        @DisplayName("application/pdf scan render từng trang qua EasyOCR khi không có text layer")
+        void processDocument_scannedPdf_usesRenderedPageEasyOcrBeforeTextract() throws Exception {
+            when(ocrRestTemplate.getForObject("https://example.com/scanned.pdf", byte[].class))
+                    .thenReturn(buildBlankPdf(1));
+            when(ocrRestTemplate.postForObject(
+                    eq(OCR_SERVICE_URL + "/ocr"),
+                    any(),
+                    eq(OcrService.EasyOcrResponse.class)
+            )).thenReturn(new OcrService.EasyOcrResponse(
+                    "HBsAg Negative",
+                    0.88f,
+                    "en",
+                    600,
+                    2
+            ));
+
+            OcrService.OcrProcessingResult result = ocrService.processDocument("https://example.com/scanned.pdf", "application/pdf");
+
+            assertThat(result.route()).isEqualTo("pdf-rendered-images");
+            assertThat(result.provider()).isEqualTo("easyocr");
+            assertThat(result.result().getText()).contains("HBsAg Negative");
+            assertThat(result.pages()).containsExactly(new OcrService.OcrPageResult(1, "easyocr", 0.88f));
+            verifyNoInteractions(textractClient);
+        }
+
+        @Test
+        @DisplayName("application/pdf scan fallback dùng document provider khi không có text layer")
+        void processDocument_scannedPdf_usesDocumentProviderFallback() throws Exception {
+            when(ocrRestTemplate.getForObject("https://example.com/scanned.pdf", byte[].class))
+                    .thenReturn(buildBlankPdf(2));
+            when(ocrRestTemplate.postForObject(
+                    eq(OCR_SERVICE_URL + "/ocr"),
+                    any(),
+                    eq(OcrService.EasyOcrResponse.class)
+            )).thenReturn(new OcrService.EasyOcrResponse(
+                    "",
+                    0.0f,
+                    "unknown",
+                    100,
+                    0
+            ));
+            when(textractClient.extract("https://example.com/scanned.pdf")).thenReturn(
+                    OcrResult.builder()
+                            .text("HbA1c 5.6")
+                            .confidence(0.89f)
+                            .source("textract")
+                            .language("vi")
+                            .processingTimeMs(900)
+                            .build()
+            );
+
+            OcrService.OcrProcessingResult result = ocrService.processDocument("https://example.com/scanned.pdf", "application/pdf");
+
+            assertThat(result.route()).isEqualTo("pdf-document");
+            assertThat(result.provider()).isEqualTo("textract");
+            assertThat(result.mimeType()).isEqualTo("application/pdf");
+            assertThat(result.pages()).containsExactly(
+                    new OcrService.OcrPageResult(1, "textract", 0.89f),
+                    new OcrService.OcrPageResult(2, "textract", 0.89f)
+            );
+            verify(textractClient).extract("https://example.com/scanned.pdf");
+        }
+
+        @Test
+        @DisplayName("application/pdf khi Textract disabled trả provider failure rõ ràng")
+        void processDocument_textractStub_returnsAllProvidersFailed() throws Exception {
+            when(ocrRestTemplate.getForObject("https://example.com/scanned.pdf", byte[].class))
+                    .thenReturn(buildBlankPdf(1));
+            when(ocrRestTemplate.postForObject(
+                    eq(OCR_SERVICE_URL + "/ocr"),
+                    any(),
+                    eq(OcrService.EasyOcrResponse.class)
+            )).thenReturn(new OcrService.EasyOcrResponse(
+                    "",
+                    0.0f,
+                    "unknown",
+                    100,
+                    0
+            ));
+            when(textractClient.extract("https://example.com/scanned.pdf")).thenReturn(
+                    OcrResult.builder()
+                            .text("")
+                            .confidence(0.0f)
+                            .source("textract-stub")
+                            .language("unknown")
+                            .processingTimeMs(0)
+                            .build()
+            );
+
+            OcrService.OcrProcessingResult result = ocrService.processDocument("https://example.com/scanned.pdf", "application/pdf");
+
+            assertThat(result.route()).isEqualTo("pdf-document");
+            assertThat(result.result().getSource()).isEqualTo("all-providers-failed");
+            assertThat(result.pages()).containsExactly(new OcrService.OcrPageResult(1, "textract", 0.0f));
+        }
+
+        @Test
+        @DisplayName("application/pdf khi PDFBox lỗi vẫn fallback sang document provider")
+        void processPdfBytes_pdfBoxFailure_stillFallsBackToDocumentProvider() {
+            when(textractClient.extract("https://example.com/scanned.pdf")).thenReturn(
+                    OcrResult.builder()
+                            .text("fallback text")
+                            .confidence(0.82f)
+                            .source("textract")
+                            .language("vi")
+                            .processingTimeMs(200)
+                            .build()
+            );
+
+            OcrService.OcrProcessingResult result = ocrService.processPdfBytes(
+                    "not-a-valid-pdf".getBytes(StandardCharsets.UTF_8),
+                    "https://example.com/scanned.pdf",
+                    "application/pdf"
+            );
+
+            assertThat(result.route()).isEqualTo("pdf-document");
+            assertThat(result.provider()).isEqualTo("textract");
+            assertThat(result.result().getText()).isEqualTo("fallback text");
+            verify(textractClient).extract("https://example.com/scanned.pdf");
+        }
+
+        @Test
+        @DisplayName("unsupported MIME bị reject rõ ràng")
+        void processDocument_unsupportedMime_throws() {
+            assertThatThrownBy(() -> ocrService.processDocument(TEST_IMAGE_URL, "text/plain"))
+                    .isInstanceOf(OcrProcessingException.class)
+                    .hasMessageContaining("Unsupported OCR MIME type");
+        }
+
+        private byte[] buildPdf(String... pageTexts) throws IOException {
+            try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                for (String pageText : pageTexts) {
+                    PDPage page = new PDPage();
+                    document.addPage(page);
+                    try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                        content.beginText();
+                        content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+                        content.newLineAtOffset(72, 720);
+                        content.showText(pageText);
+                        content.endText();
+                    }
+                }
+                document.save(out);
+                return out.toByteArray();
+            }
+        }
+
+        private byte[] buildBlankPdf(int pages) throws IOException {
+            try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                for (int i = 0; i < pages; i++) {
+                    document.addPage(new PDPage());
+                }
+                document.save(out);
+                return out.toByteArray();
+            }
         }
     }
 

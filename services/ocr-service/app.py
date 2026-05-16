@@ -13,16 +13,19 @@ Architecture: Story 1.9 (Option B+)
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 import easyocr
 import uvicorn
 import logging
 import time
+import base64
+import math
 import numpy as np
 from typing import Optional
 from io import BytesIO
 
 MAX_IMAGE_SIZE_BYTES = 30 * 1024 * 1024
+MAX_IMAGE_BASE64_LENGTH = math.ceil(MAX_IMAGE_SIZE_BYTES / 3) * 4
 MAX_IMAGE_DIMENSION = 10000
 
 # Configure logging
@@ -69,19 +72,33 @@ def get_reader() -> easyocr.Reader:
 class OcrRequest(BaseModel):
     """Request body for OCR extraction."""
 
-    image_url: str = Field(
-        ...,
+    image_url: Optional[str] = Field(
+        None,
+        validation_alias=AliasChoices("image_url", "imageUrl"),
         description="URL of the image to process (http/https) or presigned S3/MinIO URL",
         examples=["https://example.com/test-image.png"],
+    )
+    image_base64: Optional[str] = Field(
+        None,
+        validation_alias=AliasChoices("image_base64", "imageBase64"),
+        description="Base64 encoded image bytes for internal PDF page rendering",
     )
 
     @field_validator("image_url")
     @classmethod
-    def validate_url_scheme(cls, v: str) -> str:
+    def validate_url_scheme(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
         lower = v.lower()
         if not (lower.startswith("http://") or lower.startswith("https://")):
             raise ValueError("Only http:// and https:// URLs are allowed")
         return v
+
+    @model_validator(mode="after")
+    def require_one_image_source(self):
+        if bool(self.image_url) == bool(self.image_base64):
+            raise ValueError("Provide exactly one of image_url or image_base64")
+        return self
 
 
 class OcrResult(BaseModel):
@@ -146,16 +163,30 @@ async def extract_text(request: OcrRequest):
     start_time = time.time()
 
     try:
-        logger.info("Downloading image from: %s", request.image_url[:100])
-        response = http_requests.get(request.image_url, timeout=30, stream=True)
-        response.raise_for_status()
+        if request.image_url:
+            logger.info("Downloading image from: %s", request.image_url[:100])
+            response = http_requests.get(request.image_url, timeout=30, stream=True)
+            response.raise_for_status()
 
-        content_type = response.headers.get("Content-Type", "")
-        if content_type and not content_type.startswith(("image/", "application/octet-stream")):
-            logger.warning("Unexpected content type: %s — rejecting", content_type)
-            raise HTTPException(status_code=400, detail="URL does not point to an image")
+            content_type = response.headers.get("Content-Type", "")
+            if content_type and not content_type.startswith(("image/", "application/octet-stream")):
+                logger.warning("Unexpected content type: %s — rejecting", content_type)
+                raise HTTPException(status_code=400, detail="URL does not point to an image")
 
-        raw_bytes = response.content
+            raw_bytes = response.content
+        else:
+            logger.info("Reading image from base64 payload")
+            base64_payload = (request.image_base64 or "").strip()
+            if len(base64_payload) > MAX_IMAGE_BASE64_LENGTH:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Base64 payload too large: {len(base64_payload)} chars (max: {MAX_IMAGE_BASE64_LENGTH})"
+                )
+            try:
+                raw_bytes = base64.b64decode(base64_payload, validate=True)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid base64 image")
+
         if len(raw_bytes) > MAX_IMAGE_SIZE_BYTES:
             raise HTTPException(
                 status_code=400,
@@ -235,7 +266,7 @@ async def extract_text(request: OcrRequest):
         )
 
     except http_requests.exceptions.Timeout:
-        logger.error("Image download timeout for URL: %s", request.image_url[:100])
+        logger.error("Image download timeout for URL: %s", (request.image_url or "")[:100])
         raise HTTPException(status_code=504, detail="Image download timeout")
     except http_requests.exceptions.RequestException as e:
         logger.error("Failed to download image: %s", str(e))

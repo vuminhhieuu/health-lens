@@ -145,14 +145,42 @@ type RecommendationGroup = {
 };
 
 const metricSchema = z.object({
-  name: z.string().min(1, "Tên chỉ số không được để trống"),
+  name: z.string().trim().min(1, "Tên chỉ số không được để trống"),
   value: z
     .string()
-    .min(1, "Giá trị không được để trống")
-    .regex(/^-?\d+(?:[.,]\d+)?$/, "Giá trị phải là số hợp lệ"),
-  unit: z.string().min(1, "Đơn vị không được để trống"),
+    .trim()
+    .min(1, "Giá trị không được để trống"),
+  unit: z.string().trim().min(1, "Đơn vị không được để trống"),
   source: z.enum(["ocr", "manual"]),
 });
+
+function metricLabel(metric: Pick<MetricDto, "name"> | null | undefined, index: number) {
+  const name = metric?.name?.trim();
+  return name ? "“" + name + "”" : "#" + (index + 1);
+}
+
+function validateMetricForSave(metric: MetricDto, index: number): string | null {
+  const validation = metricSchema.safeParse({
+    name: metric.name,
+    value: metric.value,
+    unit: metric.unit,
+    source: "manual",
+  });
+  if (validation.success) return null;
+  const message = validation.error.issues[0]?.message ?? "Dữ liệu chỉ số không hợp lệ";
+  return "Chỉ số " + metricLabel(metric, index) + ": " + message.charAt(0).toLowerCase() + message.slice(1);
+}
+
+function friendlyApiErrorMessage(message: string | undefined, metrics: MetricDto[]) {
+  if (!message) return null;
+  const metricMatch = message.match(/^Metric\[(\d+)\]:\s*(.+)$/);
+  if (metricMatch) {
+    const index = Number(metricMatch[1]);
+    const detail = metricMatch[2] ?? "dữ liệu không hợp lệ";
+    return "Chỉ số " + metricLabel(metrics[index], index) + ": " + detail;
+  }
+  return message;
+}
 
 function extractFilename(contentDisposition: unknown): string | null {
   if (typeof contentDisposition !== "string") return null;
@@ -470,10 +498,14 @@ export default function ReviewRecordPage() {
       return;
     }
 
+    const cleanedMetric = validation.data;
     setSaveError(null);
     const updatedMetrics: MetricDto[] = [...metrics];
     updatedMetrics[editingIndex] = {
       ...editForm,
+      name: cleanedMetric.name,
+      value: cleanedMetric.value,
+      unit: cleanedMetric.unit,
       source: "manual",
       confidenceLevel: "high" as const,
       confidence: 1.0,
@@ -509,11 +541,12 @@ export default function ReviewRecordPage() {
       return;
     }
 
+    const cleanedMetric = validation.data;
     setAddError(null);
     const newMetric: MetricDto = {
-      name: addForm.name,
-      value: addForm.value,
-      unit: addForm.unit,
+      name: cleanedMetric.name,
+      value: cleanedMetric.value,
+      unit: cleanedMetric.unit,
       confidence: 1.0,
       confidenceLevel: "high",
       source: "manual",
@@ -540,6 +573,11 @@ export default function ReviewRecordPage() {
 
       const resolvedKeepPartial = keepPartial || (data?.status === "ocr_failed" && manualMode);
       const finalMetrics: MetricDto[] = metrics;
+      const metricValidationError = finalMetrics.map(validateMetricForSave).find(Boolean);
+      if (metricValidationError) {
+        setSaveError(metricValidationError);
+        return false;
+      }
 
       const payloadMetrics: ConfirmMetricPayload[] = finalMetrics.map((m) => ({
         name: m.name ?? "",
@@ -572,9 +610,8 @@ export default function ReviewRecordPage() {
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string; title?: string }; status?: number } };
       const serverMsg = axiosErr?.response?.data?.detail ?? axiosErr?.response?.data?.title;
-      const statusCode = axiosErr?.response?.status;
       if (serverMsg) {
-        setSaveError(`Lỗi ${statusCode ?? ""}: ${serverMsg}`);
+        setSaveError(friendlyApiErrorMessage(serverMsg, metrics));
       } else {
         setSaveError("Đã có lỗi xảy ra khi lưu. Vui lòng thử lại.");
       }
@@ -1710,8 +1747,7 @@ export default function ReviewRecordPage() {
                 </label>
                 <input
                   type="text"
-                  inputMode="decimal"
-                  placeholder="VD: 5.4"
+                  placeholder="VD: 5.4 hoặc Âm tính"
                   className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378]"
                   value={addForm.value}
                   onChange={(e) => {
@@ -1730,7 +1766,10 @@ export default function ReviewRecordPage() {
                   placeholder="VD: mmol/L"
                   className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378]"
                   value={addForm.unit}
-                  onChange={(e) => setAddForm((prev) => ({ ...prev, unit: e.target.value }))}
+                  onChange={(e) => {
+                    setAddForm((prev) => ({ ...prev, unit: e.target.value }));
+                    setAddError(null);
+                  }}
                 />
               </div>
 
