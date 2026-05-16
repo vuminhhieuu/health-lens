@@ -785,6 +785,38 @@ So that tôi phát hiện sớm vấn đề OCR hoặc hạ tầng.
 **Then** hiển thị tỷ lệ thành công/thất bại theo ngày và tuần
 **And** cho phép drill-down theo nguyên nhân lỗi chính.
 
+## Epic 10: Trợ Giúp và Thắc Mắc Người Dùng
+
+Goal: Cung cấp các trang hướng dẫn và câu hỏi thường gặp trong web dashboard để người dùng tự tìm hiểu cách dùng HealthLens, hiểu giới hạn thông tin tham khảo, và biết cách xử lý các tình huống thường gặp.
+
+### Story 10.1: Trang trợ giúp và trang thắc mắc
+
+As a người dùng HealthLens,
+I want mở trang trợ giúp từ Home và trang thắc mắc từ biểu tượng dấu hỏi ở header,
+So that tôi biết cách dùng các tính năng chính và tìm câu trả lời nhanh khi gặp vấn đề.
+
+**Acceptance Criteria:**
+
+**Given** tôi đang ở trang Home
+**When** bấm tile/nút "Trợ giúp" hoặc CTA "Đọc hướng dẫn"
+**Then** hệ thống điều hướng đến trang `/help` trong dashboard shell.
+
+**Given** tôi đang ở bất kỳ trang dashboard nào có header
+**When** bấm biểu tượng `?` hoặc `HelpCircle`
+**Then** hệ thống điều hướng đến trang `/questions`.
+
+**Given** trang `/help` được mở
+**When** nội dung hiển thị
+**Then** trang có các nhóm hướng dẫn tối thiểu: tải kết quả khám, xem kết quả/giải thích chỉ số, quản lý hồ sơ, chia sẻ cho người thân, tải PDF kết quả, và quyền riêng tư dữ liệu.
+
+**Given** trang `/questions` được mở
+**When** nội dung hiển thị
+**Then** trang có danh sách thắc mắc thường gặp tối thiểu về OCR không đọc được, chỉ số bất thường, thông tin chỉ mang tính tham khảo, chia sẻ quyền xem, xóa dữ liệu, và lỗi đăng nhập/tải file.
+
+**Given** người dùng đọc nội dung y tế trên hai trang
+**When** nội dung nhắc đến giải thích/chỉ số sức khỏe
+**Then** phải có disclaimer rõ ràng rằng HealthLens chỉ hỗ trợ tham khảo, không thay thế tư vấn y tế chuyên môn.
+
 ## Epic 9: Nâng Cao Trải Nghiệm Mobile (Phase 2)
 
 Goal: Bổ sung trải nghiệm native trên mobile: chụp ảnh trực tiếp, đọc lịch sử offline và đồng bộ tự động.

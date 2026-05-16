@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-05-15T13:58:00+07:00
+last_updated: 2026-05-15T16:58:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -170,6 +170,13 @@ development_status:
   9-2-mobile-offline-readonly-history: backlog
   9-3-auto-sync-when-back-online: backlog
   epic-9-retrospective: optional
+
+# =====================================================
+# EPIC 10: HELP & SUPPORT (Phase 1 - Web MVP)
+# =====================================================
+  epic-10: in-progress
+  10-1-help-and-questions-pages: done
+  epic-10-retrospective: optional
 
 # =====================================================
 # SPRINT SUMMARY

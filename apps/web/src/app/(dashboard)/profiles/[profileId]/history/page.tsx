@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   useInfiniteQuery,
@@ -501,13 +502,13 @@ export default function ProfileHistoryPage() {
                 Bạn có thêm kết quả xét nghiệm từ bệnh viện khác? Hãy cập nhật
                 để HealthLens phân tích toàn diện hơn.
               </p>
-              <button
-                type="button"
-                className="mt-5 inline-flex items-center gap-2 text-base font-semibold text-[#0c9f94] hover:underline"
+              <Link
+                href="/help"
+                className="mt-5 inline-flex items-center gap-2 text-base font-semibold text-[#0c9f94] hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00685f]"
               >
                 Tìm hiểu cách tải lên
                 <ChevronRight className="h-4 w-4" />
-              </button>
+              </Link>
             </article>
           </div>
 

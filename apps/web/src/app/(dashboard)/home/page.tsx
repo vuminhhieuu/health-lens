@@ -344,7 +344,7 @@ export default function DashboardHomePage() {
             <ActionTile
               icon={<ShieldPlus className="h-6 w-6" />}
               label="Trợ giúp"
-              disabled
+              href="/help"
             />
           </div>
 
@@ -354,12 +354,12 @@ export default function DashboardHomePage() {
               Dựa trên kết quả gần nhất, bạn nên duy trì uống đủ nước và theo
               dõi định kỳ các chỉ số quan trọng.
             </p>
-            <button
-              type="button"
-              className="mt-5 rounded-full bg-white px-5 py-2 text-sm font-bold text-[#00685f] transition hover:bg-[#e9f6f3]"
+            <Link
+              href="/help"
+              className="mt-5 inline-flex min-h-12 items-center rounded-full bg-white px-5 text-sm font-bold text-[#00685f] transition hover:bg-[#e9f6f3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
               Đọc hướng dẫn
-            </button>
+            </Link>
             <div className="pointer-events-none absolute -bottom-10 -right-8 opacity-20">
               <ShieldPlus className="h-36 w-36" />
             </div>
