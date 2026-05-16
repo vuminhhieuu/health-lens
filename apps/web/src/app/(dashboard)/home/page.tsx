@@ -6,13 +6,14 @@ import type { ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
+  Bell,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
   Droplets,
   Eye,
+  FileText,
   FlaskConical,
-  HelpCircle,
   Share2,
   ShieldPlus,
   Stethoscope,
@@ -318,9 +319,9 @@ export default function DashboardHomePage() {
               href={`/health-records?profileId=${primaryProfileId ?? ""}&openUpload=1`}
             />
             <ActionTile
-              icon={<CalendarDays className="h-6 w-6" />}
-              label="Đặt lịch khám"
-              disabled
+              icon={<Bell className="h-6 w-6" />}
+              label="Nhắc lịch tái khám"
+              href="/follow-up-reminders"
             />
             <ActionTile
               icon={<Eye className="h-6 w-6" />}
@@ -337,9 +338,9 @@ export default function DashboardHomePage() {
               }}
             />
             <ActionTile
-              icon={<HelpCircle className="h-6 w-6" />}
-              label="Liên hệ bác sĩ"
-              disabled
+              icon={<FileText className="h-6 w-6" />}
+              label="Tóm tắt đi khám"
+              href="/visit-summary"
             />
             <ActionTile
               icon={<ShieldPlus className="h-6 w-6" />}
@@ -523,7 +524,7 @@ function ActionTile({
   onClick?: () => void;
 }) {
   const commonClass =
-    "group aspect-square rounded-2xl bg-white p-4 shadow-sm transition-all duration-300 hover:bg-[#00685f] hover:text-white";
+    "group aspect-square min-h-28 rounded-2xl bg-white p-4 shadow-sm transition-all duration-300 hover:bg-[#00685f] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00685f]";
 
   if (disabled || !href) {
     return (
@@ -535,7 +536,7 @@ function ActionTile({
       >
         <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
           <span className="text-[#00685f] group-hover:text-white">{icon}</span>
-          <span className="text-xs font-bold uppercase tracking-tight">
+          <span className="text-xs font-bold uppercase leading-tight tracking-tight break-words">
             {label}
           </span>
         </div>
@@ -547,7 +548,7 @@ function ActionTile({
     <Link href={href} className={commonClass}>
       <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
         <span className="text-[#00685f] group-hover:text-white">{icon}</span>
-        <span className="text-xs font-bold uppercase tracking-tight">
+        <span className="text-xs font-bold uppercase leading-tight tracking-tight break-words">
           {label}
         </span>
       </div>

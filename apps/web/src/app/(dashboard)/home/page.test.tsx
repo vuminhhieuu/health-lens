@@ -45,4 +45,18 @@ describe("DashboardHomePage", () => {
       "/help",
     );
   });
+
+  it("hien thi thao tac nhanh tu phuc vu thay cho tile chua kha dung", () => {
+    render(<DashboardHomePage />);
+
+    expect(screen.queryByText("Đặt lịch khám")).not.toBeInTheDocument();
+    expect(screen.queryByText("Liên hệ bác sĩ")).not.toBeInTheDocument();
+
+    expect(
+      screen.getByRole("link", { name: /nhắc lịch tái khám/i }),
+    ).toHaveAttribute("href", "/follow-up-reminders");
+    expect(
+      screen.getByRole("link", { name: /tóm tắt đi khám/i }),
+    ).toHaveAttribute("href", "/visit-summary");
+  });
 });
