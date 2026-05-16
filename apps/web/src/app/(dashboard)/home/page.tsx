@@ -8,12 +8,9 @@ import {
   Activity,
   Bell,
   CalendarDays,
-  CheckCircle2,
   ChevronRight,
-  Droplets,
   Eye,
   FileText,
-  FlaskConical,
   Share2,
   ShieldPlus,
   Stethoscope,
@@ -41,6 +38,7 @@ type HealthRecord = {
   examDate?: string | null;
   overallStatus?: "normal" | "attention" | "abnormal" | string;
   abnormalCount?: number;
+  createdAt?: string | null;
 };
 
 type ProfileInvitation = {
@@ -49,6 +47,11 @@ type ProfileInvitation = {
   email: string;
   status: string;
   accessLevel: "view" | "edit" | string;
+};
+
+type HealthRecordHistoryResponse = {
+  records: HealthRecord[];
+  totalItems: number;
 };
 
 function extractApiDetail(error: unknown, fallback: string): string {
@@ -81,7 +84,12 @@ export default function DashboardHomePage() {
     void apiClient.post(ApiPaths.PROFILES.ENSURE_DEFAULT);
   }, []);
 
-  const { data: profiles = [] } = useQuery({
+  const {
+    data: profiles = [],
+    isLoading: isProfilesLoading,
+    isError: isProfilesError,
+    refetch: refetchProfiles,
+  } = useQuery({
     queryKey: ["home-profiles"],
     queryFn: async () => {
       const response = await apiClient.get(ApiPaths.PROFILES.BASE);
@@ -92,8 +100,15 @@ export default function DashboardHomePage() {
   });
 
   const primaryProfileId = profiles.find((p) => p.isDefault)?.id ?? profiles[0]?.id;
+  const primaryProfileName =
+    profiles.find((p) => p.id === primaryProfileId)?.displayName ?? "hồ sơ hiện tại";
 
-  const { data: recentRecords = [] } = useQuery({
+  const {
+    data: recentRecordResponse = { records: [], totalItems: 0 },
+    isLoading: isRecordsLoading,
+    isError: isRecordsError,
+    refetch: refetchRecentRecords,
+  } = useQuery<HealthRecordHistoryResponse>({
     queryKey: ["home-recent-records", primaryProfileId],
     enabled: Boolean(primaryProfileId),
     queryFn: async () => {
@@ -103,9 +118,60 @@ export default function DashboardHomePage() {
           params: { page: 0, limit: 3 },
         },
       );
-      return (response.data?.data ?? []) as HealthRecord[];
+      const records = (response.data?.data ?? []) as HealthRecord[];
+      const rawTotalItems =
+        response.data?.pagination?.totalItems ??
+        response.data?.pagination?.total ??
+        records.length;
+      const totalItems = Number(rawTotalItems);
+      return { records, totalItems };
     },
   });
+
+  const recentRecords = recentRecordResponse.records;
+  const latestRecord = recentRecords[0];
+  const hasRecords = recentRecordResponse.totalItems > 0 || recentRecords.length > 0;
+  const isDashboardLoading = isProfilesLoading || (Boolean(primaryProfileId) && isRecordsLoading);
+  const hasDashboardError = isProfilesError || isRecordsError;
+  const latestRecordHref = latestRecord
+    ? `/health-records/review/${latestRecord.id}`
+    : historyHrefForProfile(primaryProfileId);
+  const profileStatValue = isProfilesError
+    ? "—"
+    : isDashboardLoading
+      ? "..."
+      : profiles.length.toString();
+  const recordCountStatValue = isRecordsError
+    ? "—"
+    : isDashboardLoading
+      ? "..."
+      : recentRecordResponse.totalItems.toString();
+  const latestRecordStatValue = isRecordsError
+    ? "—"
+    : isDashboardLoading
+      ? "..."
+      : formatShortDate(latestRecord?.examDate ?? latestRecord?.createdAt);
+  const latestRecordStatStatus = isRecordsError
+    ? "Không tải được"
+    : latestRecord
+      ? recordStatusLabel(resolveHomeRecordStatus(latestRecord))
+      : "Chưa có dữ liệu";
+  const latestRecordStatDetail = isRecordsError
+    ? "Vui lòng thử lại"
+    : latestRecord?.testType || "Lần khám gần nhất";
+  const abnormalCountStatValue = isRecordsError
+    ? "—"
+    : isDashboardLoading
+      ? "..."
+      : formatAbnormalCount(latestRecord);
+  const abnormalCountStatStatus = isRecordsError
+    ? "Không tải được"
+    : latestRecord
+      ? "Từ kết quả mới nhất"
+      : "Chưa có dữ liệu";
+  const abnormalCountStatDetail = isRecordsError
+    ? "Vui lòng thử lại"
+    : "Trong kết quả mới nhất";
 
   const historyHref = useMemo(() => {
     if (!primaryProfileId) return "/health-records";
@@ -210,42 +276,64 @@ export default function DashboardHomePage() {
           <p className="text-base font-bold text-[#00685f]">
             Theo dõi sức khỏe mỗi ngày
           </p>
-          <p className="text-xs uppercase tracking-wider text-[#6d7a77]">
-            HealthLens Dashboard
-          </p>
         </div>
       }
     >
       <section className="mb-12 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={<Activity className="h-6 w-6" />}
-          value="120/80"
-          unit="mmHg"
-          label="Huyết áp"
-          status="Bình thường"
+          value={profileStatValue}
+          label="Hồ sơ theo dõi"
+          detail="Từ tài khoản của bạn"
+          status={isProfilesError ? "Không tải được" : "Từ tài khoản"}
         />
         <StatCard
-          icon={<Droplets className="h-6 w-6" />}
-          value="95"
-          unit="mg/dL"
-          label="Đường huyết"
-          status="Bình thường"
+          icon={<FileText className="h-6 w-6" />}
+          value={recordCountStatValue}
+          label="Tổng kết quả"
+          detail={`Của ${primaryProfileName}`}
+          status={isRecordsError ? "Không tải được" : "Hồ sơ hiện tại"}
         />
         <StatCard
-          icon={<FlaskConical className="h-6 w-6" />}
-          value="200"
-          unit="mg/dL"
-          label="Cholesterol"
-          status="Bình thường"
+          icon={<CalendarDays className="h-6 w-6" />}
+          value={latestRecordStatValue}
+          label="Kết quả mới nhất"
+          detail={latestRecordStatDetail}
+          status={latestRecordStatStatus}
         />
         <StatCard
           icon={<ShieldPlus className="h-6 w-6" />}
-          value="24.5"
-          unit="kg/m²"
-          label="BMI"
-          status="Bình thường"
+          value={abnormalCountStatValue}
+          label="Chỉ số cần chú ý"
+          detail={abnormalCountStatDetail}
+          status={abnormalCountStatStatus}
         />
       </section>
+
+      {hasDashboardError ? (
+        <section className="mb-8 rounded-2xl border border-[#fecdd3] bg-[#fff1f2] p-5 text-sm text-[#9f1239]">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-bold">Không thể tải dữ liệu dashboard.</p>
+              <p className="mt-1 text-[#be123c]">
+                Vui lòng thử lại để xem dữ liệu sức khỏe mới nhất.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                void refetchProfiles();
+                if (primaryProfileId) {
+                  void refetchRecentRecords();
+                }
+              }}
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-[#be123c] px-5 text-sm font-bold text-white transition hover:bg-[#9f1239]"
+            >
+              Thử lại
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid grid-cols-1 gap-8 lg:grid-cols-12">
         <div className="lg:col-span-7">
@@ -263,9 +351,28 @@ export default function DashboardHomePage() {
           </div>
 
           <div className="space-y-4">
-            {recentRecords.length === 0 ? (
+            {isDashboardLoading ? (
               <div className="rounded-2xl border border-[#bcc9c6]/30 bg-white p-5 text-sm text-[#6d7a77] shadow-sm">
-                Chưa có kết quả gần đây cho hồ sơ hiện tại.
+                Đang tải dữ liệu sức khỏe mới nhất...
+              </div>
+            ) : hasDashboardError ? (
+              <div className="rounded-2xl border border-[#fecdd3] bg-white p-5 text-sm text-[#9f1239] shadow-sm">
+                Chưa thể hiển thị kết quả gần đây do lỗi tải dữ liệu.
+              </div>
+            ) : recentRecords.length === 0 ? (
+              <div className="rounded-2xl border border-[#bcc9c6]/30 bg-white p-6 text-sm text-[#6d7a77] shadow-sm">
+                <p className="text-lg font-bold text-[#121e1c]">
+                  Chưa có kết quả sức khỏe cho {primaryProfileName}.
+                </p>
+                <p className="mt-2">
+                  Tải phiếu xét nghiệm hoặc kết quả khám đầu tiên để dashboard hiển thị dữ liệu thật.
+                </p>
+                <Link
+                  href={uploadHrefForProfile(primaryProfileId)}
+                  className="mt-5 inline-flex min-h-11 items-center rounded-full bg-[#00685f] px-5 text-sm font-bold text-white transition hover:bg-[#008378]"
+                >
+                  Tải kết quả lên
+                </Link>
               </div>
             ) : (
               recentRecords.map((record) => (
@@ -316,7 +423,7 @@ export default function DashboardHomePage() {
             <ActionTile
               icon={<Upload className="h-6 w-6" />}
               label="Tải kết quả"
-              href={`/health-records?profileId=${primaryProfileId ?? ""}&openUpload=1`}
+              href={uploadHrefForProfile(primaryProfileId)}
             />
             <ActionTile
               icon={<Bell className="h-6 w-6" />}
@@ -352,14 +459,15 @@ export default function DashboardHomePage() {
           <div className="relative mt-8 overflow-hidden rounded-3xl bg-linear-to-br from-[#00685f] to-[#008378] p-7 text-white shadow-xl">
             <h3 className="text-xl font-bold">Chăm sóc sức khỏe chủ động</h3>
             <p className="mt-2 max-w-sm text-sm text-[#d8fffa]">
-              Dựa trên kết quả gần nhất, bạn nên duy trì uống đủ nước và theo
-              dõi định kỳ các chỉ số quan trọng.
+              {hasRecords
+                ? "Mở kết quả gần nhất để xem chi tiết chỉ số, trạng thái xử lý và khuyến nghị đã được tạo từ dữ liệu của bạn."
+                : "Khi bạn tải kết quả khám đầu tiên, dashboard sẽ dùng dữ liệu thật để tạo tổng quan sức khỏe."}
             </p>
             <Link
-              href="/help"
+              href={hasRecords ? latestRecordHref : uploadHrefForProfile(primaryProfileId)}
               className="mt-5 inline-flex min-h-12 items-center rounded-full bg-white px-5 text-sm font-bold text-[#00685f] transition hover:bg-[#e9f6f3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
-              Đọc hướng dẫn
+              {hasRecords ? "Xem kết quả mới nhất" : "Tải kết quả lên"}
             </Link>
             <div className="pointer-events-none absolute -bottom-10 -right-8 opacity-20">
               <ShieldPlus className="h-36 w-36" />
@@ -481,14 +589,14 @@ export default function DashboardHomePage() {
 function StatCard({
   icon,
   value,
-  unit,
   label,
+  detail,
   status,
 }: {
   icon: ReactNode;
   value: string;
-  unit: string;
   label: string;
+  detail: string;
   status: string;
 }) {
   return (
@@ -496,18 +604,48 @@ function StatCard({
       <div className="mb-4 flex items-start justify-between">
         <div className="rounded-lg bg-[#e9f6f3] p-2 text-[#00685f]">{icon}</div>
         <span className="inline-flex items-center gap-1 rounded-full bg-[#e6f6f2] px-2 py-1 text-xs font-bold text-[#00685f]">
-          <CheckCircle2 className="h-3.5 w-3.5" />
           {status}
         </span>
       </div>
-      <p className="text-4xl font-black tracking-tight text-[#121e1c]">
+      <p className="text-sm font-bold text-[#6d7a77]">
+        {label}
+      </p>
+      <p className="mt-2 text-4xl font-black tracking-tight text-[#121e1c]">
         {value}
       </p>
-      <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-[#6d7a77]">
-        {unit} • {label}
+      <p className="mt-2 text-sm font-semibold leading-5 text-[#6d7a77]">
+        {detail}
       </p>
     </article>
   );
+}
+
+function formatShortDate(value?: string | null) {
+  if (!value) return "Chưa có";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Chưa có";
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatAbnormalCount(record?: HealthRecord) {
+  if (!record) return "Chưa có";
+  const status = record.status?.toLowerCase();
+  if (status && status !== "done") return "Đang xử lý";
+  return String(record.abnormalCount ?? 0);
+}
+
+function historyHrefForProfile(profileId?: string) {
+  if (!profileId) return "/health-records";
+  return `/profiles/${profileId}/history`;
+}
+
+function uploadHrefForProfile(profileId?: string) {
+  if (!profileId) return "/health-records";
+  return `/profiles/${profileId}/history?openUpload=1`;
 }
 
 function ActionTile({
