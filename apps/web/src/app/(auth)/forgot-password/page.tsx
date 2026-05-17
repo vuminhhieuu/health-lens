@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+import { notify } from "@/lib/notify";
 
 type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 
@@ -37,7 +38,9 @@ export default function ForgotPasswordPage() {
         email: data.email,
       });
       setIsSuccess(true);
+      notify.success("Đã gửi hướng dẫn khôi phục mật khẩu đến email của bạn.");
     } catch (error: unknown) {
+      let message = "Không thể kết nối đến máy chủ. Vui lòng thử lại.";
       if (
         error &&
         typeof error === "object" &&
@@ -52,15 +55,13 @@ export default function ForgotPasswordPage() {
         if (resp.status === 429) {
           const retryAfter = resp.data?.retryAfterSeconds ?? 3600;
           const minutes = Math.ceil(retryAfter / 60);
-          setSubmitError(
-            `Bạn đã gửi yêu cầu quá nhiều. Vui lòng thử lại sau ${minutes} phút.`,
-          );
+          message = `Bạn đã gửi yêu cầu quá nhiều. Vui lòng thử lại sau ${minutes} phút.`;
         } else {
-          setSubmitError("Đã có lỗi xảy ra. Vui lòng thử lại sau.");
+          message = "Đã có lỗi xảy ra. Vui lòng thử lại sau.";
         }
-      } else {
-        setSubmitError("Không thể kết nối đến máy chủ. Vui lòng thử lại.");
       }
+      setSubmitError(message);
+      notify.error(message);
     }
   };
 

@@ -7,6 +7,7 @@ import { ApiPaths, ALLOWED_FILE_TYPES, UPLOAD_MAX_SIZE_BYTES } from "@healthlens
 import { Upload, Loader2, AlertCircle } from "lucide-react";
 
 import { apiClient } from "@/lib/api/apiClient";
+import { notify } from "@/lib/notify";
 
 type UploadStatus = "idle" | "uploading" | "done" | "error";
 
@@ -63,6 +64,7 @@ export function UploadButton({
     if (validationError) {
       setStatus("error");
       setError(validationError);
+      notify.error(validationError);
       return;
     }
 
@@ -84,11 +86,14 @@ export function UploadButton({
 
       await apiClient.post(ApiPaths.HEALTH_RECORDS.CONFIRM_UPLOAD(uploadInfo.recordId));
       setStatus("done");
+      notify.success("Tải lên thành công, hệ thống đang xử lý kết quả.");
       // Redirect to review page
       router.push(`/health-records/review/${uploadInfo.recordId}`);
     } catch {
+      const message = "Upload thất bại. Vui lòng thử lại.";
       setStatus("error");
-      setError("Upload thất bại. Vui lòng thử lại.");
+      setError(message);
+      notify.error(message);
     } finally {
       event.target.value = "";
     }

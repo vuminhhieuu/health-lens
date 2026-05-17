@@ -20,6 +20,7 @@ import { ApiPaths } from "@healthlens/shared/constants";
 
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { apiClient } from "@/lib/api/apiClient";
+import { notify } from "@/lib/notify";
 
 const REMINDER_TYPES = [
   "Tái khám",
@@ -236,11 +237,12 @@ function FollowUpReminderWorkspace({
       resetForm();
       setErrors({});
       setSuccessMessage("Đã lưu nhắc lịch cho hồ sơ này.");
+      notify.success("Đã lưu nhắc lịch cho hồ sơ này.");
     },
     onError: () => {
-      setErrors({
-        submit: "Không thể lưu nhắc lịch. Vui lòng thử lại sau.",
-      });
+      const message = "Không thể lưu nhắc lịch. Vui lòng thử lại sau.";
+      setErrors({ submit: message });
+      notify.error(message);
     },
   });
 
@@ -269,11 +271,12 @@ function FollowUpReminderWorkspace({
       resetForm();
       setErrors({});
       setSuccessMessage("Đã cập nhật nhắc lịch cho hồ sơ này.");
+      notify.success("Đã cập nhật nhắc lịch cho hồ sơ này.");
     },
     onError: () => {
-      setErrors({
-        submit: "Không thể cập nhật nhắc lịch. Vui lòng thử lại sau.",
-      });
+      const message = "Không thể cập nhật nhắc lịch. Vui lòng thử lại sau.";
+      setErrors({ submit: message });
+      notify.error(message);
     },
   });
 
@@ -293,12 +296,15 @@ function FollowUpReminderWorkspace({
       }
       setSuccessMessage("");
       setErrors((current) => ({ ...current, submit: undefined }));
+      notify.success("Đã xóa nhắc lịch.");
     },
     onError: () => {
+      const message = "Không thể xóa nhắc lịch. Vui lòng thử lại sau.";
       setErrors((current) => ({
         ...current,
-        submit: "Không thể xóa nhắc lịch. Vui lòng thử lại sau.",
+        submit: message,
       }));
+      notify.error(message);
     },
   });
   const isSaving = createReminderMutation.isPending || updateReminderMutation.isPending;

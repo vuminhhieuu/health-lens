@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+import { notify } from "@/lib/notify";
 
 type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 
@@ -49,7 +50,9 @@ function ResetPasswordContent() {
     setSubmitError("");
 
     if (!data.token) {
-      setSubmitError("Token khong hop le hoac da het han.");
+      const message = "Token không hợp lệ hoặc đã hết hạn.";
+      setSubmitError(message);
+      notify.error(message);
       return;
     }
 
@@ -59,10 +62,12 @@ function ResetPasswordContent() {
         newPassword: data.newPassword,
       });
       setIsSuccess(true);
+      notify.success("Mật khẩu của bạn đã được cập nhật thành công.");
       setTimeout(() => {
         router.push("/login");
       }, 3000);
     } catch (error: unknown) {
+      let message = "Không thể kết nối đến máy chủ. Vui lòng thử lại.";
       if (
         error &&
         typeof error === "object" &&
@@ -75,13 +80,13 @@ function ResetPasswordContent() {
           data?: { detail?: string };
         };
         if (resp.status === 400 || resp.status === 401) {
-          setSubmitError("Token khong hop le hoac da het han.");
+          message = "Token không hợp lệ hoặc đã hết hạn.";
         } else {
-          setSubmitError("Da co loi xay ra. Vui long thu lai sau.");
+          message = "Đã có lỗi xảy ra. Vui lòng thử lại sau.";
         }
-      } else {
-        setSubmitError("Khong the ket noi den may chu. Vui long thu lai.");
       }
+      setSubmitError(message);
+      notify.error(message);
     }
   };
 

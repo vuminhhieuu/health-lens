@@ -13,6 +13,7 @@ import {
 
 import { adminApiClient } from "@/lib/api/adminApiClient";
 import { API_ROUTES, API_TIMEOUT } from "@/lib/api/routes";
+import { notify } from "@/lib/notify";
 import {
   formatNoticeNewMetricMultiAdmin,
   NOTICE_NEW_METRIC_SINGLE_ADMIN,
@@ -119,7 +120,9 @@ export default function ReferenceDataImportPage() {
         return;
       }
       setPreview(null);
-      setNotice({ type: "error", message: parseApiError(error) });
+      const message = parseApiError(error);
+      setNotice({ type: "error", message });
+      notify.error(message);
     },
   });
 
@@ -156,16 +159,17 @@ export default function ReferenceDataImportPage() {
       setFile(null);
       if (inputRef.current) inputRef.current.value = "";
 
-      setNotice({
-        type: "success",
-        message: multiAdminMode
-          ? formatNoticeNewMetricMultiAdmin(data.draftChangeSetCount)
-          : NOTICE_NEW_METRIC_SINGLE_ADMIN,
-      });
+      const message = multiAdminMode
+        ? formatNoticeNewMetricMultiAdmin(data.draftChangeSetCount)
+        : NOTICE_NEW_METRIC_SINGLE_ADMIN;
+      setNotice({ type: "success", message });
+      notify.success(message);
       void queryClient.invalidateQueries({ queryKey: ["admin-reference-metrics"] });
     },
     onError: (error) => {
-      setNotice({ type: "error", message: parseApiError(error) });
+      const message = parseApiError(error);
+      setNotice({ type: "error", message });
+      notify.error(message);
     },
   });
 
@@ -186,6 +190,7 @@ export default function ReferenceDataImportPage() {
     if (error) {
       bumpPreviewToken();
       setNotice({ type: "error", message: error });
+      notify.error(error);
       setFile(null);
       setPreview(null);
       if (inputRef.current) inputRef.current.value = "";

@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import Link from "next/link";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Callout } from "@radix-ui/themes";
 import { 
   Pencil, Calendar, Cross, Key, Shield, Trash2, CheckCircle2
 } from "lucide-react";
@@ -13,6 +12,7 @@ import {
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { notify } from "@/lib/notify";
 import { updateUserProfileSchema, UpdateUserProfileInput } from "@healthlens/shared";
 
 type UserProfile = {
@@ -26,7 +26,6 @@ type UserProfile = {
 
 export default function ProfileSettingsPage() {
   const queryClient = useQueryClient();
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const {
     register,
@@ -71,13 +70,11 @@ export default function ProfileSettingsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["currentUser"] });
-      setSuccessMessage("Cập nhật thông tin thành công!");
-      setTimeout(() => setSuccessMessage(null), 3000);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      notify.success("Cập nhật thông tin thành công!");
     },
     onError: (error: unknown) => {
       console.error(error);
-      alert("Đã xảy ra lỗi khi cập nhật.");
+      notify.error("Đã xảy ra lỗi khi cập nhật.");
     },
   });
 
@@ -93,16 +90,6 @@ export default function ProfileSettingsPage() {
       title="Hồ sơ của tôi"
       subtitle="Quản lý thông tin cá nhân và cài đặt tài khoản tại một giao diện thống nhất."
     >
-
-      {successMessage && (
-        <Callout.Root color="green" mb="6" className="bg-[#e4f1ee] border border-[#00685f]/20 shadow-sm rounded-xl py-3 px-4 flex items-center gap-3">
-          <Callout.Icon>
-            <CheckCircle2 size={20} className="text-[#00685f]" />
-          </Callout.Icon>
-          <Callout.Text className="text-[#005049] font-semibold">{successMessage}</Callout.Text>
-        </Callout.Root>
-      )}
-
       {/* Profile Bento Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         

@@ -20,6 +20,7 @@ import Link from "next/link";
 
 import { adminApiClient } from "@/lib/api/adminApiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+import { notify } from "@/lib/notify";
 import {
   formatNoticeNewMetricMultiAdmin,
   NOTICE_NEW_METRIC_SINGLE_ADMIN,
@@ -225,17 +226,18 @@ export default function ReferenceDataPage() {
       return response.data.data as ReferenceMetric;
     },
     onSuccess: async () => {
-      setNotice({
-        type: "success",
-        message: adminConfig?.multiAdminMode
-          ? formatNoticeNewMetricMultiAdmin(1)
-          : NOTICE_NEW_METRIC_SINGLE_ADMIN,
-      });
+      const message = adminConfig?.multiAdminMode
+        ? formatNoticeNewMetricMultiAdmin(1)
+        : NOTICE_NEW_METRIC_SINGLE_ADMIN;
+      setNotice({ type: "success", message });
+      notify.success(message);
       closeEditor();
       await reloadList();
     },
     onError: (error) => {
-      setFormError(parseApiError(error));
+      const message = parseApiError(error);
+      setFormError(message);
+      notify.error(message);
     },
   });
 
@@ -246,11 +248,14 @@ export default function ReferenceDataPage() {
     },
     onSuccess: async (data) => {
       setNotice({ type: "success", message: data.message });
+      notify.success(data.message);
       closeEditor();
       await reloadList();
     },
     onError: (error) => {
-      setFormError(parseApiError(error));
+      const message = parseApiError(error);
+      setFormError(message);
+      notify.error(message);
     },
   });
 
@@ -261,11 +266,14 @@ export default function ReferenceDataPage() {
     },
     onSuccess: async (data) => {
       setNotice({ type: "success", message: data.message });
+      notify.success(data.message);
       setConfirmState(null);
       await reloadList();
     },
     onError: (error) => {
-      setNotice({ type: "error", message: parseApiError(error) });
+      const message = parseApiError(error);
+      setNotice({ type: "error", message });
+      notify.error(message);
       setConfirmState(null);
     },
   });
@@ -276,12 +284,16 @@ export default function ReferenceDataPage() {
       return response.data.data as ReferenceMetric;
     },
     onSuccess: async () => {
-      setNotice({ type: "success", message: "Đã kích hoạt lại chỉ số và toàn bộ ngưỡng liên quan." });
+      const message = "Đã kích hoạt lại chỉ số và toàn bộ ngưỡng liên quan.";
+      setNotice({ type: "success", message });
+      notify.success(message);
       setConfirmState(null);
       await reloadList();
     },
     onError: (error) => {
-      setNotice({ type: "error", message: parseApiError(error) });
+      const message = parseApiError(error);
+      setNotice({ type: "error", message });
+      notify.error(message);
       setConfirmState(null);
     },
   });
