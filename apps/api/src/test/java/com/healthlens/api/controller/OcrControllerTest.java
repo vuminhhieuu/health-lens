@@ -38,7 +38,7 @@ class OcrControllerTest {
     void extractText_validHttpsUrl_returnsOk() {
         controller = new OcrController(ocrService);
         OcrResult expected = OcrResult.builder()
-                .text("Glucose 5.4").confidence(0.92f).source("easyocr").language("vi").processingTimeMs(3500)
+                .text("Glucose 5.4").confidence(0.92f).provider("easyocr").language("vi").latencyMs(3500)
                 .build();
         when(ocrService.processImage("https://example.com/test.jpg")).thenReturn(expected);
 
@@ -54,7 +54,7 @@ class OcrControllerTest {
     void extractText_validHttpUrl_returnsOk() {
         controller = new OcrController(ocrService);
         when(ocrService.processImage("http://example.com/test.jpg")).thenReturn(
-                OcrResult.builder().text("").confidence(0f).source("easyocr").language("en").processingTimeMs(0).build()
+                OcrResult.builder().text("").confidence(0f).provider("easyocr").language("en").latencyMs(0).build()
         );
 
         ResponseEntity<OcrResult> response = controller.extractText(Map.of("imageUrl", "http://example.com/test.jpg"));

@@ -226,9 +226,9 @@ class OcrServiceTest {
                     OcrResult.builder()
                             .text("GCV OCR text")
                             .confidence(0.88f)
-                            .source("gcv")
+                            .provider("gcv")
                             .language("vi")
-                            .processingTimeMs(1200)
+                            .latencyMs(1200)
                             .build()
             );
 
@@ -265,9 +265,9 @@ class OcrServiceTest {
                     OcrResult.builder()
                             .text("")
                             .confidence(0.0f)
-                            .source("textract-stub")
+                            .provider("textract-stub")
                             .language("unknown")
-                            .processingTimeMs(0)
+                            .latencyMs(0)
                             .build()
             );
 
@@ -321,10 +321,14 @@ class OcrServiceTest {
             assertThat(result.provider()).isEqualTo("pdfbox");
             assertThat(result.mimeType()).isEqualTo("application/pdf");
             assertThat(result.result().getSource()).isEqualTo("pdf-text-layer");
+            assertThat(result.result().getMimeType()).isEqualTo("application/pdf");
+            assertThat(result.result().getPages()).hasSize(2);
+            assertThat(result.result().getPages().get(0).getText()).contains("HbA1c 5.6");
+            assertThat(result.result().getLines()).hasSize(2);
             assertThat(result.result().getText()).contains("HbA1c 5.6", "Glucose 5.4");
             assertThat(result.pages()).containsExactly(
-                    new OcrService.OcrPageResult(1, "pdf-text-layer", 1.0f),
-                    new OcrService.OcrPageResult(2, "pdf-text-layer", 1.0f)
+                    new OcrService.OcrPageResult(1, "pdf-text-layer", 1.0f, "HbA1c 5.6"),
+                    new OcrService.OcrPageResult(2, "pdf-text-layer", 1.0f, "Glucose 5.4")
             );
             verifyNoInteractions(textractClient);
         }
@@ -366,8 +370,12 @@ class OcrServiceTest {
 
             assertThat(result.route()).isEqualTo("pdf-rendered-images");
             assertThat(result.provider()).isEqualTo("easyocr");
+            assertThat(result.result().getMimeType()).isEqualTo("application/pdf");
+            assertThat(result.result().getPages()).hasSize(1);
+            assertThat(result.result().getPages().get(0).getText()).contains("HBsAg Negative");
+            assertThat(result.result().getLines()).hasSize(1);
             assertThat(result.result().getText()).contains("HBsAg Negative");
-            assertThat(result.pages()).containsExactly(new OcrService.OcrPageResult(1, "easyocr", 0.88f));
+            assertThat(result.pages()).containsExactly(new OcrService.OcrPageResult(1, "easyocr", 0.88f, "HBsAg Negative"));
             verifyNoInteractions(textractClient);
         }
 
@@ -391,9 +399,9 @@ class OcrServiceTest {
                     OcrResult.builder()
                             .text("HbA1c 5.6")
                             .confidence(0.89f)
-                            .source("textract")
+                            .provider("textract")
                             .language("vi")
-                            .processingTimeMs(900)
+                            .latencyMs(900)
                             .build()
             );
 
@@ -429,9 +437,9 @@ class OcrServiceTest {
                     OcrResult.builder()
                             .text("")
                             .confidence(0.0f)
-                            .source("textract-stub")
+                            .provider("textract-stub")
                             .language("unknown")
-                            .processingTimeMs(0)
+                            .latencyMs(0)
                             .build()
             );
 
@@ -439,7 +447,9 @@ class OcrServiceTest {
 
             assertThat(result.route()).isEqualTo("pdf-document");
             assertThat(result.result().getSource()).isEqualTo("all-providers-failed");
-            assertThat(result.pages()).containsExactly(new OcrService.OcrPageResult(1, "textract", 0.0f));
+            assertThat(result.result().getMimeType()).isEqualTo("application/pdf");
+            assertThat(result.result().getPages()).hasSize(1);
+            assertThat(result.pages()).containsExactly(new OcrService.OcrPageResult(1, "textract", 0.0f, ""));
         }
 
         @Test
@@ -449,9 +459,9 @@ class OcrServiceTest {
                     OcrResult.builder()
                             .text("fallback text")
                             .confidence(0.82f)
-                            .source("textract")
+                            .provider("textract")
                             .language("vi")
-                            .processingTimeMs(200)
+                            .latencyMs(200)
                             .build()
             );
 
@@ -519,9 +529,9 @@ class OcrServiceTest {
                     OcrResult.builder()
                             .text("")
                             .confidence(0.0f)
-                            .source("textract-stub")
+                            .provider("textract-stub")
                             .language("unknown")
-                            .processingTimeMs(0)
+                            .latencyMs(0)
                             .build()
             );
         }
@@ -682,9 +692,9 @@ class OcrServiceTest {
             OcrResult textractResult = OcrResult.builder()
                     .text("")
                     .confidence(0.0f)
-                    .source("textract-stub")
+                    .provider("textract-stub")
                     .language("unknown")
-                    .processingTimeMs(0)
+                    .latencyMs(0)
                     .build();
             when(textractClient.extract(TEST_IMAGE_URL)).thenReturn(textractResult);
 
@@ -863,6 +873,55 @@ class OcrServiceTest {
             // Act
             String level = ocrService.classifyConfidence(0.49f);
             assertThat(level).isEqualTo("low");
+        }
+    }
+
+    @Nested
+    @DisplayName("Normalized OCR Contract")
+    class NormalizedContractTests {
+
+        @Test
+        @DisplayName("EasyOCR mapping populates normalized contract defaults")
+        void callEasyOcr_mapsIntoNormalizedContract() {
+            OcrService.EasyOcrResponse mockResponse = new OcrService.EasyOcrResponse(
+                    "Page line", 0.9f, "vi", 1000, 1
+            );
+            when(ocrRestTemplate.postForObject(
+                    eq(OCR_SERVICE_URL + "/ocr"), any(), eq(OcrService.EasyOcrResponse.class)
+            )).thenReturn(mockResponse);
+
+            OcrResult result = ocrService.callEasyOcr(TEST_IMAGE_URL);
+
+            assertThat(result.getProvider()).isEqualTo("easyocr");
+            assertThat(result.getModelVersion()).isEqualTo("easyocr-default");
+            assertThat(result.getRetentionMode()).isEqualTo("transient");
+            assertThat(result.getPages()).hasSize(1);
+            assertThat(result.getLines()).hasSize(1);
+            assertThat(result.getSource()).isEqualTo("easyocr");
+            assertThat(result.getProcessingTimeMs()).isEqualTo(1000);
+        }
+
+        @Test
+        @DisplayName("provider failure diagnostics are redacted before persistence")
+        void processImage_providerFailureDiagnostics_areRedacted() {
+            when(ocrRestTemplate.postForObject(
+                    eq(OCR_SERVICE_URL + "/ocr"), any(), eq(OcrService.EasyOcrResponse.class)
+            )).thenThrow(new ResourceAccessException("Authorization=Bearer abc123 https://secret.example.com/file"));
+            when(textractClient.extract(TEST_IMAGE_URL)).thenReturn(
+                    OcrResult.builder().provider("textract-stub").text("").confidence(0f).language("unknown").latencyMs(0).build()
+            );
+
+            OcrResult result = ocrService.processImage(TEST_IMAGE_URL);
+
+            assertThat(result.getDiagnostics()).isNotEmpty();
+            String diagnosticMessage = result.getDiagnostics().stream()
+                    .filter(d -> "OCR_PROVIDER_FAILED".equals(d.getCode()))
+                    .findFirst()
+                    .map(OcrResult.OcrDiagnostic::getMessage)
+                    .orElse("");
+            assertThat(diagnosticMessage).isNotBlank();
+            assertThat(diagnosticMessage).doesNotContain("abc123");
+            assertThat(diagnosticMessage).doesNotContain("https://secret.example.com/file");
         }
     }
 }

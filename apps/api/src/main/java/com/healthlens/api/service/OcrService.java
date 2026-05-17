@@ -101,8 +101,13 @@ public class OcrService {
     public record OcrPageResult(
             int pageNumber,
             String provider,
-            float confidence
-    ) {}
+            float confidence,
+            String text
+    ) {
+        public OcrPageResult(int pageNumber, String provider, float confidence) {
+            this(pageNumber, provider, confidence, "");
+        }
+    }
 
     public record OcrProcessingResult(
             OcrResult result,
@@ -188,9 +193,16 @@ public class OcrService {
                 imageUrl.length() > 80 ? imageUrl.substring(0, 80) + "..." : imageUrl);
 
         List<String> providerOrder = resolveProviderOrder();
+        List<OcrResult.OcrDiagnostic> failureDiagnostics = new ArrayList<>();
         if (providerOrder.isEmpty()) {
             log.error("OCR provider order is empty. Check OCR_PROVIDER_PRIMARY/OCR_PROVIDER_FALLBACK_ORDER");
-            return buildAllProvidersFailedResult();
+            OcrResult result = buildAllProvidersFailedResult();
+            result.setDiagnostics(List.of(buildFailureDiagnostic(
+                    "config",
+                    "OCR_PROVIDER_CONFIGURATION_INVALID",
+                    "No valid OCR providers are configured"
+            )));
+            return result;
         }
         for (String provider : providerOrder) {
             long attemptStarted = System.nanoTime();
@@ -207,20 +219,31 @@ public class OcrService {
                         result.getSource(),
                         elapsedMs(attemptStarted),
                         elapsedMs(pipelineStarted));
+                if (!failureDiagnostics.isEmpty()) {
+                    List<OcrResult.OcrDiagnostic> mergedDiagnostics = new ArrayList<>(result.getDiagnostics());
+                    mergedDiagnostics.addAll(failureDiagnostics);
+                    result.setDiagnostics(mergedDiagnostics);
+                }
                 return result;
             } catch (OcrProcessingException ex) {
                 recordProviderMetrics(provider, false, attemptStarted);
                 log.warn("OCR provider '{}' failed: {}", provider, ex.getMessage());
+                failureDiagnostics.add(buildFailureDiagnostic(provider, "OCR_PROVIDER_FAILED", ex.getMessage()));
             } catch (Exception ex) {
                 recordProviderMetrics(provider, false, attemptStarted);
                 log.warn("OCR provider '{}' failed with unexpected error: {}", provider, ex.getMessage());
+                failureDiagnostics.add(buildFailureDiagnostic(provider, "OCR_PROVIDER_UNEXPECTED_ERROR", ex.getMessage()));
             }
         }
 
         recordProviderMetrics("all-providers-failed", false, pipelineStarted);
         log.warn("ocr_provider_selected provider=all-providers-failed success=false source=all-providers-failed totalLatencyMs={}",
                 elapsedMs(pipelineStarted));
-        return buildAllProvidersFailedResult();
+        OcrResult failedResult = buildAllProvidersFailedResult();
+        List<OcrResult.OcrDiagnostic> mergedDiagnostics = new ArrayList<>(failedResult.getDiagnostics());
+        mergedDiagnostics.addAll(failureDiagnostics);
+        failedResult.setDiagnostics(mergedDiagnostics);
+        return failedResult;
     }
 
     public OcrProcessingResult processDocument(String documentUrl, String mimeTypeRaw) {
@@ -347,7 +370,7 @@ public class OcrService {
                     }
                     combinedText.append(pageText);
                 }
-                pages.add(new OcrPageResult(page, "pdf-text-layer", pageText.isBlank() ? 0.0f : 1.0f));
+                pages.add(new OcrPageResult(page, "pdf-text-layer", pageText.isBlank() ? 0.0f : 1.0f, pageText));
             }
             String text = combinedText.toString();
             float confidence = text.isBlank() ? 0.0f : 1.0f;
@@ -357,13 +380,15 @@ public class OcrService {
                     pageCount,
                     elapsedMs(started));
             return new OcrProcessingResult(
-                    OcrResult.builder()
-                            .text(text)
-                            .confidence(confidence)
-                            .source(text.isBlank() ? "pdf-text-layer-empty" : "pdf-text-layer")
-                            .language("unknown")
-                            .processingTimeMs((int) elapsedMs(started))
-                            .build(),
+                    buildNormalizedOcrResult(
+                            text.isBlank() ? "pdf-text-layer-empty" : "pdf-text-layer",
+                            "pdfbox",
+                            mimeType,
+                            text,
+                            confidence,
+                            "unknown",
+                            elapsedMs(started),
+                            pages),
                     "pdf-text-layer",
                     "pdfbox",
                     mimeType,
@@ -403,9 +428,9 @@ public class OcrService {
                     pageResult = OcrResult.builder()
                             .text("")
                             .confidence(0.0f)
-                            .source("easyocr")
+                            .provider("easyocr")
                             .language("unknown")
-                            .processingTimeMs(0)
+                            .latencyMs(0)
                             .build();
                 }
                 if (!pageText.isBlank()) {
@@ -416,7 +441,7 @@ public class OcrService {
                     confidenceSum += pageResult.getConfidence();
                     recognizedPages++;
                 }
-                pages.add(new OcrPageResult(pageIndex + 1, "easyocr", pageText.isBlank() ? 0.0f : pageResult.getConfidence()));
+                pages.add(new OcrPageResult(pageIndex + 1, "easyocr", pageText.isBlank() ? 0.0f : pageResult.getConfidence(), pageText));
                 if (combinedText.length() >= pdfRenderedImagesMinTextCharsBeforeStop) {
                     break;
                 }
@@ -430,13 +455,15 @@ public class OcrService {
                     pages.size(),
                     elapsedMs(started));
             return new OcrProcessingResult(
-                    OcrResult.builder()
-                            .text(text)
-                            .confidence(confidence)
-                            .source(text.isBlank() ? "pdf-rendered-images-empty" : "easyocr")
-                            .language("unknown")
-                            .processingTimeMs((int) elapsedMs(started))
-                            .build(),
+                    buildNormalizedOcrResult(
+                            text.isBlank() ? "pdf-rendered-images-empty" : "easyocr",
+                            "easyocr-rendered-pdf",
+                            mimeType,
+                            text,
+                            confidence,
+                            "unknown",
+                            elapsedMs(started),
+                            pages),
                     "pdf-rendered-images",
                     "easyocr",
                     mimeType,
@@ -455,13 +482,15 @@ public class OcrService {
 
     private OcrProcessingResult emptyPdfStageResult(String route, String provider, String mimeType) {
         return new OcrProcessingResult(
-                OcrResult.builder()
-                        .text("")
-                        .confidence(0.0f)
-                        .source(provider + "-empty")
-                        .language("unknown")
-                        .processingTimeMs(0)
-                        .build(),
+                buildNormalizedOcrResult(
+                        provider + "-empty",
+                        provider,
+                        mimeType,
+                        "",
+                        0.0f,
+                        "unknown",
+                        0,
+                        List.of()),
                 route,
                 provider,
                 mimeType,
@@ -474,18 +503,73 @@ public class OcrService {
             return List.of(new OcrPageResult(1, provider, confidence));
         }
         return sourcePages.stream()
-                .map(page -> new OcrPageResult(page.pageNumber(), provider, confidence))
+                .map(page -> new OcrPageResult(page.pageNumber(), provider, confidence, page.text()))
                 .toList();
     }
 
     private OcrProcessingResult failedPdfResult(String mimeType, List<OcrPageResult> pages) {
+        List<OcrPageResult> providerPages = buildProviderPages(pages, "textract", 0.0f);
         return new OcrProcessingResult(
-                buildAllProvidersFailedResult(),
+                buildAllProvidersFailedResult(mimeType, providerPages),
                 "pdf-document",
                 "textract",
                 mimeType,
-                buildProviderPages(pages, "textract", 0.0f)
+                providerPages
         );
+    }
+
+    private OcrResult buildNormalizedOcrResult(
+            String provider,
+            String modelVersion,
+            String mimeType,
+            String text,
+            float confidence,
+            String language,
+            long latencyMs,
+            List<OcrPageResult> pageResults
+    ) {
+        return OcrResult.builder()
+                .provider(provider)
+                .modelVersion(modelVersion)
+                .mimeType(mimeType)
+                .retentionMode("transient")
+                .latencyMs(Math.max(0, latencyMs))
+                .text(text == null ? "" : text)
+                .confidence(confidence)
+                .language(language == null || language.isBlank() ? "unknown" : language)
+                .pages(toOcrPages(pageResults))
+                .blocks(List.of())
+                .lines(toOcrLines(pageResults))
+                .diagnostics(List.of())
+                .build();
+    }
+
+    private List<OcrResult.OcrPage> toOcrPages(List<OcrPageResult> pageResults) {
+        if (pageResults == null || pageResults.isEmpty()) {
+            return List.of();
+        }
+        return pageResults.stream()
+                .map(page -> OcrResult.OcrPage.builder()
+                        .pageNumber(page.pageNumber())
+                        .text(page.text() == null ? "" : page.text())
+                        .confidence(page.confidence())
+                        .build())
+                .toList();
+    }
+
+    private List<OcrResult.OcrSegment> toOcrLines(List<OcrPageResult> pageResults) {
+        if (pageResults == null || pageResults.isEmpty()) {
+            return List.of();
+        }
+        return pageResults.stream()
+                .filter(page -> page.text() != null && !page.text().isBlank())
+                .map(page -> OcrResult.OcrSegment.builder()
+                        .pageNumber(page.pageNumber())
+                        .text(page.text())
+                        .confidence(page.confidence())
+                        .kind("line")
+                        .build())
+                .toList();
     }
 
     /**
@@ -531,11 +615,28 @@ public class OcrService {
                     blockCount, confidence, response.processing_time_ms());
 
             return OcrResult.builder()
+                    .provider("easyocr")
+                    .modelVersion("easyocr-default")
+                    .mimeType("image/*")
+                    .retentionMode("transient")
+                    .providerRequestId(null)
+                    .latencyMs(Math.max(0, response.processing_time_ms()))
                     .text(response.text() != null ? response.text() : "")
                     .confidence(confidence)
-                    .source("easyocr")
                     .language(response.language_detected() != null ? response.language_detected() : "unknown")
-                    .processingTimeMs(response.processing_time_ms())
+                    .pages(List.of(OcrResult.OcrPage.builder()
+                            .pageNumber(1)
+                            .text(response.text() != null ? response.text() : "")
+                            .confidence(confidence)
+                            .build()))
+                    .lines(List.of(OcrResult.OcrSegment.builder()
+                            .pageNumber(1)
+                            .text(response.text() != null ? response.text() : "")
+                            .confidence(confidence)
+                            .kind("line")
+                            .build()))
+                    .blocks(List.of())
+                    .diagnostics(List.of())
                     .build();
 
         } catch (ResourceAccessException e) {
@@ -636,13 +737,52 @@ public class OcrService {
     }
 
     private OcrResult buildAllProvidersFailedResult() {
+        return buildAllProvidersFailedResult("image/*", List.of());
+    }
+
+    private OcrResult buildAllProvidersFailedResult(String mimeType, List<OcrPageResult> pageResults) {
         return OcrResult.builder()
+                .provider("all-providers-failed")
+                .modelVersion("n/a")
+                .mimeType(mimeType)
+                .retentionMode("transient")
+                .latencyMs(0)
                 .text("")
                 .confidence(0.0f)
-                .source("all-providers-failed")
                 .language("unknown")
-                .processingTimeMs(0)
+                .pages(toOcrPages(pageResults))
+                .blocks(List.of())
+                .lines(toOcrLines(pageResults))
+                .diagnostics(List.of(buildFailureDiagnostic(
+                        "all-providers-failed",
+                        "OCR_ALL_PROVIDERS_FAILED",
+                        "All configured OCR providers failed"
+                )))
                 .build();
+    }
+
+    private OcrResult.OcrDiagnostic buildFailureDiagnostic(String provider, String code, String message) {
+        return OcrResult.OcrDiagnostic.builder()
+                .provider(provider)
+                .category("provider_failure")
+                .code(code)
+                .message(sanitizeDiagnosticMessage(message))
+                .build();
+    }
+
+    private String sanitizeDiagnosticMessage(String input) {
+        if (input == null || input.isBlank()) {
+            return "OCR provider failure";
+        }
+        String sanitized = input
+                .replaceAll("(?i)(authorization)\\s*[:=]\\s*(bearer|basic)\\s+[^\\s,;]+", "$1=[REDACTED]")
+                .replaceAll("(?i)(x-api-key|api-key|token|secret)\\s*[:=]\\s*[^\\s,;]+", "$1=[REDACTED]")
+                .replaceAll("(?i)(authorization|x-api-key|api-key|token|secret)\\s*[:=]\\s*[^\\s,;]+", "$1=[REDACTED]")
+                .replaceAll("https?://\\S+", "[REDACTED_URL]");
+        if (sanitized.length() > 240) {
+            sanitized = sanitized.substring(0, 240);
+        }
+        return sanitized;
     }
 
     private void recordProviderMetrics(String provider, boolean success, long startedNanos) {

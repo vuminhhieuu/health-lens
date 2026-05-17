@@ -45,8 +45,7 @@ public class OcrJobConsumer {
             ObjectMapper objectMapper,
             @Value("${app.stream.ocr-events:ocr.events}") String ocrStream,
             @Value("${app.stream.ocr-consumer-group:ocr-consumers}") String consumerGroup,
-            @Value("${app.stream.ocr-consumer-name:api-ocr-consumer}") String consumerName
-    ) {
+            @Value("${app.stream.ocr-consumer-name:api-ocr-consumer}") String consumerName) {
         this.redisTemplate = redisTemplate;
         this.storageService = storageService;
         this.ocrService = ocrService;
@@ -69,8 +68,7 @@ public class OcrJobConsumer {
                     org.springframework.data.redis.connection.stream.StreamReadOptions.empty()
                             .count(10)
                             .block(Duration.ofMillis(500)),
-                    StreamOffset.create(ocrStream, ReadOffset.lastConsumed())
-            );
+                    StreamOffset.create(ocrStream, ReadOffset.lastConsumed()));
         } catch (Exception ex) {
             if (ex.getMessage() != null && ex.getMessage().contains("NOGROUP")) {
                 ensureConsumerGroup();
@@ -112,7 +110,8 @@ public class OcrJobConsumer {
                     recordId,
                     fileKey,
                     mimeType);
-            healthRecordService.markOcrFailed(recordId, mimeType.isBlank() ? "missing_mime_type" : "unsupported_mime_type");
+            healthRecordService.markOcrFailed(recordId,
+                    mimeType.isBlank() ? "missing_mime_type" : "unsupported_mime_type");
             return;
         }
         String downloadUrl = storageService.generateInternalDownloadUrl(fileKey, Duration.ofMinutes(5));
@@ -123,13 +122,13 @@ public class OcrJobConsumer {
                 processingResult = ocrService.processPdfBytes(
                         storageService.downloadObjectBytes(fileKey),
                         downloadUrl,
-                        mimeType
-                );
+                        mimeType);
             } else {
                 processingResult = ocrService.processDocument(downloadUrl, mimeType);
             }
             OcrResult result = processingResult.result();
-            log.info("[OcrJobConsumer] OCR route selected. recordId={} jobId={} correlationId={} mimeType={} route={} provider={}",
+            log.info(
+                    "[OcrJobConsumer] OCR route selected. recordId={} jobId={} correlationId={} mimeType={} route={} provider={}",
                     recordId,
                     valueAsString(record.getValue().get("jobId")),
                     valueAsString(record.getValue().get("correlationId")),
@@ -143,7 +142,8 @@ public class OcrJobConsumer {
                 healthRecordService.markOcrFailed(recordId, reason);
                 return;
             }
-            OcrService.OcrExtractionResult parsedData = ocrService.parseMetrics(result.getText(), result.getConfidence());
+            OcrService.OcrExtractionResult parsedData = ocrService.parseMetrics(result.getOrderedTextForParser(),
+                    result.getConfidence());
             boolean hasLowConfidenceMetrics = result.getConfidence() < reviewThreshold;
 
             Map<String, Object> rawOcrPayload = new LinkedHashMap<>();
@@ -176,7 +176,8 @@ public class OcrJobConsumer {
             log.info("[OcrJobConsumer] Created consumer group={} for stream={}", consumerGroup, ocrStream);
         } catch (Exception ex) {
             if (containsAnyMessage(ex, "BUSYGROUP")) {
-                log.info("[OcrJobConsumer] Consumer group already exists. group={} stream={}", consumerGroup, ocrStream);
+                log.info("[OcrJobConsumer] Consumer group already exists. group={} stream={}", consumerGroup,
+                        ocrStream);
                 return;
             }
             log.warn("[OcrJobConsumer] ensureConsumerGroup failed for stream={}", ocrStream, ex);

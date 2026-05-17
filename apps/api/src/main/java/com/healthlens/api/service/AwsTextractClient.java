@@ -54,11 +54,23 @@ public class AwsTextractClient {
             log.warn("AWS Textract is disabled (stub mode). Set app.ocr.textract.enabled=true " +
                     "and configure AWS credentials to enable.");
             return OcrResult.builder()
+                    .provider("textract-stub")
+                    .modelVersion("stub")
+                    .mimeType("image/*")
+                    .retentionMode("transient")
+                    .latencyMs(0)
                     .text("")
                     .confidence(0.0f)
-                    .source("textract-stub")
                     .language("unknown")
-                    .processingTimeMs(0)
+                    .pages(java.util.List.of())
+                    .blocks(java.util.List.of())
+                    .lines(java.util.List.of())
+                    .diagnostics(java.util.List.of(OcrResult.OcrDiagnostic.builder()
+                            .provider("textract")
+                            .category("provider_stub")
+                            .code("OCR_PROVIDER_STUB")
+                            .message("AWS Textract is disabled in current environment")
+                            .build()))
                     .build();
         }
 
