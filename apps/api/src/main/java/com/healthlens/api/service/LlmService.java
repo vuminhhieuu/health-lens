@@ -21,10 +21,10 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * LLM Service — Tích hợp Groq API để generate giải thích kết quả xét nghiệm
+ * LLM Service — Tích hợp AI chat provider để generate giải thích kết quả xét nghiệm
  *
- * <p>Service này sử dụng Spring AI {@link ChatClient} để giao tiếp với Groq API
- * (OpenAI-compatible endpoint: https://api.groq.com/openai).
+ * <p>Service này sử dụng Spring AI {@link ChatClient} để giao tiếp với provider
+ * OpenAI-compatible được cấu hình qua AI_CHAT_*.
  *
  * <p>Retry strategy: 3 lần với exponential backoff (1s → 2s → 4s)
  * <p>Caching: Redis cache với key = metricName:value:unit:status
@@ -41,7 +41,7 @@ public class LlmService {
     private static final String RECOMMENDATIONS_PROMPT_VERSION = "v7-required-modes-vi";
     private static final String CACHE_VALUE_SEPARATOR = "||";
 
-    private final ChatClient groqChatClient;
+    private final ChatClient aiChatClient;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -130,8 +130,8 @@ public class LlmService {
             Map.entry("HBSAG", "tình trạng nhiễm virus viêm gan B")
     );
 
-    public LlmService(ChatClient groqChatClient, StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
-        this.groqChatClient = groqChatClient;
+    public LlmService(ChatClient aiChatClient, StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+        this.aiChatClient = aiChatClient;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
     }
@@ -223,7 +223,7 @@ public class LlmService {
         String prompt = buildRecommendationsPrompt(riskyMetrics, profileAge, gender, examContext);
         String llmOutput;
         try {
-            llmOutput = groqChatClient.prompt()
+            llmOutput = aiChatClient.prompt()
                     .user(prompt)
                     .call()
                     .content();
@@ -250,19 +250,19 @@ public class LlmService {
 
         for (int attempt = 1; attempt <= maxRetryAttempts; attempt++) {
             try {
-                String result = groqChatClient.prompt()
+                String result = aiChatClient.prompt()
                         .user(prompt)
                         .call()
                         .content();
 
                 if (attempt > 1) {
-                    log.info("Groq API succeeded on attempt {}/{} for metric '{}'",
+                    log.info("AI chat provider succeeded on attempt {}/{} for metric '{}'",
                             attempt, maxRetryAttempts, metricName);
                 }
                 return new ExplanationResult(result, "llm");
 
             } catch (Exception e) {
-                log.warn("Groq API attempt {}/{} failed for metric '{}': {}",
+                log.warn("AI chat provider attempt {}/{} failed for metric '{}': {}",
                         attempt, maxRetryAttempts, metricName, e.getMessage());
 
                 if (attempt < maxRetryAttempts) {

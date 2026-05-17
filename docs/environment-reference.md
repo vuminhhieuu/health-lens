@@ -50,9 +50,11 @@ This file collects the environment variables and runtime settings that matter mo
 
 | Variable | Used by | Purpose |
 | --- | --- | --- |
-| `GROQ_API_KEY` | API | OpenAI-compatible chat provider key |
-| `GROQ_BASE_URL` | API | Chat provider base URL |
-| `GROQ_CHAT_MODEL` | API | Chat model name |
+| `AI_CHAT_PROVIDER` | API | Chat provider selector. Currently only `openai-compatible` is supported for env-only switching |
+| `AI_CHAT_API_KEY` | API | OpenAI-compatible chat provider key |
+| `AI_CHAT_BASE_URL` | API | Chat provider base URL |
+| `AI_CHAT_MODEL` | API | Chat model name |
+| `AI_CHAT_TIMEOUT_MS` | API | Chat request timeout budget in milliseconds for app-level policy |
 | `EMBEDDING_API_KEY` | API | Embedding provider key |
 | `EMBEDDING_BASE_URL` | API | Embedding provider base URL |
 | `EMBEDDING_MODEL` | API | Embedding model name |
@@ -61,6 +63,8 @@ This file collects the environment variables and runtime settings that matter mo
 | `QDRANT_API_KEY` | API | Qdrant API key |
 | `QDRANT_COLLECTION` | API | Qdrant collection name |
 | `QDRANT_VECTOR_DIMENSION` | API | Vector dimension |
+
+Migration note: `GROQ_API_KEY`, `GROQ_BASE_URL`, and `GROQ_CHAT_MODEL` are accepted as a temporary legacy fallback when the matching `AI_CHAT_*` variable is absent. New deployments should use only `AI_CHAT_*`. Native non-OpenAI-compatible providers require a code adapter before they can be selected.
 
 ## Storage And Mail
 
@@ -103,4 +107,3 @@ This file collects the environment variables and runtime settings that matter mo
 - [apps/api/src/main/resources/application.yml](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/apps/api/src/main/resources/application.yml)
 - [docker/compose.yml](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/docker/compose.yml)
 - [docker/compose.dev.yml](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/docker/compose.dev.yml)
-

@@ -2,30 +2,26 @@ package com.healthlens.api.config;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
+import org.springframework.boot.http.client.HttpClientSettings;
+import org.springframework.boot.restclient.RestClientCustomizer;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Duration;
+
 /**
- * Groq AI Configuration
+ * Provider-neutral AI chat configuration.
  *
- * <p>Cấu hình Spring AI sử dụng Groq API thông qua OpenAI-compatible endpoint.
- * Groq là cloud AI inference service hỗ trợ OpenAI API format.
- *
- * <p>Kiến trúc:
- * <ul>
- *   <li>ChatModel: Groq API (base-url: https://api.groq.com/openai)</li>
- *   <li>EmbeddingModel: OpenAI-compatible embedding provider</li>
- *   <li>ChatClient: Spring AI abstraction với system prompt mặc định</li>
- * </ul>
- *
- * <p>Config tại: application.yml → spring.ai.openai
+ * <p>HealthLens uses Spring AI's OpenAI client path for OpenAI-compatible chat
+ * providers. Native providers require an explicit adapter before they can be
+ * selected through configuration.
  */
 @Configuration
 @EnableCaching
-public class GroqAiConfig {
+public class AiChatConfig {
 
     /**
      * System prompt mặc định cho tất cả chat requests.
@@ -41,31 +37,27 @@ public class GroqAiConfig {
             - Không đưa ra chẩn đoán bệnh
             """;
 
-    @Value("${app.ai.primary:groq}")
+    @Value("${app.ai.chat.provider:openai-compatible}")
     private String primaryProvider;
 
-    /**
-     * ChatClient bean với system prompt mặc định.
-     *
-     * <p>ChatModel được auto-configured bởi Spring AI từ application.yml:
-     * spring.ai.openai.base-url = https://api.groq.com/openai
-     * spring.ai.openai.api-key = ${GROQ_API_KEY}
-     *
-     * @param chatModel auto-configured OpenAI-compatible chat model (points to Groq)
-     * @return ChatClient với system prompt sức khỏe tiếng Việt
-     */
     @Bean
-    public ChatClient groqChatClient(ChatModel chatModel) {
+    public RestClientCustomizer aiChatTimeoutRestClientCustomizer(
+            @Value("${app.ai.chat.timeout-ms:30000}") long timeoutMs
+    ) {
+        Duration timeout = Duration.ofMillis(timeoutMs);
+        HttpClientSettings settings = HttpClientSettings.defaults().withTimeouts(timeout, timeout);
+        return restClientBuilder -> restClientBuilder.requestFactory(
+                ClientHttpRequestFactoryBuilder.detect().build(settings)
+        );
+    }
+
+    @Bean
+    public ChatClient aiChatClient(ChatModel chatModel) {
         return ChatClient.builder(chatModel)
                 .defaultSystem(DEFAULT_SYSTEM_PROMPT)
                 .build();
     }
 
-    /**
-     * Expose primary provider name cho logging/monitoring.
-     *
-     * @return tên provider chính (mặc định: "groq")
-     */
     public String getPrimaryProvider() {
         return primaryProvider;
     }

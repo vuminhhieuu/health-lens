@@ -47,7 +47,7 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
 	implementation("org.flywaydb:flyway-database-postgresql")
 
-	// Spring AI - OpenAI (Compatible with Groq)
+	// Spring AI - OpenAI-compatible chat provider
 	implementation("org.springframework.ai:spring-ai-starter-model-openai")
 
 	// Spring AI - Qdrant VectorStore

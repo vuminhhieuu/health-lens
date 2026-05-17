@@ -29,7 +29,7 @@ Important variables include:
 - `NEXT_PUBLIC_API_BASE_URL`
 - `OCR_SERVICE_URL`
 - `MINIO_ENDPOINT`, `MINIO_PUBLIC_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`
-- `GROQ_API_KEY`, `GROQ_BASE_URL`, `GROQ_CHAT_MODEL`
+- `AI_CHAT_PROVIDER`, `AI_CHAT_API_KEY`, `AI_CHAT_BASE_URL`, `AI_CHAT_MODEL`, `AI_CHAT_TIMEOUT_MS`
 - `EMBEDDING_API_KEY`, `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`
 - `QDRANT_HOST`, `QDRANT_PORT`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`
 - `JWT_SECRET`
@@ -94,4 +94,3 @@ cd packages/shared && pnpm build
 - Keep backend route constants in `apps/api/src/main/java/com/healthlens/api/constants/ApiRoutes.java` synchronized with `packages/shared/constants/api.ts`.
 - Add frontend-consumed shared contracts to `packages/shared` instead of duplicating string constants across apps.
 - Do not read generated folders such as `.next`, `node_modules`, `.gradle`, or `apps/api/build` when producing source-level analysis.
-

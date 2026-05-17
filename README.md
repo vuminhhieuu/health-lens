@@ -24,7 +24,7 @@ The project is implemented as a production-oriented monorepo with a web app, API
 | OCR Service          | FastAPI, EasyOCR                                  |
 | Data                 | PostgreSQL, Redis, Qdrant                         |
 | Object Storage       | MinIO (dev), S3-compatible storage (staging/prod) |
-| AI                   | Groq API                                          |
+| AI                   | OpenAI-compatible chat provider                  |
 | Deployment (staging) | Vercel + Render + Neon + Upstash                  |
 
 
@@ -39,7 +39,7 @@ flowchart LR
     A --> R[(Redis)]
     A --> V[(Qdrant)]
     A --> S[(MinIO / S3)]
-    A --> G[Groq API]
+    A --> G[OpenAI-compatible chat provider]
 ```
 
 
@@ -80,7 +80,7 @@ health-lens/
 cp .env.example .env
 ```
 
-Update required keys in `.env` (at minimum: Groq and Qdrant settings for AI/vector features).
+Update required keys in `.env` (at minimum: `AI_CHAT_*` and Qdrant settings for AI/vector features).
 
 ### 2) Start services
 
@@ -194,4 +194,3 @@ Planned / evolving:
 - Mobile app hardening
 - Admin analytics dashboards
 - Further documentation and architecture artifacts
-

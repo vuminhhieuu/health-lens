@@ -33,7 +33,7 @@ The API requires:
 - JWT secret with enough entropy.
 - Mail configuration for verification, reset, invitation, and deletion email flows.
 - Object storage endpoint, bucket, credentials, and region.
-- Groq/OpenAI-compatible chat provider configuration.
+- `AI_CHAT_*` OpenAI-compatible chat provider configuration.
 - Embedding and Qdrant configuration when retrieval features are enabled.
 
 ## Web Deployment Concerns
@@ -61,4 +61,3 @@ GitHub workflows are present at:
 - `.github/workflows/deploy.yml`
 
 The README states that CI covers linting, type checks, API tests, and build validation for relevant app/package changes.
-

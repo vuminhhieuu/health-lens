@@ -16,7 +16,7 @@ flowchart LR
     API --> Redis[(Redis)]
     API --> Storage[(MinIO / S3-compatible storage)]
     API --> Qdrant[(Qdrant)]
-    API --> Groq[Groq / OpenAI-compatible chat]
+    API --> AIChat[OpenAI-compatible chat provider]
     API --> OCR[FastAPI EasyOCR service]
     Web --> OCRProxy[/API OCR endpoints/]
 ```
@@ -78,11 +78,10 @@ flowchart LR
 | API | Redis | Cache and event stream configuration |
 | API | MinIO/S3 | Presigned upload and file access |
 | API | OCR service | HTTP call to `OCR_SERVICE_URL` |
-| API | Groq/OpenAI-compatible chat | Spring AI OpenAI client configuration |
+| API | OpenAI-compatible chat provider | Spring AI OpenAI client configuration |
 | API | Qdrant | Spring AI vector store |
 | API | SMTP/Mailhog | Email verification, deletion, invitation templates |
 
 ## Deployment Architecture
 
 Local development uses Docker Compose. Staging docs reference Vercel for web, Render for API/OCR, Neon for PostgreSQL, Upstash for Redis, Cloudflare R2 for storage, and managed Qdrant.
-
