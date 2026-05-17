@@ -1,6 +1,7 @@
 package com.healthlens.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.healthlens.api.entity.OcrJobState;
 import com.healthlens.api.dto.OcrResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -8,22 +9,32 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.connection.stream.RecordId;
+import org.springframework.data.redis.connection.stream.StreamOffset;
+import org.springframework.data.redis.connection.stream.StreamReadOptions;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,8 +48,13 @@ class OcrJobConsumerTest {
         private OcrService ocrService;
         @Mock
         private HealthRecordService healthRecordService;
+
+        @Mock
+        private OcrJobStateService ocrJobStateService;
         @Mock
         private StreamOperations<String, Object, Object> streamOperations;
+        @Mock
+        private ValueOperations<String, String> valueOperations;
         @Mock
         @SuppressWarnings("unchecked")
         private MapRecord<String, Object, Object> mapRecord;
@@ -49,11 +65,17 @@ class OcrJobConsumerTest {
         void setUp() {
                 when(redisTemplate.opsForStream()).thenReturn(streamOperations);
                 when(redisTemplate.hasKey("ocr.events")).thenReturn(true);
+                lenient().when(mapRecord.getId()).thenReturn(RecordId.of("1-0"));
+                lenient().when(ocrJobStateService.startAttempt(any())).thenReturn(
+                                new OcrJobStateService.AttemptDecision(false, 1, OcrJobState.PROCESSING));
+                lenient().when(ocrJobStateService.markRetryableOrDeadLetter(anyString(), anyString())).thenReturn(
+                                new OcrJobStateService.RetryDecision(false, 1, Instant.now().plusSeconds(30)));
                 consumer = new OcrJobConsumer(
                                 redisTemplate,
                                 storageService,
                                 ocrService,
                                 healthRecordService,
+                                ocrJobStateService,
                                 new ObjectMapper(),
                                 "ocr.events",
                                 "ocr-consumers",
@@ -104,8 +126,8 @@ class OcrJobConsumerTest {
 
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecord", mapRecord);
 
-                verify(healthRecordService).markOcrCompleted(eq(recordId), any(String.class),
-                                any(OcrService.OcrExtractionResult.class), eq(true));
+                verify(ocrJobStateService).completeSucceeded(eq(recordId), any(String.class),
+                                any(OcrService.OcrExtractionResult.class), eq(true), anyString());
         }
 
         @Test
@@ -129,13 +151,13 @@ class OcrJobConsumerTest {
 
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecord", mapRecord);
 
-                verify(healthRecordService).markOcrCompleted(eq(recordId), any(String.class),
-                                any(OcrService.OcrExtractionResult.class), eq(false));
+                verify(ocrJobStateService).completeSucceeded(eq(recordId), any(String.class),
+                                any(OcrService.OcrExtractionResult.class), eq(false), anyString());
         }
 
         @Test
-        @DisplayName("all providers failed -> markOcrFailed timeout reason")
-        void handleRecord_allProvidersFailed_marksTimeoutReason() {
+        @DisplayName("all providers failed -> schedules retryable provider timeout")
+        void handleRecord_allProvidersFailed_schedulesRetryableTimeout() {
                 UUID recordId = UUID.randomUUID();
                 when(mapRecord.getValue()).thenReturn(
                                 Map.of("recordId", recordId.toString(), "fileKey", "k", "mimeType", "image/jpeg"));
@@ -153,7 +175,8 @@ class OcrJobConsumerTest {
 
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecord", mapRecord);
 
-                verify(healthRecordService).markOcrFailed(recordId, "timeout");
+                verify(ocrJobStateService).markRetryableOrDeadLetter(anyString(), eq("provider_timeout"));
+                verify(healthRecordService, never()).markOcrFailed(eq(recordId), anyString());
         }
 
         @Test
@@ -180,8 +203,8 @@ class OcrJobConsumerTest {
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecord", mapRecord);
 
                 verify(healthRecordService, never()).markOcrFailed(recordId, "low_confidence");
-                verify(healthRecordService).markOcrCompleted(eq(recordId), any(String.class),
-                                any(OcrService.OcrExtractionResult.class), eq(true));
+                verify(ocrJobStateService).completeSucceeded(eq(recordId), any(String.class),
+                                any(OcrService.OcrExtractionResult.class), eq(true), anyString());
         }
 
         @Test
@@ -211,13 +234,13 @@ class OcrJobConsumerTest {
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecord", mapRecord);
 
                 verify(ocrService).processDocument("https://example.com/img", "image/png");
-                verify(healthRecordService).markOcrCompleted(eq(recordId),
+                verify(ocrJobStateService).completeSucceeded(eq(recordId),
                                 argThat(json -> json.contains("\"mimeType\":\"image/png\"")
                                                 && json.contains("\"route\":\"image\"")
                                                 && json.contains("\"provider\":\"easyocr\"")
                                                 && json.contains("\"jobId\":\"job-1\"")
                                                 && json.contains("\"correlationId\":\"corr-1\"")),
-                                any(OcrService.OcrExtractionResult.class), eq(false));
+                                any(OcrService.OcrExtractionResult.class), eq(false), anyString());
         }
 
         @Test
@@ -247,16 +270,16 @@ class OcrJobConsumerTest {
 
                 verify(ocrService).processPdfBytes(any(byte[].class), eq("https://example.com/doc.pdf"),
                                 eq("application/pdf"));
-                verify(healthRecordService).markOcrCompleted(eq(recordId),
+                verify(ocrJobStateService).completeSucceeded(eq(recordId),
                                 argThat(json -> json.contains("\"mimeType\":\"application/pdf\"")
                                                 && json.contains("\"route\":\"pdf-document\"")
                                                 && json.contains("\"pages\"")),
-                                any(OcrService.OcrExtractionResult.class), eq(false));
+                                any(OcrService.OcrExtractionResult.class), eq(false), anyString());
         }
 
         @Test
-        @DisplayName("PDF provider failure stores PDF processing failure reason")
-        void handleRecord_pdfProviderFailed_marksPdfProcessingFailed() {
+        @DisplayName("PDF provider failure schedules retry with PDF processing reason")
+        void handleRecord_pdfProviderFailed_schedulesRetry() {
                 UUID recordId = UUID.randomUUID();
                 when(mapRecord.getValue()).thenReturn(
                                 Map.of("recordId", recordId.toString(), "fileKey", "k", "mimeType", "application/pdf"));
@@ -278,7 +301,8 @@ class OcrJobConsumerTest {
 
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecord", mapRecord);
 
-                verify(healthRecordService).markOcrFailed(recordId, "pdf_processing_failed");
+                verify(ocrJobStateService).markRetryableOrDeadLetter(anyString(), eq("pdf_processing_failed"));
+                verify(healthRecordService, never()).markOcrFailed(eq(recordId), anyString());
         }
 
         @Test
@@ -321,5 +345,76 @@ class OcrJobConsumerTest {
                 verify(healthRecordService).markOcrFailed(recordId, "missing_mime_type");
                 verify(storageService, never()).generateInternalDownloadUrl(any(), any(Duration.class));
                 verifyNoInteractions(ocrService);
+        }
+
+        @Test
+        @DisplayName("DB failure after provider success is persisted retryable before ack")
+        void consume_dbFailureAfterProviderSuccess_schedulesRetryAndAcks() {
+                UUID recordId = UUID.randomUUID();
+                when(streamOperations.read(any(Consumer.class), any(StreamReadOptions.class), any(StreamOffset.class)))
+                                .thenReturn(List.of(mapRecord));
+                when(mapRecord.getValue()).thenReturn(
+                                Map.of("recordId", recordId.toString(), "fileKey", "k", "mimeType", "image/jpeg"));
+                when(storageService.generateInternalDownloadUrl(eq("k"), any(Duration.class)))
+                                .thenReturn("https://example.com/img");
+                when(ocrService.processDocument("https://example.com/img", "image/jpeg")).thenReturn(
+                                new OcrService.OcrProcessingResult(
+                                                OcrResult.builder().text("x").confidence(0.90f).provider("easyocr")
+                                                                .language("vi").latencyMs(100).build(),
+                                                "image",
+                                                "easyocr",
+                                                "image/jpeg",
+                                                java.util.List.of()));
+                when(ocrService.parseMetrics("x", 0.90f)).thenReturn(
+                                new OcrService.OcrExtractionResult(null, null, null, null, java.util.List.of()));
+                doThrow(new RuntimeException("db down")).when(ocrJobStateService)
+                                .completeSucceeded(eq(recordId), anyString(), any(OcrService.OcrExtractionResult.class),
+                                                eq(false), anyString());
+
+                consumer.consume();
+
+                verify(ocrJobStateService).markRetryableOrDeadLetter(anyString(), eq("persistence_error"));
+                verify(streamOperations).acknowledge(eq("ocr.events"), eq("ocr-consumers"), any(RecordId.class));
+        }
+
+        @Test
+        @DisplayName("duplicate succeeded idempotency key skips OCR side effects")
+        void handleRecord_duplicateSucceeded_skipsSideEffects() {
+                UUID recordId = UUID.randomUUID();
+                when(mapRecord.getValue()).thenReturn(
+                                Map.of("recordId", recordId.toString(), "jobId", "job-1", "fileKey", "k", "mimeType",
+                                                "image/jpeg"));
+                when(ocrJobStateService.startAttempt(any())).thenReturn(
+                                new OcrJobStateService.AttemptDecision(true, 1, OcrJobState.SUCCEEDED));
+
+                ReflectionTestUtils.invokeMethod(consumer, "handleRecord", mapRecord);
+
+                verifyNoInteractions(storageService);
+                verifyNoInteractions(ocrService);
+                verify(healthRecordService, never()).markOcrCompleted(any(), anyString(), any(), anyBoolean());
+        }
+
+        @Test
+        @DisplayName("unexpected repeated consumer failure moves stream entry to DLQ and acks")
+        void consume_repeatedUnexpectedFailure_deadLettersAndAcks() {
+                UUID recordId = UUID.randomUUID();
+                when(streamOperations.read(any(Consumer.class), any(StreamReadOptions.class), any(StreamOffset.class)))
+                                .thenReturn(List.of(mapRecord));
+                when(mapRecord.getValue()).thenReturn(
+                                Map.of("recordId", recordId.toString(), "fileKey", "k", "mimeType", "image/jpeg"));
+                when(ocrJobStateService.startAttempt(any())).thenThrow(new RuntimeException("db down"));
+                when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+                when(valueOperations.increment("ocr:consumer-failures:1-0")).thenReturn(3L);
+
+                consumer.consume();
+
+                verify(ocrJobStateService).deadLetterPayload(argThat(payload ->
+                                recordId.toString().equals(payload.get("recordId"))
+                                                && "1-0".equals(payload.get("streamRecordId"))
+                                                && "3".equals(payload.get("consumerFailureCount"))),
+                                eq("consumer_processing_error"),
+                                eq(3));
+                verify(redisTemplate).delete("ocr:consumer-failures:1-0");
+                verify(streamOperations).acknowledge(eq("ocr.events"), eq("ocr-consumers"), any(RecordId.class));
         }
 }

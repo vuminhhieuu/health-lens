@@ -308,6 +308,27 @@ class HealthRecordServiceTest {
     }
 
     @Test
+    @DisplayName("markOcrCompleted khong ghi de record dang review_required da co OCR result")
+    void markOcrCompleted_existingReviewRequiredResult_skipsOverwrite() {
+        UUID recordId = UUID.randomUUID();
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setProfileId(UUID.randomUUID());
+        record.setStatus("review_required");
+        record.setRawOcrResult("{\"text\":\"existing\"}");
+        record.setDiagnosis("user edit");
+        when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+
+        healthRecordService.markOcrCompleted(recordId, "{\"text\":\"new\"}",
+                new OcrService.OcrExtractionResult("2026-01-01", "new", "new", "new", List.of()),
+                false);
+
+        assertThat(record.getRawOcrResult()).isEqualTo("{\"text\":\"existing\"}");
+        assertThat(record.getDiagnosis()).isEqualTo("user edit");
+        verify(healthRecordRepository, never()).save(record);
+    }
+
+    @Test
     @DisplayName("confirmRecord cho phep ocr_failed khi keepPartial=true")
     void confirmRecord_allowOcrFailedWhenKeepPartial() {
         UUID userId = UUID.randomUUID();
