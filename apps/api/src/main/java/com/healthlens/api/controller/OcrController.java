@@ -70,11 +70,23 @@ public class OcrController {
             log.error("OCR processing failed: {}", e.getMessage());
             return ResponseEntity.internalServerError()
                     .body(OcrResult.builder()
+                            .provider("error")
+                            .modelVersion("n/a")
+                            .mimeType("image/*")
+                            .retentionMode("transient")
+                            .latencyMs(0)
                             .text("")
                             .confidence(0.0f)
-                            .source("error")
                             .language("unknown")
-                            .processingTimeMs(0)
+                            .pages(java.util.List.of())
+                            .blocks(java.util.List.of())
+                            .lines(java.util.List.of())
+                            .diagnostics(java.util.List.of(OcrResult.OcrDiagnostic.builder()
+                                    .provider("error")
+                                    .category("provider_failure")
+                                    .code("OCR_UNHANDLED_EXCEPTION")
+                                    .message("OCR processing failed")
+                                    .build()))
                             .build());
         }
     }
