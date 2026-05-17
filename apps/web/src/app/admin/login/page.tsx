@@ -208,7 +208,10 @@ export default function AdminLoginPage() {
                     autoComplete="email"
                     placeholder="admin@healthlens.vn"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setError("");
+                    }}
                     className="h-14 w-full rounded-lg border border-slate-200 bg-white shadow-sm px-4 text-base text-slate-900 outline-none transition placeholder:text-gray-500 focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                     required
                   />
@@ -224,11 +227,24 @@ export default function AdminLoginPage() {
                     autoComplete="current-password"
                     placeholder="••••••••"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError("");
+                    }}
                     className="h-14 w-full rounded-lg border border-slate-200 bg-white shadow-sm px-4 text-base text-slate-900 outline-none transition placeholder:text-gray-500 focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                     required
                   />
                 </div>
+
+                {error ? (
+                  <p
+                    id="admin-credentials-error"
+                    role="alert"
+                    className="text-center text-sm font-medium text-red-600"
+                  >
+                    {error}
+                  </p>
+                ) : null}
 
                 <button
                   id="admin-login-submit"
@@ -282,7 +298,10 @@ export default function AdminLoginPage() {
                       value={totpCode}
                       onChange={(e) => {
                         setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                        setError("");
                       }}
+                      aria-describedby={error ? "admin-totp-error" : undefined}
+                      aria-invalid={Boolean(error)}
                       className="h-16 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-center text-3xl font-mono tracking-[0.5em] text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:bg-white"
                       required
                     />
@@ -296,12 +315,25 @@ export default function AdminLoginPage() {
                       onChange={(e) => {
                         const val = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "");
                         setTotpCode(val.slice(0, 11));
+                        setError("");
                       }}
+                      aria-describedby={error ? "admin-totp-error" : undefined}
+                      aria-invalid={Boolean(error)}
                       className="h-16 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-center text-xl md:text-2xl font-mono tracking-[0.2em] md:tracking-[0.5em] text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:bg-white uppercase"
                       required
                     />
                   )}
                 </div>
+
+                {error ? (
+                  <p
+                    id="admin-totp-error"
+                    role="alert"
+                    className="text-center text-sm font-medium text-red-600"
+                  >
+                    {error}
+                  </p>
+                ) : null}
 
                 <button
                   id="admin-totp-submit"
@@ -522,10 +554,25 @@ export default function AdminLoginPage() {
                     autoComplete="one-time-code"
                     placeholder="000 000"
                     value={totpCode}
-                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    onChange={(e) => {
+                      setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                      setError("");
+                    }}
+                    aria-describedby={error ? "admin-totp-setup-error" : undefined}
+                    aria-invalid={Boolean(error)}
                     className="w-full h-14 bg-slate-50 border border-slate-200 rounded-xl text-center text-2xl font-mono tracking-[0.5em] focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all text-teal-900 placeholder:text-slate-300"
                     required
                   />
+
+                  {error ? (
+                    <p
+                      id="admin-totp-setup-error"
+                      role="alert"
+                      className="text-center text-sm font-medium text-red-600"
+                    >
+                      {error}
+                    </p>
+                  ) : null}
 
                   <div className="flex gap-4 pt-6">
                     <button
@@ -652,7 +699,7 @@ export default function AdminLoginPage() {
           )}
 
           {/* Error message */}
-          {error && (
+          {error && step !== "credentials" && step !== "totp" && !(step === "totp-setup" && totpSetup) && (
             <p className="mt-4 text-center text-sm text-red-600">
               {error}
             </p>

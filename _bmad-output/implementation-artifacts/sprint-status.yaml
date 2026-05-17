@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-05-17T19:21:00+07:00
+last_updated: 2026-05-17T22:27:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -212,7 +212,7 @@ development_status:
   core-6-1-global-toast-notification-foundation: done
   core-6-2-replace-browser-alerts-and-local-toasts: done
   core-6-3-vietnamese-language-normalization-and-message-catalog: done
-  core-6-4-standard-loading-empty-and-error-state-components: ready-for-dev
+  core-6-4-standard-loading-empty-and-error-state-components: done
   core-6-5-medical-copy-and-disclaimer-review: ready-for-dev
   core-7-1-backend-ai-ocr-rag-package-boundary-refactor: ready-for-dev
   core-7-2-split-health-record-review-page-into-feature-components-and-hooks: ready-for-dev

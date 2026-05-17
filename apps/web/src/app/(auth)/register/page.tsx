@@ -3,14 +3,13 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { registerSchema } from "@healthlens/shared/schemas/auth";
 import axios from "axios";
-import { CalendarDays, CircleHelp, Info, ShieldCheck } from "lucide-react";
+import { CircleHelp, Info, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { apiBaseUrl } from "@/lib/api";
 import { messageCatalog, registerErrorMessage } from "@/lib/i18n/messages";
-import { notify } from "@/lib/notify";
 
 const POST_REGISTER_RETURN_URL_KEY = "post-register-return-url";
 
@@ -73,11 +72,9 @@ export default function RegisterPage() {
           ? messageCatalog.auth.registerSuccessWithInvite
           : messageCatalog.auth.registerSuccess;
       setSuccessMessage(message);
-      notify.success(message);
     } catch (error: unknown) {
       const message = registerErrorMessage(error);
       setSubmitError(message);
-      notify.error(message);
     }
   };
 
@@ -141,15 +138,12 @@ export default function RegisterPage() {
               <label htmlFor="birthDate" className="ml-1 block text-sm font-semibold text-[#3d4947]">
                 Ngày sinh
               </label>
-              <div className="relative">
-                <input
-                  id="birthDate"
-                  type="date"
-                  {...register("birthDate")}
-                  className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 pr-12 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
-                />
-                <CalendarDays className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#3d4947]" />
-              </div>
+              <input
+                id="birthDate"
+                type="date"
+                {...register("birthDate")}
+                className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
+              />
               {errors.birthDate ? <p className="text-sm text-[#ba1a1a]">{errors.birthDate.message}</p> : null}
             </div>
 
@@ -201,6 +195,24 @@ export default function RegisterPage() {
             </label>
             {errors.acceptedTerms ? <p className="text-sm text-[#ba1a1a]">{errors.acceptedTerms.message}</p> : null}
 
+            {successMessage ? (
+              <p
+                role="status"
+                className="text-sm font-medium text-[#00685f]"
+              >
+                {successMessage}
+              </p>
+            ) : null}
+
+            {submitError ? (
+              <p
+                role="alert"
+                className="text-sm font-medium text-[#ba1a1a]"
+              >
+                {submitError}
+              </p>
+            ) : null}
+
             <button
               type="submit"
               disabled={isSubmitting}
@@ -209,9 +221,6 @@ export default function RegisterPage() {
               {isSubmitting ? "Đang xử lý..." : "Đăng Ký"}
             </button>
           </form>
-
-          {successMessage ? <p className="mt-4 text-sm text-[#00685f]">{successMessage}</p> : null}
-          {submitError ? <p className="mt-4 text-sm text-[#ba1a1a]">{submitError}</p> : null}
 
           <div className="mt-8 border-t border-[#d8e5e2] pt-6 text-center">
             <p className="text-sm text-[#3d4947]">

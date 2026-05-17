@@ -39,6 +39,7 @@ import { apiClient } from "@/lib/api/apiClient";
 import { notify } from "@/lib/notify";
 import { ALLOWED_FILE_TYPES, ApiPaths, UPLOAD_MAX_SIZE_BYTES } from "@healthlens/shared/constants";
 import { HealthMetricCard } from "@/components/ui/HealthMetricCard";
+import { ErrorState, InlineFieldError, LoadingState } from "@/components/ui";
 import { OcrFailureScreen } from "@/components/features/upload/OcrFailureScreen";
 import { DeleteRecordModal } from "@/components/features/health-records/DeleteRecordModal";
 import { toThreeLineExplanation } from "@/lib/utils/explanationFormatter";
@@ -138,6 +139,7 @@ type HealthRecordSharedMember = {
 };
 
 type RecommendationCategory = "nutrition" | "lifestyle";
+type AddMetricField = "name" | "value" | "unit";
 
 type RecommendationGroup = {
   category: RecommendationCategory;
@@ -232,6 +234,7 @@ export default function ReviewRecordPage() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", value: "", unit: "" });
   const [addError, setAddError] = useState<string | null>(null);
+  const [addErrorField, setAddErrorField] = useState<AddMetricField | null>(null);
 
   const { data, refetch, isLoading, isError } = useQuery<ReviewRecordData>({
     queryKey: ["record-status", recordId],
@@ -550,12 +553,15 @@ export default function ReviewRecordPage() {
     });
 
     if (!validation.success) {
+      const field = validation.error.issues[0]?.path[0];
+      setAddErrorField(field === "name" || field === "value" || field === "unit" ? field : null);
       setAddError(validation.error.issues[0]?.message ?? "Dữ liệu không hợp lệ");
       return;
     }
 
     const cleanedMetric = validation.data;
     setAddError(null);
+    setAddErrorField(null);
     const newMetric: MetricDto = {
       name: cleanedMetric.name,
       value: cleanedMetric.value,
@@ -567,6 +573,7 @@ export default function ReviewRecordPage() {
     setMetrics((prev) => [...prev, newMetric]);
     setShowAddDialog(false);
     setAddForm({ name: "", value: "", unit: "" });
+    setAddErrorField(null);
   };
 
   const handleAddNameChange = (name: string) => {
@@ -576,6 +583,8 @@ export default function ReviewRecordPage() {
       name,
       unit: ref?.unit ?? prev.unit,
     }));
+    setAddError(null);
+    setAddErrorField(null);
   };
 
   const executeSave = async (keepPartial = false) => {
@@ -863,24 +872,22 @@ export default function ReviewRecordPage() {
   if (isLoading || data?.status === "processing") {
     return renderReviewStateShell(
       "Review kết quả khám",
-      <div className="flex min-h-[50vh] w-full flex-col items-center justify-center gap-6">
-        <Loader2 className="h-10 w-10 animate-spin text-[#00685f]" />
-        <h2 className="text-xl font-bold text-[#121e1c]">Hệ thống đang xử lý OCR</h2>
-        <p className="text-[#4e6360]">Quá trình này có thể mất một chút thời gian, vui lòng không đóng trang...</p>
-      </div>
+      <LoadingState
+        title="Hệ thống đang xử lý OCR"
+        description="Quá trình này có thể mất một chút thời gian, vui lòng không đóng trang."
+      />
     );
   }
 
   if (isError) {
     return renderReviewStateShell(
       "Review kết quả khám",
-      <div className="flex min-h-[50vh] w-full flex-col items-center justify-center gap-6">
-        <AlertTriangle className="h-10 w-10 text-[#ba1a1a]" />
-        <h2 className="text-xl font-bold text-[#ba1a1a]">Lỗi tải dữ liệu</h2>
-        <button onClick={() => refetch()} className="rounded-xl bg-[#00685f] px-6 py-2 text-white">
-          Thử lại
-        </button>
-      </div>
+      <ErrorState
+        title="Lỗi tải dữ liệu"
+        description="Không thể tải kết quả khám. Vui lòng thử lại."
+        actionLabel="Thử lại"
+        onAction={() => void refetch()}
+      />
     );
   }
 
@@ -913,16 +920,12 @@ export default function ReviewRecordPage() {
   if (!data) {
     return renderReviewStateShell(
       "Review kết quả khám",
-      <div className="flex min-h-[50vh] w-full flex-col items-center justify-center gap-6 text-center">
-        <AlertTriangle className="h-10 w-10 text-[#ba1a1a]" />
-        <h2 className="text-xl font-bold text-[#ba1a1a]">Không tìm thấy dữ liệu hồ sơ</h2>
-        <button
-          onClick={() => router.push("/health-records")}
-          className="rounded-xl bg-[#00685f] px-6 py-2 font-semibold text-white hover:brightness-110"
-        >
-          Quay lại danh sách
-        </button>
-      </div>
+      <ErrorState
+        title="Không tìm thấy dữ liệu hồ sơ"
+        description="Kết quả này không còn khả dụng hoặc bạn không có quyền xem."
+        actionLabel="Quay lại danh sách"
+        onAction={() => router.push("/health-records")}
+      />
     );
   }
 
@@ -1509,6 +1512,7 @@ export default function ReviewRecordPage() {
                     onClick={() => {
                       setAddForm({ name: "", value: "", unit: "" });
                       setAddError(null);
+                      setAddErrorField(null);
                       setShowAddDialog(true);
                     }}
                     className="flex items-center gap-1.5 rounded-lg bg-[#00685f] px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110"
@@ -1751,6 +1755,8 @@ export default function ReviewRecordPage() {
                   <select
                     className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378] bg-white"
                     value={addForm.name}
+                    aria-invalid={addErrorField === "name"}
+                    aria-describedby={addErrorField === "name" ? "add-metric-error" : undefined}
                     onChange={(e) => handleAddNameChange(e.target.value)}
                   >
                     <option value="">-- Chọn chỉ số --</option>
@@ -1766,7 +1772,13 @@ export default function ReviewRecordPage() {
                     placeholder="Nhập tên chỉ số..."
                     className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378]"
                     value={addForm.name}
-                    onChange={(e) => setAddForm((prev) => ({ ...prev, name: e.target.value }))}
+                    onChange={(e) => {
+                      setAddForm((prev) => ({ ...prev, name: e.target.value }));
+                      setAddError(null);
+                      setAddErrorField(null);
+                    }}
+                    aria-invalid={addErrorField === "name"}
+                    aria-describedby={addErrorField === "name" ? "add-metric-error" : undefined}
                   />
                 )}
               </div>
@@ -1780,9 +1792,12 @@ export default function ReviewRecordPage() {
                   placeholder="VD: 5.4 hoặc Âm tính"
                   className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378]"
                   value={addForm.value}
+                  aria-invalid={addErrorField === "value"}
+                  aria-describedby={addErrorField === "value" ? "add-metric-error" : undefined}
                   onChange={(e) => {
                     setAddForm((prev) => ({ ...prev, value: e.target.value }));
                     setAddError(null);
+                    setAddErrorField(null);
                   }}
                 />
               </div>
@@ -1796,18 +1811,18 @@ export default function ReviewRecordPage() {
                   placeholder="VD: mmol/L"
                   className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378]"
                   value={addForm.unit}
+                  aria-invalid={addErrorField === "unit"}
+                  aria-describedby={addErrorField === "unit" ? "add-metric-error" : undefined}
                   onChange={(e) => {
                     setAddForm((prev) => ({ ...prev, unit: e.target.value }));
                     setAddError(null);
+                    setAddErrorField(null);
                   }}
                 />
               </div>
 
               {addError && (
-                <div className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a] flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                  {addError}
-                </div>
+                <InlineFieldError id="add-metric-error" message={addError} />
               )}
             </div>
 

@@ -21,6 +21,7 @@ import Link from "next/link";
 import { adminApiClient } from "@/lib/api/adminApiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { notify } from "@/lib/notify";
+import { EmptyState, ErrorState, InlineFieldError, LoadingState } from "@/components/ui";
 import {
   formatNoticeNewMetricMultiAdmin,
   NOTICE_NEW_METRIC_SINGLE_ADMIN,
@@ -199,7 +200,13 @@ export default function ReferenceDataPage() {
     staleTime: 60_000,
   });
 
-  const { data: metrics = [], isLoading, isFetching } = useQuery<ReferenceMetric[]>({
+  const {
+    data: metrics = [],
+    isLoading,
+    isFetching,
+    isError,
+    refetch,
+  } = useQuery<ReferenceMetric[]>({
     queryKey: ["admin-reference-metrics"],
     queryFn: async () => {
       const response = await adminApiClient.get(API_ROUTES.ADMIN_REFERENCE_DATA.METRICS);
@@ -412,9 +419,19 @@ export default function ReferenceDataPage() {
         </div>
 
         {isLoading ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 px-6 py-10 text-center text-sm text-slate-500">
-            Đang tải danh sách chỉ số...
-          </div>
+          <LoadingState
+            title="Đang tải danh sách chỉ số"
+            description="Các chỉ số tham chiếu sẽ hiển thị ngay khi dữ liệu sẵn sàng."
+            className="border-slate-200 bg-slate-50"
+          />
+        ) : isError ? (
+          <ErrorState
+            title="Không tải được danh sách chỉ số"
+            description="Vui lòng thử lại để quản trị dữ liệu tham chiếu."
+            actionLabel="Thử lại"
+            onAction={() => void refetch()}
+            className="border-slate-200 bg-slate-50"
+          />
         ) : (
           <div className="space-y-6">
             <MetricSection
@@ -512,7 +529,13 @@ function MetricSection({
       </div>
 
       {metrics.length === 0 ? (
-        <div className="px-5 py-8 text-sm text-slate-500">Chưa có chỉ số nào trong nhóm này.</div>
+        <div className="px-5 py-5">
+          <EmptyState
+            title="Chưa có chỉ số nào"
+            description="Nhóm này chưa có chỉ số tham chiếu để hiển thị."
+            className="min-h-48 border-slate-200 bg-slate-50"
+          />
+        </div>
       ) : (
         <div className="overflow-hidden">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -727,7 +750,11 @@ function MetricEditorModal({
           </button>
         </div>
 
-        <form className="max-h-[80vh] overflow-y-auto px-6 py-5" onSubmit={handleSubmit}>
+        <form
+          className="max-h-[80vh] overflow-y-auto px-6 py-5"
+          onSubmit={handleSubmit}
+          aria-describedby={formError ? "reference-metric-form-error" : undefined}
+        >
           <div className="grid gap-4 md:grid-cols-3">
             <Field label="Tên chỉ số (tiếng Anh)">
               <input
@@ -871,9 +898,7 @@ function MetricEditorModal({
           </div>
 
           {formError ? (
-            <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {formError}
-            </div>
+            <InlineFieldError id="reference-metric-form-error" message={formError} />
           ) : null}
 
           <div className="mt-6 flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
