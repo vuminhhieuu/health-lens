@@ -1,6 +1,6 @@
 # Story 8.3: Tỷ lệ upload thành công vs thất bại
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 
@@ -32,18 +32,18 @@ so that tôi phát hiện sớm vấn đề OCR hoặc hạ tầng.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: Upload quality endpoint (AC: #1, #2, #3)
-  - [ ] `GET /api/v1/admin/analytics/upload-quality?from={date}&to={date}&granularity=day|week`
-  - [ ] Query: COUNT records by status per day/week
-  - [ ] Thêm cột `failure_reason` vào health_records (V019): `timeout`, `low_confidence`, `api_error`, `invalid_file`
-  - [ ] Response: `{ data: [{ date, success, failed, failureBreakdown: {...} }] }`
-- [ ] Task 2 — Web: Upload quality charts (AC: #1, #3, #4)
-  - [ ] Trong analytics page: stacked bar chart (recharts BarChart)
-  - [ ] Màu: xanh lá (success), đỏ (fail)
-  - [ ] Threshold line at 95% success rate (dashed horizontal line)
-  - [ ] Drill-down: click bar → modal với failure breakdown pie chart
-- [ ] Task 3 — Tests (AC: #1, #2)
-  - [ ] `AnalyticsServiceTest`: upload quality query, failure rate calculation
+- [X] Task 1 — Backend: Upload quality endpoint (AC: #1, #2, #3)
+  - [X] `GET /api/v1/admin/analytics/upload-quality?from={date}&to={date}&granularity=day|week`
+  - [X] Query: COUNT records by status per day/week
+  - [X] Thêm cột `failure_reason` vào health_records (V019): `timeout`, `low_confidence`, `api_error`, `invalid_file`
+  - [X] Response: `{ data: [{ date, success, failed, failureBreakdown: {...} }] }`
+- [X] Task 2 — Web: Upload quality charts (AC: #1, #3, #4)
+  - [X] Trong analytics page: stacked bar chart (recharts BarChart)
+  - [X] Màu: xanh lá (success), đỏ (fail)
+  - [X] Threshold line at 95% success rate (dashed horizontal line)
+  - [X] Drill-down: click bar → modal với failure breakdown pie chart
+- [X] Task 3 — Tests (AC: #1, #2)
+  - [X] `AnalyticsServiceTest`: upload quality query, failure rate calculation
 
 ## Dev Notes
 

@@ -740,9 +740,28 @@ public class HealthRecordService {
     public void markOcrFailed(UUID recordId, String reason) {
         HealthRecord record = healthRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+        String normalizedReason = normalizeFailureReasonForStorage(reason);
         record.setStatus("ocr_failed");
-        record.setRawOcrResult(buildFailurePayload(reason));
+        record.setFailureReason(normalizedReason);
+        record.setRawOcrResult(buildFailurePayload(normalizedReason));
         healthRecordRepository.save(record);
+    }
+
+    static String normalizeFailureReasonForStorage(String reason) {
+        if (reason == null || reason.isBlank()) {
+            return "api_error";
+        }
+        String normalized = reason.trim().toLowerCase(Locale.ROOT);
+        if ("processing_error".equals(normalized)) {
+            return "api_error";
+        }
+        if ("timeout".equals(normalized)
+                || "low_confidence".equals(normalized)
+                || "api_error".equals(normalized)
+                || "invalid_file".equals(normalized)) {
+            return normalized;
+        }
+        return "api_error";
     }
 
     private void persistUploadReservation(UUID recordId, UUID userId, UUID profileId, String fileKey, String mimeType) {

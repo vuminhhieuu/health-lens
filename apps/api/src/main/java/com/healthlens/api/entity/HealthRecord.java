@@ -77,6 +77,9 @@ public class HealthRecord {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
+    @Column(name = "failure_reason", length = 50)
+    private String failureReason;
+
     @PrePersist
     public void prePersist() {
         Instant now = Instant.now();

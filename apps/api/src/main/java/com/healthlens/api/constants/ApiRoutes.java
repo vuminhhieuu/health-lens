@@ -132,6 +132,14 @@ public final class ApiRoutes {
     public static final String ADMIN_BASE = API_V1 + "/admin";
     public static final String ADMIN_AUTH_BASE = ADMIN_BASE + "/auth";
     public static final String ADMIN_REFERENCE_DATA_BASE = ADMIN_BASE + "/reference-data";
+    public static final String ADMIN_ANALYTICS_BASE = ADMIN_BASE + "/analytics";
+    // Relative variants (for @RequestMapping(ADMIN_ANALYTICS_BASE) controllers)
+    public static final String ADMIN_ANALYTICS_UPLOAD_QUALITY_REL = "/upload-quality";
+    public static final String ADMIN_ANALYTICS_UPLOAD_HISTORY_REL = "/upload-history";
+    public static final String ADMIN_ANALYTICS_UPLOAD_QUALITY =
+            ADMIN_ANALYTICS_BASE + ADMIN_ANALYTICS_UPLOAD_QUALITY_REL;
+    public static final String ADMIN_ANALYTICS_UPLOAD_HISTORY =
+            ADMIN_ANALYTICS_BASE + ADMIN_ANALYTICS_UPLOAD_HISTORY_REL;
     public static final String ADMIN_REFERENCE_DATA_IMPORT_PREVIEW = ADMIN_REFERENCE_DATA_BASE + "/import/preview";
     public static final String ADMIN_REFERENCE_DATA_IMPORT_CONFIRM = ADMIN_REFERENCE_DATA_BASE + "/import/confirm";
     public static final String ADMIN_AUTH_LOGIN = ADMIN_AUTH_BASE + "/login";
