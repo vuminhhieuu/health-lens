@@ -19,6 +19,7 @@ import {
 
 import { adminApiClient } from "@/lib/api/adminApiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+import { notify } from "@/lib/notify";
 
 const APPROVAL_CHECKBOX_CLASS =
   "h-4 w-4 shrink-0 cursor-pointer rounded border border-slate-400 bg-white shadow-sm outline-none transition-colors checked:border-emerald-600 checked:bg-emerald-600 checked:text-white focus-visible:ring-2 focus-visible:ring-emerald-200 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50";
@@ -284,7 +285,13 @@ export default function ApprovalsPage() {
       options?: { onFullSuccess?: () => void },
     ) => {
       await reloadList();
-      setNotice(formatBulkChangeSetNotice(actionVerb, result));
+      const nextNotice = formatBulkChangeSetNotice(actionVerb, result);
+      setNotice(nextNotice);
+      if (nextNotice.type === "success") {
+        notify.success(nextNotice.message);
+      } else {
+        notify.error(nextNotice.message);
+      }
       if (result.failed.length === 0) {
         setSelectedIds(new Set());
         options?.onFullSuccess?.();
@@ -304,7 +311,9 @@ export default function ApprovalsPage() {
       await applyBulkChangeSetResult(result, "phê duyệt");
     },
     onError: async (error) => {
-      setNotice({ type: "error", message: parseApiError(error) });
+      const message = parseApiError(error);
+      setNotice({ type: "error", message });
+      notify.error(message);
       await reloadList();
     },
   });
@@ -325,7 +334,9 @@ export default function ApprovalsPage() {
       });
     },
     onError: async (error) => {
-      setNotice({ type: "error", message: parseApiError(error) });
+      const message = parseApiError(error);
+      setNotice({ type: "error", message });
+      notify.error(message);
       await reloadList();
     },
   });
@@ -346,13 +357,16 @@ export default function ApprovalsPage() {
     },
     onSuccess: async (data) => {
       setNotice({ type: "success", message: data.message });
+      notify.success(data.message);
       setRejectDialogId(null);
       setRejectReason("");
       setSelectedIds(new Set());
       await reloadList();
     },
     onError: (error) => {
-      setNotice({ type: "error", message: parseApiError(error) });
+      const message = parseApiError(error);
+      setNotice({ type: "error", message });
+      notify.error(message);
     },
   });
 

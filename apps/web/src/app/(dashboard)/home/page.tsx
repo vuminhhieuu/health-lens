@@ -22,6 +22,7 @@ import {
 import { ApiPaths } from "@healthlens/shared/constants";
 
 import { apiClient } from "@/lib/api/apiClient";
+import { notify } from "@/lib/notify";
 import { InviteMemberModal } from "@/components/features/profiles/InviteMemberModal";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 
@@ -187,10 +188,10 @@ export default function DashboardHomePage() {
     },
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ["profile-shared-members", variables.profileId] });
-      alert(`Đã cập nhật quyền ${variables.accessLevel === "edit" ? "chỉnh sửa" : "chỉ xem"} cho ${variables.email}.`);
+      notify.success(`Đã cập nhật quyền ${variables.accessLevel === "edit" ? "chỉnh sửa" : "chỉ xem"} cho ${variables.email}.`);
     },
     onError: (error: unknown) => {
-      alert(extractApiDetail(error, "Không thể cập nhật quyền truy cập."));
+      notify.error(extractApiDetail(error, "Không thể cập nhật quyền truy cập."));
     },
   });
 
@@ -213,11 +214,11 @@ export default function DashboardHomePage() {
       setInviteModalOpen(false);
       setInvitingProfileId(null);
       if (result.invitedCount > 0) {
-        alert("Đã gửi lời mời chia sẻ thành công.");
+        notify.success("Đã gửi lời mời chia sẻ thành công.");
       }
     },
     onError: (error: unknown) => {
-      alert(extractApiDetail(error, "Không thể gửi lời mời chia sẻ."));
+      notify.error(extractApiDetail(error, "Không thể gửi lời mời chia sẻ."));
     },
   });
 
@@ -241,10 +242,10 @@ export default function DashboardHomePage() {
         delete next[email.toLowerCase()];
         return next;
       });
-      alert("Đã thu hồi quyền truy cập thành công.");
+      notify.success("Đã thu hồi quyền truy cập thành công.");
     },
     onError: (error: unknown) => {
-      alert(extractApiDetail(error, "Không thể thu hồi quyền truy cập."));
+      notify.error(extractApiDetail(error, "Không thể thu hồi quyền truy cập."));
     },
   });
 

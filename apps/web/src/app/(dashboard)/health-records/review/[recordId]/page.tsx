@@ -36,6 +36,7 @@ import {
 import { z } from "zod";
 
 import { apiClient } from "@/lib/api/apiClient";
+import { notify } from "@/lib/notify";
 import { ALLOWED_FILE_TYPES, ApiPaths, UPLOAD_MAX_SIZE_BYTES } from "@healthlens/shared/constants";
 import { HealthMetricCard } from "@/components/ui/HealthMetricCard";
 import { OcrFailureScreen } from "@/components/features/upload/OcrFailureScreen";
@@ -171,17 +172,6 @@ function validateMetricForSave(metric: MetricDto, index: number): string | null 
   return "Chỉ số " + metricLabel(metric, index) + ": " + message.charAt(0).toLowerCase() + message.slice(1);
 }
 
-function friendlyApiErrorMessage(message: string | undefined, metrics: MetricDto[]) {
-  if (!message) return null;
-  const metricMatch = message.match(/^Metric\[(\d+)\]:\s*(.+)$/);
-  if (metricMatch) {
-    const index = Number(metricMatch[1]);
-    const detail = metricMatch[2] ?? "dữ liệu không hợp lệ";
-    return "Chỉ số " + metricLabel(metrics[index], index) + ": " + detail;
-  }
-  return message;
-}
-
 function extractFilename(contentDisposition: unknown): string | null {
   if (typeof contentDisposition !== "string") return null;
   const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
@@ -310,9 +300,12 @@ export default function ReviewRecordPage() {
       setRecordShareEmail("");
       setRecordShareError(null);
       await queryClient.invalidateQueries({ queryKey: ["health-record-shared-members", recordId] });
+      notify.success("Đã gửi lời mời chia sẻ kết quả khám.");
     },
     onError: () => {
-      setRecordShareError("Gửi lời mời thất bại. Vui lòng kiểm tra email và thử lại.");
+      const message = "Gửi lời mời thất bại. Vui lòng kiểm tra email và thử lại.";
+      setRecordShareError(message);
+      notify.error(message);
     },
   });
 
@@ -338,9 +331,12 @@ export default function ReviewRecordPage() {
           (previous ?? []).filter((item) => item.id !== member.id && item.email.toLowerCase() !== member.email.toLowerCase())
       );
       await queryClient.invalidateQueries({ queryKey: ["health-record-shared-members", recordId] });
+      notify.success("Đã thu hồi quyền truy cập kết quả khám.");
     },
     onError: () => {
-      setRecordShareError("Thu hồi quyền thất bại. Vui lòng thử lại.");
+      const message = "Thu hồi quyền thất bại. Vui lòng thử lại.";
+      setRecordShareError(message);
+      notify.error(message);
     },
   });
 
@@ -373,9 +369,12 @@ export default function ReviewRecordPage() {
           )
       );
       await queryClient.invalidateQueries({ queryKey: ["health-record-shared-members", recordId] });
+      notify.success(`Đã cập nhật quyền ${variables.accessLevel === "edit" ? "chỉnh sửa" : "chỉ xem"}.`);
     },
     onError: () => {
-      setRecordShareError("Cập nhật quyền thất bại. Vui lòng thử lại.");
+      const message = "Cập nhật quyền thất bại. Vui lòng thử lại.";
+      setRecordShareError(message);
+      notify.error(message);
     },
   });
   const recommendationGroups = useMemo(
@@ -403,6 +402,7 @@ export default function ReviewRecordPage() {
   const initialized = useRef(false);
   const initialSnapshotRef = useRef<string>("");
   const skipUnloadWarningRef = useRef(false);
+  const notifiedOcrFailureRef = useRef<string | null>(null);
 
   const buildSnapshot = (payload: {
     metrics: MetricDto[];
@@ -441,7 +441,7 @@ export default function ReviewRecordPage() {
       initialized.current = true;
       setEditMode(
         (data.status === "review_required" || (data.status === "ocr_failed" && manualMode)) &&
-          (data.canEdit ?? data.isOwner ?? true)
+        (data.canEdit ?? data.isOwner ?? true)
       );
     }
   }, [data, manualMode]);
@@ -477,6 +477,19 @@ export default function ReviewRecordPage() {
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDirty]);
+
+  useEffect(() => {
+    if (data?.status !== "ocr_failed" || manualMode) {
+      return;
+    }
+
+    if (notifiedOcrFailureRef.current === recordId) {
+      return;
+    }
+
+    notifiedOcrFailureRef.current = recordId;
+    notify.error(data.ocrFailureReason?.trim() || "Không thể nhận diện dữ liệu từ tệp đã tải lên.");
+  }, [data?.ocrFailureReason, data?.status, manualMode, recordId]);
 
   const handleEditClick = (index: number) => {
     setEditingIndex(index);
@@ -605,15 +618,20 @@ export default function ReviewRecordPage() {
         diagnosis,
       });
       await refetch();
-      alert("Lưu kết quả khám thành công!");
+      notify.success("Lưu kết quả khám thành công!");
       return true;
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string; title?: string }; status?: number } };
       const serverMsg = axiosErr?.response?.data?.detail ?? axiosErr?.response?.data?.title;
+      const statusCode = axiosErr?.response?.status;
       if (serverMsg) {
-        setSaveError(friendlyApiErrorMessage(serverMsg, metrics));
+        const message = `Lỗi ${statusCode ?? ""}: ${serverMsg}`;
+        setSaveError(message);
+        notify.error(message);
       } else {
-        setSaveError("Đã có lỗi xảy ra khi lưu. Vui lòng thử lại.");
+        const message = "Đã có lỗi xảy ra khi lưu. Vui lòng thử lại.";
+        setSaveError(message);
+        notify.error(message);
       }
       return false;
     } finally {
@@ -651,12 +669,15 @@ export default function ReviewRecordPage() {
     const validationError = validateRetryFile(file);
     if (validationError) {
       setRetryUploadError(validationError);
+      notify.error(validationError);
       event.target.value = "";
       return;
     }
 
     if (!data?.profileId) {
-      setRetryUploadError("Không xác định được hồ sơ người dùng để tải tệp mới.");
+      const message = "Không xác định được hồ sơ người dùng để tải tệp mới.";
+      setRetryUploadError(message);
+      notify.error(message);
       event.target.value = "";
       return;
     }
@@ -676,11 +697,14 @@ export default function ReviewRecordPage() {
       });
 
       await apiClient.post(ApiPaths.HEALTH_RECORDS.CONFIRM_UPLOAD(uploadInfo.recordId));
+      notify.success("Đã tải tệp mới. Hệ thống đang xử lý lại OCR.");
       initialized.current = false;
       await refetch();
       router.replace(`/health-records/review/${uploadInfo.recordId}`);
     } catch {
-      setRetryUploadError("Tải tệp mới thất bại. Vui lòng thử lại.");
+      const message = "Tải tệp mới thất bại. Vui lòng thử lại.";
+      setRetryUploadError(message);
+      notify.error(message);
     } finally {
       setIsRetryUploading(false);
       event.target.value = "";
@@ -693,10 +717,13 @@ export default function ReviewRecordPage() {
       setDeleteRecordError(null);
       setShowDeleteRecordModal(false);
       await apiClient.delete(ApiPaths.HEALTH_RECORDS.DELETE(recordId));
+      notify.success("Đã xóa kết quả khám thành công.");
       const redirectPath = data?.profileId ? `/profiles/${data.profileId}/history` : "/health-records";
       router.push(redirectPath);
     } catch {
-      setDeleteRecordError("Xóa kết quả thất bại. Vui lòng thử lại.");
+      const message = "Xóa kết quả thất bại. Vui lòng thử lại.";
+      setDeleteRecordError(message);
+      notify.error(message);
     } finally {
       setIsDeletingRecord(false);
     }
@@ -724,7 +751,9 @@ export default function ReviewRecordPage() {
       link.remove();
       URL.revokeObjectURL(objectUrl);
     } catch {
-      setPdfDownloadError("Tải PDF thất bại. Vui lòng thử lại.");
+      const message = "Tải PDF thất bại. Vui lòng thử lại.";
+      setPdfDownloadError(message);
+      notify.error(message);
     } finally {
       setIsDownloadingPdf(false);
     }
@@ -733,7 +762,9 @@ export default function ReviewRecordPage() {
   const handleInviteRecordShare = () => {
     const trimmedEmail = recordShareEmail.trim().toLowerCase();
     if (!trimmedEmail) {
-      setRecordShareError("Vui lòng nhập địa chỉ email.");
+      const message = "Vui lòng nhập địa chỉ email.";
+      setRecordShareError(message);
+      notify.error(message);
       return;
     }
     setRecordShareError(null);
@@ -948,340 +979,339 @@ export default function ReviewRecordPage() {
         <div className="mx-auto w-full max-w-[1360px] px-6 pb-10 pt-6">
           <div className="space-y-6">
 
-          <section className="flex flex-col gap-4 rounded-[28px] bg-white p-6 shadow-sm md:flex-row md:items-end md:justify-between">
-            <div>
-              <h1 className="text-3xl font-extrabold tracking-tight text-[#121e1c]">
-                {displayRecordType} - {displayExamDate}
-              </h1>
-              <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#deebe8] px-3 py-1.5 text-xs font-bold text-[#274d48]">
-                <Building2 className="h-3.5 w-3.5" />
-                {displayHospitalName}
-              </div>
-              <p className="mt-2 text-xs text-[#6d7a77]">
-                Kết quả khám của: <span className="font-semibold text-[#3d4947]">{profileOwnerLabel}</span>
-              </p>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {canEdit ? (
-                <button
-                  type="button"
-                  title="Chỉnh sửa kết quả"
-                  aria-label="Chỉnh sửa kết quả"
-                  onClick={() => setEditMode(true)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#00685f] text-white transition hover:brightness-110"
-                >
-                  <Edit2 className="h-4 w-4" />
-                </button>
-              ) : null}
-              {canShareRecord ? (
-                <button
-                  type="button"
-                  title="Chia sẻ kết quả"
-                  aria-label="Chia sẻ kết quả"
-                  onClick={() => setShowRecordShareModal(true)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#e9f6f3] text-[#00685f] transition hover:brightness-95"
-                >
-                  <Share2 className="h-4 w-4" />
-                </button>
-              ) : null}
-              <button
-                type="button"
-                title="Tải PDF"
-                aria-label="Tải PDF"
-                onClick={() => void handleDownloadPdf()}
-                disabled={isDownloadingPdf}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#e9f6f3] text-[#3d4947] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isDownloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-              </button>
-              {canDeleteRecord ? (
-                <button
-                  type="button"
-                  title="Xóa kết quả"
-                  aria-label="Xóa kết quả"
-                  onClick={() => setShowDeleteRecordModal(true)}
-                  disabled={isDeletingRecord}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#ffdad6] text-[#ba1a1a] disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {isDeletingRecord ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                </button>
-              ) : null}
-            </div>
-          </section>
-          {deleteRecordError ? (
-            <div className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]">{deleteRecordError}</div>
-          ) : null}
-          {pdfDownloadError ? (
-            <div className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]">{pdfDownloadError}</div>
-          ) : null}
-
-          {/* ── Zone 1: Status Summary (Gradient Card) ── */}
-          <section>
-            <article className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#00685f] to-[#008378] p-7 text-white shadow-md">
-              <div className="relative z-10">
-                <span className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-sm font-bold">
-                  <CheckCircle className="h-4 w-4" />
-                  {overallSummary}
-                </span>
-                <h2 className="mt-4 text-2xl font-bold">Tổng quan kết quả xét nghiệm</h2>
-                <p className="mt-2 max-w-2xl text-white/90">
-                  {overallSummary === "Bình thường"
-                    ? "Các chỉ số chính đang trong ngưỡng an toàn. Tiếp tục duy trì lối sống lành mạnh."
-                    : "Một số chỉ số cần theo dõi thêm. Bạn nên xem kỹ phần giải thích và khuyến nghị bên dưới."}
+            <section className="flex flex-col gap-4 rounded-[28px] bg-white p-6 shadow-sm md:flex-row md:items-end md:justify-between">
+              <div>
+                <h1 className="text-3xl font-extrabold tracking-tight text-[#121e1c]">
+                  {displayRecordType} - {displayExamDate}
+                </h1>
+                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#deebe8] px-3 py-1.5 text-xs font-bold text-[#274d48]">
+                  <Building2 className="h-3.5 w-3.5" />
+                  {displayHospitalName}
+                </div>
+                <p className="mt-2 text-xs text-[#6d7a77]">
+                  Kết quả khám của: <span className="font-semibold text-[#3d4947]">{profileOwnerLabel}</span>
                 </p>
               </div>
-              <div className="pointer-events-none absolute -right-10 -bottom-12 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
-            </article>
-          </section>
-
-          {/* ── Zone 2: AI Recommendations (White Cards) ── */}
-          {recommendationsData && recommendationGroups.length > 0 && (
-            <section className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-[#00685f]" />
-                <h3 className="text-sm font-bold uppercase tracking-wider text-[#3d4947]">Khuyến nghị từ AI</h3>
+              <div className="flex items-center gap-1.5">
+                {canEdit ? (
+                  <button
+                    type="button"
+                    title="Chỉnh sửa kết quả"
+                    aria-label="Chỉnh sửa kết quả"
+                    onClick={() => setEditMode(true)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#00685f] text-white transition hover:brightness-110"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+                ) : null}
+                {canShareRecord ? (
+                  <button
+                    type="button"
+                    title="Chia sẻ kết quả"
+                    aria-label="Chia sẻ kết quả"
+                    onClick={() => setShowRecordShareModal(true)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#e9f6f3] text-[#00685f] transition hover:brightness-95"
+                  >
+                    <Share2 className="h-4 w-4" />
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  title="Tải PDF"
+                  aria-label="Tải PDF"
+                  onClick={() => void handleDownloadPdf()}
+                  disabled={isDownloadingPdf}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#e9f6f3] text-[#3d4947] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isDownloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+                </button>
+                {canDeleteRecord ? (
+                  <button
+                    type="button"
+                    title="Xóa kết quả"
+                    aria-label="Xóa kết quả"
+                    onClick={() => setShowDeleteRecordModal(true)}
+                    disabled={isDeletingRecord}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#ffdad6] text-[#ba1a1a] disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {isDeletingRecord ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  </button>
+                ) : null}
               </div>
+            </section>
+            {deleteRecordError ? (
+              <div className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]">{deleteRecordError}</div>
+            ) : null}
+            {pdfDownloadError ? (
+              <div className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]">{pdfDownloadError}</div>
+            ) : null}
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {recommendationGroups.map((group) => {
-                  const GroupIcon = recommendationIcon(group.category);
-                  return (
-                    <article key={group.category} className="rounded-2xl border border-[#bcc9c6]/20 bg-white p-5 shadow-sm">
-                      <div className="mb-3 flex items-center gap-2.5">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#e9f6f3]">
-                          <GroupIcon className="h-4 w-4 text-[#00685f]" />
+            {/* ── Zone 1: Status Summary (Gradient Card) ── */}
+            <section>
+              <article className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#00685f] to-[#008378] p-7 text-white shadow-md">
+                <div className="relative z-10">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-sm font-bold">
+                    <CheckCircle className="h-4 w-4" />
+                    {overallSummary}
+                  </span>
+                  <h2 className="mt-4 text-2xl font-bold">Tổng quan kết quả xét nghiệm</h2>
+                  <p className="mt-2 max-w-2xl text-white/90">
+                    {overallSummary === "Bình thường"
+                      ? "Các chỉ số chính đang trong ngưỡng an toàn. Tiếp tục duy trì lối sống lành mạnh."
+                      : "Một số chỉ số cần theo dõi thêm. Bạn nên xem kỹ phần giải thích và khuyến nghị bên dưới."}
+                  </p>
+                </div>
+                <div className="pointer-events-none absolute -right-10 -bottom-12 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
+              </article>
+            </section>
+
+            {/* ── Zone 2: AI Recommendations (White Cards) ── */}
+            {recommendationsData && recommendationGroups.length > 0 && (
+              <section className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-[#00685f]" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-[#3d4947]">Khuyến nghị từ AI</h3>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {recommendationGroups.map((group) => {
+                    const GroupIcon = recommendationIcon(group.category);
+                    return (
+                      <article key={group.category} className="rounded-2xl border border-[#bcc9c6]/20 bg-white p-5 shadow-sm">
+                        <div className="mb-3 flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#e9f6f3]">
+                            <GroupIcon className="h-4 w-4 text-[#00685f]" />
+                          </div>
+                          <h4 className="text-sm font-bold text-[#121e1c]">{group.title}</h4>
                         </div>
-                        <h4 className="text-sm font-bold text-[#121e1c]">{group.title}</h4>
+                        <ul className="space-y-2">
+                          {group.items.map((item, idx) => (
+                            <li key={idx} className="flex items-start gap-2 text-sm leading-relaxed text-[#3d4947]">
+                              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#00685f]/40" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </article>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-start gap-3 rounded-xl border border-[#e8c86e]/40 bg-[#fffbeb] px-4 py-3.5">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#fef3c7]">
+                    <ShieldAlert className="h-4 w-4 text-[#92700e]" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-[#92700e]">Lưu ý quan trọng</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-[#78650d]">
+                      {recommendationsData.disclaimer ?? "Thông tin trên được tạo bởi AI, chỉ mang tính tham khảo và không thay thế tư vấn của bác sĩ chuyên khoa."}
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-[#121e1c]">Chỉ số chi tiết</h3>
+                <span className="rounded-full bg-[#deebe8] px-3 py-1 text-xs font-bold uppercase text-[#00685f]">
+                  Tổng {metrics.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {metrics.map((metric, idx) => {
+                  const metricValue = metric.value?.trim() || "--";
+                  const metricUnit = metric.unit?.trim() || "";
+                  const metricRangeText = compactRangeText(metric);
+                  const metricPercent = compactMetricPercent(metric);
+                  const isNormal = (metric.status ?? "no_data") === "normal";
+                  return (
+                    <article
+                      key={`${metric.name}-${idx}`}
+                      role="button"
+                      tabIndex={0}
+                      className="group cursor-pointer rounded-3xl bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:ring-2 hover:ring-[#00685f]/15"
+                      onClick={() => setSelectedMetricIndex(idx)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedMetricIndex(idx);
+                        }
+                      }}
+                    >
+                      <div className="mb-5 flex items-start justify-between gap-2">
+                        <span className="line-clamp-2 text-xs font-extrabold tracking-wide text-[#3d4947] uppercase">
+                          {metric.displayNameVi || metric.name}
+                        </span>
+                        <CheckCircle className={`h-4 w-4 shrink-0 ${isNormal ? "text-[#00685f]" : "text-[#6d7a77]"}`} />
                       </div>
-                      <ul className="space-y-2">
-                        {group.items.map((item, idx) => (
-                          <li key={idx} className="flex items-start gap-2 text-sm leading-relaxed text-[#3d4947]">
-                            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#00685f]/40" />
-                            {item}
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="flex items-end gap-1.5">
+                        <span className="text-[44px] leading-none font-black tracking-tight text-[#121e1c]">{metricValue}</span>
+                        <span className="pb-1 text-2xs font-semibold text-[#3d4947]">{metricUnit}</span>
+                      </div>
+                      <div className="mt-4 h-2 w-full rounded-full bg-[#deebe8]">
+                        <div
+                          className="h-full rounded-full bg-[#008378] transition-all"
+                          style={{ width: `${metricPercent}%` }}
+                        />
+                      </div>
+                      <div className="mt-3 flex items-center justify-between text-xs font-extrabold uppercase tracking-wide">
+                        <span className="text-[#4e6360]">Ngưỡng: {metricRangeText}</span>
+                        <span className={isNormal ? "text-[#00685f]" : "text-[#773215]"}>{recordStatusLabel(metric.status)}</span>
+                      </div>
                     </article>
                   );
                 })}
               </div>
-
-              <div className="flex items-start gap-3 rounded-xl border border-[#e8c86e]/40 bg-[#fffbeb] px-4 py-3.5">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#fef3c7]">
-                  <ShieldAlert className="h-4 w-4 text-[#92700e]" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-[#92700e]">Lưu ý quan trọng</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-[#78650d]">
-                    {recommendationsData.disclaimer ?? "Thông tin trên được tạo bởi AI, chỉ mang tính tham khảo và không thay thế tư vấn của bác sĩ chuyên khoa."}
-                  </p>
-                </div>
-              </div>
             </section>
-          )}
 
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-[#121e1c]">Chỉ số chi tiết</h3>
-              <span className="rounded-full bg-[#deebe8] px-3 py-1 text-xs font-bold uppercase text-[#00685f]">
-                Tổng {metrics.length}
-              </span>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {metrics.map((metric, idx) => {
-                const metricValue = metric.value?.trim() || "--";
-                const metricUnit = metric.unit?.trim() || "";
-                const metricRangeText = compactRangeText(metric);
-                const metricPercent = compactMetricPercent(metric);
-                const isNormal = (metric.status ?? "no_data") === "normal";
-                return (
-                  <article
-                    key={`${metric.name}-${idx}`}
-                    role="button"
-                    tabIndex={0}
-                    className="group cursor-pointer rounded-3xl bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:ring-2 hover:ring-[#00685f]/15"
-                    onClick={() => setSelectedMetricIndex(idx)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelectedMetricIndex(idx);
-                      }
-                    }}
-                  >
-                    <div className="mb-5 flex items-start justify-between gap-2">
-                      <span className="line-clamp-2 text-xs font-extrabold tracking-wide text-[#3d4947] uppercase">
-                        {metric.displayNameVi || metric.name}
-                      </span>
-                      <CheckCircle className={`h-4 w-4 shrink-0 ${isNormal ? "text-[#00685f]" : "text-[#6d7a77]"}`} />
-                    </div>
-                    <div className="flex items-end gap-1.5">
-                      <span className="text-[44px] leading-none font-black tracking-tight text-[#121e1c]">{metricValue}</span>
-                      <span className="pb-1 text-2xs font-semibold text-[#3d4947]">{metricUnit}</span>
-                    </div>
-                    <div className="mt-4 h-2 w-full rounded-full bg-[#deebe8]">
-                      <div
-                        className="h-full rounded-full bg-[#008378] transition-all"
-                        style={{ width: `${metricPercent}%` }}
-                      />
-                    </div>
-                    <div className="mt-3 flex items-center justify-between text-xs font-extrabold uppercase tracking-wide">
-                      <span className="text-[#4e6360]">Ngưỡng: {metricRangeText}</span>
-                      <span className={isNormal ? "text-[#00685f]" : "text-[#773215]"}>{recordStatusLabel(metric.status)}</span>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* Metric Detail Popup */}
-          {selectedMetricIndex !== null && metrics[selectedMetricIndex] && (() => {
-            const m = metrics[selectedMetricIndex];
-            const mValue = m.value?.trim() || "--";
-            const mUnit = m.unit?.trim() || "";
-            const mPercent = compactMetricPercent(m);
-            const mIsNormal = (m.status ?? "no_data") === "normal";
-            const mDisplayRef = m.referenceRange
-              ? `${m.referenceRange.min} - ${m.referenceRange.max} ${m.referenceRange.unit ?? m.unit}`
-              : "Không có dữ liệu tham chiếu";
-            const mRangeCtx = m.rangeContext;
-            const mCtxNote = mRangeCtx && (mRangeCtx.gender || mRangeCtx.ageRange)
-              ? `Ngưỡng áp dụng cho: ${[mRangeCtx.gender === "female" ? "Nữ" : mRangeCtx.gender === "male" ? "Nam" : null, mRangeCtx.ageRange ? `${mRangeCtx.ageRange} tuổi` : null].filter(Boolean).join(", ")}`
-              : null;
-            return (
-              <div
-                className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-                onClick={() => setSelectedMetricIndex(null)}
-              >
+            {/* Metric Detail Popup */}
+            {selectedMetricIndex !== null && metrics[selectedMetricIndex] && (() => {
+              const m = metrics[selectedMetricIndex];
+              const mValue = m.value?.trim() || "--";
+              const mUnit = m.unit?.trim() || "";
+              const mPercent = compactMetricPercent(m);
+              const mIsNormal = (m.status ?? "no_data") === "normal";
+              const mDisplayRef = m.referenceRange
+                ? `${m.referenceRange.min} - ${m.referenceRange.max} ${m.referenceRange.unit ?? m.unit}`
+                : "Không có dữ liệu tham chiếu";
+              const mRangeCtx = m.rangeContext;
+              const mCtxNote = mRangeCtx && (mRangeCtx.gender || mRangeCtx.ageRange)
+                ? `Ngưỡng áp dụng cho: ${[mRangeCtx.gender === "female" ? "Nữ" : mRangeCtx.gender === "male" ? "Nam" : null, mRangeCtx.ageRange ? `${mRangeCtx.ageRange} tuổi` : null].filter(Boolean).join(", ")}`
+                : null;
+              return (
                 <div
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby="metric-detail-title"
-                  className="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200"
-                  onClick={(e) => e.stopPropagation()}
+                  className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+                  onClick={() => setSelectedMetricIndex(null)}
                 >
-                  {/* Header */}
-                  <div className="relative overflow-hidden bg-gradient-to-br from-[#00685f] to-[#008378] px-6 pt-6 pb-5 text-white">
-                    <div className="relative z-10">
-                      <div className="flex items-start justify-between gap-3">
-                        <h3 id="metric-detail-title" className="text-lg font-bold leading-snug">
-                          {m.displayNameVi || m.name}
-                        </h3>
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="metric-detail-title"
+                    className="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Header */}
+                    <div className="relative overflow-hidden bg-gradient-to-br from-[#00685f] to-[#008378] px-6 pt-6 pb-5 text-white">
+                      <div className="relative z-10">
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 id="metric-detail-title" className="text-lg font-bold leading-snug">
+                            {m.displayNameVi || m.name}
+                          </h3>
+                          <button
+                            type="button"
+                            aria-label="Đóng chi tiết chỉ số"
+                            onClick={() => setSelectedMetricIndex(null)}
+                            className="-mr-1 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 transition hover:bg-white/30"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <div className="mt-4 flex items-end gap-2">
+                          <span className="text-4xl font-black tracking-tight">{mValue}</span>
+                          <span className="pb-0.5 text-sm font-semibold text-white/80">{mUnit}</span>
+                        </div>
+                        <div className="mt-3 h-1.5 w-full rounded-full bg-white/20">
+                          <div className="h-full rounded-full bg-white/80 transition-all" style={{ width: `${mPercent}%` }} />
+                        </div>
+                        <div className="mt-2 flex items-center justify-between text-xs font-bold">
+                          <span className="text-white/70">Ngưỡng: {compactRangeText(m)}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${mIsNormal ? "bg-white/20 text-white" : "bg-[#ffdad6] text-[#ba1a1a]"
+                            }`}>
+                            {recordStatusLabel(m.status)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="pointer-events-none absolute -right-8 -bottom-10 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
+                    </div>
+
+                    {/* Detail Body */}
+                    <div className="px-6 py-5 space-y-3">
+                      <div className="rounded-xl bg-[#f7fbfa] p-4 text-sm leading-relaxed text-[#35514c] space-y-2.5">
+                        <p>
+                          <span className="font-semibold">Ngưỡng tham chiếu: </span>
+                          {mDisplayRef}
+                        </p>
+                        {m.referenceRangeSource && m.referenceRangeSource !== "none" ? (
+                          <p>
+                            <span className="font-semibold">Nguồn ngưỡng: </span>
+                            {m.referenceRangeSource === "document" ? "Theo phiếu xét nghiệm" : "Theo hệ thống tham chiếu"}
+                          </p>
+                        ) : null}
+                        {m.referenceRangeSource === "system" ? (
+                          <p>
+                            <span className="font-semibold">Ngữ cảnh ngưỡng: </span>
+                            {mCtxNote ?? "Ngưỡng tham chiếu chung"}
+                          </p>
+                        ) : null}
+                        {m.critical ? (
+                          <p className="rounded-lg bg-[#fff2f2] px-3 py-2 text-[#ba1a1a]">
+                            Chỉ số có dấu hiệu vượt ngưỡng nguy cấp, nên liên hệ bác sĩ để được tư vấn sớm.
+                          </p>
+                        ) : null}
+                        {(() => {
+                          const staticExp = m.explanation?.trim() || "";
+                          const explanationText = staticExp
+                            ? toThreeLineExplanation(staticExp)
+                            : !isExplanationLoading
+                              ? toThreeLineExplanation(popupExplanationData?.explanation)
+                              : "";
+                          const showSkeleton = !staticExp && isExplanationLoading;
+                          return (
+                            <>
+                              {showSkeleton ? (
+                                <div className="space-y-2 pt-1">
+                                  <div className="h-3 w-full animate-pulse rounded bg-[#d4e7e3]" />
+                                  <div className="h-3 w-4/5 animate-pulse rounded bg-[#d4e7e3]" />
+                                  <div className="h-3 w-3/5 animate-pulse rounded bg-[#d4e7e3]" />
+                                </div>
+                              ) : null}
+                              {explanationText ? (
+                                <p className="whitespace-pre-line">
+                                  <span className="font-semibold">Giải thích: </span>
+                                  {explanationText}
+                                </p>
+                              ) : null}
+                            </>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Navigation arrows */}
+                      <div className="flex items-center justify-between pt-1">
                         <button
                           type="button"
-                          aria-label="Đóng chi tiết chỉ số"
-                          onClick={() => setSelectedMetricIndex(null)}
-                          className="-mr-1 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 transition hover:bg-white/30"
+                          disabled={selectedMetricIndex <= 0}
+                          onClick={() => setSelectedMetricIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev))}
+                          className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold text-[#00685f] transition hover:bg-[#e9f6f3] disabled:opacity-40 disabled:cursor-not-allowed"
                         >
-                          <X className="h-4 w-4" />
+                          <ChevronUp className="h-3.5 w-3.5 -rotate-90" />
+                          Trước
+                        </button>
+                        <span className="text-xs text-[#6d7a77]">
+                          {selectedMetricIndex + 1} / {metrics.length}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={selectedMetricIndex >= metrics.length - 1}
+                          onClick={() => setSelectedMetricIndex((prev) => (prev !== null && prev < metrics.length - 1 ? prev + 1 : prev))}
+                          className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold text-[#00685f] transition hover:bg-[#e9f6f3] disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Sau
+                          <ChevronDown className="h-3.5 w-3.5 -rotate-90" />
                         </button>
                       </div>
-                      <div className="mt-4 flex items-end gap-2">
-                        <span className="text-4xl font-black tracking-tight">{mValue}</span>
-                        <span className="pb-0.5 text-sm font-semibold text-white/80">{mUnit}</span>
-                      </div>
-                      <div className="mt-3 h-1.5 w-full rounded-full bg-white/20">
-                        <div className="h-full rounded-full bg-white/80 transition-all" style={{ width: `${mPercent}%` }} />
-                      </div>
-                      <div className="mt-2 flex items-center justify-between text-xs font-bold">
-                        <span className="text-white/70">Ngưỡng: {compactRangeText(m)}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
-                          mIsNormal ? "bg-white/20 text-white" : "bg-[#ffdad6] text-[#ba1a1a]"
-                        }`}>
-                          {recordStatusLabel(m.status)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="pointer-events-none absolute -right-8 -bottom-10 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
-                  </div>
-
-                  {/* Detail Body */}
-                  <div className="px-6 py-5 space-y-3">
-                    <div className="rounded-xl bg-[#f7fbfa] p-4 text-sm leading-relaxed text-[#35514c] space-y-2.5">
-                      <p>
-                        <span className="font-semibold">Ngưỡng tham chiếu: </span>
-                        {mDisplayRef}
-                      </p>
-                      {m.referenceRangeSource && m.referenceRangeSource !== "none" ? (
-                        <p>
-                          <span className="font-semibold">Nguồn ngưỡng: </span>
-                          {m.referenceRangeSource === "document" ? "Theo phiếu xét nghiệm" : "Theo hệ thống tham chiếu"}
-                        </p>
-                      ) : null}
-                      {m.referenceRangeSource === "system" ? (
-                        <p>
-                          <span className="font-semibold">Ngữ cảnh ngưỡng: </span>
-                          {mCtxNote ?? "Ngưỡng tham chiếu chung"}
-                        </p>
-                      ) : null}
-                      {m.critical ? (
-                        <p className="rounded-lg bg-[#fff2f2] px-3 py-2 text-[#ba1a1a]">
-                          Chỉ số có dấu hiệu vượt ngưỡng nguy cấp, nên liên hệ bác sĩ để được tư vấn sớm.
-                      </p>
-                      ) : null}
-                      {(() => {
-                        const staticExp = m.explanation?.trim() || "";
-                        const explanationText = staticExp
-                          ? toThreeLineExplanation(staticExp)
-                          : !isExplanationLoading
-                            ? toThreeLineExplanation(popupExplanationData?.explanation)
-                            : "";
-                        const showSkeleton = !staticExp && isExplanationLoading;
-                        return (
-                          <>
-                            {showSkeleton ? (
-                              <div className="space-y-2 pt-1">
-                                <div className="h-3 w-full animate-pulse rounded bg-[#d4e7e3]" />
-                                <div className="h-3 w-4/5 animate-pulse rounded bg-[#d4e7e3]" />
-                                <div className="h-3 w-3/5 animate-pulse rounded bg-[#d4e7e3]" />
-                              </div>
-                            ) : null}
-                            {explanationText ? (
-                              <p className="whitespace-pre-line">
-                                <span className="font-semibold">Giải thích: </span>
-                                {explanationText}
-                              </p>
-                            ) : null}
-                          </>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Navigation arrows */}
-                    <div className="flex items-center justify-between pt-1">
-                      <button
-                        type="button"
-                        disabled={selectedMetricIndex <= 0}
-                        onClick={() => setSelectedMetricIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev))}
-                        className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold text-[#00685f] transition hover:bg-[#e9f6f3] disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        <ChevronUp className="h-3.5 w-3.5 -rotate-90" />
-                        Trước
-                      </button>
-                      <span className="text-xs text-[#6d7a77]">
-                        {selectedMetricIndex + 1} / {metrics.length}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={selectedMetricIndex >= metrics.length - 1}
-                        onClick={() => setSelectedMetricIndex((prev) => (prev !== null && prev < metrics.length - 1 ? prev + 1 : prev))}
-                        className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold text-[#00685f] transition hover:bg-[#e9f6f3] disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        Sau
-                        <ChevronDown className="h-3.5 w-3.5 -rotate-90" />
-                      </button>
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })()}
+              );
+            })()}
 
-          {!canEdit ? (
-            <p className="rounded-xl border border-[#d7e5e1] bg-white px-4 py-3 text-sm text-[#4e6360]">
-              Bạn đang xem hồ sơ ở chế độ chia sẻ. Chỉnh sửa và xóa dữ liệu đã bị vô hiệu hóa.
-            </p>
-          ) : null}
+            {!canEdit ? (
+              <p className="rounded-xl border border-[#d7e5e1] bg-white px-4 py-3 text-sm text-[#4e6360]">
+                Bạn đang xem hồ sơ ở chế độ chia sẻ. Chỉnh sửa và xóa dữ liệu đã bị vô hiệu hóa.
+              </p>
+            ) : null}
           </div>
         </div>
         {deleteRecordModal}
@@ -1313,7 +1343,7 @@ export default function ReviewRecordPage() {
                 <FileText className="h-4 w-4" />
                 Hồ sơ gốc
               </div>
-              <button 
+              <button
                 onClick={() => setShowFullDoc(true)}
                 className="p-1.5 hover:bg-[#c5dfd9] rounded-lg transition"
                 title="Xem toàn màn hình"
@@ -1323,16 +1353,16 @@ export default function ReviewRecordPage() {
             </div>
             <div className="flex-1 bg-gray-100 overflow-auto p-4 flex items-start justify-center">
               {isPdf ? (
-                <iframe 
-                  src={fileUrl} 
+                <iframe
+                  src={fileUrl}
                   className="w-full h-full rounded-lg"
                   title="PDF Viewer"
                 />
               ) : (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img 
-                  src={fileUrl} 
-                  alt="Original Document" 
+                <img
+                  src={fileUrl}
+                  alt="Original Document"
                   className="max-w-none w-full h-auto shadow-sm rounded-lg cursor-zoom-in"
                   onClick={() => setShowFullDoc(true)}
                 />
@@ -1519,9 +1549,8 @@ export default function ReviewRecordPage() {
                       return (
                         <tr
                           key={idx}
-                          className={`hover:bg-gray-50 transition ${
-                            metric.confidenceLevel !== "high" ? "bg-[#fff8e8]" : ""
-                          }`}
+                          className={`hover:bg-gray-50 transition ${metric.confidenceLevel !== "high" ? "bg-[#fff8e8]" : ""
+                            }`}
                         >
                           <td className="px-6 py-4">
                             {isEditing ? (
@@ -1566,13 +1595,12 @@ export default function ReviewRecordPage() {
                             <td className="px-6 py-4">
                               {!isEditing && (
                                 <span
-                                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                                    metric.confidenceLevel === "high"
+                                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${metric.confidenceLevel === "high"
                                       ? "bg-[#ccfbf1] text-[#0f766e]"
                                       : metric.confidenceLevel === "medium"
-                                      ? "bg-[#ffddb3] text-[#825500]"
-                                      : "bg-[#ffdad6] text-[#ba1a1a]"
-                                  }`}
+                                        ? "bg-[#ffddb3] text-[#825500]"
+                                        : "bg-[#ffdad6] text-[#ba1a1a]"
+                                    }`}
                                 >
                                   {metric.confidenceLevel === "high" && <CheckCircle className="h-3 w-3" />}
                                   {metric.confidenceLevel === "medium" && <AlertTriangle className="h-3 w-3" />}
@@ -1580,8 +1608,8 @@ export default function ReviewRecordPage() {
                                   {metric.confidenceLevel === "high"
                                     ? "Cao"
                                     : metric.confidenceLevel === "medium"
-                                    ? "Trung bình"
-                                    : "Vui lòng kiểm tra"}
+                                      ? "Trung bình"
+                                      : "Vui lòng kiểm tra"}
                                 </span>
                               )}
                             </td>
@@ -1618,14 +1646,14 @@ export default function ReviewRecordPage() {
                         </tr>
                       );
                     })}
-                  {metrics.length === 0 && (
-                    <tr>
-                      <td colSpan={showConfidenceColumn ? 6 : 5} className="px-6 py-8 text-center text-[#4e6360]">
-                        Không tìm thấy chỉ số nào từ kết quả OCR.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
+                    {metrics.length === 0 && (
+                      <tr>
+                        <td colSpan={showConfidenceColumn ? 6 : 5} className="px-6 py-8 text-center text-[#4e6360]">
+                          Không tìm thấy chỉ số nào từ kết quả OCR.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
                 </table>
               </div>
             </div>
@@ -1956,39 +1984,39 @@ function RecordShareModal({
                 {members.map((member) => (
                   (() => {
                     return (
-                  <li
-                    key={member.id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-[#e2efeb] bg-white px-3 py-2.5"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-[#23312f]">{member.email}</p>
-                      <p className="text-xs text-[#6d7a77]">{recordShareStatusLabel(member.status)}</p>
-                    </div>
-                    <div className="ml-auto flex shrink-0 items-center gap-2">
-                      <div className="relative">
-                        <select
-                          disabled={isUpdatingAccess || isRevoking || member.status === "revoked" || member.status === "expired"}
-                          value={member.accessLevel === "edit" ? "edit" : "view"}
-                          onChange={(event) => {
-                            const nextAction = event.target.value as "view" | "edit" | "revoke";
-                            if (nextAction === "revoke") {
-                              onAskRevoke(member);
-                              return;
-                            }
-                            onUpdateMemberAccess(member, nextAction);
-                          }}
-                          className="h-8 appearance-none rounded-full border border-[#b7e8e0] bg-[#d7e5e2] px-3 pr-7 text-left text-xs font-bold text-[#00685f] outline-none disabled:cursor-not-allowed disabled:opacity-70"
-                        >
-                          <option value="view">Chỉ xem</option>
-                          <option value="edit">Có thể chỉnh sửa</option>
-                          {member.status === "accepted" ? <option value="revoke">Thu hồi quyền truy cập</option> : null}
-                        </select>
-                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-[#00685f]">
-                          ▾
-                        </span>
-                      </div>
-                    </div>
-                  </li>
+                      <li
+                        key={member.id}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-[#e2efeb] bg-white px-3 py-2.5"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-[#23312f]">{member.email}</p>
+                          <p className="text-xs text-[#6d7a77]">{recordShareStatusLabel(member.status)}</p>
+                        </div>
+                        <div className="ml-auto flex shrink-0 items-center gap-2">
+                          <div className="relative">
+                            <select
+                              disabled={isUpdatingAccess || isRevoking || member.status === "revoked" || member.status === "expired"}
+                              value={member.accessLevel === "edit" ? "edit" : "view"}
+                              onChange={(event) => {
+                                const nextAction = event.target.value as "view" | "edit" | "revoke";
+                                if (nextAction === "revoke") {
+                                  onAskRevoke(member);
+                                  return;
+                                }
+                                onUpdateMemberAccess(member, nextAction);
+                              }}
+                              className="h-8 appearance-none rounded-full border border-[#b7e8e0] bg-[#d7e5e2] px-3 pr-7 text-left text-xs font-bold text-[#00685f] outline-none disabled:cursor-not-allowed disabled:opacity-70"
+                            >
+                              <option value="view">Chỉ xem</option>
+                              <option value="edit">Có thể chỉnh sửa</option>
+                              {member.status === "accepted" ? <option value="revoke">Thu hồi quyền truy cập</option> : null}
+                            </select>
+                            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-[#00685f]">
+                              ▾
+                            </span>
+                          </div>
+                        </div>
+                      </li>
                     );
                   })()
                 ))}
@@ -2055,11 +2083,10 @@ function SourceBadge({ source }: { source: string }) {
   const isManual = source === "manual";
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-        isManual
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${isManual
           ? "bg-[#e8f4ff] text-[#0055aa]"
           : "bg-[#f0fdf4] text-[#166534]"
-      }`}
+        }`}
     >
       {isManual ? <PenLine className="h-3 w-3" /> : <ScanLine className="h-3 w-3" />}
       {isManual ? "Nhập tay" : "OCR"}

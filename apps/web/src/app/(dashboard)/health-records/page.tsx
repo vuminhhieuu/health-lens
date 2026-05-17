@@ -14,6 +14,7 @@ import {
 } from "@/components/features/profiles/ProfileCard";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { apiClient } from "@/lib/api/apiClient";
+import { notify } from "@/lib/notify";
 import { InviteMemberModal } from "@/components/features/profiles/InviteMemberModal";
 
 type Profile = {
@@ -170,10 +171,10 @@ export default function HealthRecordsPage() {
     },
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ["profile-shared-members", variables.profileId] });
-      alert(`Đã cập nhật quyền ${variables.accessLevel === "edit" ? "chỉnh sửa" : "chỉ xem"} cho ${variables.email}.`);
+      notify.success(`Đã cập nhật quyền ${variables.accessLevel === "edit" ? "chỉnh sửa" : "chỉ xem"} cho ${variables.email}.`);
     },
     onError: (error: unknown) => {
-      alert(extractApiDetail(error, "Không thể cập nhật quyền truy cập."));
+      notify.error(extractApiDetail(error, "Không thể cập nhật quyền truy cập."));
     },
   });
 
@@ -196,11 +197,11 @@ export default function HealthRecordsPage() {
       setInviteModalOpen(false);
       setInvitingProfileId(null);
       if (result.invitedCount > 0) {
-        alert("Đã gửi lời mời chia sẻ thành công.");
+        notify.success("Đã gửi lời mời chia sẻ thành công.");
       }
     },
     onError: (error: unknown) => {
-      alert(extractApiDetail(error, "Không thể gửi lời mời chia sẻ."));
+      notify.error(extractApiDetail(error, "Không thể gửi lời mời chia sẻ."));
     },
   });
 
@@ -219,10 +220,10 @@ export default function HealthRecordsPage() {
       );
       void queryClient.invalidateQueries({ queryKey: ["profile-shared-members", invitingProfileId] });
       void queryClient.invalidateQueries({ queryKey: ["shared-profiles"] });
-      alert("Đã thu hồi quyền truy cập thành công.");
+      notify.success("Đã thu hồi quyền truy cập thành công.");
     },
     onError: (error: unknown) => {
-      alert(extractApiDetail(error, "Không thể thu hồi quyền truy cập."));
+      notify.error(extractApiDetail(error, "Không thể thu hồi quyền truy cập."));
     },
   });
 

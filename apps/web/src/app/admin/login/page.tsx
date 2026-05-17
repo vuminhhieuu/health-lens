@@ -6,6 +6,7 @@ import { QRCodeCanvas } from "qrcode.react";
 
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+import { notify } from "@/lib/notify";
 
 type LoginStep = "credentials" | "totp" | "totp-method" | "totp-setup" | "totp-success";
 
@@ -561,10 +562,14 @@ export default function AdminLoginPage() {
                   <button
                     type="button"
                     className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition"
-                    onClick={() => {
+                    onClick={async () => {
                       if (totpSetup?.backupCodes) {
-                        navigator.clipboard.writeText(totpSetup.backupCodes.join('\n'));
-                        alert('Đã sao chép mã dự phòng');
+                        try {
+                          await navigator.clipboard.writeText(totpSetup.backupCodes.join('\n'));
+                          notify.success("Đã sao chép mã dự phòng.");
+                        } catch {
+                          notify.error("Không thể sao chép mã dự phòng. Vui lòng thử lại.");
+                        }
                       }
                     }}
                     title="Sao chép tất cả"

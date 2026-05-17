@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { AxiosError } from 'axios';
 import { apiClient } from '../lib/api/apiClient';
 import { API_ROUTES } from '@/lib/api/routes';
+import { notify } from '@/lib/notify';
 
 interface DeleteAccountResponse {
     data: {
@@ -61,11 +62,14 @@ export const useAccountDeletion = () => {
             const data: DeleteAccountResponse = response.data;
 
             setRequestSuccess(true);
+            notify.success('Đã gửi yêu cầu xóa tài khoản.');
             return data.data;
 
         } catch (err) {
             const error = err as ApiError;
-            setError(getErrorMessage(error));
+            const message = getErrorMessage(error);
+            setError(message);
+            notify.error(message);
             throw err;
 
         } finally {
@@ -88,6 +92,7 @@ export const useAccountDeletion = () => {
 
             const data: CancelDeletionResponse = response.data;
             setCancelSuccess(true);
+            notify.success('Đã hủy yêu cầu xóa tài khoản.');
             return data.data;
         } catch (err) {
             const error = err as ApiError;
@@ -102,6 +107,7 @@ export const useAccountDeletion = () => {
                         : getErrorMessage(error);
 
             setError(message);
+            notify.error(message);
             throw err;
         } finally {
             setIsCancelling(false);

@@ -27,6 +27,7 @@ import { ApiPaths } from "@healthlens/shared/constants";
 
 import { UploadButton } from "@/components/features/upload/UploadButton";
 import { apiClient } from "@/lib/api/apiClient";
+import { notify } from "@/lib/notify";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { DeleteRecordModal } from "@/components/features/health-records/DeleteRecordModal";
 
@@ -158,9 +159,12 @@ export default function ProfileHistoryPage() {
       );
       setDeleteError(null);
       setDeleteTarget(null);
+      notify.success("Đã xóa kết quả khám thành công.");
     },
     onError: () => {
-      setDeleteError("Xóa kết quả thất bại. Vui lòng thử lại.");
+      const message = "Xóa kết quả thất bại. Vui lòng thử lại.";
+      setDeleteError(message);
+      notify.error(message);
     },
   });
   useEffect(() => {

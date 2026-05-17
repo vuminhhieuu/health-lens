@@ -9,6 +9,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { apiBaseUrl } from "@/lib/api";
+import { notify } from "@/lib/notify";
 
 const POST_REGISTER_RETURN_URL_KEY = "post-register-return-url";
 
@@ -66,13 +67,16 @@ export default function RegisterPage() {
         password: data.password,
       });
 
-      setSuccessMessage(
+      const message =
         returnUrl
           ? "Tài khoản đã tạo. Vui lòng xác thực email, sau đó đăng nhập để tiếp tục lời mời đang chờ."
-          : "Tài khoản đã tạo. Vui lòng kiểm tra email của bạn để xác thực."
-      );
+          : "Tài khoản đã tạo. Vui lòng kiểm tra email của bạn để xác thực.";
+      setSuccessMessage(message);
+      notify.success(message);
     } catch {
-      setSubmitError("Đăng ký thất bại. Vui lòng thử lại.");
+      const message = "Đăng ký thất bại. Vui lòng thử lại.";
+      setSubmitError(message);
+      notify.error(message);
     }
   };
 

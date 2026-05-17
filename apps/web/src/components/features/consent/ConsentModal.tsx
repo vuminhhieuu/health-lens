@@ -6,14 +6,9 @@ import { ApiPaths, CONSENT_VERSION } from '@healthlens/shared/constants';
 import { useAuthStore } from '@/stores/authStore';
 import { apiClient } from '@/lib/api/apiClient';
 import { syncActiveConsentVersion } from '@/lib/consent/syncActiveConsentVersion';
-import { ArrowRight, ShieldCheck, TriangleAlert, AlertCircle } from "lucide-react";
+import { notify } from '@/lib/notify';
+import { ArrowRight, ShieldCheck, TriangleAlert } from "lucide-react";
 import { usePathname } from 'next/navigation';
-
-interface ToastMessage {
-    id: string;
-    message: string;
-    type: 'success' | 'error' | 'info';
-}
 
 export const ConsentModal: React.FC = () => {
     const pathname = usePathname();
@@ -26,7 +21,6 @@ export const ConsentModal: React.FC = () => {
     const [ackTerms, setAckTerms] = useState(false);
     const [ackData, setAckData] = useState(false);
     const [ackDisclaimer, setAckDisclaimer] = useState(false);
-    const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -45,38 +39,30 @@ export const ConsentModal: React.FC = () => {
 
     const allChecked = ackTerms && ackData && ackDisclaimer;
 
-    const addToast = (message: string, type: 'success' | 'error' | 'info') => {
-        const id = Date.now().toString();
-        setToasts(prev => [...prev, { id, message, type }]);
-        setTimeout(() => {
-            setToasts(prev => prev.filter(t => t.id !== id));
-        }, 3000);
-    };
-
     const handleAccept = async () => {
         setSubmitting(true);
         try {
             await apiClient.post(ApiPaths.CONSENT.ME, { version: policyVersion, accepted: true });
             setConsent(policyVersion);
-            addToast('Consent đã được ghi nhận thành công', 'success');
+            notify.success('Consent đã được ghi nhận thành công');
         } catch (error) {
             console.error('Failed to submit consent', error);
 
             if (axios.isAxiosError(error)) {
                 const status = error.response?.status;
                 if (status === 401) {
-                    addToast('Phiên đăng nhập hết hạn, vui lòng đăng nhập lại', 'error');
+                    notify.error('Phiên đăng nhập hết hạn, vui lòng đăng nhập lại');
                     clearAuth();
                     window.location.href = '/login';
                 } else if (status === 403) {
-                    addToast('Bạn không có quyền thực hiện hành động này', 'error');
+                    notify.error('Bạn không có quyền thực hiện hành động này');
                 } else if (status === 404) {
-                    addToast('Không tìm thấy tài khoản người dùng', 'error');
+                    notify.error('Không tìm thấy tài khoản người dùng');
                 } else {
-                    addToast('Không thể xử lý yêu cầu, vui lòng thử lại', 'error');
+                    notify.error('Không thể xử lý yêu cầu, vui lòng thử lại');
                 }
             } else {
-                addToast('Không thể xử lý yêu cầu, vui lòng thử lại', 'error');
+                notify.error('Không thể xử lý yêu cầu, vui lòng thử lại');
             }
         } finally {
             setSubmitting(false);
@@ -87,10 +73,10 @@ export const ConsentModal: React.FC = () => {
         setSubmitting(true);
         try {
             await apiClient.post(ApiPaths.CONSENT.ME, { version: policyVersion, accepted: false });
-            addToast('Bạn đã từ chối consent. Vui lòng đăng nhập lại để tiếp tục.', 'info');
+            notify.info('Bạn đã từ chối consent. Vui lòng đăng nhập lại để tiếp tục.');
         } catch (error) {
             console.error('Failed to register rejection', error);
-            addToast('Lỗi khi ghi nhận từ chối consent', 'error');
+            notify.error('Lỗi khi ghi nhận từ chối consent');
         } finally {
             clearAuth(); // Log out the user immediately if they reject
             setTimeout(() => {
@@ -101,23 +87,6 @@ export const ConsentModal: React.FC = () => {
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4">
-        {/* Toast Container */}
-        <div className="fixed top-4 right-4 z-[60] space-y-2">
-          {toasts.map(toast => (
-            <div
-              key={toast.id}
-              className={`px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 max-w-xs ${
-                toast.type === 'success' ? 'bg-green-100 text-green-800' :
-                toast.type === 'error' ? 'bg-red-100 text-red-800' :
-                'bg-blue-100 text-blue-800'
-              }`}
-            >
-              <AlertCircle className="h-4 w-4" />
-              <span className="text-sm">{toast.message}</span>
-            </div>
-          ))}
-        </div>
-
         <div className="w-full max-w-[700px] max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-2rem)] overflow-hidden rounded-xl bg-white shadow-[0_24px_80px_rgba(0,0,0,0.25)] flex flex-col">
           <div className="p-6 sm:p-8 text-center text-white bg-linear-to-r from-[#00685f] to-[#008378]">
             <h2 className="text-2xl font-bold tracking-tight">Điều khoản & Consent dữ liệu y tế</h2>

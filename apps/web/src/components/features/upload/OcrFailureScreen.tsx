@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle, Camera, CheckCircle2, PencilLine, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { Camera, CheckCircle2, PencilLine, ShieldCheck } from "lucide-react";
 
 type OcrFailureScreenProps = {
   hasPartialMetrics: boolean;
@@ -35,10 +36,6 @@ export function OcrFailureScreen({
   return (
     <div className="flex w-full flex-col gap-8">
       <header className="space-y-3">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[#f2b8b5] bg-[#ffefee] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#ba1a1a]">
-          <AlertTriangle className="h-3.5 w-3.5" />
-          OCR failure recovery
-        </div>
         <h1 className="text-3xl font-extrabold tracking-tight text-[#11322e] sm:text-4xl">Không thể nhận diện dữ liệu</h1>
         <p className="max-w-3xl text-sm text-[#48635f] sm:text-base">
           Hệ thống gặp khó khăn khi đọc tệp của bạn. Hãy chọn cách xử lý phù hợp để tiếp tục xác nhận kết quả xét
@@ -143,20 +140,20 @@ export function OcrFailureScreen({
               Nếu bạn vẫn gặp sự cố khi tải lên, đội ngũ HealthLens sẵn sàng hỗ trợ để bạn tiếp tục nhanh hơn.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
-              <button
-                type="button"
+              <a
+                href="mailto:support@healthlens.vn?subject=HealthLens%20-%20Can%20ho%20tro%20tai%20len%20ket%20qua%20kham"
                 aria-label="Chat với hỗ trợ"
-                className="inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#007267]"
+                className="inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#007267] transition hover:bg-[#f6fbfa]"
               >
                 Chat với hỗ trợ
-              </button>
-              <button
-                type="button"
+              </a>
+              <Link
+                href="/help"
                 aria-label="Xem hướng dẫn"
-                className="inline-flex rounded-full border border-white/60 px-4 py-2 text-sm font-medium text-white"
+                className="inline-flex rounded-full border border-white/60 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
               >
                 Xem hướng dẫn
-              </button>
+              </Link>
             </div>
           </div>
         </div>

@@ -17,6 +17,7 @@ import { ApiPaths } from "@healthlens/shared/constants";
 
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+import { notify } from "@/lib/notify";
 import {
   ProfileCard,
   HealthStatus,
@@ -136,7 +137,7 @@ export default function ProfilesPage() {
       });
     },
     onError: (error: unknown) => {
-      alert(extractApiDetail(error, "Không thể từ chối lời mời lúc này."));
+      notify.error(extractApiDetail(error, "Không thể từ chối lời mời lúc này."));
     },
   });
 
@@ -148,9 +149,10 @@ export default function ProfilesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profiles"] });
       setIsModalOpen(false);
+      notify.success("Đã tạo hồ sơ sức khỏe thành công.");
     },
     onError: (error: unknown) => {
-      alert(extractApiDetail(error, "Đã xảy ra lỗi khi tạo hồ sơ."));
+      notify.error(extractApiDetail(error, "Đã xảy ra lỗi khi tạo hồ sơ."));
     },
   });
 
@@ -221,7 +223,7 @@ export default function ProfilesPage() {
         queryClient.setQueryData(["profiles"], context.previousProfiles);
       }
 
-      alert(extractApiDetail(error, "Đã xảy ra lỗi khi cập nhật hồ sơ."));
+      notify.error(extractApiDetail(error, "Đã xảy ra lỗi khi cập nhật hồ sơ."));
     },
     onSuccess: (updatedProfile) => {
       queryClient.setQueryData<Profile[]>(["profiles"], (old = []) =>
@@ -236,6 +238,7 @@ export default function ProfilesPage() {
       });
       setIsEditModalOpen(false);
       setEditingProfileId(null);
+      notify.success("Đã cập nhật hồ sơ sức khỏe thành công.");
     },
   });
 
