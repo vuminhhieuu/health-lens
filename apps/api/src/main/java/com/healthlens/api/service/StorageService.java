@@ -250,6 +250,15 @@ public class StorageService {
         return presigned.url().toExternalForm();
     }
 
+    public byte[] downloadObjectBytes(String key) {
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .build();
+
+        return s3Client.getObjectAsBytes(getObjectRequest).asByteArray();
+    }
+
     public void deleteObject(String key) {
         s3Client.deleteObject(DeleteObjectRequest.builder()
                 .bucket(bucket)

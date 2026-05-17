@@ -1,6 +1,6 @@
 # Story 1.1: MIME-Aware OCR Router For PDF And Image
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 
@@ -30,27 +30,35 @@ This story creates the MIME-aware routing foundation. It should not attempt to s
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 - Extend OCR job payload (AC: #1, #5)
-  - [ ] Include `recordId`, `fileKey`, `mimeType`, `jobId`, `correlationId`.
-  - [ ] Ensure upload confirmation/publisher supplies MIME type from trusted metadata, not only client filename.
-  - [ ] Add backward-compatible handling for existing payloads where needed.
-- [ ] Task 2 - Implement MIME-aware router (AC: #1, #2, #3, #4)
-  - [ ] Route `image/*` to existing image OCR flow.
-  - [ ] Route `application/pdf` to a PDF path.
-  - [ ] Reject unsupported MIME types with structured OCR failure reason.
-  - [ ] Persist route/provider/path choice in diagnostics/logs.
-- [ ] Task 3 - Add PDF handling baseline (AC: #2, #3)
-  - [ ] Detect or attempt text-layer extraction for PDFs where feasible.
-  - [ ] Add clear fallback seam for scanned PDF/document OCR.
-  - [ ] Preserve page-level output placeholders for Story 1.2 contract.
-- [ ] Task 4 - Update health record status/failure path (AC: #4)
-  - [ ] Store failure reason for unsupported file type or PDF processing failure.
-  - [ ] Ensure existing OCR failure UI can show manual entry/retry path.
-- [ ] Task 5 - Tests (AC: #1-#5)
-  - [ ] Unit tests for image MIME routing.
-  - [ ] Unit/integration tests for PDF MIME routing.
-  - [ ] Unsupported MIME test.
-  - [ ] Legacy/missing MIME payload test.
+- [x] Task 1 - Extend OCR job payload (AC: #1, #5)
+  - [x] Include `recordId`, `fileKey`, `mimeType`, `jobId`, `correlationId`.
+  - [x] Ensure upload confirmation/publisher supplies MIME type from trusted metadata, not only client filename.
+  - [x] Add backward-compatible handling for existing payloads where needed.
+- [x] Task 2 - Implement MIME-aware router (AC: #1, #2, #3, #4)
+  - [x] Route `image/*` to existing image OCR flow.
+  - [x] Route `application/pdf` to a PDF path.
+  - [x] Reject unsupported MIME types with structured OCR failure reason.
+  - [x] Persist route/provider/path choice in diagnostics/logs.
+- [x] Task 3 - Add PDF handling baseline (AC: #2, #3)
+  - [x] Detect or attempt text-layer extraction for PDFs where feasible.
+  - [x] Add clear fallback seam for scanned PDF/document OCR.
+  - [x] Preserve page-level output placeholders for Story 1.2 contract.
+- [x] Task 4 - Update health record status/failure path (AC: #4)
+  - [x] Store failure reason for unsupported file type or PDF processing failure.
+  - [x] Ensure existing OCR failure UI can show manual entry/retry path.
+- [x] Task 5 - Tests (AC: #1-#5)
+  - [x] Unit tests for image MIME routing.
+  - [x] Unit/integration tests for PDF MIME routing.
+  - [x] Unsupported MIME test.
+  - [x] Legacy/missing MIME payload test.
+
+### Review Findings
+
+- [x] [Review][Decision] PDF route does not yet deliver AC2/AC3 behavior — Resolved by expanding this story: PDFBox text-layer extraction now runs before document-provider fallback, and page-level metadata preserves actual PDF page count.
+- [x] [Review][Patch] Disabled/default Textract PDF path is stored as `low_confidence` instead of `pdf_processing_failed` [apps/api/src/main/java/com/healthlens/api/service/OcrService.java:215]
+- [x] [Review][Patch] Consumer accepts arbitrary `image/*` payload MIME even though upload creation only supports JPEG/PNG [apps/api/src/main/java/com/healthlens/api/service/OcrJobConsumer.java:227]
+- [x] [Review][Patch] Legacy missing MIME fallback trusts file extension instead of persisted trusted metadata or terminal failure [apps/api/src/main/java/com/healthlens/api/service/OcrJobConsumer.java:193]
+- [x] [Review][Patch] PDF OCR failure logging can leak signed/internal URL details through raw exception messages [apps/api/src/main/java/com/healthlens/api/service/OcrService.java:231]
 
 ## Dev Notes
 
@@ -89,10 +97,35 @@ This story creates the MIME-aware routing foundation. It should not attempt to s
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+GPT-5 Codex
 
 ### Debug Log References
 
+- 2026-05-16: RED - `./gradlew test --tests com.healthlens.api.service.OcrJobConsumerTest --tests com.healthlens.api.service.OcrServiceTest --tests com.healthlens.api.service.HealthRecordServiceTest` failed at compile because MIME-aware router API did not exist yet.
+- 2026-05-16: GREEN - Targeted service tests passed after adding MIME-aware routing, upload payload metadata, and consumer diagnostics.
+- 2026-05-16: REGRESSION - Full API suite `./gradlew test` passed.
+
 ### Completion Notes List
 
+- Upload reservation now persists normalized server-selected MIME type and confirm upload publishes `jobId`, `correlationId`, `recordId`, `fileKey`, `mimeType`, and `profileId`.
+- OCR consumer resolves MIME from payload first and falls back to file-key extension for legacy jobs; unsupported/unknown MIME fails terminally with `unsupported_mime_type`.
+- OCR service now exposes `processDocument(...)` as the MIME-aware router: `image/*` uses the existing image provider order, while `application/pdf` uses a PDF document OCR path via Textract with page-level placeholder metadata.
+- Raw OCR diagnostics now include MIME type, route, provider, record id, job id, correlation id, and page metadata; PDF provider failure stores `pdf_processing_failed`.
+- No new runtime dependency was added; PDF text-layer extraction uses the existing PDFBox dependency.
+- Code review follow-ups resolved: PDFBox text-layer extraction added, scanned PDFs preserve page-count metadata through document-provider fallback, Textract stub maps to PDF processing failure, unsupported image subtypes are rejected, missing legacy MIME fails terminally, and PDF OCR logs no longer include raw exception messages.
+
 ### File List
+
+- apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java
+- apps/api/src/main/java/com/healthlens/api/service/OcrJobConsumer.java
+- apps/api/src/main/java/com/healthlens/api/service/OcrService.java
+- apps/api/src/test/java/com/healthlens/api/service/HealthRecordServiceTest.java
+- apps/api/src/test/java/com/healthlens/api/service/OcrJobConsumerTest.java
+- apps/api/src/test/java/com/healthlens/api/service/OcrServiceTest.java
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- _bmad-output/implementation-artifacts/epic-core-improvements/epic-1-ocr-reliability/1-1-mime-aware-ocr-router-for-pdf-and-image.md
+
+### Change Log
+
+- 2026-05-16: Implemented MIME-aware OCR routing foundation for image/PDF uploads and marked story ready for review.
+- 2026-05-16: Addressed code review findings and marked story done.

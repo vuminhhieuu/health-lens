@@ -14,7 +14,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -104,28 +106,61 @@ public class OcrJobConsumer {
             healthRecordService.markOcrFailed(recordId);
             return;
         }
+        String mimeType = resolveMimeType(valueAsString(record.getValue().get("mimeType")));
+        if (!isSupportedMimeType(mimeType)) {
+            log.warn("[OcrJobConsumer] Unsupported OCR MIME type. recordId={} fileKey={} mimeType={}",
+                    recordId,
+                    fileKey,
+                    mimeType);
+            healthRecordService.markOcrFailed(recordId, mimeType.isBlank() ? "missing_mime_type" : "unsupported_mime_type");
+            return;
+        }
         String downloadUrl = storageService.generateInternalDownloadUrl(fileKey, Duration.ofMinutes(5));
 
         try {
-            OcrResult result = ocrService.processImage(downloadUrl);
+            OcrService.OcrProcessingResult processingResult;
+            if ("application/pdf".equals(mimeType)) {
+                processingResult = ocrService.processPdfBytes(
+                        storageService.downloadObjectBytes(fileKey),
+                        downloadUrl,
+                        mimeType
+                );
+            } else {
+                processingResult = ocrService.processDocument(downloadUrl, mimeType);
+            }
+            OcrResult result = processingResult.result();
+            log.info("[OcrJobConsumer] OCR route selected. recordId={} jobId={} correlationId={} mimeType={} route={} provider={}",
+                    recordId,
+                    valueAsString(record.getValue().get("jobId")),
+                    valueAsString(record.getValue().get("correlationId")),
+                    processingResult.mimeType(),
+                    processingResult.route(),
+                    processingResult.provider());
             float failureThreshold = normalizedFailureThreshold();
             float reviewThreshold = normalizedReviewThreshold();
             if ("all-providers-failed".equals(result.getSource()) || result.getConfidence() < failureThreshold) {
-                String reason = "all-providers-failed".equals(result.getSource()) ? "timeout" : "low_confidence";
+                String reason = resolveFailureReason(result, processingResult);
                 healthRecordService.markOcrFailed(recordId, reason);
                 return;
             }
             OcrService.OcrExtractionResult parsedData = ocrService.parseMetrics(result.getText(), result.getConfidence());
             boolean hasLowConfidenceMetrics = result.getConfidence() < reviewThreshold;
 
-            String rawOcrJson = objectMapper.writeValueAsString(Map.of(
-                    "text", result.getText(),
-                    "confidence", result.getConfidence(),
-                    "source", result.getSource(),
-                    "language", result.getLanguage(),
-                    "processingTimeMs", result.getProcessingTimeMs(),
-                    "hasLowConfidenceMetrics", hasLowConfidenceMetrics
-            ));
+            Map<String, Object> rawOcrPayload = new LinkedHashMap<>();
+            rawOcrPayload.put("text", result.getText());
+            rawOcrPayload.put("confidence", result.getConfidence());
+            rawOcrPayload.put("source", result.getSource());
+            rawOcrPayload.put("language", result.getLanguage());
+            rawOcrPayload.put("processingTimeMs", result.getProcessingTimeMs());
+            rawOcrPayload.put("hasLowConfidenceMetrics", hasLowConfidenceMetrics);
+            rawOcrPayload.put("mimeType", processingResult.mimeType());
+            rawOcrPayload.put("route", processingResult.route());
+            rawOcrPayload.put("provider", processingResult.provider());
+            rawOcrPayload.put("recordId", recordId.toString());
+            rawOcrPayload.put("jobId", valueAsString(record.getValue().get("jobId")));
+            rawOcrPayload.put("correlationId", valueAsString(record.getValue().get("correlationId")));
+            rawOcrPayload.put("pages", processingResult.pages());
+            String rawOcrJson = objectMapper.writeValueAsString(rawOcrPayload);
             healthRecordService.markOcrCompleted(recordId, rawOcrJson, parsedData, hasLowConfidenceMetrics);
         } catch (Exception ex) {
             healthRecordService.markOcrFailed(recordId);
@@ -162,6 +197,38 @@ public class OcrJobConsumer {
 
     private String valueAsString(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private String resolveMimeType(String payloadMimeType) {
+        String normalizedPayloadMimeType = normalizeMimeType(payloadMimeType);
+        if (!normalizedPayloadMimeType.isBlank()) {
+            return normalizedPayloadMimeType;
+        }
+        return "";
+    }
+
+    private String normalizeMimeType(String mimeType) {
+        if (mimeType == null) {
+            return "";
+        }
+        int parametersIndex = mimeType.indexOf(';');
+        String baseType = parametersIndex >= 0 ? mimeType.substring(0, parametersIndex) : mimeType;
+        return baseType.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isSupportedMimeType(String mimeType) {
+        return "image/jpeg".equals(mimeType)
+                || "image/png".equals(mimeType)
+                || "application/pdf".equals(mimeType);
+    }
+
+    private String resolveFailureReason(OcrResult result, OcrService.OcrProcessingResult processingResult) {
+        if ("all-providers-failed".equals(result.getSource())) {
+            return processingResult.route().startsWith("pdf")
+                    ? "pdf_processing_failed"
+                    : "timeout";
+        }
+        return "low_confidence";
     }
 
     private float normalizedFailureThreshold() {
