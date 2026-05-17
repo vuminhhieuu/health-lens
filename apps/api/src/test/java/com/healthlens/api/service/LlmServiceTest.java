@@ -25,7 +25,7 @@ import static org.mockito.Mockito.*;
 /**
  * Unit tests cho LlmService
  *
- * <p>Sử dụng Mockito để mock ChatClient, tránh phụ thuộc vào Groq API thật.
+ * <p>Sử dụng Mockito để mock ChatClient, tránh phụ thuộc vào AI chat provider thật.
  * Test covers: generation thành công, retry logic, fallback, caching key, null-safety.
  *
  * <p>Lưu ý: maxRetryAttempts và initialDelayMs được set = 1 và 0 trong setUp
@@ -35,7 +35,7 @@ import static org.mockito.Mockito.*;
 class LlmServiceTest {
 
     @Mock
-    private ChatClient groqChatClient;
+    private ChatClient aiChatClient;
     @Mock
     private StringRedisTemplate redisTemplate;
     private ObjectMapper objectMapper;
@@ -53,7 +53,7 @@ class LlmServiceTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        llmService = new LlmService(groqChatClient, redisTemplate, objectMapper);
+        llmService = new LlmService(aiChatClient, redisTemplate, objectMapper);
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         ReflectionTestUtils.setField(llmService, "defaultFallbackExplanation",
                 "Kết quả cần được bác sĩ chuyên khoa giải thích thêm.");
@@ -69,26 +69,26 @@ class LlmServiceTest {
     // =========================================================
 
     @Test
-    @DisplayName("Thành công: Groq API trả về giải thích cho chỉ số Glucose")
-    void generateExplanation_whenGroqAvailable_returnsApiResponse() {
+    @DisplayName("Thành công: AI chat provider trả về giải thích cho chỉ số Glucose")
+    void generateExplanation_whenAiChatAvailable_returnsApiResponse() {
         String expectedExplanation = "Chỉ số đường huyết của bạn ở mức bình thường (5.4 mmol/L). "
                 + "Duy trì chế độ ăn lành mạnh và tập thể dục thường xuyên để giữ mức này. "
                 + "Hãy kiểm tra định kỳ theo khuyến nghị của bác sĩ.";
-        mockGroqApiSuccess(expectedExplanation);
+        mockAiChatSuccess(expectedExplanation);
         when(valueOperations.get(anyString())).thenReturn(null);
 
         String result = llmService.generateExplanation("Glucose", "5.4", "normal", referenceRange(), "vi");
 
         assertThat(result).isNotNull();
         assertThat(result).isEqualTo(expectedExplanation);
-        verify(groqChatClient).prompt();
+        verify(aiChatClient).prompt();
     }
 
     @Test
-    @DisplayName("Fallback: Groq API thất bại → trả về fallback explanation cho Glucose")
-    void generateExplanation_whenGroqFails_returnsKnownFallback() {
+    @DisplayName("Fallback: AI chat provider thất bại → trả về fallback explanation cho Glucose")
+    void generateExplanation_whenAiChatFails_returnsKnownFallback() {
         when(valueOperations.get(anyString())).thenReturn(null);
-        when(groqChatClient.prompt()).thenThrow(new RuntimeException("Connection timeout"));
+        when(aiChatClient.prompt()).thenThrow(new RuntimeException("Connection timeout"));
 
         String result = llmService.generateExplanation("Glucose", "8.9", "abnormal", referenceRange(), "vi");
 
@@ -99,10 +99,10 @@ class LlmServiceTest {
     }
 
     @Test
-    @DisplayName("Fallback: Groq API thất bại với metric không biết → trả về default message")
-    void generateExplanation_whenGroqFailsUnknownMetric_returnsDefaultFallback() {
+    @DisplayName("Fallback: AI chat provider thất bại với metric không biết → trả về default message")
+    void generateExplanation_whenAiChatFailsUnknownMetric_returnsDefaultFallback() {
         when(valueOperations.get(anyString())).thenReturn(null);
-        when(groqChatClient.prompt()).thenThrow(new RuntimeException("Rate limit exceeded"));
+        when(aiChatClient.prompt()).thenThrow(new RuntimeException("Rate limit exceeded"));
 
         String result = llmService.generateExplanation("UnknownMetric999", "42", "unknown", null, "vi");
 
@@ -118,7 +118,7 @@ class LlmServiceTest {
         ReflectionTestUtils.setField(llmService, "maxRetryAttempts", 3);
         String expectedExplanation = "HbA1c bình thường, tốt lắm!";
 
-        when(groqChatClient.prompt())
+        when(aiChatClient.prompt())
                 .thenThrow(new RuntimeException("Transient error"))
                 .thenReturn(requestSpec);
         when(requestSpec.user(anyString())).thenReturn(requestSpec);
@@ -128,7 +128,7 @@ class LlmServiceTest {
         String result = llmService.generateExplanation("HbA1c", "6.2", "normal", referenceRange(), "vi");
 
         assertThat(result).isEqualTo(expectedExplanation);
-        verify(groqChatClient, times(2)).prompt();
+        verify(aiChatClient, times(2)).prompt();
     }
 
     @Test
@@ -141,7 +141,7 @@ class LlmServiceTest {
 
         assertThat(result.explanation()).isEqualTo("cached explanation");
         assertThat(result.source()).isEqualTo("llm");
-        verify(groqChatClient, never()).prompt();
+        verify(aiChatClient, never()).prompt();
     }
 
     @Test
@@ -154,14 +154,14 @@ class LlmServiceTest {
 
         assertThat(result.explanation()).isEqualTo("legacy cached explanation");
         assertThat(result.source()).isEqualTo("fallback");
-        verify(groqChatClient, never()).prompt();
+        verify(aiChatClient, never()).prompt();
     }
 
     @Test
     @DisplayName("Cache miss: lưu explanation vào Redis với TTL 7 ngày")
     void generateExplanation_whenCacheMiss_storesWithSevenDaysTtl() {
         when(valueOperations.get(anyString())).thenReturn(null);
-        mockGroqApiSuccess("llm explanation");
+        mockAiChatSuccess("llm explanation");
 
         llmService.generateExplanation("Glucose", "5.6", "normal", referenceRange(), "vi");
 
@@ -176,7 +176,7 @@ class LlmServiceTest {
             requestedKeys.add(invocation.getArgument(0));
             return null;
         });
-        mockGroqApiSuccess("llm explanation");
+        mockAiChatSuccess("llm explanation");
 
         llmService.generateExplanation("Glucose", "5.6", "normal", referenceRange(), "vi");
         ReflectionTestUtils.setField(llmService, "retrievalVersion", "v2");
@@ -191,13 +191,13 @@ class LlmServiceTest {
     void generateExplanation_afterMaxRetries_returnsFallbackSource() {
         ReflectionTestUtils.setField(llmService, "maxRetryAttempts", 3);
         when(valueOperations.get(anyString())).thenReturn(null);
-        when(groqChatClient.prompt()).thenThrow(new RuntimeException("API error"));
+        when(aiChatClient.prompt()).thenThrow(new RuntimeException("API error"));
 
         LlmService.ExplanationResult result = llmService.generateExplanationResult(
                 "Glucose", "5.4", "abnormal", referenceRange(), "vi");
 
         assertThat(result.source()).isEqualTo("fallback");
-        verify(groqChatClient, times(3)).prompt();
+        verify(aiChatClient, times(3)).prompt();
     }
 
     @Test
@@ -259,14 +259,14 @@ class LlmServiceTest {
         assertThat(result).hasSizeBetween(2, 3);
         assertThat(result.stream().anyMatch(line -> line.toLowerCase().contains("dinh dưỡng"))).isTrue();
         assertThat(result.stream().anyMatch(line -> line.toLowerCase().contains("sinh hoạt"))).isTrue();
-        verify(groqChatClient, never()).prompt();
+        verify(aiChatClient, never()).prompt();
     }
 
     @Test
     @DisplayName("Recommendations: cache miss thì gọi LLM và parse JSON output")
     void generateRecommendations_cacheMiss_callsLlmAndParseJson() {
         when(valueOperations.get(anyString())).thenReturn(null);
-        mockGroqApiSuccess("[\"Chế độ dinh dưỡng: Với Đường huyết, bạn nên giảm đồ ngọt\", \"Chế độ sinh hoạt: Với Glucose, đi bộ sau ăn 20-30 phút\"]");
+        mockAiChatSuccess("[\"Chế độ dinh dưỡng: Với Đường huyết, bạn nên giảm đồ ngọt\", \"Chế độ sinh hoạt: Với Glucose, đi bộ sau ăn 20-30 phút\"]");
 
         List<String> result = llmService.generateRecommendations(
                 List.of(new LlmService.RecommendationMetricInput("Glucose", "8.1", "mmol/L", "abnormal")),
@@ -285,7 +285,7 @@ class LlmServiceTest {
     @DisplayName("Recommendations: cache malformed thì bỏ qua cache và fallback khi LLM lỗi")
     void generateRecommendations_cacheMalformed_thenFallbackWhenLlmFails() {
         when(valueOperations.get(anyString())).thenReturn("malformed-cache-value");
-        when(groqChatClient.prompt()).thenThrow(new RuntimeException("LLM down"));
+        when(aiChatClient.prompt()).thenThrow(new RuntimeException("LLM down"));
 
         List<String> result = llmService.generateRecommendations(
                 List.of(new LlmService.RecommendationMetricInput("Glucose", "8.1", "mmol/L", "abnormal")),
@@ -294,7 +294,7 @@ class LlmServiceTest {
         );
 
         assertThat(result).isNotEmpty();
-        verify(groqChatClient).prompt();
+        verify(aiChatClient).prompt();
         verify(valueOperations).set(anyString(), anyString(), eq(Duration.ofDays(7)));
     }
 
@@ -302,7 +302,7 @@ class LlmServiceTest {
     @DisplayName("Recommendations: LLM exception thì fallback được cache cho lần sau")
     void generateRecommendations_llmException_cachesFallback() {
         when(valueOperations.get(anyString())).thenReturn(null);
-        when(groqChatClient.prompt()).thenThrow(new RuntimeException("Rate limit"));
+        when(aiChatClient.prompt()).thenThrow(new RuntimeException("Rate limit"));
 
         List<String> result = llmService.generateRecommendations(
                 List.of(new LlmService.RecommendationMetricInput("Glucose", "8.1", "mmol/L", "abnormal")),
@@ -318,7 +318,7 @@ class LlmServiceTest {
     @DisplayName("Recommendations fallback: ưu tiên metric có severity cao nhất")
     void generateRecommendations_fallbackPrioritizesMostSevereMetric() {
         when(valueOperations.get(anyString())).thenReturn(null);
-        when(groqChatClient.prompt()).thenThrow(new RuntimeException("LLM down"));
+        when(aiChatClient.prompt()).thenThrow(new RuntimeException("LLM down"));
 
         List<String> result = llmService.generateRecommendations(
                 List.of(
@@ -337,8 +337,8 @@ class LlmServiceTest {
         assertThat(result.stream().anyMatch(line -> line.toLowerCase().contains("sinh hoạt"))).isTrue();
     }
 
-    private void mockGroqApiSuccess(String responseContent) {
-        when(groqChatClient.prompt()).thenReturn(requestSpec);
+    private void mockAiChatSuccess(String responseContent) {
+        when(aiChatClient.prompt()).thenReturn(requestSpec);
         when(requestSpec.user(anyString())).thenReturn(requestSpec);
         when(requestSpec.call()).thenReturn(callResponseSpec);
         when(callResponseSpec.content()).thenReturn(responseContent);

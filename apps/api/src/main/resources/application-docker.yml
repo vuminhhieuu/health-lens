@@ -17,18 +17,18 @@ spring:
   
   ai:
     openai:
-      # Groq API (OpenAI-compatible endpoint)
-      api-key: ${GROQ_API_KEY}
-      base-url: https://api.groq.com/openai
+      # OpenAI-compatible chat provider. Prefer AI_CHAT_*; GROQ_* is legacy migration fallback.
+      api-key: ${AI_CHAT_API_KEY:${GROQ_API_KEY:dev-placeholder}}
+      base-url: ${AI_CHAT_BASE_URL:${GROQ_BASE_URL:https://api.groq.com/openai}}
       chat:
         options:
-          model: ${GROQ_CHAT_MODEL:qwen-2.5-72b-versatile}
+          model: ${AI_CHAT_MODEL:${GROQ_CHAT_MODEL:qwen-2.5-72b-versatile}}
           temperature: 0.7
           max-tokens: 500
       embedding:
         # Embedding provider riêng (Groq KHÔNG hỗ trợ embedding API).
         # EMBEDDING_BASE_URL: đổi nếu dùng provider khác OpenAI (ví dụ: https://api.jina.ai/v1)
-        # EMBEDDING_API_KEY: phải set riêng, KHÔNG dùng GROQ_API_KEY
+        # EMBEDDING_API_KEY: phải set riêng, KHÔNG dùng AI_CHAT_API_KEY
         base-url: ${EMBEDDING_BASE_URL:https://api.openai.com}
         api-key: ${EMBEDDING_API_KEY}
         options:

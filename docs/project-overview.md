@@ -27,7 +27,7 @@ Monorepo with separate deployable parts:
 - Health record upload through presigned object-storage URLs.
 - OCR extraction and metric confirmation flow.
 - Reference metric/range management and admin approval workflow.
-- AI explanations using Groq-compatible chat configuration plus optional vector retrieval.
+- AI explanations using OpenAI-compatible chat configuration plus optional vector retrieval.
 - Local development stack for PostgreSQL, Redis, MinIO, Mailhog, API, web, and optional OCR service.
 
 ## High-Level Flow
@@ -38,7 +38,7 @@ Monorepo with separate deployable parts:
 4. API uses Redis for cache/streams and account/session supporting behavior.
 5. Uploaded files are stored in MinIO locally or S3-compatible storage in deployed environments.
 6. OCR is handled either through provider integrations in the API or the FastAPI EasyOCR microservice.
-7. AI explanations use Spring AI with a Groq/OpenAI-compatible chat provider and optional embedding/vector retrieval.
+7. AI explanations use Spring AI with an OpenAI-compatible chat provider and optional embedding/vector retrieval.
 
 ## Primary Documentation
 
@@ -50,4 +50,3 @@ Monorepo with separate deployable parts:
 - [Deployment Guide](./deployment-guide.md)
 - [Source Tree Analysis](./source-tree-analysis.md)
 - [Project Context](./project-context.md)
-

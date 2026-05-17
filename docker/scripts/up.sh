@@ -173,7 +173,7 @@ if [ ! -f ".env" ]; then
     echo_info "Creating from .env.example..."
     if [ -f ".env.example" ]; then
         cp .env.example .env
-        echo_warn "Please edit .env and add your API keys (Groq, Qdrant)!"
+        echo_warn "Please edit .env and add your API keys (AI_CHAT_*, Qdrant)!"
     else
         echo_error ".env.example not found. Cannot create .env"
         exit 1

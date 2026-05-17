@@ -134,7 +134,11 @@ QDRANT_HOST=xxx.qdrant.io
 QDRANT_PORT=6333
 QDRANT_API_KEY=xxx
 QDRANT_COLLECTION=healthlens_staging
-GROQ_API_KEY=gsk_xxx
+AI_CHAT_PROVIDER=openai-compatible
+AI_CHAT_API_KEY=gsk_xxx
+AI_CHAT_BASE_URL=https://api.groq.com/openai
+AI_CHAT_MODEL=qwen-2.5-72b-versatile
+AI_CHAT_TIMEOUT_MS=30000
 
 # === Security ===
 JWT_SECRET=your-32-char-minimum-secret-key-here

@@ -192,7 +192,7 @@ development_status:
   core-1-4-parser-confidence-gates-and-review-required-state: ready-for-dev
   core-1-5-paddleocr-adapter-and-healthlens-benchmark: ready-for-dev
   core-1-6-external-ocr-fallback-consent-retention-and-kill-switch: ready-for-dev
-  core-2-1-generic-ai-chat-provider-configuration: ready-for-dev
+  core-2-1-generic-ai-chat-provider-configuration: done
   core-2-2-ocr-provider-registry-and-capability-routing: ready-for-dev
   core-2-3-embedding-and-vector-store-config-validation: ready-for-dev
   core-2-4-provider-switching-documentation-and-runbook: ready-for-dev
