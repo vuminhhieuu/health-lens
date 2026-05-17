@@ -204,7 +204,7 @@ public class AuthService {
                     null,
                     Map.of("email", normalizedEmail, "reason", "bad_credentials")
             );
-            throw new BadCredentialsException("Email hoac mat khau khong dung");
+            throw new BadCredentialsException("Email hoặc mật khẩu không đúng.");
         }
 
         // Check email verified (AC #1: "đã xác thực email")
@@ -216,7 +216,7 @@ public class AuthService {
                     user.getId(),
                     Map.of("email", normalizedEmail, "reason", "email_not_verified")
             );
-            throw new BadCredentialsException("Vui long xac thuc email truoc khi dang nhap");
+            throw new BadCredentialsException("Vui lòng xác thực email trước khi đăng nhập.");
         }
 
         // Reset rate limiter on success

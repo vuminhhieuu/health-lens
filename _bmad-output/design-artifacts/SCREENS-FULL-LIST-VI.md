@@ -548,7 +548,7 @@ Stitch ID: 7c23ef03075048afb2fddab20e12afd6
 
 #### Screen 1.5.4: Nhật ký Kiểm tra (Audit Logs)
 ```
-Path: /admin/audit-logs
+Path: /admin/audit-log
 Stitch ID: d0690e9e60b74787b60020aaadd6c0e4
 ├── Header: "Nhật ký Hoạt động"
 │

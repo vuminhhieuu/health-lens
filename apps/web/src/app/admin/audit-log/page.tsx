@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { vi } from "date-fns/locale";
-import { Loader2, X } from "lucide-react";
+import { ClipboardList, Loader2, X } from "lucide-react";
 
 import { adminApiClient } from "@/lib/api/adminApiClient";
 import { ApiPaths } from "@healthlens/shared/constants";
@@ -16,6 +17,8 @@ const RESOURCE_TYPE_AUTH = "AUTH";
 const RESOURCE_TYPE_USER = "USER";
 const RESOURCE_TYPE_CONSENT = "CONSENT";
 
+type AuditLogOutcome = "SUCCESS" | "FAILURE";
+
 type AuditLogEntry = {
   id: string;
   actorEmail: string;
@@ -23,6 +26,8 @@ type AuditLogEntry = {
   resourceType: string;
   resourceId: string | null;
   entityLabel: string;
+  detailSummary: string;
+  outcome?: AuditLogOutcome;
   oldValueJson: string | null;
   newValueJson: string | null;
   ipAddress: string | null;
@@ -54,7 +59,9 @@ type ListQuery = {
   limit: number;
 };
 
-const DEFAULT_LIMIT = 50;
+const DEFAULT_LIMIT = 20;
+
+type AuditViewScope = "reference" | "all";
 
 const ACTION_LABEL_VI: Record<string, string> = {
   UPDATE_REFERENCE_METRIC_DISPLAY: "Cập nhật tên hiển thị",
@@ -171,6 +178,34 @@ const ACTION_FILTER_GROUPS: { label: string; actions: string[] }[] = [
   },
 ];
 
+const REFERENCE_ACTION_GROUP = ACTION_FILTER_GROUPS.find(
+  (g) => g.label === "Dữ liệu tham chiếu",
+)!;
+
+const REFERENCE_ACTIONS = new Set(REFERENCE_ACTION_GROUP.actions);
+
+function validateDateRange(from: string, to: string): string | null {
+  if (from && to && from > to) {
+    return "Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.";
+  }
+  return null;
+}
+
+function buildAuditLogUrl(scope: AuditViewScope, filters: Omit<ListQuery, "page" | "limit">): string {
+  const params = new URLSearchParams();
+  if (scope === "all") {
+    params.set("view", "all");
+    if (filters.resourceType.trim()) {
+      params.set("resourceType", filters.resourceType.trim());
+    }
+  }
+  if (filters.resourceId.trim()) {
+    params.set("resourceId", filters.resourceId.trim());
+  }
+  const qs = params.toString();
+  return qs ? `/admin/audit-log?${qs}` : "/admin/audit-log";
+}
+
 const RESOURCE_TYPE_LABEL_VI: Record<string, string> = {
   [RESOURCE_TYPE_REFERENCE_DATA]: "Dữ liệu tham chiếu",
   [RESOURCE_TYPE_HEALTH_RECORD]: "Hồ sơ sức khỏe",
@@ -195,25 +230,139 @@ function actionLabelVi(action: string): string {
   return ACTION_LABEL_VI[action] ?? action;
 }
 
+/** Nhãn ngắn cho cột Hành động (loại thao tác), theo prototype Stitch. */
+const ACTION_CATEGORY_VI: Record<string, string> = {
+  LOGIN: "Đăng nhập",
+  LOGIN_FAILED: "Đăng nhập",
+  ADMIN_LOGIN: "Đăng nhập",
+  LOGOUT: "Đăng xuất",
+  REGISTER: "Đăng ký",
+  VERIFY_EMAIL: "Xác thực",
+  REFRESH_TOKEN: "Đăng nhập",
+  FORGOT_PASSWORD: "Đăng nhập",
+  RESET_PASSWORD: "Đăng nhập",
+  ADMIN_TOTP_SETUP: "MFA",
+  ADMIN_TOTP_VERIFY: "MFA",
+  CREATE_HEALTH_RECORD: "Tạo mới",
+  CONFIRM_HEALTH_RECORD: "Tạo mới",
+  CREATE_REFERENCE_METRIC: "Tạo mới",
+  CREATE_PROFILE: "Tạo mới",
+  CONFIRM_REFERENCE_IMPORT: "Tạo mới",
+  PUBLISH_CHANGE_SET: "Tạo mới",
+  DELETE_HEALTH_RECORD: "Xóa",
+  DEACTIVATE_REFERENCE_METRIC: "Xóa",
+  REVOKE_PROFILE_SHARE: "Xóa",
+  REVOKE_HEALTH_RECORD_SHARE: "Xóa",
+  CANCEL_PROFILE_INVITATION: "Xóa",
+  CANCEL_ACCOUNT_DELETION: "Xóa",
+  REQUEST_ACCOUNT_DELETION: "Xóa",
+  REJECT_CHANGE_SET: "Xóa",
+  REJECT_PROFILE_INVITATION: "Xóa",
+  DOWNLOAD_HEALTH_RECORD_PDF: "Xuất dữ liệu",
+  APPROVE_CHANGE_SET: "Phê duyệt",
+  SUBMIT_REFERENCE_CHANGE_SET: "Phê duyệt",
+  INVITE_PROFILE_SHARE: "Chia sẻ",
+  INVITE_HEALTH_RECORD_SHARE: "Chia sẻ",
+  ACCEPT_PROFILE_INVITATION: "Chia sẻ",
+  ACCEPT_HEALTH_RECORD_SHARE: "Chia sẻ",
+  RESEND_PROFILE_INVITATION: "Chia sẻ",
+  RECORD_CONSENT: "Cập nhật",
+  REVOKE_CONSENT: "Cập nhật",
+  UPDATE_USER: "Cập nhật",
+  UPDATE_PROFILE: "Cập nhật",
+  UPDATE_HEALTH_RECORD_METRICS: "Cập nhật",
+  UPDATE_REFERENCE_METRIC: "Cập nhật",
+  UPDATE_REFERENCE_METRIC_DISPLAY: "Cập nhật",
+  REACTIVATE_REFERENCE_METRIC: "Cập nhật",
+};
+
+function actionCategoryVi(action: string): string {
+  if (ACTION_CATEGORY_VI[action]) {
+    return ACTION_CATEGORY_VI[action];
+  }
+  if (
+    action.includes("DELETE") ||
+    action.includes("REVOKE") ||
+    action.includes("DEACTIVATE") ||
+    action.includes("CANCEL")
+  ) {
+    return "Xóa";
+  }
+  if (action.includes("CREATE") || action.includes("CONFIRM") || action.includes("PUBLISH")) {
+    return "Tạo mới";
+  }
+  if (action.includes("DOWNLOAD") || action.includes("EXPORT")) {
+    return "Xuất dữ liệu";
+  }
+  if (action.includes("APPROVE") || action.includes("SUBMIT") || action.includes("REJECT")) {
+    return "Phê duyệt";
+  }
+  if (action.includes("INVITE") || action.includes("SHARE") || action.includes("ACCEPT")) {
+    return "Chia sẻ";
+  }
+  if (action.includes("LOGIN") || action.includes("LOGOUT") || action.includes("REGISTER")) {
+    return "Đăng nhập";
+  }
+  if (action.includes("TOTP")) {
+    return "MFA";
+  }
+  return "Cập nhật";
+}
+
+function resolveOutcome(entry: Pick<AuditLogEntry, "outcome" | "action">): AuditLogOutcome {
+  if (entry.outcome === "FAILURE" || entry.outcome === "SUCCESS") {
+    return entry.outcome;
+  }
+  return entry.action === "LOGIN_FAILED" || entry.action.endsWith("_FAILED")
+    ? "FAILURE"
+    : "SUCCESS";
+}
+
+function outcomeLabelVi(outcome: AuditLogOutcome): string {
+  return outcome === "FAILURE" ? "Thất bại" : "Thành công";
+}
+
+function outcomeBadgeClass(outcome: AuditLogOutcome): string {
+  return outcome === "FAILURE"
+    ? "bg-[#924628]/10 text-[#924628]"
+    : "bg-emerald-50 text-emerald-800";
+}
+
 function actionBadgeClass(action: string): string {
+  if (action.includes("TOTP")) {
+    return "bg-slate-200 text-slate-700";
+  }
+  if (action.includes("DOWNLOAD") || action.includes("EXPORT")) {
+    return "bg-[#ffb59a]/30 text-[#924628]";
+  }
   if (
     action.includes("DELETE") ||
     action.includes("REJECT") ||
     action.includes("FAILED") ||
     action.includes("REVOKE") ||
-    action.includes("DEACTIVATE")
+    action.includes("DEACTIVATE") ||
+    action.includes("CANCEL")
   ) {
     return "bg-[#924628]/10 text-[#924628]";
   }
   if (
     action.includes("CREATE") ||
-    action.includes("INSERT") ||
     action.includes("APPROVE") ||
-    action.includes("LOGIN") ||
     action.includes("REGISTER") ||
-    action.includes("ACCEPT")
+    action.includes("ACCEPT") ||
+    action.includes("PUBLISH")
   ) {
     return "bg-[#c2ebe3] text-[#456b66]";
+  }
+  if (
+    action.includes("LOGIN") ||
+    action === "REFRESH_TOKEN" ||
+    action.includes("VERIFY")
+  ) {
+    return "bg-[#c2ebe3] text-[#456b66]";
+  }
+  if (action.includes("INVITE") || action.includes("SHARE")) {
+    return "bg-[#008378]/10 text-[#008378]";
   }
   return "bg-[#008378]/10 text-[#008378]";
 }
@@ -262,9 +411,12 @@ function displayNameFromEmail(email: string): string {
     .join(" ");
 }
 
-function detailSummary(row: AuditLogEntry): string {
-  const base = row.entityLabel?.trim() || `${row.resourceType}${row.resourceId ? ` · ${row.resourceId}` : ""}`;
-  return base.length > 120 ? `${base.slice(0, 117)}…` : base;
+function rowDetailText(row: AuditLogEntry): string {
+  const base =
+    row.detailSummary?.trim() ||
+    row.entityLabel?.trim() ||
+    `${row.resourceType}${row.resourceId ? ` · ${row.resourceId}` : ""}`;
+  return base.length > 160 ? `${base.slice(0, 157)}…` : base;
 }
 
 function buildListParams(q: ListQuery): Record<string, string | number> {
@@ -320,6 +472,21 @@ function buildPageList(current: number, total: number): (number | "ellipsis")[] 
   return out;
 }
 
+function jsonPanelLabel(
+  oldJson: string | null,
+  newJson: string | null,
+  side: "before" | "after",
+): string {
+  const empty = side === "before" ? !oldJson : !newJson;
+  if (empty && side === "before" && newJson) {
+    return "Không có dữ liệu trước (tạo mới)";
+  }
+  if (empty && side === "after" && oldJson) {
+    return "Không có dữ liệu sau (đã xóa / vô hiệu)";
+  }
+  return side === "before" ? "Trước khi thay đổi" : "Sau khi thay đổi";
+}
+
 function AuditDetailModal({
   entry,
   onClose,
@@ -327,46 +494,97 @@ function AuditDetailModal({
   entry: AuditLogEntry;
   onClose: () => void;
 }) {
+  const at = new Date(entry.createdAt);
+  const email = entry.actorEmail?.trim() || "";
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="audit-detail-title"
+      onClick={onClose}
     >
-      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl">
+      <div
+        className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-start justify-between border-b border-[#d8e5e2] px-6 py-5">
           <div>
             <h3 id="audit-detail-title" className="text-xl font-bold text-[#121e1c]">
               Chi tiết thay đổi
             </h3>
             <p className="mt-1 text-sm text-[#3d4947]">
-              {actionLabelVi(entry.action)} · {entry.entityLabel}
+              {rowDetailText(entry)}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="rounded-full p-2 text-[#3d4947] transition hover:bg-[#e9f6f3]"
+            aria-label="Đóng"
+            title="Đóng"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
+        </div>
+
+        <div className="flex flex-wrap gap-3 border-b border-[#e9f6f3] bg-[#f8fafc] px-6 py-4 text-xs">
+          <div>
+            <span className="font-bold uppercase tracking-wider text-[#0d9488]">Thời gian</span>
+            <p className="mt-0.5 font-medium text-[#121e1c]">
+              {format(at, "HH:mm:ss · dd/MM/yyyy", { locale: vi })}
+            </p>
+          </div>
+          <div className="min-w-[10rem] flex-1">
+            <span className="font-bold uppercase tracking-wider text-[#0d9488]">Người thực hiện</span>
+            <p className="mt-0.5 font-medium text-[#121e1c]">{displayNameFromEmail(email)}</p>
+            <p className="text-[10px] italic text-[#3d4947]">{email || "—"}</p>
+          </div>
+          <div>
+            <span className="font-bold uppercase tracking-wider text-[#0d9488]">Hành động</span>
+            <p className="mt-1">
+              <span
+                className={`inline-block rounded px-2 py-0.5 text-[11px] font-semibold ${actionBadgeClass(entry.action)}`}
+              >
+                {actionLabelVi(entry.action)}
+              </span>
+            </p>
+          </div>
+          <div>
+            <span className="font-bold uppercase tracking-wider text-[#0d9488]">Đối tượng</span>
+            <p className="mt-0.5 font-medium text-[#121e1c]">{entry.entityLabel || "—"}</p>
+          </div>
+          <div>
+            <span className="font-bold uppercase tracking-wider text-[#0d9488]">IP</span>
+            <p className="mt-0.5 font-mono text-[#3d4947]">{entry.ipAddress ?? "—"}</p>
+          </div>
         </div>
 
         <div className="grid flex-1 gap-4 overflow-hidden p-6 md:grid-cols-2">
           <div className="flex min-h-0 flex-col rounded-2xl border border-[#d8e5e2] bg-[#f8fafc]">
             <p className="border-b border-[#d8e5e2] bg-white px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-[#3d4947]">
-              Trước khi thay đổi
+              {jsonPanelLabel(entry.oldValueJson, entry.newValueJson, "before")}
             </p>
-            <pre className="hl-custom-scrollbar max-h-[55vh] flex-1 overflow-auto p-4 text-xs leading-relaxed text-[#121e1c]">
+            <pre className="hl-custom-scrollbar max-h-[50vh] flex-1 overflow-auto p-4 text-xs leading-relaxed text-[#121e1c]">
               {formatJsonBlock(entry.oldValueJson)}
             </pre>
           </div>
           <div className="flex min-h-0 flex-col rounded-2xl border border-[#89f5e7]/40 bg-[#e9f6f3]/60">
             <p className="border-b border-[#89f5e7]/40 bg-white px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-[#00685f]">
-              Sau khi thay đổi
+              {jsonPanelLabel(entry.oldValueJson, entry.newValueJson, "after")}
             </p>
-            <pre className="hl-custom-scrollbar max-h-[55vh] flex-1 overflow-auto p-4 text-xs leading-relaxed text-[#121e1c]">
+            <pre className="hl-custom-scrollbar max-h-[50vh] flex-1 overflow-auto p-4 text-xs leading-relaxed text-[#121e1c]">
               {formatJsonBlock(entry.newValueJson)}
             </pre>
           </div>
@@ -376,28 +594,47 @@ function AuditDetailModal({
   );
 }
 
+function resolveInitialAuditState(searchParams: URLSearchParams): {
+  viewScope: AuditViewScope;
+  filters: Omit<ListQuery, "page" | "limit">;
+} {
+  const viewScope: AuditViewScope =
+    searchParams.get("view") === "all" ? "all" : "reference";
+  const resourceId = searchParams.get("resourceId") ?? "";
+  const resourceType =
+    viewScope === "reference"
+      ? RESOURCE_TYPE_REFERENCE_DATA
+      : (searchParams.get("resourceType") ?? "");
+  return {
+    viewScope,
+    filters: {
+      resourceType,
+      resourceId,
+      actorEmail: "",
+      action: "",
+      from: "",
+      to: "",
+    },
+  };
+}
+
 export default function AuditLogPage() {
   const queryClient = useQueryClient();
-  const [draft, setDraft] = useState({
-    resourceType: "",
-    resourceId: "",
-    actorEmail: "",
-    action: "",
-    from: "",
-    to: "",
-  });
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initial = useMemo(() => resolveInitialAuditState(searchParams), [searchParams]);
+
+  const [viewScope, setViewScope] = useState<AuditViewScope>(initial.viewScope);
+  const [draft, setDraft] = useState(initial.filters);
   const [applied, setApplied] = useState<ListQuery>({
-    resourceType: "",
-    resourceId: "",
-    actorEmail: "",
-    action: "",
-    from: "",
-    to: "",
+    ...initial.filters,
     page: 0,
     limit: DEFAULT_LIMIT,
   });
   const [detailEntry, setDetailEntry] = useState<AuditLogEntry | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [dateRangeError, setDateRangeError] = useState<string | null>(null);
 
   useEffect(() => {
     const id = "hl-material-symbols-outlined";
@@ -432,27 +669,81 @@ export default function AuditLogPage() {
     },
   });
 
+  const normalizeFilters = useCallback(
+    (filters: Omit<ListQuery, "page" | "limit">): Omit<ListQuery, "page" | "limit"> => ({
+      ...filters,
+      resourceType:
+        viewScope === "reference" ? RESOURCE_TYPE_REFERENCE_DATA : filters.resourceType,
+      action:
+        viewScope === "reference" && filters.action && !REFERENCE_ACTIONS.has(filters.action)
+          ? ""
+          : filters.action,
+    }),
+    [viewScope],
+  );
+
   const applyFilters = useCallback(() => {
+    const rangeError = validateDateRange(draft.from, draft.to);
+    if (rangeError) {
+      setDateRangeError(rangeError);
+      return;
+    }
+    setDateRangeError(null);
+    setExportMessage(null);
+    const next = normalizeFilters(draft);
+    setDraft(next);
     setApplied((prev) => ({
       ...prev,
-      ...draft,
+      ...next,
       page: 0,
     }));
-  }, [draft]);
+    router.replace(buildAuditLogUrl(viewScope, next), { scroll: false });
+  }, [draft, normalizeFilters, router, viewScope]);
 
   const resetDraft = useCallback(() => {
-    setDraft({ resourceType: "", resourceId: "", actorEmail: "", action: "", from: "", to: "" });
-    setApplied((prev) => ({
-      ...prev,
-      resourceType: "",
+    const cleared: Omit<ListQuery, "page" | "limit"> = {
+      resourceType: viewScope === "reference" ? RESOURCE_TYPE_REFERENCE_DATA : "",
       resourceId: "",
       actorEmail: "",
       action: "",
       from: "",
       to: "",
+    };
+    setDateRangeError(null);
+    setExportMessage(null);
+    setDraft(cleared);
+    setApplied((prev) => ({
+      ...prev,
+      ...cleared,
       page: 0,
     }));
-  }, []);
+    router.replace(buildAuditLogUrl(viewScope, cleared), { scroll: false });
+  }, [router, viewScope]);
+
+  const handleViewScopeChange = useCallback(
+    (scope: AuditViewScope) => {
+      setViewScope(scope);
+      setDateRangeError(null);
+      setExportMessage(null);
+      const next: Omit<ListQuery, "page" | "limit"> = {
+        ...draft,
+        resourceType: scope === "reference" ? RESOURCE_TYPE_REFERENCE_DATA : "",
+        resourceId: scope === "reference" ? draft.resourceId : "",
+        action:
+          scope === "reference" && draft.action && !REFERENCE_ACTIONS.has(draft.action)
+            ? ""
+            : draft.action,
+      };
+      setDraft(next);
+      setApplied((prev) => ({
+        ...prev,
+        ...next,
+        page: 0,
+      }));
+      router.replace(buildAuditLogUrl(scope, next), { scroll: false });
+    },
+    [draft, router],
+  );
 
   const totalPages = useMemo(() => {
     if (!listQuery.data) {
@@ -470,7 +761,15 @@ export default function AuditLogPage() {
     [applied.page, totalPages],
   );
 
+  const rows = listQuery.data?.content ?? [];
+  const total = listQuery.data?.totalElements ?? 0;
+
   const handleExportCsv = useCallback(async () => {
+    if (total === 0) {
+      setExportMessage("Không có dữ liệu để xuất với bộ lọc hiện tại.");
+      return;
+    }
+    setExportMessage(null);
     setExporting(true);
     try {
       const params = buildListParams(applied);
@@ -495,13 +794,28 @@ export default function AuditLogPage() {
     } finally {
       setExporting(false);
     }
-  }, [applied]);
-
-  const rows = listQuery.data?.content ?? [];
-  const total = listQuery.data?.totalElements ?? 0;
+  }, [applied, total]);
 
   const showMetricFilter =
-    draft.resourceType === "" || draft.resourceType === RESOURCE_TYPE_REFERENCE_DATA;
+    viewScope === "reference" ||
+    draft.resourceType === "" ||
+    draft.resourceType === RESOURCE_TYPE_REFERENCE_DATA;
+
+  const hasActiveFilters = useMemo(
+    () =>
+      Boolean(
+        applied.from ||
+          applied.to ||
+          applied.resourceId ||
+          applied.actorEmail.trim() ||
+          applied.action ||
+          (viewScope === "all" && applied.resourceType),
+      ),
+    [applied, viewScope],
+  );
+
+  const actionFilterGroups =
+    viewScope === "reference" ? [REFERENCE_ACTION_GROUP] : ACTION_FILTER_GROUPS;
 
   const appliedFilterChips = useMemo(() => {
     const chips: string[] = [];
@@ -535,24 +849,62 @@ export default function AuditLogPage() {
   }, [applied, metrics]);
 
   return (
-    <section className="-mx-6 -mt-2 mb-2 min-h-0 bg-[#effcf9] px-8 pb-12 pt-2 text-[#121e1c] antialiased">
-      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="space-y-6 text-slate-900">
+      <header className="flex flex-col gap-4 rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <nav className="mb-1 flex text-[10px] font-bold uppercase tracking-widest text-[#00685f]/60">
-            <span>Admin</span>
-            <span className="mx-2">/</span>
-            <span className="text-[#00685f]">Nhật ký hoạt động</span>
-          </nav>
-          <h1 className="text-xl font-bold tracking-tight text-teal-800">Nhật ký hoạt động</h1>
-          <p className="mt-1 max-w-2xl text-sm text-[#3d4947]">
-            Truy vết ai đã thay đổi dữ liệu tham chiếu, khi nào và nội dung trước/sau.
+          <h1 className="flex items-center gap-3 text-2xl font-bold text-slate-900">
+            <ClipboardList className="h-7 w-7 shrink-0 text-teal-600" aria-hidden="true" />
+            Nhật ký hoạt động
+          </h1>
+          <p className="mt-2 max-w-3xl text-sm text-slate-500">
+            {viewScope === "reference"
+              ? "Truy vết ai đã thay đổi dữ liệu tham chiếu, khi nào và nội dung trước/sau."
+              : "Xem toàn bộ hoạt động quản trị và người dùng trên hệ thống."}
           </p>
+          <div
+            className="mt-4 inline-flex rounded-full bg-slate-100 p-1"
+            role="tablist"
+            aria-label="Phạm vi nhật ký"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewScope === "reference"}
+              onClick={() => handleViewScopeChange("reference")}
+              className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                viewScope === "reference"
+                  ? "bg-white text-teal-800 shadow-sm"
+                  : "text-slate-600 hover:text-teal-700"
+              }`}
+            >
+              Dữ liệu tham chiếu
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewScope === "all"}
+              onClick={() => handleViewScopeChange("all")}
+              className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                viewScope === "all"
+                  ? "bg-white text-teal-800 shadow-sm"
+                  : "text-slate-600 hover:text-teal-700"
+              }`}
+            >
+              Toàn hệ thống
+            </button>
+          </div>
         </div>
-        <button
+        <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          {exportMessage ? (
+            <p className="max-w-xs text-right text-xs font-medium text-amber-800" role="status">
+              {exportMessage}
+            </p>
+          ) : null}
+          <button
           type="button"
           onClick={handleExportCsv}
-          disabled={exporting}
-          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-[#00685f] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#005049] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={exporting || total === 0}
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {exporting ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -561,14 +913,25 @@ export default function AuditLogPage() {
           )}
           Xuất CSV
         </button>
+        </div>
       </header>
 
-      <div className="mb-6 rounded-3xl border border-[#deebe8]/80 bg-white p-5 shadow-sm sm:p-6">
-        <p className="mb-4 text-[11px] font-black uppercase tracking-widest text-[#0d9488]">
+      <div className="rounded-[28px] bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
+        <p className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-500">
           Bộ lọc
         </p>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {dateRangeError ? (
+          <p className="mb-4 rounded-xl border border-[#ffb59a]/50 bg-[#ffb59a]/10 px-3 py-2 text-sm text-[#924628]">
+            {dateRangeError}
+          </p>
+        ) : null}
+
+        <div
+          className={`grid grid-cols-1 gap-4 md:grid-cols-2 ${
+            viewScope === "all" ? "xl:grid-cols-4" : "xl:grid-cols-3"
+          }`}
+        >
           <div>
             <label className="mb-2 block text-xs font-bold uppercase text-[#0d9488]">
               Từ ngày
@@ -577,7 +940,10 @@ export default function AuditLogPage() {
               type="date"
               className="w-full rounded-xl border border-[#deebe8] bg-[#f8fafc] px-3 py-2.5 text-sm outline-none transition focus:border-[#00685f] focus:ring-2 focus:ring-[#00685f]/15"
               value={draft.from}
-              onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))}
+              onChange={(e) => {
+                setDateRangeError(null);
+                setDraft((d) => ({ ...d, from: e.target.value }));
+              }}
             />
           </div>
           <div>
@@ -588,71 +954,86 @@ export default function AuditLogPage() {
               type="date"
               className="w-full rounded-xl border border-[#deebe8] bg-[#f8fafc] px-3 py-2.5 text-sm outline-none transition focus:border-[#00685f] focus:ring-2 focus:ring-[#00685f]/15"
               value={draft.to}
-              onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
+              onChange={(e) => {
+                setDateRangeError(null);
+                setDraft((d) => ({ ...d, to: e.target.value }));
+              }}
             />
           </div>
           <div>
             <label className="mb-2 block text-xs font-bold uppercase text-[#0d9488]">
               Chỉ số
             </label>
-            <select
-              className="w-full cursor-pointer appearance-none rounded-xl border border-[#deebe8] bg-[#f8fafc] px-3 py-2.5 text-sm outline-none transition focus:border-[#00685f] focus:ring-2 focus:ring-[#00685f]/15 disabled:cursor-not-allowed disabled:opacity-50"
-              value={draft.resourceId}
-              disabled={!showMetricFilter || metricsLoading}
-              onChange={(e) => setDraft((d) => ({ ...d, resourceId: e.target.value }))}
-            >
-              <option value="">Tất cả chỉ số</option>
-              {metrics.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.displayNameVi}
-                </option>
-              ))}
-            </select>
-            {!showMetricFilter ? (
+            <div className="relative">
+              <select
+                className="w-full cursor-pointer appearance-none rounded-xl border border-[#deebe8] bg-[#f8fafc] px-3 py-2.5 pr-10 text-sm outline-none transition focus:border-[#00685f] focus:ring-2 focus:ring-[#00685f]/15 disabled:cursor-not-allowed disabled:opacity-50"
+                value={draft.resourceId}
+                disabled={!showMetricFilter || metricsLoading}
+                onChange={(e) => setDraft((d) => ({ ...d, resourceId: e.target.value }))}
+              >
+                <option value="">Tất cả chỉ số</option>
+                {metrics.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.displayNameVi}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[#00685f]">
+                ▾
+              </span>
+            </div>
+            {viewScope === "all" && !showMetricFilter ? (
               <p className="mt-1 text-[10px] text-[#3d4947]">
                 Chỉ lọc theo chỉ số khi loại tài nguyên là dữ liệu tham chiếu.
               </p>
             ) : null}
           </div>
-          <div>
-            <label className="mb-2 block text-xs font-bold uppercase text-[#0d9488]">
-              Loại tài nguyên
-            </label>
-            <select
-              className="w-full cursor-pointer appearance-none rounded-xl border border-[#deebe8] bg-[#f8fafc] px-3 py-2.5 text-sm outline-none transition focus:border-[#00685f] focus:ring-2 focus:ring-[#00685f]/15"
-              value={draft.resourceType}
-              onChange={(e) =>
-                setDraft((d) => ({
-                  ...d,
-                  resourceType: e.target.value,
-                  resourceId:
-                    e.target.value === "" || e.target.value === RESOURCE_TYPE_REFERENCE_DATA
-                      ? d.resourceId
-                      : "",
-                }))
-              }
-            >
-              <option value="">Tất cả loại</option>
-              <option value={RESOURCE_TYPE_REFERENCE_DATA}>
-                {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_REFERENCE_DATA]}
-              </option>
-              <option value={RESOURCE_TYPE_HEALTH_RECORD}>
-                {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_HEALTH_RECORD]}
-              </option>
-              <option value={RESOURCE_TYPE_PROFILE}>
-                {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_PROFILE]}
-              </option>
-              <option value={RESOURCE_TYPE_AUTH}>
-                {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_AUTH]}
-              </option>
-              <option value={RESOURCE_TYPE_USER}>
-                {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_USER]}
-              </option>
-              <option value={RESOURCE_TYPE_CONSENT}>
-                {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_CONSENT]}
-              </option>
-            </select>
-          </div>
+          {viewScope === "all" ? (
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase text-[#0d9488]">
+                Loại tài nguyên
+              </label>
+              <div className="relative">
+                <select
+                  className="w-full cursor-pointer appearance-none rounded-xl border border-[#deebe8] bg-[#f8fafc] px-3 py-2.5 pr-10 text-sm outline-none transition focus:border-[#00685f] focus:ring-2 focus:ring-[#00685f]/15"
+                  value={draft.resourceType}
+                  onChange={(e) =>
+                    setDraft((d) => ({
+                      ...d,
+                      resourceType: e.target.value,
+                      resourceId:
+                        e.target.value === "" || e.target.value === RESOURCE_TYPE_REFERENCE_DATA
+                          ? d.resourceId
+                          : "",
+                    }))
+                  }
+                >
+                  <option value="">Tất cả loại</option>
+                  <option value={RESOURCE_TYPE_REFERENCE_DATA}>
+                    {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_REFERENCE_DATA]}
+                  </option>
+                  <option value={RESOURCE_TYPE_HEALTH_RECORD}>
+                    {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_HEALTH_RECORD]}
+                  </option>
+                  <option value={RESOURCE_TYPE_PROFILE}>
+                    {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_PROFILE]}
+                  </option>
+                  <option value={RESOURCE_TYPE_AUTH}>
+                    {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_AUTH]}
+                  </option>
+                  <option value={RESOURCE_TYPE_USER}>
+                    {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_USER]}
+                  </option>
+                  <option value={RESOURCE_TYPE_CONSENT}>
+                    {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_CONSENT]}
+                  </option>
+                </select>
+                <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[#00685f]">
+                  ▾
+                </span>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -677,22 +1058,27 @@ export default function AuditLogPage() {
             <label className="mb-2 block text-xs font-bold uppercase text-[#0d9488]">
               Loại hành động
             </label>
-            <select
-              className="w-full cursor-pointer appearance-none rounded-xl border border-[#deebe8] bg-[#f8fafc] px-3 py-2.5 text-sm outline-none transition focus:border-[#00685f] focus:ring-2 focus:ring-[#00685f]/15"
-              value={draft.action}
-              onChange={(e) => setDraft((d) => ({ ...d, action: e.target.value }))}
-            >
-              <option value="">Tất cả hành động</option>
-              {ACTION_FILTER_GROUPS.map((group) => (
-                <optgroup key={group.label} label={group.label}>
-                  {group.actions.map((action) => (
-                    <option key={action} value={action}>
-                      {ACTION_LABEL_VI[action] ?? action}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                className="w-full cursor-pointer appearance-none rounded-xl border border-[#deebe8] bg-[#f8fafc] px-3 py-2.5 pr-10 text-sm outline-none transition focus:border-[#00685f] focus:ring-2 focus:ring-[#00685f]/15"
+                value={draft.action}
+                onChange={(e) => setDraft((d) => ({ ...d, action: e.target.value }))}
+              >
+                <option value="">Tất cả hành động</option>
+                {actionFilterGroups.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.actions.map((action) => (
+                      <option key={action} value={action}>
+                        {ACTION_LABEL_VI[action] ?? action}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[#00685f]">
+                ▾
+              </span>
+            </div>
           </div>
         </div>
 
@@ -730,11 +1116,11 @@ export default function AuditLogPage() {
         </div>
       </div>
 
-      <div className="flex flex-col overflow-hidden rounded-3xl bg-white shadow-sm">
-        <div className="flex flex-col justify-between gap-3 border-b border-[#e9f6f3] bg-[#e9f6f3]/50 px-6 py-4 sm:flex-row sm:items-center">
+      <div className="flex flex-col overflow-hidden rounded-[28px] bg-white shadow-sm ring-1 ring-slate-200">
+        <div className="flex flex-col justify-between gap-3 border-b border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#00685f]">history</span>
-            <span className="font-bold text-[#134e4a]">
+            <span className="material-symbols-outlined text-teal-700">history</span>
+            <span className="font-bold text-slate-800">
               {listQuery.isLoading
                 ? "Đang tải…"
                 : `${total.toLocaleString("vi-VN")} bản ghi`}
@@ -743,15 +1129,15 @@ export default function AuditLogPage() {
           <button
             type="button"
             onClick={() => queryClient.invalidateQueries({ queryKey: ["admin-audit-logs"] })}
-            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-[#0d9488] transition hover:bg-[#ccfbf1]"
+            className="inline-flex items-center justify-center rounded-lg p-2 text-slate-600 transition hover:bg-teal-50"
             title="Tải lại"
+            aria-label="Tải lại"
           >
             <span
               className={`material-symbols-outlined text-[20px] ${listQuery.isFetching ? "inline-block animate-spin" : ""}`}
             >
               refresh
             </span>
-            Tải lại
           </button>
         </div>
         {listQuery.isLoading ? (
@@ -765,42 +1151,43 @@ export default function AuditLogPage() {
           </div>
         ) : rows.length === 0 ? (
           <div className="p-14 text-center text-sm text-[#3d4947]">
-            Không có bản ghi phù hợp với bộ lọc hiện tại.
+            {hasActiveFilters
+              ? "Không có bản ghi phù hợp với bộ lọc hiện tại."
+              : viewScope === "reference"
+                ? "Chưa có hoạt động nào trên dữ liệu tham chiếu."
+                : "Chưa có hoạt động được ghi nhận."}
           </div>
         ) : (
           <div className="hl-custom-scrollbar overflow-x-auto">
             <table className="w-full border-collapse text-left">
               <thead>
-                <tr className="border-b border-[#d8e5e2] bg-[#deebe8]/30">
-                  <th className="px-6 py-4 text-[11px] font-black uppercase tracking-widest text-[#0f766e]/70">
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="whitespace-nowrap px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Thời gian
                   </th>
-                  <th className="px-6 py-4 text-[11px] font-black uppercase tracking-widest text-[#0f766e]/70">
+                  <th className="whitespace-nowrap px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Người dùng
                   </th>
-                  <th className="px-6 py-4 text-[11px] font-black uppercase tracking-widest text-[#0f766e]/70">
+                  <th className="whitespace-nowrap px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Hành động
                   </th>
-                  <th className="px-6 py-4 text-[11px] font-black uppercase tracking-widest text-[#0f766e]/70">
-                    Chi tiết
-                  </th>
-                  <th className="px-6 py-4 text-center text-[11px] font-black uppercase tracking-widest text-[#0f766e]/70">
-                    Địa chỉ IP
-                  </th>
-                  <th className="px-6 py-4 text-center text-[11px] font-black uppercase tracking-widest text-[#0f766e]/70">
+                  <th className="whitespace-nowrap px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Trạng thái
                   </th>
-                  <th className="px-6 py-4 text-right text-[11px] font-black uppercase tracking-widest text-[#0f766e]/70">
-                    Thao tác
+                  <th className="whitespace-nowrap px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Tóm tắt
+                  </th>
+                  <th className="whitespace-nowrap px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    IP
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#e9f6f3]">
+              <tbody className="divide-y divide-slate-100">
                 {rows.map((row) => {
                   const at = new Date(row.createdAt);
                   const email = row.actorEmail?.trim() || "";
                   return (
-                    <tr key={row.id} className="group transition-colors hover:bg-teal-50/30">
+                    <tr key={row.id} className="transition-colors hover:bg-teal-50/30">
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="text-sm font-bold text-[#121e1c]">
@@ -829,38 +1216,40 @@ export default function AuditLogPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="whitespace-nowrap px-6 py-4">
                         <span
                           className={`inline-block rounded px-2 py-1 text-xs font-semibold ${actionBadgeClass(row.action)}`}
                         >
                           {actionLabelVi(row.action)}
                         </span>
                       </td>
-                      <td className="max-w-xs px-6 py-4">
-                        <p className="truncate text-xs text-[#3d4947]" title={detailSummary(row)}>
-                          {detailSummary(row)}
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <span
+                          className={`inline-block rounded px-2 py-1 text-xs font-semibold ${outcomeBadgeClass(resolveOutcome(row))}`}
+                        >
+                          {outcomeLabelVi(resolveOutcome(row))}
+                        </span>
+                      </td>
+                      <td className="max-w-md px-6 py-4">
+                        <p
+                          className="line-clamp-2 text-xs leading-relaxed text-slate-600"
+                          title={row.detailSummary?.trim() || undefined}
+                        >
+                          {row.detailSummary?.trim() || "—"}
                         </p>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="inline-block rounded bg-[#e9f6f3] px-2 py-0.5 font-mono text-[11px] text-[#3d4947]">
-                          {row.ipAddress ?? "—"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#00685f]/10 px-3 py-1 text-[10px] font-black uppercase tracking-tighter text-[#00685f]">
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#00685f]" />
-                          Thành công
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
                         <button
                           type="button"
                           onClick={() => setDetailEntry(row)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#00685f] opacity-0 transition-all hover:bg-[#00685f]/10 group-hover:opacity-100"
-                          title="Xem chi tiết"
+                          className="mt-1 text-xs font-semibold text-teal-700 hover:underline"
+                          aria-label={`Xem chi tiết: ${row.entityLabel || row.action}`}
                         >
-                          <span className="material-symbols-outlined text-lg">visibility</span>
+                          Xem chi tiết
                         </button>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="inline-block rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-600">
+                          {row.ipAddress ?? "—"}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -884,18 +1273,20 @@ export default function AuditLogPage() {
                 disabled={applied.page <= 0}
                 onClick={() => setApplied((p) => ({ ...p, page: 0 }))}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-[#3d4947] transition hover:bg-[#deebe8] disabled:opacity-40"
+                aria-label="Trang đầu"
                 title="Trang đầu"
               >
-                <span className="material-symbols-outlined text-base">first_page</span>
+                <span className="material-symbols-outlined text-base" aria-hidden="true">first_page</span>
               </button>
               <button
                 type="button"
                 disabled={applied.page <= 0}
                 onClick={() => setApplied((p) => ({ ...p, page: Math.max(0, p.page - 1) }))}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-[#3d4947] transition hover:bg-[#deebe8] disabled:opacity-40"
+                aria-label="Trang trước"
                 title="Trang trước"
               >
-                <span className="material-symbols-outlined text-base">chevron_left</span>
+                <span className="material-symbols-outlined text-base" aria-hidden="true">chevron_left</span>
               </button>
               {pageButtons.map((item, idx) =>
                 item === "ellipsis" ? (
@@ -922,18 +1313,20 @@ export default function AuditLogPage() {
                 disabled={applied.page + 1 >= totalPages}
                 onClick={() => setApplied((p) => ({ ...p, page: p.page + 1 }))}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-[#3d4947] transition hover:bg-[#deebe8] disabled:opacity-40"
+                aria-label="Trang sau"
                 title="Trang sau"
               >
-                <span className="material-symbols-outlined text-base">chevron_right</span>
+                <span className="material-symbols-outlined text-base" aria-hidden="true">chevron_right</span>
               </button>
               <button
                 type="button"
                 disabled={applied.page + 1 >= totalPages}
                 onClick={() => setApplied((p) => ({ ...p, page: totalPages - 1 }))}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-[#3d4947] transition hover:bg-[#deebe8] disabled:opacity-40"
+                aria-label="Trang cuối"
                 title="Trang cuối"
               >
-                <span className="material-symbols-outlined text-base">last_page</span>
+                <span className="material-symbols-outlined text-base" aria-hidden="true">last_page</span>
               </button>
             </div>
           </div>
@@ -943,6 +1336,6 @@ export default function AuditLogPage() {
       {detailEntry ? (
         <AuditDetailModal entry={detailEntry} onClose={() => setDetailEntry(null)} />
       ) : null}
-    </section>
+    </div>
   );
 }

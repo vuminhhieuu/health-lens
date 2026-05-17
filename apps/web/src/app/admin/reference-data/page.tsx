@@ -9,6 +9,7 @@ import {
   FileEdit,
   Loader2,
   Pencil,
+  ClipboardList,
   Plus,
   RefreshCcw,
   RotateCcw,
@@ -350,7 +351,15 @@ export default function ReferenceDataPage() {
           </p>
         </div>
 
-        <div className="flex gap-4">
+        <div className="flex flex-col items-stretch gap-3 sm:items-end">
+          <Link
+            href="/admin/audit-log?view=reference"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-semibold text-teal-800 transition hover:bg-teal-100"
+          >
+            <ClipboardList className="h-4 w-4" aria-hidden="true" />
+            Nhật ký hoạt động
+          </Link>
+          <div className="flex gap-4">
           <div className="rounded-2xl bg-emerald-50 px-4 py-2 ring-1 ring-emerald-100">
             <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Đang áp dụng</div>
             <div className="text-xl font-bold text-emerald-700">{groupedMetrics.active.length}</div>
@@ -358,6 +367,7 @@ export default function ReferenceDataPage() {
           <div className="rounded-2xl bg-slate-100 px-4 py-2 ring-1 ring-slate-200">
             <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Ngưng áp dụng</div>
             <div className="text-xl font-bold text-slate-600">{groupedMetrics.deactivated.length}</div>
+          </div>
           </div>
         </div>
       </div>

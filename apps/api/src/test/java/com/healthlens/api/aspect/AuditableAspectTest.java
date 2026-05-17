@@ -90,6 +90,22 @@ class AuditableAspectTest {
     }
 
     @Test
+    @DisplayName("unified resource — xóa snapshot khi method throw")
+    void clearUnifiedSnapshot_onFailure() throws Exception {
+        UUID metricId = UUID.randomUUID();
+        UnifiedAuditSnapshot.set(new UnifiedAuditSnapshot.Payload(metricId, "{\"x\":1}", null));
+
+        AuditableAspect aspect = new AuditableAspect(healthRecordAuditLogRepository, unifiedAuditLogWriter);
+        Method method = DummyService.class.getDeclaredMethod("unifiedMutation");
+        Auditable auditable = method.getAnnotation(Auditable.class);
+
+        aspect.clearUnifiedSnapshotOnFailure(auditable);
+
+        assertThat(UnifiedAuditSnapshot.take()).isNull();
+        verify(unifiedAuditLogWriter, never()).record(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("unified resource — ghi audit_logs khi có snapshot")
     void writeUnified_auditLogs() throws Exception {
         UUID metricId = UUID.randomUUID();

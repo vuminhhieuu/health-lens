@@ -74,7 +74,7 @@ function LoginContent() {
       );
 
       try {
-        await syncActiveConsentVersion().catch(() => { });
+        await syncActiveConsentVersion().catch(() => {});
         const consentRes = await apiClient.get<{
           consentGiven?: boolean;
           consentVersion?: string | null;

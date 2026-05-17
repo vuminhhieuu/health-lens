@@ -40,7 +40,7 @@ public class AdminAuditLogController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "50") @Min(1) @Max(200) int limit
+            @RequestParam(defaultValue = "20") @Min(1) @Max(200) int limit
     ) {
         Instant fromInstant = from != null ? AdminAuditLogService.startOfUtcDay(from) : null;
         Instant toInstant = to != null ? AdminAuditLogService.endOfUtcDayInclusive(to) : null;

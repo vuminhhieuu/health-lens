@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
+import org.aspectj.lang.annotation.AfterThrowing;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.stereotype.Component;
 
@@ -22,6 +23,13 @@ public class AuditableAspect {
 
     private final HealthRecordAuditLogRepository healthRecordAuditLogRepository;
     private final UnifiedAuditLogWriter unifiedAuditLogWriter;
+
+    @AfterThrowing(value = "@annotation(auditable)")
+    public void clearUnifiedSnapshotOnFailure(Auditable auditable) {
+        if (auditable.unifiedResourceType() != null && !auditable.unifiedResourceType().isBlank()) {
+            UnifiedAuditSnapshot.take();
+        }
+    }
 
     @AfterReturning(value = "@annotation(auditable)")
     public void writeAuditLog(JoinPoint joinPoint, Auditable auditable) {

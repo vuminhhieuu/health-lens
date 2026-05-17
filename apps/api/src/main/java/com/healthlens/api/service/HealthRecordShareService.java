@@ -115,7 +115,20 @@ public class HealthRecordShareService {
         }
 
         healthRecordInvitationRepository.save(invitation);
-        writeAuditLog(requesterId, record.getProfileId(), null, AuditActions.INVITE_HEALTH_RECORD_SHARE, "HEALTH_RECORD_INVITATION", invitation.getId());
+        writeAuditLog(
+                requesterId,
+                recordId,
+                record.getProfileId(),
+                null,
+                AuditActions.INVITE_HEALTH_RECORD_SHARE,
+                "HEALTH_RECORD_INVITATION",
+                invitation.getId(),
+                Map.of(
+                        "inviteeEmail", normalizedEmail,
+                        "accessLevel", resolvedAccessLevel,
+                        "status", invitation.getStatus()
+                )
+        );
 
         if (!"accepted".equals(invitation.getStatus())) {
             emailService.sendHealthRecordInvitationEmail(inviter, normalizedEmail, buildInvitationLink(invitation.getToken()));
@@ -308,7 +321,16 @@ public class HealthRecordShareService {
         invitation.setStatus("accepted");
         invitation.setAcceptedAt(now);
         healthRecordInvitationRepository.save(invitation);
-        writeAuditLog(userId, record.getProfileId(), viewer.getId(), AuditActions.ACCEPT_HEALTH_RECORD_SHARE, "HEALTH_RECORD_SHARE", share.getId());
+        writeAuditLog(
+                userId,
+                invitation.getHealthRecordId(),
+                record.getProfileId(),
+                viewer.getId(),
+                AuditActions.ACCEPT_HEALTH_RECORD_SHARE,
+                "HEALTH_RECORD_SHARE",
+                share.getId(),
+                Map.of("invitationId", invitation.getId().toString())
+        );
 
         return new AcceptHealthRecordInvitationResultResponse(
                 "accepted",
@@ -348,7 +370,16 @@ public class HealthRecordShareService {
                     }
                     healthRecordInvitationRepository.saveAll(invitations);
                 });
-        writeAuditLog(requesterId, record.getProfileId(), resolvedViewerId, AuditActions.REVOKE_HEALTH_RECORD_SHARE, "HEALTH_RECORD_SHARE", share.getId());
+        writeAuditLog(
+                requesterId,
+                recordId,
+                record.getProfileId(),
+                resolvedViewerId,
+                AuditActions.REVOKE_HEALTH_RECORD_SHARE,
+                "HEALTH_RECORD_SHARE",
+                share.getId(),
+                Map.of()
+        );
     }
 
     private HealthRecord loadRecord(UUID recordId) {
@@ -429,22 +460,39 @@ public class HealthRecordShareService {
         return UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
     }
 
-    private void writeAuditLog(UUID actorId, UUID profileId, UUID viewerId, String action, String resourceType, UUID resourceId) {
+    private void writeAuditLog(
+            UUID actorId,
+            UUID healthRecordId,
+            UUID profileId,
+            UUID viewerId,
+            String action,
+            String relatedResourceType,
+            UUID relatedResourceId,
+            Map<String, Object> extraDetails
+    ) {
         ProfileShareAuditLog auditLog = new ProfileShareAuditLog();
         auditLog.setActorId(actorId);
         auditLog.setProfileId(profileId);
         auditLog.setViewerId(viewerId != null ? viewerId : actorId);
         auditLog.setAction(action);
-        auditLog.setResourceType(resourceType);
-        auditLog.setResourceId(resourceId);
+        auditLog.setResourceType(relatedResourceType);
+        auditLog.setResourceId(relatedResourceId);
         auditLogRepository.save(auditLog);
 
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("profileId", profileId.toString());
-        details.put("resourceType", resourceType);
+        details.put("relatedResourceType", relatedResourceType);
+        if ("HEALTH_RECORD_INVITATION".equals(relatedResourceType)) {
+            details.put("invitationId", relatedResourceId.toString());
+        } else {
+            details.put("shareId", relatedResourceId.toString());
+        }
         if (viewerId != null) {
             details.put("viewerId", viewerId.toString());
         }
-        auditEventRecorder.recordEvent(actorId, action, AuditResourceTypes.HEALTH_RECORD, resourceId, details);
+        if (extraDetails != null && !extraDetails.isEmpty()) {
+            details.putAll(extraDetails);
+        }
+        auditEventRecorder.recordEvent(actorId, action, AuditResourceTypes.HEALTH_RECORD, healthRecordId, details);
     }
 }

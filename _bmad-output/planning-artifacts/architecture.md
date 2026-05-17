@@ -1183,7 +1183,7 @@ healthlens/
 │   │   │   │       │   ├── page.tsx
 │   │   │   │       │   └── [id]/page.tsx
 │   │   │   │       ├── users/page.tsx
-│   │   │   │       ├── audit-logs/page.tsx
+│   │   │   │       ├── audit-log/page.tsx
 │   │   │   │       └── analytics/page.tsx
 │   │   │   ├── components/
 │   │   │   │   ├── ui/                         # UI chung (Radix-based)
@@ -1572,7 +1572,7 @@ healthlens/
 |----------|------------|--------------|
 | Dashboard admin | `app/admin/page.tsx` | `GET /api/v1/admin/analytics` |
 | CRUD dữ liệu tham chiếu | `app/admin/reference-data/` | `GET/POST/PUT/DELETE /api/v1/admin/reference-data` |
-| Xem audit log | `app/admin/audit-logs/page.tsx` | `GET /api/v1/admin/audit-logs` |
+| Xem audit log | `app/admin/audit-log/page.tsx` | `GET /api/v1/admin/audit-logs` |
 | Thực thi MFA | `components/features/admin/` + backend | `POST /api/v1/auth/mfa/verify` |
 
 #### Nhóm FR → Ánh Xạ Thư Mục

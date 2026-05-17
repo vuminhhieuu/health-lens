@@ -10,6 +10,8 @@ public record AuditLogEntryDto(
         String resourceType,
         UUID resourceId,
         String entityLabel,
+        String detailSummary,
+        String outcome,
         String oldValueJson,
         String newValueJson,
         String ipAddress,

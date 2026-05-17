@@ -193,8 +193,12 @@ public class ProfileShareService {
                 ownerId,
                 AuditActions.INVITE_PROFILE_SHARE,
                 profileId,
-                inv.getId(),
-                Map.of("inviteeEmail", normalizedEmail, "accessLevel", resolvedAccessLevel, "status", inv.getStatus())
+                Map.of(
+                        "invitationId", inv.getId(),
+                        "inviteeEmail", normalizedEmail,
+                        "accessLevel", resolvedAccessLevel,
+                        "status", inv.getStatus()
+                )
         );
 
         return mapToResponse(inv);
@@ -212,8 +216,7 @@ public class ProfileShareService {
                 ownerId,
                 AuditActions.CANCEL_PROFILE_INVITATION,
                 profileId,
-                invitationId,
-                Map.of("inviteeEmail", inv.getInviteeEmail())
+                Map.of("invitationId", invitationId, "inviteeEmail", inv.getInviteeEmail())
         );
         profileInvitationRepository.delete(inv);
     }
@@ -260,8 +263,7 @@ public class ProfileShareService {
                 ownerId,
                 AuditActions.RESEND_PROFILE_INVITATION,
                 profileId,
-                invitationId,
-                Map.of("inviteeEmail", inv.getInviteeEmail())
+                Map.of("invitationId", invitationId, "inviteeEmail", inv.getInviteeEmail())
         );
 
         return mapToResponse(inv);
@@ -325,8 +327,7 @@ public class ProfileShareService {
                 userId,
                 AuditActions.ACCEPT_PROFILE_INVITATION,
                 profileId,
-                invitation.getId(),
-                Map.of("ownerId", ownerId.toString())
+                Map.of("invitationId", invitation.getId(), "ownerId", ownerId.toString())
         );
 
         return new AcceptInvitationResultResponse("accepted", FAMILY_PROFILES_PATH, profileId);
@@ -357,8 +358,7 @@ public class ProfileShareService {
                 userId,
                 AuditActions.REJECT_PROFILE_INVITATION,
                 invitation.getProfileId(),
-                invitationId,
-                Map.of("status", invitation.getStatus())
+                Map.of("invitationId", invitationId, "status", invitation.getStatus())
         );
     }
 
@@ -468,8 +468,7 @@ public class ProfileShareService {
                 actorId,
                 AuditActions.REVOKE_PROFILE_SHARE,
                 profileId,
-                shareId,
-                Map.of("viewerId", viewerId.toString())
+                Map.of("shareId", shareId, "viewerId", viewerId.toString())
         );
     }
 
@@ -477,9 +476,16 @@ public class ProfileShareService {
             UUID actorId,
             String action,
             UUID profileId,
-            UUID resourceId,
             Map<String, Object> details
     ) {
-        auditEventRecorder.recordEvent(actorId, action, AuditResourceTypes.PROFILE, resourceId, details);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        profileRepository.findById(profileId).ifPresent(profile -> {
+            String displayName = profile.getDisplayName();
+            if (displayName != null && !displayName.isBlank()) {
+                payload.put("displayName", displayName.trim());
+            }
+        });
+        payload.putAll(details);
+        auditEventRecorder.recordEvent(actorId, action, AuditResourceTypes.PROFILE, profileId, payload);
     }
 }
