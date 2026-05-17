@@ -44,6 +44,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -193,22 +195,39 @@ public class HealthRecordService {
         healthRecordRepository.save(record);
         updateProfileLastRecordAt(reservation.profileId());
 
-        StreamOperations<String, Object, Object> streamOps = redisTemplate.opsForStream();
         String jobId = UUID.randomUUID().toString();
         String mimeType = reservation.mimeType() == null || reservation.mimeType().isBlank()
                 ? deriveMimeTypeFromFileKey(reservation.fileKey())
                 : reservation.mimeType();
-        streamOps.add(ocrStreamName, Map.of(
+        Map<String, String> ocrPayload = Map.of(
                 "jobId", jobId,
                 "correlationId", jobId,
                 "recordId", recordId.toString(),
                 "fileKey", reservation.fileKey(),
+                "fileVersion", "unversioned",
                 "mimeType", mimeType,
                 "profileId", reservation.profileId().toString()
-        ));
+        );
+        enqueueOcrAfterCommit(ocrPayload);
         redisTemplate.delete(uploadReservationKey(recordId));
 
         return new ConfirmUploadResponse(recordId, STATUS_PROCESSING);
+    }
+
+
+    private void enqueueOcrAfterCommit(Map<String, String> ocrPayload) {
+        Runnable publish = () -> redisTemplate.opsForStream().add(ocrStreamName, ocrPayload);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    publish.run();
+                }
+            });
+            return;
+        }
+        log.warn("Publishing OCR event outside an active transaction. recordId={}", ocrPayload.get("recordId"));
+        publish.run();
     }
 
     @Transactional(readOnly = true)
@@ -675,6 +694,15 @@ public class HealthRecordService {
     public void markOcrCompleted(UUID recordId, String rawOcrJson, OcrService.OcrExtractionResult parsedData, boolean hasLowConfidenceMetrics) {
         HealthRecord record = healthRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+        if ("done".equals(record.getStatus())) {
+            log.info("Skip OCR completion replay for confirmed health record {}", recordId);
+            return;
+        }
+        if ("review_required".equals(record.getStatus()) && record.getRawOcrResult() != null
+                && !record.getRawOcrResult().isBlank()) {
+            log.info("Skip OCR completion replay for existing review-required health record {}", recordId);
+            return;
+        }
         record.setStatus("review_required");
         record.setRawOcrResult(rawOcrJson);
         

@@ -8,12 +8,15 @@ import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.StreamOffset;
+import org.springframework.data.redis.connection.stream.StreamReadOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.ResourceAccessException;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -24,10 +27,13 @@ import java.util.UUID;
 @Service
 public class OcrJobConsumer {
 
+    static final String DEFAULT_FILE_VERSION = "unversioned";
+
     private final StringRedisTemplate redisTemplate;
     private final StorageService storageService;
     private final OcrService ocrService;
     private final HealthRecordService healthRecordService;
+    private final OcrJobStateService ocrJobStateService;
     private final ObjectMapper objectMapper;
     private final String ocrStream;
     private final String consumerGroup;
@@ -36,12 +42,17 @@ public class OcrJobConsumer {
     private float ocrFailureThreshold = 0.50f;
     @Value("${app.ocr.confidence.high-threshold:0.85}")
     private float ocrReviewRequiredThreshold = 0.85f;
+    @Value("${app.ocr.consumer.max-failures:3}")
+    private int maxConsumerFailures = 3;
+    @Value("${app.ocr.consumer.failure-counter-ttl:PT1H}")
+    private Duration consumerFailureCounterTtl = Duration.ofHours(1);
 
     public OcrJobConsumer(
             StringRedisTemplate redisTemplate,
             StorageService storageService,
             OcrService ocrService,
             HealthRecordService healthRecordService,
+            OcrJobStateService ocrJobStateService,
             ObjectMapper objectMapper,
             @Value("${app.stream.ocr-events:ocr.events}") String ocrStream,
             @Value("${app.stream.ocr-consumer-group:ocr-consumers}") String consumerGroup,
@@ -50,6 +61,7 @@ public class OcrJobConsumer {
         this.storageService = storageService;
         this.ocrService = ocrService;
         this.healthRecordService = healthRecordService;
+        this.ocrJobStateService = ocrJobStateService;
         this.objectMapper = objectMapper;
         this.ocrStream = ocrStream;
         this.consumerGroup = consumerGroup;
@@ -58,17 +70,11 @@ public class OcrJobConsumer {
     }
 
     @Scheduled(fixedDelayString = "${app.stream.ocr-poll-delay-ms:1000}")
-    @SuppressWarnings("unchecked")
     public void consume() {
         StreamOperations<String, Object, Object> streamOps = redisTemplate.opsForStream();
         List<MapRecord<String, Object, Object>> records;
         try {
-            records = streamOps.read(
-                    Consumer.from(consumerGroup, consumerName),
-                    org.springframework.data.redis.connection.stream.StreamReadOptions.empty()
-                            .count(10)
-                            .block(Duration.ofMillis(500)),
-                    StreamOffset.create(ocrStream, ReadOffset.lastConsumed()));
+            records = readPendingThenNew(streamOps);
         } catch (Exception ex) {
             if (ex.getMessage() != null && ex.getMessage().contains("NOGROUP")) {
                 ensureConsumerGroup();
@@ -76,48 +82,112 @@ public class OcrJobConsumer {
             return;
         }
 
-        if (records == null || records.isEmpty()) {
+        if (records.isEmpty()) {
             return;
         }
 
         for (MapRecord<String, Object, Object> record : records) {
             try {
-                handleRecord(record);
-                streamOps.acknowledge(ocrStream, consumerGroup, record.getId());
+                if (handleRecord(record)) {
+                    streamOps.acknowledge(ocrStream, consumerGroup, record.getId());
+                }
             } catch (Exception ex) {
-                log.error("[OcrJobConsumer] Failed processing record {}", record.getId(), ex);
-                markFailedSafely(record);
-                streamOps.acknowledge(ocrStream, consumerGroup, record.getId());
+                if (deadLetterUnexpectedFailure(record, ex)) {
+                    streamOps.acknowledge(ocrStream, consumerGroup, record.getId());
+                }
             }
         }
     }
 
-    private void handleRecord(MapRecord<String, Object, Object> record) {
-        String recordIdRaw = valueAsString(record.getValue().get("recordId"));
+    private List<MapRecord<String, Object, Object>> readPendingThenNew(
+            StreamOperations<String, Object, Object> streamOps) {
+        List<MapRecord<String, Object, Object>> records = new ArrayList<>();
+        List<MapRecord<String, Object, Object>> pendingRecords = streamOps.read(
+                Consumer.from(consumerGroup, consumerName),
+                StreamReadOptions.empty().count(10),
+                StreamOffset.create(ocrStream, ReadOffset.from("0")));
+        if (pendingRecords != null && !pendingRecords.isEmpty()) {
+            records.addAll(pendingRecords);
+            return records;
+        }
+
+        List<MapRecord<String, Object, Object>> newRecords = streamOps.read(
+                Consumer.from(consumerGroup, consumerName),
+                StreamReadOptions.empty()
+                        .count(10)
+                        .block(Duration.ofMillis(500)),
+                StreamOffset.create(ocrStream, ReadOffset.lastConsumed()));
+        if (newRecords != null) {
+            records.addAll(newRecords);
+        }
+        return records;
+    }
+
+    private boolean handleRecord(MapRecord<String, Object, Object> record) {
+        Map<String, Object> payload = normalizePayload(record.getValue());
+        String recordIdRaw = valueAsString(payload.get("recordId"));
         if (recordIdRaw.isBlank()) {
-            // Ignore bootstrap/legacy stream records without OCR payload.
-            return;
+            // Ignore bootstrap stream records without OCR payload.
+            return true;
         }
-        UUID recordId = UUID.fromString(recordIdRaw);
-        String fileKey = valueAsString(record.getValue().get("fileKey"));
+
+        UUID recordId;
+        try {
+            recordId = UUID.fromString(recordIdRaw);
+        } catch (IllegalArgumentException ex) {
+            ocrJobStateService.deadLetterMalformedPayload(payload, "invalid_record_id");
+            return true;
+        }
+
+        String fileKey = valueAsString(payload.get("fileKey"));
+        String jobId = boundedValue(payload, "jobId", record.getId().getValue(), 120);
+        payload.put("jobId", jobId);
+        String correlationId = boundedValue(payload, "correlationId", jobId, 120);
+        payload.put("correlationId", correlationId);
+        String fileVersion = boundedValue(payload, "fileVersion", DEFAULT_FILE_VERSION, 120);
+        payload.put("fileVersion", fileVersion);
+        String idempotencyKey = buildIdempotencyKey(recordId, jobId, fileKey, fileVersion);
+        payload.put("idempotencyKey", idempotencyKey);
+
         if (fileKey.isBlank()) {
-            healthRecordService.markOcrFailed(recordId);
-            return;
+            ocrJobStateService.deadLetterMalformedPayload(payload, "missing_file_key");
+            healthRecordService.markOcrFailed(recordId, "missing_file_key");
+            return true;
         }
-        String mimeType = resolveMimeType(valueAsString(record.getValue().get("mimeType")));
+        if (fileKey.length() > 500) {
+            ocrJobStateService.deadLetterMalformedPayload(payload, "file_key_too_long");
+            healthRecordService.markOcrFailed(recordId, "file_key_too_long");
+            return true;
+        }
+
+        OcrJobStateService.AttemptDecision attempt = ocrJobStateService
+                .startAttempt(new OcrJobStateService.OcrJobMetadata(
+                        recordId,
+                        jobId,
+                        fileKey,
+                        idempotencyKey,
+                        correlationId,
+                        payload));
+        if (attempt.shouldSkipProcessing()) {
+            log.info(
+                    "[OcrJobConsumer] Duplicate OCR delivery skipped. recordId={} jobId={} state={} correlationId={}",
+                    recordId, jobId, attempt.state(), correlationId);
+            return true;
+        }
+
+        String mimeType = resolveMimeType(valueAsString(payload.get("mimeType")));
         if (!isSupportedMimeType(mimeType)) {
             log.warn("[OcrJobConsumer] Unsupported OCR MIME type. recordId={} fileKey={} mimeType={}",
                     recordId,
                     fileKey,
                     mimeType);
-            healthRecordService.markOcrFailed(recordId,
+            return persistTerminalFailure(recordId, idempotencyKey,
                     mimeType.isBlank() ? "missing_mime_type" : "unsupported_mime_type");
-            return;
         }
-        String downloadUrl = storageService.generateInternalDownloadUrl(fileKey, Duration.ofMinutes(5));
 
+        String downloadUrl = storageService.generateInternalDownloadUrl(fileKey, Duration.ofMinutes(5));
+        OcrService.OcrProcessingResult processingResult;
         try {
-            OcrService.OcrProcessingResult processingResult;
             if ("application/pdf".equals(mimeType)) {
                 processingResult = ocrService.processPdfBytes(
                         storageService.downloadObjectBytes(fileKey),
@@ -126,45 +196,140 @@ public class OcrJobConsumer {
             } else {
                 processingResult = ocrService.processDocument(downloadUrl, mimeType);
             }
-            OcrResult result = processingResult.result();
-            log.info(
-                    "[OcrJobConsumer] OCR route selected. recordId={} jobId={} correlationId={} mimeType={} route={} provider={}",
-                    recordId,
-                    valueAsString(record.getValue().get("jobId")),
-                    valueAsString(record.getValue().get("correlationId")),
-                    processingResult.mimeType(),
-                    processingResult.route(),
-                    processingResult.provider());
-            float failureThreshold = normalizedFailureThreshold();
-            float reviewThreshold = normalizedReviewThreshold();
-            if ("all-providers-failed".equals(result.getSource()) || result.getConfidence() < failureThreshold) {
-                String reason = resolveFailureReason(result, processingResult);
-                healthRecordService.markOcrFailed(recordId, reason);
-                return;
-            }
-            OcrService.OcrExtractionResult parsedData = ocrService.parseMetrics(result.getOrderedTextForParser(),
-                    result.getConfidence());
-            boolean hasLowConfidenceMetrics = result.getConfidence() < reviewThreshold;
-
-            Map<String, Object> rawOcrPayload = new LinkedHashMap<>();
-            rawOcrPayload.put("text", result.getText());
-            rawOcrPayload.put("confidence", result.getConfidence());
-            rawOcrPayload.put("source", result.getSource());
-            rawOcrPayload.put("language", result.getLanguage());
-            rawOcrPayload.put("processingTimeMs", result.getProcessingTimeMs());
-            rawOcrPayload.put("hasLowConfidenceMetrics", hasLowConfidenceMetrics);
-            rawOcrPayload.put("mimeType", processingResult.mimeType());
-            rawOcrPayload.put("route", processingResult.route());
-            rawOcrPayload.put("provider", processingResult.provider());
-            rawOcrPayload.put("recordId", recordId.toString());
-            rawOcrPayload.put("jobId", valueAsString(record.getValue().get("jobId")));
-            rawOcrPayload.put("correlationId", valueAsString(record.getValue().get("correlationId")));
-            rawOcrPayload.put("pages", processingResult.pages());
-            String rawOcrJson = objectMapper.writeValueAsString(rawOcrPayload);
-            healthRecordService.markOcrCompleted(recordId, rawOcrJson, parsedData, hasLowConfidenceMetrics);
+        } catch (ResourceAccessException ex) {
+            return persistRetryableFailure(recordId, idempotencyKey, "provider_timeout");
         } catch (Exception ex) {
-            healthRecordService.markOcrFailed(recordId);
+            return persistRetryableFailure(recordId, idempotencyKey, "provider_transient_error");
         }
+
+        try {
+            return persistSuccessfulOcr(recordId, jobId, correlationId, idempotencyKey, attempt, processingResult);
+        } catch (Exception ex) {
+            log.warn("[OcrJobConsumer] Post-provider OCR persistence failed. recordId={} jobId={} correlationId={}",
+                    recordId, jobId, correlationId, ex);
+            return persistRetryableFailure(recordId, idempotencyKey, "persistence_error");
+        }
+    }
+
+    private boolean persistSuccessfulOcr(
+            UUID recordId,
+            String jobId,
+            String correlationId,
+            String idempotencyKey,
+            OcrJobStateService.AttemptDecision attempt,
+            OcrService.OcrProcessingResult processingResult) {
+        OcrResult result = processingResult.result();
+        log.info(
+                "[OcrJobConsumer] OCR route selected. recordId={} jobId={} correlationId={} mimeType={} route={} provider={} attempt={}",
+                recordId,
+                jobId,
+                correlationId,
+                processingResult.mimeType(),
+                processingResult.route(),
+                processingResult.provider(),
+                attempt.attempt());
+
+        float failureThreshold = normalizedFailureThreshold();
+        float reviewThreshold = normalizedReviewThreshold();
+        if ("all-providers-failed".equals(result.getSource())) {
+            return persistRetryableFailure(recordId, idempotencyKey, resolveFailureReason(result, processingResult));
+        }
+        if (result.getConfidence() < failureThreshold) {
+            return persistTerminalFailure(recordId, idempotencyKey, "low_confidence");
+        }
+
+        OcrService.OcrExtractionResult parsedData = ocrService.parseMetrics(result.getOrderedTextForParser(),
+                result.getConfidence());
+        boolean hasLowConfidenceMetrics = result.getConfidence() < reviewThreshold;
+
+        Map<String, Object> rawOcrPayload = new LinkedHashMap<>();
+        rawOcrPayload.put("text", result.getText());
+        rawOcrPayload.put("confidence", result.getConfidence());
+        rawOcrPayload.put("source", result.getSource());
+        rawOcrPayload.put("language", result.getLanguage());
+        rawOcrPayload.put("processingTimeMs", result.getProcessingTimeMs());
+        rawOcrPayload.put("hasLowConfidenceMetrics", hasLowConfidenceMetrics);
+        rawOcrPayload.put("mimeType", processingResult.mimeType());
+        rawOcrPayload.put("route", processingResult.route());
+        rawOcrPayload.put("provider", processingResult.provider());
+        rawOcrPayload.put("recordId", recordId.toString());
+        rawOcrPayload.put("jobId", jobId);
+        rawOcrPayload.put("correlationId", correlationId);
+        rawOcrPayload.put("idempotencyKey", idempotencyKey);
+        rawOcrPayload.put("attempt", attempt.attempt());
+        rawOcrPayload.put("pages", processingResult.pages());
+        String rawOcrJson;
+        try {
+            rawOcrJson = objectMapper.writeValueAsString(rawOcrPayload);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Cannot serialize OCR payload", ex);
+        }
+        ocrJobStateService.completeSucceeded(recordId, rawOcrJson, parsedData, hasLowConfidenceMetrics, idempotencyKey);
+        return true;
+    }
+
+    private boolean persistRetryableFailure(UUID recordId, String idempotencyKey, String reason) {
+        OcrJobStateService.RetryDecision retryDecision = ocrJobStateService.markRetryableOrDeadLetter(idempotencyKey,
+                reason);
+        if (retryDecision.deadLettered()) {
+            try {
+                healthRecordService.markOcrFailed(recordId, reason);
+            } catch (Exception ex) {
+                log.warn(
+                        "[OcrJobConsumer] OCR job is DLQ'd but health record failure reason could not be updated. recordId={}",
+                        recordId, ex);
+            }
+        }
+        return true;
+    }
+
+    private boolean persistTerminalFailure(UUID recordId, String idempotencyKey, String reason) {
+        healthRecordService.markOcrFailed(recordId, reason);
+        ocrJobStateService.markTerminal(idempotencyKey, reason);
+        return true;
+    }
+
+    private boolean deadLetterUnexpectedFailure(
+            MapRecord<String, Object, Object> record,
+            Exception failure) {
+        long failures = incrementConsumerFailureCount(record);
+        if (failures < Math.max(1, maxConsumerFailures)) {
+            log.error("[OcrJobConsumer] Failed processing record {}; leaving message pending. failureCount={}",
+                    record.getId(), failures, failure);
+            return false;
+        }
+
+        try {
+            Map<String, Object> payload = normalizePayload(record.getValue());
+            payload.put("streamRecordId", record.getId().getValue());
+            payload.put("consumerFailureCount", Long.toString(failures));
+            ocrJobStateService.deadLetterPayload(payload, "consumer_processing_error", (int) failures);
+            redisTemplate.delete(consumerFailureKey(record));
+            log.error("[OcrJobConsumer] Moved repeatedly failing OCR stream entry to DLQ. recordId={} failures={}",
+                    record.getId(), failures, failure);
+            return true;
+        } catch (Exception dlqFailure) {
+            log.error("[OcrJobConsumer] Failed processing record {} and could not persist consumer DLQ; leaving pending",
+                    record.getId(), dlqFailure);
+            return false;
+        }
+    }
+
+    private long incrementConsumerFailureCount(MapRecord<String, Object, Object> record) {
+        try {
+            String key = consumerFailureKey(record);
+            Long failures = redisTemplate.opsForValue().increment(key);
+            redisTemplate.expire(key, consumerFailureCounterTtl);
+            return failures == null ? 1L : failures;
+        } catch (Exception counterFailure) {
+            log.warn("[OcrJobConsumer] Could not increment OCR consumer failure counter for record={}", record.getId(),
+                    counterFailure);
+            return 1L;
+        }
+    }
+
+    private String consumerFailureKey(MapRecord<String, Object, Object> record) {
+        return "ocr:consumer-failures:" + record.getId().getValue();
     }
 
     private void ensureConsumerGroup() {
@@ -196,8 +361,26 @@ public class OcrJobConsumer {
         return false;
     }
 
+    private Map<String, Object> normalizePayload(Map<Object, Object> rawPayload) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        rawPayload.forEach((key, value) -> payload.put(valueAsString(key), value));
+        return payload;
+    }
+
+    private String boundedValue(Map<String, Object> payload, String key, String fallback, int maxLength) {
+        String value = valueAsString(payload.get(key));
+        if (value.isBlank()) {
+            value = fallback;
+        }
+        return value.length() > maxLength ? value.substring(0, maxLength) : value;
+    }
+
     private String valueAsString(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private String buildIdempotencyKey(UUID recordId, String jobId, String fileKey, String fileVersion) {
+        return recordId + ":" + jobId + ":" + fileKey + ":" + fileVersion;
     }
 
     private String resolveMimeType(String payloadMimeType) {
@@ -227,7 +410,7 @@ public class OcrJobConsumer {
         if ("all-providers-failed".equals(result.getSource())) {
             return processingResult.route().startsWith("pdf")
                     ? "pdf_processing_failed"
-                    : "timeout";
+                    : "provider_timeout";
         }
         return "low_confidence";
     }
@@ -238,17 +421,5 @@ public class OcrJobConsumer {
 
     private float normalizedReviewThreshold() {
         return Math.max(ocrFailureThreshold, ocrReviewRequiredThreshold);
-    }
-
-    private void markFailedSafely(MapRecord<String, Object, Object> record) {
-        String recordIdRaw = valueAsString(record.getValue().get("recordId"));
-        if (recordIdRaw.isBlank()) {
-            return;
-        }
-        try {
-            healthRecordService.markOcrFailed(UUID.fromString(recordIdRaw));
-        } catch (Exception ex) {
-            log.warn("[OcrJobConsumer] Cannot mark OCR failed for recordId={}", recordIdRaw, ex);
-        }
     }
 }
