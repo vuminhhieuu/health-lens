@@ -136,9 +136,9 @@ public class HealthRecordPdfService {
         }
 
         throw new IllegalStateException(
-                "Khong tim thay font Unicode de tao PDF tieng Viet. " +
-                "Hay bundle fonts/Arial.ttf hoac fonts/NotoSans-Regular.ttf, " +
-                "hoac cai dat NotoSans/Arial Unicode tren host."
+                "Không tìm thấy font Unicode để tạo PDF tiếng Việt. " +
+                "Hãy bundle fonts/Arial.ttf hoặc fonts/NotoSans-Regular.ttf, " +
+                "hoặc cài đặt NotoSans/Arial Unicode trên host."
         );
     }
 

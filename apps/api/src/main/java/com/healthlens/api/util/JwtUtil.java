@@ -131,7 +131,7 @@ public class JwtUtil {
      */
     public String generateAdminAccessToken(User user, boolean totpVerified) {
         if (user.getRole() != UserRole.ROLE_ADMIN) {
-            throw new IllegalArgumentException("Cannot generate admin token for non-admin user");
+            throw new IllegalArgumentException("Không thể tạo mã truy cập quản trị cho người dùng không có quyền quản trị viên");
         }
         Date now = new Date();
         Date expiry = new Date(now.getTime() + adminAccessTtl);

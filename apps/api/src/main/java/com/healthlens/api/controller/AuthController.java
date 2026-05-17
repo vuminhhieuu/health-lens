@@ -47,7 +47,7 @@ public class AuthController {
 
         Map<String, Object> body = Map.of(
                 "data", Map.of(
-                        "message", "Tai khoan da tao. Kiem tra email de xac thuc.",
+                        "message", "Tài khoản đã tạo. Vui lòng kiểm tra email để xác thực.",
                         "userId", userId
                 ),
                 "meta", Map.of(
@@ -125,9 +125,10 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of(
                             "type", "https://healthlens.vn/errors/unauthorized",
-                            "title", "Unauthorized",
+                            "title", "Không được xác thực",
                             "status", 401,
-                            "detail", "Refresh token khong ton tai"
+                            "detail", "Refresh token không tồn tại",
+                            "errorCode", "INVALID_CREDENTIALS"
                     ));
         }
 
@@ -189,7 +190,7 @@ public class AuthController {
         authService.forgotPassword(request);
 
         Map<String, Object> body = Map.of(
-                "data", Map.of("message", "Neu email ton tai, ban se nhan duoc huong dan dat lai mat khau."),
+                "data", Map.of("message", "Nếu email tồn tại, bạn sẽ nhận được hướng dẫn đặt lại mật khẩu."),
                 "meta", Map.of(
                         "timestamp", Instant.now().toString(),
                         "requestId", UUID.randomUUID().toString()
@@ -208,7 +209,7 @@ public class AuthController {
         authService.resetPassword(request);
 
         Map<String, Object> body = Map.of(
-                "data", Map.of("message", "Mat khau da duoc dat lai thanh cong."),
+                "data", Map.of("message", "Mật khẩu đã được đặt lại thành công."),
                 "meta", Map.of(
                         "timestamp", Instant.now().toString(),
                         "requestId", UUID.randomUUID().toString()

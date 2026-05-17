@@ -6,14 +6,7 @@ import axios from "axios";
 import { Loader2 } from "lucide-react";
 import { ApiPaths } from "@healthlens/shared/constants";
 import { apiClient } from "@/lib/api/apiClient";
-
-function problemDetailMessage(data: unknown): string | undefined {
-  if (typeof data !== "object" || data === null || !("detail" in data)) {
-    return undefined;
-  }
-  const detail = (data as { detail: unknown }).detail;
-  return typeof detail === "string" ? detail : undefined;
-}
+import { invitationErrorMessage, messageCatalog } from "@/lib/i18n/messages";
 
 function loginReturnUrlForToken(token: string): string {
   const returnUrl = `/health-record-invitations/accept?token=${encodeURIComponent(token)}`;
@@ -59,26 +52,25 @@ function AcceptHealthRecordInvitationContent() {
         const response = await apiClient.post(ApiPaths.HEALTH_RECORD_INVITATIONS.ACCEPT(token));
         const result = response.data?.data as AcceptResult | undefined;
         if (!result?.redirectUrl) {
-          setError("Không thể xử lý lời mời. Vui lòng thử lại.");
+          setError(messageCatalog.sharing.invitationProcessingFailed);
           return;
         }
         window.location.replace(result.redirectUrl);
       } catch (err: unknown) {
         if (axios.isAxiosError(err)) {
           const status = err.response?.status;
-          const detail = problemDetailMessage(err.response?.data);
           if (status === 403) {
-            setError(detail ?? "Email đăng nhập không khớp với lời mời.");
+            setError(invitationErrorMessage(err));
             return;
           }
           if (status === 404) {
-            setError(detail ?? "Liên kết mời không hợp lệ hoặc không còn dùng được.");
+            setError(invitationErrorMessage(err));
             return;
           }
           if (status === 401) {
             const guardKey = invitationLoginRedirectGuardKey(token);
             if (sessionStorage.getItem(guardKey) === "1") {
-              setError("Phiên đăng nhập không hợp lệ hoặc hệ thống đang lỗi. Vui lòng thử lại sau.");
+              setError(messageCatalog.sharing.loginInvalidOrServerError);
               return;
             }
             sessionStorage.setItem(guardKey, "1");
@@ -86,13 +78,13 @@ function AcceptHealthRecordInvitationContent() {
             return;
           }
           if (status !== undefined && status >= 500) {
-            setError("Hệ thống đang gặp sự cố. Vui lòng thử lại sau.");
+            setError(invitationErrorMessage(err));
             return;
           }
-          setError(detail ?? "Không thể xử lý lời mời. Vui lòng thử lại.");
+          setError(invitationErrorMessage(err));
           return;
         }
-        setError("Không thể kết nối. Vui lòng kiểm tra mạng và thử lại.");
+        setError(messageCatalog.sharing.networkError);
       }
     };
 

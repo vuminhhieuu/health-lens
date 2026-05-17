@@ -12,7 +12,7 @@ const DEFAULT_TO = format(new Date(), "yyyy-MM-dd");
 
 const STUB_CARDS = [
   { label: "Người dùng", story: "8.1" },
-  { label: "Upload tuần này", story: "8.2" },
+  { label: "Tải lên tuần này", story: "8.2" },
 ] as const;
 
 function formatRate(rate: number) {

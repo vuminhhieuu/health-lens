@@ -149,7 +149,7 @@ public class HealthRecordController {
     ) {
         UUID userId = UUID.fromString(authentication.getName());
         healthRecordService.confirmRecord(userId, recordId, request);
-        return ResponseEntity.ok(buildResponseBody(Map.of("message", "Confirmed successfully")));
+        return ResponseEntity.ok(buildResponseBody(Map.of("message", "Đã xác nhận kết quả khám thành công")));
     }
 
     @PutMapping("/{recordId}/metrics")
@@ -160,7 +160,7 @@ public class HealthRecordController {
     ) {
         UUID userId = UUID.fromString(authentication.getName());
         healthRecordService.updateMetrics(userId, recordId, request);
-        return ResponseEntity.ok(buildResponseBody(Map.of("message", "Metrics updated successfully")));
+        return ResponseEntity.ok(buildResponseBody(Map.of("message", "Đã cập nhật chỉ số thành công")));
     }
 
     @DeleteMapping("/{recordId}")
@@ -170,7 +170,7 @@ public class HealthRecordController {
     ) {
         UUID userId = UUID.fromString(authentication.getName());
         healthRecordService.deleteHealthRecord(userId, recordId);
-        return ResponseEntity.ok(buildResponseBody(Map.of("message", "Deleted successfully")));
+        return ResponseEntity.ok(buildResponseBody(Map.of("message", "Đã xóa kết quả khám thành công")));
     }
 
     @PostMapping("/{recordId}/invitations")

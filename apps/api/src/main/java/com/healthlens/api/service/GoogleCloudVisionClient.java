@@ -44,10 +44,10 @@ public class GoogleCloudVisionClient {
 
     public OcrResult extract(String imageUrl) {
         if (!gcvEnabled) {
-            throw new OcrProcessingException("Google Cloud Vision is disabled");
+            throw new OcrProcessingException("Google Cloud Vision đang bị tắt");
         }
         if (gcvApiKey == null || gcvApiKey.isBlank()) {
-            throw new OcrProcessingException("Google Cloud Vision API key is missing");
+            throw new OcrProcessingException("Thiếu khóa API Google Cloud Vision");
         }
         if (gcvProjectId == null || gcvProjectId.isBlank()) {
             log.warn("Google Cloud Vision project-id is empty; please set OCR_GCV_PROJECT_ID for environment traceability");
@@ -74,7 +74,7 @@ public class GoogleCloudVisionClient {
             );
             String body = response.getBody();
             if (body == null || body.isBlank()) {
-                throw new OcrProcessingException("Google Vision returned empty response");
+                throw new OcrProcessingException("Google Vision trả về phản hồi rỗng");
             }
 
             JsonNode root = objectMapper.readTree(body);
@@ -82,10 +82,10 @@ public class GoogleCloudVisionClient {
                     ? root.path("responses").get(0)
                     : null;
             if (first == null || first.isMissingNode()) {
-                throw new OcrProcessingException("Google Vision missing response payload");
+                throw new OcrProcessingException("Google Vision thiếu dữ liệu phản hồi");
             }
             if (first.has("error")) {
-                throw new OcrProcessingException("Google Vision error: " + first.path("error").path("message").asText());
+                throw new OcrProcessingException("Google Vision trả về lỗi: " + first.path("error").path("message").asText());
             }
 
             String text = first.path("fullTextAnnotation").path("text").asText("");
@@ -111,7 +111,7 @@ public class GoogleCloudVisionClient {
                     .diagnostics(List.of())
                     .build();
         } catch (Exception ex) {
-            throw new OcrProcessingException("Google Cloud Vision OCR failed", ex);
+            throw new OcrProcessingException("OCR bằng Google Cloud Vision thất bại", ex);
         }
     }
 

@@ -39,7 +39,7 @@ public class AdminAnalyticsController {
                 : AnalyticsService.defaultToExclusive();
 
         if (!fromInstant.isBefore(toExclusive)) {
-            throw new IllegalArgumentException("from phai nho hon to");
+            throw new IllegalArgumentException("Thời điểm bắt đầu phải nhỏ hơn thời điểm kết thúc");
         }
 
         UploadQualityResponse response = analyticsService.getUploadQuality(fromInstant, toExclusive, granularity);
@@ -62,7 +62,7 @@ public class AdminAnalyticsController {
                 : AnalyticsService.defaultToExclusive();
 
         if (!fromInstant.isBefore(toExclusive)) {
-            throw new IllegalArgumentException("from phai nho hon to");
+            throw new IllegalArgumentException("Thời điểm bắt đầu phải nhỏ hơn thời điểm kết thúc");
         }
 
         UploadHistoryPageResponse response = analyticsService.getUploadHistory(

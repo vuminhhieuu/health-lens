@@ -274,11 +274,11 @@ export default function DeleteAccountPage() {
                     </li>
                     <li className="flex items-center gap-3">
                       <ShieldCheck className="h-4 w-4 text-[#00685f]" />
-                      Nhật ký đồng ý (Consent logs)
+                      Nhật ký đồng thuận
                     </li>
                     <li className="flex items-center gap-3">
                       <FileText className="h-4 w-4 text-[#00685f]" />
-                      Nhật ký hoạt động (Audit logs)
+                      Nhật ký hoạt động
                     </li>
                   </ul>
                 </div>

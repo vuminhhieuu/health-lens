@@ -756,7 +756,7 @@ class ReferenceDataAdminServiceTest {
 
             assertThatThrownBy(() -> referenceDataAdminService.publishChangeSet(changeSetId, adminId))
                     .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("multi-admin");
+                    .hasMessageContaining("Chế độ nhiều quản trị viên");
         }
 
         @Test
@@ -770,7 +770,7 @@ class ReferenceDataAdminServiceTest {
 
             assertThatThrownBy(() -> referenceDataAdminService.submitChangeSetForApproval(changeSetId, adminId))
                     .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("single-admin");
+                    .hasMessageContaining("Chế độ một quản trị viên");
         }
     }
 

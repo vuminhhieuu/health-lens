@@ -145,7 +145,7 @@ public class AnalyticsService {
         }
         String normalized = granularity.trim().toLowerCase(Locale.ROOT);
         if (!ALLOWED_GRANULARITIES.contains(normalized)) {
-            throw new IllegalArgumentException("granularity phai la day hoac week");
+            throw new IllegalArgumentException("Độ chi tiết phải là day hoặc week");
         }
         return normalized;
     }
@@ -156,7 +156,7 @@ public class AnalyticsService {
         }
         String normalized = status.trim().toLowerCase(Locale.ROOT);
         if (!ALLOWED_TERMINAL_STATUSES.contains(normalized)) {
-            throw new IllegalArgumentException("status phai la done hoac ocr_failed");
+            throw new IllegalArgumentException("Trạng thái phải là done hoặc ocr_failed");
         }
         return normalized;
     }

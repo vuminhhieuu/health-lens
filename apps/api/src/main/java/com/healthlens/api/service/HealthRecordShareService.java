@@ -76,7 +76,7 @@ public class HealthRecordShareService {
         assertCanShareRecord(requesterId, profile);
 
         User inviter = userRepository.findById(requesterId)
-                .orElseThrow(() -> new ResourceNotFoundException("User khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
         String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
         String resolvedAccessLevel = normalizeAccessLevel(accessLevel);
 
@@ -207,7 +207,7 @@ public class HealthRecordShareService {
     @Transactional
     public List<IncomingHealthRecordInvitationResponse> listIncomingInvitations(UUID userId) {
         User viewer = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
         Instant now = Instant.now();
         List<HealthRecordInvitation> invitations = healthRecordInvitationRepository
@@ -250,7 +250,7 @@ public class HealthRecordShareService {
     @Transactional
     public AcceptHealthRecordInvitationResultResponse acceptInvitation(String token, UUID userId) {
         HealthRecordInvitation invitation = healthRecordInvitationRepository.findByToken(token)
-                .orElseThrow(() -> new ResourceNotFoundException("Loi moi khong hop le"));
+                .orElseThrow(() -> new ResourceNotFoundException("Lời mời không hợp lệ"));
 
         Instant now = Instant.now();
         if (isPendingAndPastExpiry(invitation, now)) {
@@ -271,9 +271,9 @@ public class HealthRecordShareService {
         }
 
         User viewer = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
         if (!viewer.getEmail().trim().equalsIgnoreCase(invitation.getInviteeEmail().trim())) {
-            throw new AccessDeniedException("Email dang nhap khong khop voi loi moi");
+            throw new AccessDeniedException("Email đăng nhập không khớp với lời mời");
         }
 
         HealthRecord record = loadRecord(invitation.getHealthRecordId());
@@ -317,7 +317,7 @@ public class HealthRecordShareService {
         HealthRecord record = loadRecord(recordId);
         Profile profile = loadProfile(record.getProfileId());
         if (!profile.getUser().getId().equals(requesterId)) {
-            throw new AccessDeniedException("Chi chu ho so moi co the thu hoi quyen chia se ket qua");
+            throw new AccessDeniedException("Chỉ chủ hồ sơ mới có thể thu hồi quyền chia sẻ kết quả");
         }
 
         HealthRecordShare share = healthRecordShareRepository
@@ -325,7 +325,7 @@ public class HealthRecordShareService {
                 .orElseGet(() -> healthRecordShareRepository.findById(viewerId)
                         .filter(found -> recordId.equals(found.getHealthRecordId()))
                         .filter(found -> found.getRevokedAt() == null)
-                        .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay quyen chia se dang hoat dong")));
+                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy quyền chia sẻ đang hoạt động")));
         UUID resolvedViewerId = share.getViewerId();
         share.setRevokedAt(Instant.now());
         healthRecordShareRepository.save(share);
@@ -347,12 +347,12 @@ public class HealthRecordShareService {
 
     private HealthRecord loadRecord(UUID recordId) {
         return healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)
-                .orElseThrow(() -> new ResourceNotFoundException("Health record khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy kết quả khám"));
     }
 
     private Profile loadProfile(UUID profileId) {
         return profileRepository.findById(profileId)
-                .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hồ sơ"));
     }
 
     private void assertCanShareRecord(UUID requesterId, Profile profile) {
@@ -362,7 +362,7 @@ public class HealthRecordShareService {
         boolean canEdit = profileShareRepository.existsByProfileIdAndViewerIdAndAccessLevelIgnoreCaseAndRevokedAtIsNull(
                 profile.getId(), requesterId, "edit");
         if (!canEdit) {
-            throw new AccessDeniedException("Ban khong co quyen chia se ket qua kham nay");
+            throw new AccessDeniedException("Bạn không có quyền chia sẻ kết quả khám này");
         }
     }
 

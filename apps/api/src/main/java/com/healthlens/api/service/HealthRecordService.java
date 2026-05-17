@@ -128,21 +128,21 @@ public class HealthRecordService {
 
         if (request.retryRecordId() != null) {
             HealthRecord existingRecord = healthRecordRepository.findByIdAndUserId(request.retryRecordId(), userId)
-                    .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+                    .orElseThrow(() -> new IllegalArgumentException("Kết quả khám không tồn tại"));
             if (!"ocr_failed".equals(existingRecord.getStatus())) {
-                throw new IllegalStateException("Chi duoc retry upload khi OCR that bai");
+                throw new IllegalStateException("Chỉ được thử tải lên lại khi OCR thất bại");
             }
             targetProfileId = existingRecord.getProfileId();
             recordId = existingRecord.getId();
         }
 
         Profile profile = profileRepository.findById(targetProfileId)
-                .orElseThrow(() -> new IllegalArgumentException("Profile khong ton tai"));
+                .orElseThrow(() -> new IllegalArgumentException("Hồ sơ không tồn tại"));
         UUID profileOwnerId = profile.getUser().getId();
         boolean canUploadAsOwner = profileOwnerId.equals(userId);
         boolean canUploadAsSharedEditor = hasEditAccess(targetProfileId, userId);
         if (!canUploadAsOwner && !canUploadAsSharedEditor) {
-            throw new ProfileAccessRevokedException("Ban khong co quyen tai len cho ho so nay");
+            throw new ProfileAccessRevokedException("Bạn không có quyền tải lên cho hồ sơ này");
         }
 
         UploadFormat uploadFormat = resolveUploadFormat(request.fileType());
@@ -160,7 +160,7 @@ public class HealthRecordService {
     public ConfirmUploadResponse confirmUpload(UUID userId, UUID recordId) {
         UploadReservation reservation = loadUploadReservation(recordId);
         if (!reservation.userId().equals(userId)) {
-            throw new IllegalArgumentException("Record khong thuoc ve nguoi dung hien tai");
+            throw new IllegalArgumentException("Kết quả khám không thuộc về người dùng hiện tại");
         }
 
         HealthRecord record = healthRecordRepository.findById(recordId).orElseGet(HealthRecord::new);
@@ -176,9 +176,9 @@ public class HealthRecordService {
             record.setUserId(recordOwnerId);
             record.setProfileId(reservation.profileId());
         } else if (!reservation.profileId().equals(record.getProfileId())) {
-            throw new IllegalStateException("Upload reservation khong khop voi health record da ton tai");
+            throw new IllegalStateException("Phiên tải lên không khớp với kết quả khám đã tồn tại");
         } else if (!"ocr_failed".equals(record.getStatus()) && !"processing".equals(record.getStatus())) {
-            throw new IllegalStateException("Chi duoc xac nhan upload cho record moi hoac retry OCR that bai");
+            throw new IllegalStateException("Chỉ được xác nhận tải lên cho kết quả khám mới hoặc OCR thất bại cần thử lại");
         }
         record.setFileKey(reservation.fileKey());
         record.setStatus(STATUS_PROCESSING);
@@ -295,10 +295,10 @@ public class HealthRecordService {
 
         UUID recordProfileId = record.getProfileId();
         if (profileId != null && !profileId.equals(recordProfileId)) {
-            throw new AccessDeniedException("Profile khong khop voi health record");
+            throw new AccessDeniedException("Hồ sơ không khớp với kết quả khám");
         }
         Profile profile = profileRepository.findById(recordProfileId)
-                .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Hồ sơ không tồn tại"));
         List<MetricDto> metricsList = parseMetrics(record.getMetrics()).stream()
                 .map(metric -> enrichMetric(metric, profile, record.getExamDate()))
                 .collect(Collectors.toList());
@@ -328,7 +328,7 @@ public class HealthRecordService {
         AccessibleRecord accessibleRecord = loadAccessibleRecord(userId, recordId);
         HealthRecord record = accessibleRecord.record();
         Profile profile = profileRepository.findById(record.getProfileId())
-                .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Hồ sơ không tồn tại"));
         List<MetricDto> metrics = parseMetrics(record.getMetrics()).stream()
                 .map(metric -> enrichMetric(metric, profile, record.getExamDate(), false))
                 .collect(Collectors.toList());
@@ -414,7 +414,7 @@ public class HealthRecordService {
         MetricDto metric = parseMetrics(record.getMetrics()).stream()
                 .filter(item -> item.getName() != null && item.getName().equalsIgnoreCase(metricName))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Khong tim thay chi so trong health record"));
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy chỉ số trong kết quả khám"));
 
         MetricExplanationRetrievalService.RetrievalResult retrievalResult = metricExplanationRetrievalService.retrieve(
                 metric.getName(),
@@ -441,13 +441,13 @@ public class HealthRecordService {
         HealthRecord record = accessibleRecord.record();
 
         if (record.getProfileId() == null) {
-            throw new ResourceNotFoundException("Profile khong ton tai");
+            throw new ResourceNotFoundException("Hồ sơ không tồn tại");
         }
 
         Profile profile = profileRepository.findById(record.getProfileId())
-                .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Hồ sơ không tồn tại"));
         if (!profile.getUser().getId().equals(userId) && !accessibleRecord.isShared()) {
-            throw new AccessDeniedException("Profile khong thuoc ve nguoi dung");
+            throw new AccessDeniedException("Hồ sơ không thuộc về người dùng");
         }
 
         /*
@@ -575,9 +575,9 @@ public class HealthRecordService {
     @Transactional(readOnly = true)
     public java.util.List<HealthRecordStatusResponse> getRecordsByProfile(UUID userId, UUID profileId) {
         Profile profile = profileRepository.findById(profileId)
-                .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Hồ sơ không tồn tại"));
         if (!hasFullProfileHistoryAccess(profile, userId)) {
-            throw new AccessDeniedException("Profile khong thuoc ve nguoi dung");
+            throw new AccessDeniedException("Hồ sơ không thuộc về người dùng");
         }
         boolean isOwner = profile.getUser().getId().equals(userId);
         UUID ownerId = profile.getUser().getId();
@@ -617,11 +617,11 @@ public class HealthRecordService {
     @Transactional(readOnly = true)
     public HealthRecordHistoryPageResponse getProfileHistory(UUID userId, UUID profileId, int page, int limit) {
         Profile profile = profileRepository.findById(profileId)
-                .orElseThrow(() -> new ResourceNotFoundException("Profile khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Hồ sơ không tồn tại"));
         boolean hasFullProfileAccess = hasFullProfileHistoryAccess(profile, userId);
         boolean hasRecordLevelAccess = hasRecordLevelHistoryAccess(profile.getId(), userId);
         if (!hasFullProfileAccess && !hasRecordLevelAccess) {
-            throw new AccessDeniedException("Profile khong thuoc ve nguoi dung");
+            throw new AccessDeniedException("Hồ sơ không thuộc về người dùng");
         }
 
         PageRequest pageable = PageRequest.of(
@@ -693,7 +693,7 @@ public class HealthRecordService {
     @Transactional
     public void markOcrCompleted(UUID recordId, String rawOcrJson, OcrService.OcrExtractionResult parsedData, boolean hasLowConfidenceMetrics) {
         HealthRecord record = healthRecordRepository.findById(recordId)
-                .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+                .orElseThrow(() -> new IllegalArgumentException("Kết quả khám không tồn tại"));
         if ("done".equals(record.getStatus())) {
             log.info("Skip OCR completion replay for confirmed health record {}", recordId);
             return;
@@ -739,7 +739,7 @@ public class HealthRecordService {
     @Transactional
     public void markOcrFailed(UUID recordId, String reason) {
         HealthRecord record = healthRecordRepository.findById(recordId)
-                .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+                .orElseThrow(() -> new IllegalArgumentException("Kết quả khám không tồn tại"));
         String normalizedReason = normalizeFailureReasonForStorage(reason);
         record.setStatus("ocr_failed");
         record.setFailureReason(normalizedReason);
@@ -770,29 +770,29 @@ public class HealthRecordService {
             String json = objectMapper.writeValueAsString(reservation);
             redisTemplate.opsForValue().set(uploadReservationKey(recordId), json, UPLOAD_RESERVATION_TTL);
         } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Khong the luu upload reservation", ex);
+            throw new IllegalStateException("Không thể lưu phiên tải lên", ex);
         }
     }
 
     private UploadReservation loadUploadReservation(UUID recordId) {
         String json = redisTemplate.opsForValue().get(uploadReservationKey(recordId));
         if (json == null) {
-            throw new IllegalArgumentException("Upload session da het han hoac khong ton tai");
+            throw new IllegalArgumentException("Phiên tải lên đã hết hạn hoặc không tồn tại");
         }
         try {
             return objectMapper.readValue(json, UploadReservation.class);
         } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Upload session bi loi du lieu", ex);
+            throw new IllegalStateException("Phiên tải lên bị lỗi dữ liệu", ex);
         }
     }
 
     @Transactional
     public void confirmRecord(UUID userId, UUID recordId, ConfirmRecordRequest request) {
         HealthRecord record = healthRecordRepository.findById(recordId)
-                .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+                .orElseThrow(() -> new IllegalArgumentException("Kết quả khám không tồn tại"));
 
         if (!canEditRecord(userId, record)) {
-            throw new AccessDeniedException("Ban khong co quyen xac nhan health record nay");
+            throw new AccessDeniedException("Bạn không có quyền xác nhận kết quả khám này");
         }
 
         String previousStatus = record.getStatus();
@@ -801,7 +801,7 @@ public class HealthRecordService {
                 || "done".equals(record.getStatus())
                 || "ocr_failed".equals(record.getStatus());
         if (!canUpdateFromStatus) {
-            throw new IllegalStateException("Health record khong o trang thai cho phep cap nhat");
+            throw new IllegalStateException("Kết quả khám không ở trạng thái cho phép cập nhật");
         }
 
         record.setStatus("done");
@@ -855,16 +855,16 @@ public class HealthRecordService {
     @Transactional
     public void updateMetrics(UUID userId, UUID recordId, UpdateMetricsRequest request) {
         HealthRecord record = healthRecordRepository.findById(recordId)
-                .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+                .orElseThrow(() -> new IllegalArgumentException("Kết quả khám không tồn tại"));
 
         if (!canEditRecord(userId, record)) {
-            throw new AccessDeniedException("Ban khong co quyen cap nhat health record nay");
+            throw new AccessDeniedException("Bạn không có quyền cập nhật kết quả khám này");
         }
 
         if (!"review_required".equals(record.getStatus())
                 && !"done".equals(record.getStatus())
                 && !"ocr_failed".equals(record.getStatus())) {
-            throw new IllegalStateException("Health record khong o trang thai cho phep cap nhat");
+            throw new IllegalStateException("Kết quả khám không ở trạng thái cho phép cập nhật");
         }
 
         List<MetricDto> metrics = request.getMetrics();
@@ -886,10 +886,10 @@ public class HealthRecordService {
     @Auditable(action = "DELETE_HEALTH_RECORD")
     public void deleteHealthRecord(UUID userId, UUID recordId) {
         HealthRecord record = healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)
-                .orElseThrow(() -> new IllegalArgumentException("Health record khong ton tai"));
+                .orElseThrow(() -> new IllegalArgumentException("Kết quả khám không tồn tại"));
 
         if (!record.getUserId().equals(userId) && !hasEditAccess(record.getProfileId(), userId)) {
-            throw new AccessDeniedException("Ban khong co quyen xoa health record nay");
+            throw new AccessDeniedException("Bạn không có quyền xóa kết quả khám này");
         }
 
         record.setDeletedAt(Instant.now());
@@ -1322,7 +1322,7 @@ public class HealthRecordService {
             return new AccessibleRecord(ownedRecord, true, false, true, "owner");
         }
         HealthRecord record = healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)
-                .orElseThrow(() -> new ResourceNotFoundException("Health record khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Kết quả khám không tồn tại"));
         boolean profileShared = profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(record.getProfileId(), userId);
         if (profileShared) {
             boolean canEdit = hasEditAccess(record.getProfileId(), userId);
@@ -1330,11 +1330,11 @@ public class HealthRecordService {
         }
         boolean recordShared = healthRecordShareRepository.existsByHealthRecordIdAndViewerIdAndRevokedAtIsNull(recordId, userId);
         if (!recordShared) {
-            throw new ProfileAccessRevokedException("Ban khong co quyen truy cap health record nay");
+            throw new ProfileAccessRevokedException("Bạn không có quyền truy cập kết quả khám này");
         }
         HealthRecordShare share = healthRecordShareRepository
                 .findByHealthRecordIdAndViewerIdAndRevokedAtIsNull(recordId, userId)
-                .orElseThrow(() -> new ProfileAccessRevokedException("Ban khong co quyen truy cap health record nay"));
+                .orElseThrow(() -> new ProfileAccessRevokedException("Bạn không có quyền truy cập kết quả khám này"));
         boolean canEdit = "edit".equalsIgnoreCase(share.getAccessLevel());
         return new AccessibleRecord(record, false, true, canEdit, "record");
     }

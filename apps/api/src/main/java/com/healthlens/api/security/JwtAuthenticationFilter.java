@@ -115,7 +115,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (requestUri.startsWith(ApiRoutes.ADMIN_BASE + "/") && !requestUri.startsWith(ApiRoutes.ADMIN_AUTH_BASE + "/")) {
             Boolean totpVerified = jwtUtil.extractClaims(token).get("totpVerified", Boolean.class);
             if (!Boolean.TRUE.equals(totpVerified)) {
-                response.sendError(HttpServletResponse.SC_FORBIDDEN, "TOTP verification required");
+                response.sendError(HttpServletResponse.SC_FORBIDDEN, "Vui lòng xác thực TOTP trước khi truy cập khu vực quản trị");
                 return;
             }
         }
@@ -146,9 +146,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 ? "Tài khoản đã bị xóa"
                 : "Tài khoản đang chờ xóa";
         String body = "{\"type\":\"https://healthlens.vn/errors/account-pending-deletion\","
-                + "\"title\":\"Account Pending Deletion\","
+                + "\"title\":\"Tài khoản đang chờ xóa\","
                 + "\"status\":403,"
-                + "\"detail\":\"" + detail + "\"}";
+                + "\"detail\":\"" + detail + "\","
+                + "\"errorCode\":\"ACCOUNT_PENDING_DELETION\"}";
         response.getWriter().write(body);
     }
 

@@ -144,7 +144,7 @@ public class ProfileShareService {
         assertProfileOwner(ownerId, profileId);
 
         User inviter = userRepository.findById(ownerId)
-                .orElseThrow(() -> new ResourceNotFoundException("User khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
         String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
         String resolvedAccessLevel = (accessLevel == null || accessLevel.isBlank()) ? "view" : accessLevel.trim();
@@ -190,7 +190,7 @@ public class ProfileShareService {
     public void cancelInvitation(UUID ownerId, UUID profileId, UUID invitationId) {
         assertProfileOwner(ownerId, profileId);
         ProfileInvitation inv = profileInvitationRepository.findByIdAndProfileId(invitationId, profileId)
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay loi moi"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lời mời"));
         if (!"pending".equals(inv.getStatus())) {
             throw new IllegalStateException("Chỉ có thể hủy lời mời đang chờ.");
         }
@@ -204,7 +204,7 @@ public class ProfileShareService {
                 .orElseGet(() -> profileShareRepository.findById(viewerId)
                         .filter(found -> profileId.equals(found.getProfileId()))
                         .filter(found -> found.getRevokedAt() == null)
-                        .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay quyen chia se dang hoat dong")));
+                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy quyền chia sẻ đang hoạt động")));
         UUID resolvedViewerId = share.getViewerId();
         share.setRevokedAt(Instant.now());
         profileShareRepository.save(share);
@@ -221,12 +221,12 @@ public class ProfileShareService {
     public ProfileInvitationResponse resendInvitation(UUID ownerId, UUID profileId, UUID invitationId) {
         assertProfileOwner(ownerId, profileId);
         ProfileInvitation inv = profileInvitationRepository.findByIdAndProfileId(invitationId, profileId)
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay loi moi"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lời mời"));
         if (!"pending".equals(inv.getStatus())) {
             throw new IllegalStateException("Chỉ có thể gửi lại lời mời đang chờ.");
         }
         User inviter = userRepository.findById(ownerId)
-                .orElseThrow(() -> new ResourceNotFoundException("User khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
         inv.setToken(newToken());
         inv.setExpiresAt(Instant.now().plus(INVITE_VALID_DAYS, ChronoUnit.DAYS));
@@ -241,7 +241,7 @@ public class ProfileShareService {
     @Transactional
     public AcceptInvitationResultResponse acceptInvitation(String token, UUID userId) {
         ProfileInvitation invitation = profileInvitationRepository.findByToken(token)
-                .orElseThrow(() -> new ResourceNotFoundException("Loi moi khong hop le"));
+                .orElseThrow(() -> new ResourceNotFoundException("Lời mời không hợp lệ"));
 
         Instant now = Instant.now();
         boolean pastExpiry =
@@ -259,14 +259,14 @@ public class ProfileShareService {
         }
 
         User viewer = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
         if (!viewer.getEmail().trim().equalsIgnoreCase(invitation.getInviteeEmail().trim())) {
-            throw new AccessDeniedException("Email dang nhap khong khop voi loi moi");
+            throw new AccessDeniedException("Email đăng nhập không khớp với lời mời");
         }
 
         Profile profile = profileRepository.findById(invitation.getProfileId())
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay ho so"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hồ sơ"));
         UUID profileId = profile.getId();
         UUID ownerId = profile.getUser().getId();
 
@@ -298,15 +298,15 @@ public class ProfileShareService {
     @Transactional
     public void rejectIncomingInvitation(UUID invitationId, UUID userId) {
         ProfileInvitation invitation = profileInvitationRepository.findById(invitationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay loi moi"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lời mời"));
         if (!"pending".equals(invitation.getStatus())) {
-            throw new IllegalStateException("Chi co the tu choi loi moi dang cho.");
+            throw new IllegalStateException("Chỉ có thể từ chối lời mời đang chờ.");
         }
 
         User viewer = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
         if (!viewer.getEmail().trim().equalsIgnoreCase(invitation.getInviteeEmail().trim())) {
-            throw new AccessDeniedException("Email dang nhap khong khop voi loi moi");
+            throw new AccessDeniedException("Email đăng nhập không khớp với lời mời");
         }
 
         if (isPendingAndPastExpiry(invitation, Instant.now())) {
@@ -331,7 +331,7 @@ public class ProfileShareService {
 
     private void assertProfileOwner(UUID requesterId, UUID profileId) {
         Profile profile = profileRepository.findById(profileId)
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay ho so"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hồ sơ"));
         if (!requesterId.equals(profile.getUser().getId())) {
             throw new AccessDeniedException("Không có quyền truy cập hồ sơ này");
         }
@@ -366,7 +366,7 @@ public class ProfileShareService {
     @Transactional
     public List<IncomingProfileInvitationResponse> listIncomingInvitations(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
         String email = user.getEmail().trim().toLowerCase(Locale.ROOT);
         Instant now = Instant.now();
         List<ProfileInvitation> pending =

@@ -45,6 +45,7 @@ public class GlobalExceptionHandler {
         problem.setTitle("Tài khoản bị khóa tạm thời");
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("retryAfterSeconds", ex.getRetryAfterSeconds());
+        applyErrorCode(problem, ApiErrorCode.ACCOUNT_LOCKED);
         
         return ResponseEntity
                 .status(HttpStatus.TOO_MANY_REQUESTS)
@@ -62,8 +63,9 @@ public class GlobalExceptionHandler {
                 ex.getMessage()
         );
 
-        problem.setTitle("Account Pending Deletion");
+        problem.setTitle("Tài khoản đang chờ xóa");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.ACCOUNT_PENDING_DELETION);
 
         return problem;
     }
@@ -73,10 +75,13 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(BadCredentialsException.class)
     public ProblemDetail handleBadCredentials(BadCredentialsException ex, HttpServletRequest request) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.UNAUTHORIZED,
+                ex.getMessage() == null ? "Email hoặc mật khẩu không đúng." : ex.getMessage());
         problem.setType(URI.create("https://healthlens.vn/errors/unauthorized"));
-        problem.setTitle("Unauthorized");
+        problem.setTitle("Không được xác thực");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.INVALID_CREDENTIALS);
         return problem;
     }
 
@@ -86,6 +91,7 @@ public class GlobalExceptionHandler {
         problem.setType(URI.create("https://healthlens.vn/errors/email-already-exists"));
         problem.setTitle("Email đã tồn tại");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.EMAIL_ALREADY_EXISTS);
         return problem;
     }
 
@@ -97,12 +103,14 @@ public class GlobalExceptionHandler {
             problem.setType(URI.create("https://healthlens.vn/errors/invitation-pending-exists"));
             problem.setTitle("Lời mời đang chờ");
             problem.setInstance(URI.create(request.getRequestURI()));
+            applyErrorCode(problem, ApiErrorCode.BUSINESS_ERROR);
             return problem;
         }
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Email này đã được đăng ký");
         problem.setType(URI.create("https://healthlens.vn/errors/email-already-exists"));
         problem.setTitle("Email đã tồn tại");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.EMAIL_ALREADY_EXISTS);
         return problem;
     }
 
@@ -119,8 +127,9 @@ public class GlobalExceptionHandler {
                 "Lỗi hệ thống dữ liệu. Vui lòng thử lại sau."
         );
         problem.setType(URI.create("https://healthlens.vn/errors/database-error"));
-        problem.setTitle("Database error");
+        problem.setTitle("Lỗi hệ thống dữ liệu");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.DATABASE_ERROR);
         return problem;
     }
 
@@ -135,9 +144,10 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleWeakPassword(WeakPasswordException ex, HttpServletRequest request) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problem.setType(URI.create("https://healthlens.vn/errors/validation-error"));
-        problem.setTitle("Validation error");
+        problem.setTitle("Dữ liệu không hợp lệ");
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("errors", List.of(Map.of("field", "password", "message", ex.getMessage())));
+        applyErrorCode(problem, ApiErrorCode.VALIDATION_ERROR);
         return problem;
     }
 
@@ -151,9 +161,10 @@ public class GlobalExceptionHandler {
 
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Dữ liệu đầu vào không hợp lệ");
         problem.setType(URI.create("https://healthlens.vn/errors/validation-error"));
-        problem.setTitle("Validation error");
+        problem.setTitle("Dữ liệu không hợp lệ");
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("errors", errors);
+        applyErrorCode(problem, ApiErrorCode.VALIDATION_ERROR);
         return problem;
     }
 
@@ -169,9 +180,10 @@ public class GlobalExceptionHandler {
 
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Dữ liệu đầu vào không hợp lệ");
         problem.setType(URI.create("https://healthlens.vn/errors/validation-error"));
-        problem.setTitle("Validation error");
+        problem.setTitle("Dữ liệu không hợp lệ");
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("errors", errors);
+        applyErrorCode(problem, ApiErrorCode.VALIDATION_ERROR);
         return problem;
     }
 
@@ -179,8 +191,9 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problem.setType(URI.create("https://healthlens.vn/errors/validation-error"));
-        problem.setTitle("Validation error");
+        problem.setTitle("Dữ liệu không hợp lệ");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, deletionCancelCode(ex));
         return problem;
     }
 
@@ -190,6 +203,7 @@ public class GlobalExceptionHandler {
         problem.setType(URI.create("https://healthlens.vn/errors/business-error"));
         problem.setTitle("Lỗi xử lý nghiệp vụ");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.BUSINESS_ERROR);
         return problem;
     }
 
@@ -199,26 +213,28 @@ public class GlobalExceptionHandler {
         problem.setType(URI.create("https://healthlens.vn/errors/invalid-state"));
         problem.setTitle("Trạng thái không hợp lệ");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.INVALID_STATE);
         return problem;
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ProblemDetail handleMessageNotReadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
-        String detail = "Request body không hợp lệ hoặc thiếu dữ liệu";
+        String detail = "Nội dung yêu cầu không hợp lệ hoặc thiếu dữ liệu";
         log.warn("Invalid request body at {}: {}", request.getRequestURI(), ex.getMostSpecificCause() != null
                 ? ex.getMostSpecificCause().getMessage()
                 : ex.getMessage());
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
         problem.setType(URI.create("https://healthlens.vn/errors/bad-request"));
-        problem.setTitle("Bad Request");
+        problem.setTitle("Yêu cầu không hợp lệ");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.BAD_REQUEST);
         return problem;
     }
 
     private Map<String, String> toFieldError(FieldError error) {
         return Map.of(
                 "field", error.getField(),
-                "message", error.getDefaultMessage() == null ? "Invalid value" : error.getDefaultMessage()
+                "message", error.getDefaultMessage() == null ? "Giá trị không hợp lệ" : error.getDefaultMessage()
         );
     }
 
@@ -226,8 +242,9 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleConsentRequired(ConsentRequiredException ex, HttpServletRequest request) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
         problem.setType(URI.create("https://healthlens.vn/errors/consent-required"));
-        problem.setTitle("Consent Required");
+        problem.setTitle("Cần xác nhận đồng thuận");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.CONSENT_REQUIRED);
         return problem;
     }
 
@@ -235,8 +252,9 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleUserNotFound(UserNotFoundException ex, HttpServletRequest request) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problem.setType(URI.create("https://healthlens.vn/errors/user-not-found"));
-        problem.setTitle("User Not Found");
+        problem.setTitle("Không tìm thấy người dùng");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.NOT_FOUND);
         return problem;
     }
 
@@ -244,8 +262,9 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleResourceNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problem.setType(URI.create("https://healthlens.vn/errors/not-found"));
-        problem.setTitle("Not Found");
+        problem.setTitle("Không tìm thấy dữ liệu");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.NOT_FOUND);
         return problem;
     }
 
@@ -255,6 +274,7 @@ public class GlobalExceptionHandler {
         problem.setType(URI.create("https://healthlens.vn/errors/forbidden"));
         problem.setTitle("Không có quyền truy cập hồ sơ này");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.FORBIDDEN);
         return problem;
     }
 
@@ -264,7 +284,7 @@ public class GlobalExceptionHandler {
         problem.setType(URI.create("https://healthlens.vn/errors/profile-access-revoked"));
         problem.setTitle("Quyền truy cập hồ sơ đã bị thu hồi");
         problem.setInstance(URI.create(request.getRequestURI()));
-        problem.setProperty("errorCode", ProfileAccessRevokedException.ERROR_CODE);
+        applyErrorCode(problem, ApiErrorCode.PROFILE_ACCESS_REVOKED);
         return problem;
     }
 
@@ -273,11 +293,12 @@ public class GlobalExceptionHandler {
         log.warn("Upload too large at {}: {}", request.getRequestURI(), ex.getMessage());
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.PAYLOAD_TOO_LARGE,
-                "File vượt quá giới hạn upload của máy chủ. Vui lòng chọn file nhỏ hơn (tối đa 10MB)."
+                "Tệp vượt quá giới hạn tải lên của máy chủ. Vui lòng chọn tệp nhỏ hơn (tối đa 10MB)."
         );
         problem.setType(URI.create("https://healthlens.vn/errors/payload-too-large"));
-        problem.setTitle("File quá lớn");
+        problem.setTitle("Tệp quá lớn");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.VALIDATION_ERROR);
         return problem;
     }
 
@@ -286,12 +307,13 @@ public class GlobalExceptionHandler {
             MissingServletRequestPartException ex,
             HttpServletRequest request) {
         log.warn("Missing multipart part at {}: {}", request.getRequestURI(), ex.getRequestPartName());
-        String detail = "Thiếu phần upload \"%s\". Gửi multipart/form-data với field tên \"file\" chứa file CSV/JSON."
+        String detail = "Thiếu phần tải lên \"%s\". Gửi multipart/form-data với trường \"file\" chứa tệp CSV/JSON."
                 .formatted(ex.getRequestPartName() != null ? ex.getRequestPartName() : "file");
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
         problem.setType(URI.create("https://healthlens.vn/errors/missing-part"));
-        problem.setTitle("Thiếu file upload");
+        problem.setTitle("Thiếu tệp tải lên");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.BAD_REQUEST);
         return problem;
     }
 
@@ -300,11 +322,24 @@ public class GlobalExceptionHandler {
         log.warn("Multipart error at {}: {}", request.getRequestURI(), ex.getMessage());
         String detail = ex.getMessage() != null && !ex.getMessage().isBlank()
                 ? ex.getMessage()
-                : "Không đọc được dữ liệu upload. Kiểm tra gửi đúng multipart (field \"file\").";
+                : "Không đọc được dữ liệu tải lên. Kiểm tra gửi đúng multipart (trường \"file\").";
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
         problem.setType(URI.create("https://healthlens.vn/errors/multipart"));
-        problem.setTitle("Lỗi upload");
+        problem.setTitle("Lỗi tải lên");
         problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.BAD_REQUEST);
         return problem;
+    }
+
+    private static void applyErrorCode(ProblemDetail problem, ApiErrorCode errorCode) {
+        problem.setProperty("errorCode", errorCode.value());
+    }
+
+    private static ApiErrorCode deletionCancelCode(IllegalArgumentException ex) {
+        String message = ex.getMessage();
+        if (message != null && message.contains("Liên kết hủy yêu cầu")) {
+            return ApiErrorCode.DELETION_CANCEL_TOKEN_INVALID;
+        }
+        return ApiErrorCode.VALIDATION_ERROR;
     }
 }

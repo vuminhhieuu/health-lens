@@ -11,3 +11,7 @@
 ## Deferred from: code review of 3-1-upload-pdf-image-library.md (2026-04-20)
 
 - Schema `health_records` chưa có một số cột trong phần Dev Notes (`exam_date`, `ocr_confidence`) tại `apps/api/src/main/resources/db/migration/V010__create_health_records_table.sql`. Deferred vì hiện tại không chặn AC chính của story upload/confirm/enqueue.
+
+## Deferred from: code review of 6-3-vietnamese-language-normalization-and-message-catalog.md (2026-05-17)
+
+- Cancel-deletion client treats every backend 409 as cancellation success at `apps/web/src/app/cancel-deletion/CancelDeletionClient.tsx:148`. Deferred because it appears pre-existing and outside the direct 6.3 diff, but it can mislead users into believing deletion cancellation succeeded when backend refused it.

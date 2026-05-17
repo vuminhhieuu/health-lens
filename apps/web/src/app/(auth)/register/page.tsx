@@ -9,6 +9,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { apiBaseUrl } from "@/lib/api";
+import { messageCatalog, registerErrorMessage } from "@/lib/i18n/messages";
 import { notify } from "@/lib/notify";
 
 const POST_REGISTER_RETURN_URL_KEY = "post-register-return-url";
@@ -69,12 +70,12 @@ export default function RegisterPage() {
 
       const message =
         returnUrl
-          ? "Tài khoản đã tạo. Vui lòng xác thực email, sau đó đăng nhập để tiếp tục lời mời đang chờ."
-          : "Tài khoản đã tạo. Vui lòng kiểm tra email của bạn để xác thực.";
+          ? messageCatalog.auth.registerSuccessWithInvite
+          : messageCatalog.auth.registerSuccess;
       setSuccessMessage(message);
       notify.success(message);
-    } catch {
-      const message = "Đăng ký thất bại. Vui lòng thử lại.";
+    } catch (error: unknown) {
+      const message = registerErrorMessage(error);
       setSubmitError(message);
       notify.error(message);
     }

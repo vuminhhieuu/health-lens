@@ -69,7 +69,7 @@ class UserServiceTest {
 
         assertThatThrownBy(() -> userService.getCurrentUser(userId))
                 .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessageContaining("User khong ton tai");
+                .hasMessageContaining("Người dùng không tồn tại");
     }
 
     @Test

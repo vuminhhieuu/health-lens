@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotBlank;
  * Request to delete user account with password confirmation.
  */
 public record DeleteAccountRequest(
-        @NotBlank(message = "Mat khau khong duoc de trong")
+        @NotBlank(message = "Mật khẩu không được để trống")
         String password
 ) {
 }

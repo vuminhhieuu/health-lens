@@ -625,7 +625,9 @@ export default function ReviewRecordPage() {
       const serverMsg = axiosErr?.response?.data?.detail ?? axiosErr?.response?.data?.title;
       const statusCode = axiosErr?.response?.status;
       if (serverMsg) {
-        const message = `Lỗi ${statusCode ?? ""}: ${serverMsg}`;
+        const message = statusCode
+          ? `Không thể lưu kết quả khám. Mã lỗi ${statusCode}: ${serverMsg}`
+          : `Không thể lưu kết quả khám. ${serverMsg}`;
         setSaveError(message);
         notify.error(message);
       } else {

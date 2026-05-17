@@ -88,17 +88,17 @@ public class AdminAuthService {
         User user = userRepository.findByEmailIgnoreCase(request.email())
                 .orElseThrow(() -> {
                     rateLimiter.recordFailure(request.email());
-                    return new BadCredentialsException("Email hoac mat khau khong dung");
+                    return new BadCredentialsException("Email hoặc mật khẩu không đúng.");
                 });
 
         if (user.getRole() != UserRole.ROLE_ADMIN) {
             rateLimiter.recordFailure(request.email());
-            throw new BadCredentialsException("Email hoac mat khau khong dung");
+            throw new BadCredentialsException("Email hoặc mật khẩu không đúng.");
         }
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             rateLimiter.recordFailure(request.email());
-            throw new BadCredentialsException("Email hoac mat khau khong dung");
+            throw new BadCredentialsException("Email hoặc mật khẩu không đúng.");
         }
 
         // Check TOTP status
@@ -150,19 +150,19 @@ public class AdminAuthService {
                 code = Integer.parseInt(submittedCode);
             } catch (NumberFormatException e) {
                 rateLimiter.recordFailure(request.email());
-                throw new BadCredentialsException("Ma xac thuc khong hop le");
+                throw new BadCredentialsException("Mã xác thực không hợp lệ");
             }
 
             if (!googleAuth.authorize(secret, code)) {
                 rateLimiter.recordFailure(request.email());
-                throw new BadCredentialsException("Ma xac thuc khong hop le hoac da het han");
+                throw new BadCredentialsException("Mã xác thực không hợp lệ hoặc đã hết hạn");
             }
 
             // Prevent replay attacks for TOTP
             String replayKey = "totp_used:" + user.getId() + ":" + code;
             if (Boolean.TRUE.equals(redisTemplate.hasKey(replayKey))) {
                 rateLimiter.recordFailure(request.email());
-                throw new BadCredentialsException("Ma xac thuc da duoc su dung, vui long doi ma moi");
+                throw new BadCredentialsException("Mã xác thực đã được sử dụng, vui lòng đợi mã mới");
             }
             redisTemplate.opsForValue().set(replayKey, "1", Duration.ofMinutes(2));
         }
@@ -181,10 +181,10 @@ public class AdminAuthService {
     @Transactional
     public AdminTotpSetupResponse setupTotp(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BadCredentialsException("User khong ton tai"));
+                .orElseThrow(() -> new BadCredentialsException("Người dùng không tồn tại"));
 
         if (user.getRole() != UserRole.ROLE_ADMIN) {
-            throw new BadCredentialsException("Khong co quyen admin");
+            throw new BadCredentialsException("Không có quyền admin");
         }
 
         // Generate new TOTP credentials
@@ -226,14 +226,14 @@ public class AdminAuthService {
     @Transactional
     public AdminLoginResponse verifyTotp(UUID userId, String code) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BadCredentialsException("User khong ton tai"));
+                .orElseThrow(() -> new BadCredentialsException("Người dùng không tồn tại"));
 
         rateLimiter.checkLocked(user.getEmail());
 
         AdminTotpSecret totpSecret = totpSecretRepository.findByUserId(userId)
                 .orElseThrow(() -> {
                     rateLimiter.recordFailure(user.getEmail());
-                    return new BadCredentialsException("Chua setup TOTP");
+                    return new BadCredentialsException("Chưa thiết lập TOTP");
                 });
 
         boolean isValidCode = false;
@@ -255,19 +255,19 @@ public class AdminAuthService {
                 totpCode = Integer.parseInt(submittedCode);
             } catch (NumberFormatException e) {
                 rateLimiter.recordFailure(user.getEmail());
-                throw new BadCredentialsException("Ma xac thuc khong hop le");
+                throw new BadCredentialsException("Mã xác thực không hợp lệ");
             }
 
             if (!googleAuth.authorize(secret, totpCode)) {
                 rateLimiter.recordFailure(user.getEmail());
-                throw new BadCredentialsException("Ma xac thuc khong hop le hoac da het han");
+                throw new BadCredentialsException("Mã xác thực không hợp lệ hoặc đã hết hạn");
             }
 
             // Prevent replay attacks
             String replayKey = "totp_used:" + user.getId() + ":" + code;
             if (Boolean.TRUE.equals(redisTemplate.hasKey(replayKey))) {
                 rateLimiter.recordFailure(user.getEmail());
-                throw new BadCredentialsException("Ma xac thuc da duoc su dung, vui long doi ma moi");
+                throw new BadCredentialsException("Mã xác thực đã được sử dụng, vui lòng đợi mã mới");
             }
             redisTemplate.opsForValue().set(replayKey, "1", Duration.ofMinutes(2));
         }

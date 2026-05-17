@@ -100,7 +100,7 @@ class AdminAuthServiceTest {
 
             assertThatThrownBy(() -> adminAuthService.login(request))
                     .isInstanceOf(BadCredentialsException.class)
-                    .hasMessage("Email hoac mat khau khong dung");
+                    .hasMessage("Email hoặc mật khẩu không đúng.");
 
             verify(rateLimiter).recordFailure("admin@healthlens.vn");
         }
@@ -116,7 +116,7 @@ class AdminAuthServiceTest {
 
             assertThatThrownBy(() -> adminAuthService.login(request))
                     .isInstanceOf(BadCredentialsException.class)
-                    .hasMessage("Email hoac mat khau khong dung");
+                    .hasMessage("Email hoặc mật khẩu không đúng.");
 
             verify(rateLimiter).recordFailure("user@healthlens.vn");
         }
@@ -131,7 +131,7 @@ class AdminAuthServiceTest {
 
             assertThatThrownBy(() -> adminAuthService.login(request))
                     .isInstanceOf(BadCredentialsException.class)
-                    .hasMessage("Email hoac mat khau khong dung");
+                    .hasMessage("Email hoặc mật khẩu không đúng.");
         }
 
         @Test
@@ -173,7 +173,7 @@ class AdminAuthServiceTest {
             // The TOTP code 999999 will be rejected by GoogleAuthenticator mock
             assertThatThrownBy(() -> adminAuthService.login(request))
                     .isInstanceOf(BadCredentialsException.class)
-                    .hasMessage("Ma xac thuc khong hop le hoac da het han");
+                    .hasMessage("Mã xác thực không hợp lệ hoặc đã hết hạn");
 
             verify(rateLimiter).recordFailure("admin@healthlens.vn");
         }
@@ -193,7 +193,7 @@ class AdminAuthServiceTest {
 
             assertThatThrownBy(() -> adminAuthService.login(request))
                     .isInstanceOf(BadCredentialsException.class)
-                    .hasMessage("Ma xac thuc khong hop le");
+                    .hasMessage("Mã xác thực không hợp lệ");
         }
 
         @Test
@@ -249,7 +249,7 @@ class AdminAuthServiceTest {
 
             assertThatThrownBy(() -> adminAuthService.setupTotp(regularUser.getId()))
                     .isInstanceOf(BadCredentialsException.class)
-                    .hasMessage("Khong co quyen admin");
+                    .hasMessage("Không có quyền admin");
         }
     }
 
@@ -273,7 +273,7 @@ class AdminAuthServiceTest {
 
             assertThatThrownBy(() -> adminAuthService.verifyTotp(admin.getId(), "999999"))
                     .isInstanceOf(BadCredentialsException.class)
-                    .hasMessage("Ma xac thuc khong hop le hoac da het han");
+                    .hasMessage("Mã xác thực không hợp lệ hoặc đã hết hạn");
             
             verify(rateLimiter).recordFailure(admin.getEmail());
         }
@@ -288,7 +288,7 @@ class AdminAuthServiceTest {
 
             assertThatThrownBy(() -> adminAuthService.verifyTotp(admin.getId(), "123456"))
                     .isInstanceOf(BadCredentialsException.class)
-                    .hasMessage("Chua setup TOTP");
+                    .hasMessage("Chưa thiết lập TOTP");
             
             verify(rateLimiter).recordFailure(admin.getEmail());
         }
@@ -305,7 +305,7 @@ class AdminAuthServiceTest {
 
             assertThatThrownBy(() -> adminAuthService.verifyTotp(admin.getId(), "abcdef"))
                     .isInstanceOf(BadCredentialsException.class)
-                    .hasMessage("Ma xac thuc khong hop le");
+                    .hasMessage("Mã xác thực không hợp lệ");
             
             verify(rateLimiter).recordFailure(admin.getEmail());
         }

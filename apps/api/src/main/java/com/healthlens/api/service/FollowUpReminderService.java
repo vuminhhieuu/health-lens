@@ -90,7 +90,7 @@ public class FollowUpReminderService {
     ) {
         requireOwnedProfile(userId, profileId);
         FollowUpReminder reminder = reminderRepository.findByIdAndProfileId(reminderId, profileId)
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay nhac lich"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhắc lịch"));
 
         LocalDate previousDate = reminder.getReminderDate();
         applyRequest(reminder, request);
@@ -107,7 +107,7 @@ public class FollowUpReminderService {
     public void delete(UUID userId, UUID profileId, UUID reminderId) {
         requireOwnedProfile(userId, profileId);
         FollowUpReminder reminder = reminderRepository.findByIdAndProfileId(reminderId, profileId)
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay nhac lich"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhắc lịch"));
         reminderRepository.delete(reminder);
     }
 
@@ -222,7 +222,7 @@ public class FollowUpReminderService {
 
     private Profile requireOwnedProfile(UUID userId, UUID profileId) {
         return profileRepository.findByIdAndUserId(profileId, userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay ho so"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hồ sơ"));
     }
 
     private void sendAfterCommitIfDue(FollowUpReminder reminder) {
