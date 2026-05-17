@@ -158,6 +158,12 @@ export const ApiPaths = {
     TOTP_VERIFY: `/api/${API_VERSION}/admin/auth/totp/verify`,
   },
 
+  ADMIN_ANALYTICS: {
+    BASE: `/api/${API_VERSION}/admin/analytics`,
+    UPLOAD_QUALITY: `/api/${API_VERSION}/admin/analytics/upload-quality`,
+    UPLOAD_HISTORY: `/api/${API_VERSION}/admin/analytics/upload-history`,
+  },
+
   ADMIN_REFERENCE_DATA: {
     BASE: `/api/${API_VERSION}/admin/reference-data`,
     METRICS: `/api/${API_VERSION}/admin/reference-data/metrics`,
