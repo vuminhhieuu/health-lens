@@ -59,7 +59,7 @@ function parseApiError(error: unknown) {
     if (d?.title && d?.message) return `${d.title}: ${d.message}`;
     if (d?.title) return d.title;
     if (d?.message) return d.message;
-    if (response.status === 413) return "File quá lớn so với giới hạn máy chủ.";
+    if (response.status === 413) return "Tệp quá lớn so với giới hạn máy chủ.";
     return "Không thể xử lý yêu cầu.";
   }
   if (error && typeof error === "object" && "message" in error && typeof (error as Error).message === "string") {
@@ -176,10 +176,10 @@ export default function ReferenceDataImportPage() {
   const validateFile = (nextFile: File) => {
     const ext = nextFile.name.split(".").pop()?.toLowerCase();
     if (!ext || !["csv", "json"].includes(ext)) {
-      return "Chỉ hỗ trợ file .csv hoặc .json.";
+      return "Chỉ hỗ trợ tệp .csv hoặc .json.";
     }
     if (nextFile.size > 5 * 1024 * 1024) {
-      return "File vượt quá 5MB. Vui lòng chọn file nhỏ hơn.";
+      return "Tệp vượt quá 5MB. Vui lòng chọn tệp nhỏ hơn.";
     }
     return null;
   };

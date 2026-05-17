@@ -14,11 +14,11 @@ import { ApiPaths } from "@healthlens/shared/constants";
 import { syncActiveConsentVersion } from "@/lib/consent/syncActiveConsentVersion";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+import { authErrorMessage, getApiErrorCode, messageCatalog } from "@/lib/i18n/messages";
 import { useAuthStore } from "@/stores/authStore";
 
 type LoginInput = z.infer<typeof loginSchema>;
-const PENDING_DELETION_UI_MESSAGE =
-  "Yêu cầu xóa tài khoản của bạn đã được ghi nhận. Theo Nghị định 13/2023/NĐ-CP, hệ thống đang trong quá trình xóa dữ liệu vĩnh viễn (tối đa 72 giờ). Trong thời gian này, bạn không thể đăng nhập.";
+const PENDING_DELETION_UI_MESSAGE = messageCatalog.auth.pendingDeletion;
 
 export default function LoginPage() {
   return (
@@ -39,7 +39,7 @@ function LoginContent() {
   const [isPendingDeletionBlocked, setIsPendingDeletionBlocked] = useState(
     searchParams.get("pendingDeletion") === "1",
   );
-  const [pendingDeletionMessage, setPendingDeletionMessage] = useState(
+  const [pendingDeletionMessage, setPendingDeletionMessage] = useState<string>(
     PENDING_DELETION_UI_MESSAGE,
   );
 
@@ -93,64 +93,14 @@ function LoginContent() {
       const returnUrl = searchParams.get("returnUrl") || "/";
       router.push(returnUrl);
     } catch (error: unknown) {
-      if (
-        error &&
-        typeof error === "object" &&
-        "response" in error &&
-        error.response &&
-        typeof error.response === "object"
-      ) {
-        const resp = error.response as {
-          status?: number;
-          data?: {
-            detail?: string;
-            title?: string;
-            type?: string;
-            retryAfterSeconds?: number;
-          };
-        };
-        if (resp.status === 429) {
-          const retryAfter = resp.data?.retryAfterSeconds ?? 900;
-          const minutes = Math.ceil(retryAfter / 60);
-          setSubmitError(
-            `Tài khoản bị khóa tạm thời. Thử lại sau ${minutes} phút.`,
-          );
-        } else if (resp.status === 401) {
-          setSubmitError("Email hoặc mật khẩu không đúng.");
-        } else if (resp.status === 403 || resp.status === 423) {
-          const detail = (resp.data?.detail ?? "").toLowerCase();
-          const title = (resp.data?.title ?? "").toLowerCase();
-          const type = (resp.data?.type ?? "").toLowerCase();
-          const normalize = (value: string) =>
-            value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-          const detailPlain = normalize(detail);
-          const titlePlain = normalize(title);
-          const pendingMarkers = [
-            detail,
-            title,
-            type,
-            detailPlain,
-            titlePlain,
-          ];
+      const errorCode = getApiErrorCode(error);
+      const message = authErrorMessage(error);
 
-          const isPendingDeletion = pendingMarkers.some(
-            (value) =>
-              value.includes("pending") ||
-              value.includes("dang cho xoa") ||
-              value.includes("deletion-pending"),
-          );
-
-          if (isPendingDeletion) {
-            setIsPendingDeletionBlocked(true);
-            setPendingDeletionMessage(PENDING_DELETION_UI_MESSAGE);
-          } else {
-            setSubmitError("Tài khoản chưa thể đăng nhập ở thời điểm hiện tại.");
-          }
-        } else {
-          setSubmitError("Đăng nhập thất bại. Vui lòng thử lại.");
-        }
+      if (errorCode === "ACCOUNT_PENDING_DELETION") {
+        setIsPendingDeletionBlocked(true);
+        setPendingDeletionMessage(message);
       } else {
-        setSubmitError("Không thể kết nối đến máy chủ. Vui lòng thử lại.");
+        setSubmitError(message);
       }
     }
   };

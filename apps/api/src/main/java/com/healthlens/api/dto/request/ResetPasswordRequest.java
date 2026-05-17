@@ -5,12 +5,12 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record ResetPasswordRequest(
-    @NotBlank(message = "Token khong duoc de trong")
+    @NotBlank(message = "Token không được để trống")
     String token,
 
-    @NotBlank(message = "Mat khau moi khong duoc de trong")
-    @Size(min = 8, message = "Mat khau phai co it nhat 8 ky tu")
-    @Pattern(regexp = ".*[A-Z].*", message = "Mat khau phai co it nhat 1 chu hoa")
-    @Pattern(regexp = ".*\\d.*", message = "Mat khau phai co it nhat 1 chu so")
+    @NotBlank(message = "Mật khẩu mới không được để trống")
+    @Size(min = 8, message = "Mật khẩu phải có ít nhất 8 ký tự")
+    @Pattern(regexp = ".*[A-Z].*", message = "Mật khẩu phải có ít nhất 1 chữ hoa")
+    @Pattern(regexp = ".*\\d.*", message = "Mật khẩu phải có ít nhất 1 chữ số")
     String newPassword
 ) {}

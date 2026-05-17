@@ -39,13 +39,13 @@ const FAILURE_LABELS: Record<string, string> = {
   timeout: "Timeout",
   low_confidence: "Độ tin cậy thấp",
   api_error: "Lỗi API",
-  invalid_file: "File không hợp lệ",
+  invalid_file: "Tệp không hợp lệ",
 };
 
 const FILTER_TITLES: Record<string, string> = {
-  all: "Tất cả upload",
-  done: "Upload thành công",
-  ocr_failed: "Upload thất bại",
+  all: "Tất cả lượt tải lên",
+  done: "Tải lên thành công",
+  ocr_failed: "Tải lên thất bại",
 };
 
 type UploadHistoryModalProps = {
@@ -70,8 +70,8 @@ export function UploadHistoryModal({
   const filterKey = filter.status ?? "all";
   const subtitle =
     filter.failureReason != null
-      ? `${FILTER_TITLES[filterKey] ?? "Upload"} · ${FAILURE_LABELS[filter.failureReason] ?? filter.failureReason}`
-      : (FILTER_TITLES[filterKey] ?? "Upload");
+      ? `${FILTER_TITLES[filterKey] ?? "Tải lên"} · ${FAILURE_LABELS[filter.failureReason] ?? filter.failureReason}`
+      : (FILTER_TITLES[filterKey] ?? "Tải lên");
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["admin-upload-history", from, to, filter.status, filter.failureReason, page],

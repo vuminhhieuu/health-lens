@@ -70,7 +70,7 @@ public class EmailService {
             log.info("[EmailService] Verification email sent successfully to: {}", user.getEmail());
         } catch (MessagingException e) {
             log.error("[EmailService] Failed to send verification email to {}", user.getEmail(), e);
-            throw new IllegalStateException("Gui email xac thuc that bai", e);
+            throw new IllegalStateException("Gửi email xác thực thất bại", e);
         }
     }
 
@@ -85,12 +85,12 @@ public class EmailService {
         String htmlContent = """
                 <html>
                   <body style=\"font-family: Arial, sans-serif; color: #111827;\">
-                    <h2> HealthLens - Dat lai mat khau</h2>
-                    <p>Chao %s,</p>
-                    <p>Chung toi da nhan duoc yeu cau dat lai mat khau cho tai khoan cua ban.</p>
-                    <p>Vui long bam vao lien ket ben duoi de thuc hien (hieu luc trong 1 gio):</p>
-                    <p><a href=\"%s\" style=\"background-color: #00685f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;\">Dat lai mat khau</a></p>
-                    <p>Neu ban khong yeu cau dat lai mat khau, hay bo qua email nay. Mat khau cua ban se khong thay doi cho den khi ban truy cap vao lien ket tren va tao mat khau moi.</p>
+                    <h2>HealthLens - Đặt lại mật khẩu</h2>
+                    <p>Chào %s,</p>
+                    <p>Chúng tôi đã nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.</p>
+                    <p>Vui lòng bấm vào liên kết bên dưới để thực hiện. Liên kết có hiệu lực trong 1 giờ.</p>
+                    <p><a href=\"%s\" style=\"background-color: #00685f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;\">Đặt lại mật khẩu</a></p>
+                    <p>Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này. Mật khẩu của bạn sẽ không thay đổi cho đến khi bạn truy cập liên kết trên và tạo mật khẩu mới.</p>
                   </body>
                 </html>
                 """.formatted(user.getFullName(), resetLink);
@@ -100,14 +100,14 @@ public class EmailService {
             MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
             helper.setFrom(fromAddress);
             helper.setTo(user.getEmail());
-            helper.setSubject("[HealthLens] Dat lai mat khau");
+            helper.setSubject("[HealthLens] Đặt lại mật khẩu");
             helper.setText(htmlContent, true);
 
             mailSender.send(message);
             log.info("[EmailService] Password reset email sent successfully to: {}", user.getEmail());
         } catch (MessagingException e) {
             log.error("[EmailService] Failed to send password reset email to {}", user.getEmail(), e);
-            throw new IllegalStateException("Gui email dat lai mat khau that bai", e);
+            throw new IllegalStateException("Gửi email đặt lại mật khẩu thất bại", e);
         }
     }
 
@@ -138,7 +138,7 @@ public class EmailService {
             log.info("[EmailService] Deletion confirmation email sent successfully to: {}", user.getEmail());
         } catch (MessagingException e) {
             log.error("[EmailService] Failed to send deletion confirmation email to {}", user.getEmail(), e);
-            throw new IllegalStateException("Gui email xac nhan xoa tai khoan that bai", e);
+            throw new IllegalStateException("Gửi email xác nhận xóa tài khoản thất bại", e);
         }
     }
 
@@ -173,7 +173,7 @@ public class EmailService {
             log.info("[EmailService] Cancellation confirmation email sent successfully to: {}", user.getEmail());
         } catch (MessagingException e) {
             log.error("[EmailService] Failed to send cancellation confirmation email to {}", user.getEmail(), e);
-            throw new IllegalStateException("Gui email xac nhan huy xoa tai khoan that bai", e);
+            throw new IllegalStateException("Gửi email xác nhận hủy xóa tài khoản thất bại", e);
         }
     }
 
@@ -209,7 +209,7 @@ public class EmailService {
             log.info("[EmailService] Deletion completion email sent successfully to: {}", user.getEmail());
         } catch (MessagingException e) {
             log.error("[EmailService] Failed to send deletion completion email to {}", user.getEmail(), e);
-            throw new IllegalStateException("Gui email xac nhan xoa tai khoan hoan tat that bai", e);
+            throw new IllegalStateException("Gửi email xác nhận xóa tài khoản hoàn tất thất bại", e);
         }
     }
 
@@ -231,7 +231,7 @@ public class EmailService {
             mailSender.send(message);
         } catch (MessagingException e) {
             log.error("[EmailService] Failed to send profile invitation to {}", inviteeEmail, e);
-            throw new IllegalStateException("Gui email moi chia se ho so that bai", e);
+            throw new IllegalStateException("Gửi email mời chia sẻ hồ sơ thất bại", e);
         }
     }
 
@@ -278,7 +278,7 @@ public class EmailService {
             mailSender.send(message);
         } catch (MessagingException e) {
             log.error("[EmailService] Failed to send health record invitation to {}", inviteeEmail, e);
-            throw new IllegalStateException("Gui email moi chia se ket qua kham that bai", e);
+            throw new IllegalStateException("Gửi email mời chia sẻ kết quả khám thất bại", e);
         }
     }
 

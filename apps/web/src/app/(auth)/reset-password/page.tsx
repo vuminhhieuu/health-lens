@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+import { getApiErrorStatus, messageCatalog } from "@/lib/i18n/messages";
 import { notify } from "@/lib/notify";
 
 type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
@@ -50,7 +51,7 @@ function ResetPasswordContent() {
     setSubmitError("");
 
     if (!data.token) {
-      const message = "Token không hợp lệ hoặc đã hết hạn.";
+      const message = messageCatalog.auth.resetTokenInvalid;
       setSubmitError(message);
       notify.error(message);
       return;
@@ -62,29 +63,17 @@ function ResetPasswordContent() {
         newPassword: data.newPassword,
       });
       setIsSuccess(true);
-      notify.success("Mật khẩu của bạn đã được cập nhật thành công.");
+      notify.success(messageCatalog.auth.resetPasswordSuccess);
       setTimeout(() => {
         router.push("/login");
       }, 3000);
     } catch (error: unknown) {
-      let message = "Không thể kết nối đến máy chủ. Vui lòng thử lại.";
-      if (
-        error &&
-        typeof error === "object" &&
-        "response" in error &&
-        error.response &&
-        typeof error.response === "object"
-      ) {
-        const resp = error.response as {
-          status?: number;
-          data?: { detail?: string };
-        };
-        if (resp.status === 400 || resp.status === 401) {
-          message = "Token không hợp lệ hoặc đã hết hạn.";
-        } else {
-          message = "Đã có lỗi xảy ra. Vui lòng thử lại sau.";
-        }
-      }
+      const status = getApiErrorStatus(error);
+      const message = status === 400 || status === 401
+        ? messageCatalog.auth.resetTokenInvalid
+        : status
+          ? messageCatalog.auth.genericRetry
+          : messageCatalog.auth.networkError;
       setSubmitError(message);
       notify.error(message);
     }

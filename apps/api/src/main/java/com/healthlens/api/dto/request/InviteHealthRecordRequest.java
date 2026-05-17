@@ -5,10 +5,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
 public record InviteHealthRecordRequest(
-        @NotBlank(message = "Email khong duoc de trong")
-        @Email(message = "Email khong hop le")
+        @NotBlank(message = "Email không được để trống")
+        @Email(message = "Email không hợp lệ")
         String email,
-        @Pattern(regexp = "^(view|edit)?$", message = "accessLevel phai la view hoac edit")
+        @Pattern(regexp = "^(view|edit)?$", message = "Quyền truy cập phải là view hoặc edit")
         String accessLevel
 ) {
 }

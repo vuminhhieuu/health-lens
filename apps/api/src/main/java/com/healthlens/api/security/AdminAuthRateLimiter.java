@@ -39,7 +39,7 @@ public class AdminAuthRateLimiter {
                 Long ttl = redisTemplate.getExpire(key);
                 long retryAfterSeconds = (ttl != null && ttl > 0) ? ttl : LOCK_DURATION.toSeconds();
                 throw new AccountLockedException(
-                        "Tai khoan admin bi khoa tam thoi. Thu lai sau " + retryAfterSeconds + " giay.",
+                        "Tài khoản admin bị khóa tạm thời. Vui lòng thử lại sau " + retryAfterSeconds + " giây.",
                         retryAfterSeconds
                 );
             }
@@ -48,7 +48,7 @@ public class AdminAuthRateLimiter {
         } catch (Exception e) {
             log.error("Redis unavailable when checking admin lock. Fail-closed: {}. Email: {}", failClosed, email, e);
             if (failClosed) {
-                throw new AccountLockedException("He thong tam ngung. Thu lai sau.", LOCK_DURATION.toSeconds());
+                throw new AccountLockedException("Hệ thống tạm ngưng. Vui lòng thử lại sau.", LOCK_DURATION.toSeconds());
             }
         }
     }
@@ -63,7 +63,7 @@ public class AdminAuthRateLimiter {
         } catch (Exception e) {
             log.error("Redis unavailable when recording admin login failure. Email: {}", email, e);
             if (failClosed) {
-                throw new AccountLockedException("He thong tam ngung. Thu lai sau.", LOCK_DURATION.toSeconds());
+                throw new AccountLockedException("Hệ thống tạm ngưng. Vui lòng thử lại sau.", LOCK_DURATION.toSeconds());
             }
         }
     }

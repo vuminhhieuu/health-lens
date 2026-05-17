@@ -6,9 +6,9 @@ import lombok.Data;
 
 @Data
 public class ConsentRequest {
-    @NotBlank(message = "Version is required")
+    @NotBlank(message = "Phiên bản đồng thuận là bắt buộc")
     private String version;
 
-    @NotNull(message = "Accepted field is required")
+    @NotNull(message = "Trạng thái đồng thuận là bắt buộc")
     private Boolean accepted;
 }

@@ -187,7 +187,7 @@ class HealthRecordServiceTest {
                 new CreateUploadUrlRequest(profileId, "pdf", retryRecordId)
         ))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("retry upload");
+                .hasMessageContaining("thử tải lên lại");
     }
 
     @Test
@@ -234,7 +234,7 @@ class HealthRecordServiceTest {
 
         assertThatThrownBy(() -> healthRecordService.confirmUpload(userId, recordId))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Upload session");
+                .hasMessageContaining("Phiên tải lên");
     }
 
     @Test
@@ -262,7 +262,7 @@ class HealthRecordServiceTest {
 
         assertThatThrownBy(() -> healthRecordService.confirmUpload(userId, recordId))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("retry OCR that bai");
+                .hasMessageContaining("OCR thất bại cần thử lại");
     }
 
     @Test
@@ -304,7 +304,7 @@ class HealthRecordServiceTest {
 
         assertThatThrownBy(() -> healthRecordService.confirmRecord(userId, recordId, new ConfirmRecordRequest()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("khong o trang thai cho phep cap nhat");
+                .hasMessageContaining("không ở trạng thái cho phép cập nhật");
     }
 
     @Test
@@ -470,7 +470,7 @@ class HealthRecordServiceTest {
 
         assertThatThrownBy(() -> healthRecordService.confirmRecord(userId, recordId, new ConfirmRecordRequest()))
                 .isInstanceOf(AccessDeniedException.class)
-                .hasMessageContaining("quyen xac nhan");
+                .hasMessageContaining("quyền xác nhận");
     }
 
     @Test
@@ -544,7 +544,7 @@ class HealthRecordServiceTest {
 
         assertThatThrownBy(() -> healthRecordService.getMetricExplanation(userId, recordId, "Glucose"))
                 .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessageContaining("Health record khong ton tai");
+                .hasMessageContaining("Kết quả khám không tồn tại");
     }
 
     @Test
@@ -562,7 +562,7 @@ class HealthRecordServiceTest {
 
         assertThatThrownBy(() -> healthRecordService.getMetricExplanation(userId, recordId, "Glucose"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Khong tim thay chi so");
+                .hasMessageContaining("Không tìm thấy chỉ số");
     }
 
     @Test
@@ -626,7 +626,7 @@ class HealthRecordServiceTest {
 
         assertThatThrownBy(() -> healthRecordService.getProfileHistory(userId, profileId, 0, 20))
                 .isInstanceOf(AccessDeniedException.class)
-                .hasMessageContaining("khong thuoc ve nguoi dung");
+                .hasMessageContaining("không thuộc về người dùng");
     }
 
     @Test
@@ -803,7 +803,7 @@ class HealthRecordServiceTest {
 
         assertThatThrownBy(() -> healthRecordService.updateMetrics(userId, recordId, request))
                 .isInstanceOf(AccessDeniedException.class)
-                .hasMessageContaining("quyen cap nhat");
+                .hasMessageContaining("quyền cập nhật");
     }
 
     @Test
@@ -823,7 +823,7 @@ class HealthRecordServiceTest {
 
         assertThatThrownBy(() -> healthRecordService.updateMetrics(userId, recordId, request))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("khong o trang thai cho phep cap nhat");
+                .hasMessageContaining("không ở trạng thái cho phép cập nhật");
     }
 
     @Test
@@ -1033,7 +1033,7 @@ class HealthRecordServiceTest {
 
         assertThatThrownBy(() -> healthRecordService.deleteHealthRecord(requesterId, recordId))
                 .isInstanceOf(AccessDeniedException.class)
-                .hasMessageContaining("quyen xoa");
+                .hasMessageContaining("quyền xóa");
     }
 
     @Test

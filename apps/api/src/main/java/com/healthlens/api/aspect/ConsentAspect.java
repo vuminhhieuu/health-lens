@@ -43,12 +43,12 @@ public class ConsentAspect {
             
             if (!hasConsent) {
                 logger.warn("User {} attempted to access protected resource without valid consent", userId);
-                throw new ConsentRequiredException("User consent is required for this action");
+                throw new ConsentRequiredException("Bạn cần xác nhận đồng thuận trước khi thực hiện hành động này");
             }
             logger.debug("User {} has valid consent", userId);
         } catch (IllegalArgumentException e) {
             logger.warn("Invalid UUID format in authentication principal", e);
-            throw new ConsentRequiredException("Invalid authentication context");
+            throw new ConsentRequiredException("Phiên đăng nhập không hợp lệ");
         }
     }
 }

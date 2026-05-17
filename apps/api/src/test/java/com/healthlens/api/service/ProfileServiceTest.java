@@ -144,7 +144,7 @@ class ProfileServiceTest {
 
         assertThatThrownBy(() -> profileService.createProfile(userId, request))
                 .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessageContaining("User khong ton tai");
+                .hasMessageContaining("Người dùng không tồn tại");
     }
 
     @Test

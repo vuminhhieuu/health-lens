@@ -156,7 +156,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(BadCredentialsException.class)
-                .hasMessage("Email hoac mat khau khong dung");
+                .hasMessage("Email hoặc mật khẩu không đúng.");
 
         verify(rateLimiter).recordFailure("user@example.com");
     }
@@ -171,7 +171,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(BadCredentialsException.class)
-                .hasMessage("Email hoac mat khau khong dung");
+                .hasMessage("Email hoặc mật khẩu không đúng.");
 
         verify(rateLimiter).recordFailure("nonexistent@example.com");
     }
@@ -181,7 +181,7 @@ class AuthServiceTest {
     void login_accountLocked() {
         LoginRequest request = new LoginRequest("locked@example.com", "AnyPass1");
 
-        doThrow(new AccountLockedException("Tai khoan bi khoa tam thoi. Thu lai sau 900 giay."))
+        doThrow(new AccountLockedException("Tài khoản bị khóa tạm thời. Vui lòng thử lại sau 900 giây."))
                 .when(rateLimiter).checkLocked("locked@example.com");
 
         assertThatThrownBy(() -> authService.login(request))
@@ -200,7 +200,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(BadCredentialsException.class)
-                .hasMessage("Vui long xac thuc email truoc khi dang nhap");
+                .hasMessage("Vui lòng xác thực email trước khi đăng nhập.");
     }
 
     // ========== REFRESH TESTS ==========
@@ -291,7 +291,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.refresh(rawRefreshToken))
                 .isInstanceOf(BadCredentialsException.class)
-                .hasMessage("Refresh token da het han");
+                .hasMessage("Refresh token đã hết hạn");
     }
 
     @Test
@@ -304,7 +304,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.refresh(rawRefreshToken))
                 .isInstanceOf(BadCredentialsException.class)
-                .hasMessage("Refresh token khong hop le");
+                .hasMessage("Refresh token không hợp lệ");
     }
 
     // ========== LOGOUT TESTS ==========
@@ -395,7 +395,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.resetPassword(request))
                 .isInstanceOf(BadCredentialsException.class)
-                .hasMessage("Token khong hop le hoac da het han");
+                .hasMessage("Token không hợp lệ hoặc đã hết hạn");
     }
 
     @Test
@@ -410,7 +410,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.resetPassword(request))
                 .isInstanceOf(BadCredentialsException.class)
-                .hasMessage("Token khong hop le hoac da het han");
+                .hasMessage("Token không hợp lệ hoặc đã hết hạn");
     }
 
     // ========== HELPERS ==========

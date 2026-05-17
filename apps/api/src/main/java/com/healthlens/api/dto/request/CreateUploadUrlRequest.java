@@ -6,9 +6,9 @@ import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 
 public record CreateUploadUrlRequest(
-        @NotNull(message = "profileId khong duoc de trong")
+        @NotNull(message = "Mã hồ sơ không được để trống")
         UUID profileId,
-        @NotBlank(message = "fileType khong duoc de trong")
+        @NotBlank(message = "Loại tệp không được để trống")
         String fileType,
         UUID retryRecordId
 ) {

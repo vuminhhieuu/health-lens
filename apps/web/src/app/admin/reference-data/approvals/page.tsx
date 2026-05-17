@@ -440,7 +440,7 @@ export default function ApprovalsPage() {
                 {" "}mà không cần gửi duyệt.
               </p>
               <p className="mt-3 max-w-lg text-xs text-slate-400">
-                Khi có ≥2 quản trị viên (ROLE_ADMIN), trang này sẽ tự động chuyển sang
+                Khi có từ 2 tài khoản quản trị trở lên, trang này sẽ tự động chuyển sang
                 chế độ phê duyệt chéo — người tạo thay đổi không thể tự phê duyệt.
               </p>
             </div>
@@ -979,9 +979,9 @@ function ChangeSetDiffPanel({
           Thông tin bản thay đổi
         </h4>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <InfoBlock label="Mã Change Set" value={changeSet.id} mono />
+          <InfoBlock label="Mã bản thay đổi" value={changeSet.id} mono />
           <InfoBlock
-            label="Mã định danh Entity"
+            label="Mã định danh dữ liệu"
             value={changeSet.entityId ?? "—"}
             mono
           />

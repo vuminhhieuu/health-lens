@@ -390,7 +390,7 @@ export default function ReferenceDataPage() {
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-teal-200 hover:text-teal-700"
             >
               <UploadCloud className="h-4 w-4" />
-              Import CSV/JSON
+              Nhập CSV/JSON
             </Link>
             <button
               type="button"
@@ -429,7 +429,7 @@ export default function ReferenceDataPage() {
 
             <MetricSection
               title="Ngưng áp dụng"
-              description="Các chỉ số đã soft delete. Có thể kích hoạt lại để tiếp tục sử dụng."
+              description="Các chỉ số đã ngưng áp dụng. Có thể kích hoạt lại để tiếp tục sử dụng."
               metrics={groupedMetrics.deactivated}
               expandedMetricId={expandedMetricId}
               onToggleExpanded={setExpandedMetricId}

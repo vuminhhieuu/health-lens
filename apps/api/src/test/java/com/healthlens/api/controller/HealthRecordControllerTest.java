@@ -108,7 +108,7 @@ class HealthRecordControllerTest {
                         .with(SecurityMockMvcRequestPostProcessors.user(userId.toString()))
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.message").value("Deleted successfully"));
+                .andExpect(jsonPath("$.data.message").value("Đã xóa kết quả khám thành công"));
 
         verify(healthRecordService).deleteHealthRecord(userId, recordId);
     }

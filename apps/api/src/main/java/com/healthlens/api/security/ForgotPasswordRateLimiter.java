@@ -35,12 +35,12 @@ public class ForgotPasswordRateLimiter {
                 Long ttl = redisTemplate.getExpire(key);
                 long retryAfterSeconds = (ttl != null && ttl > 0) ? ttl : WINDOW_DURATION.toSeconds();
                 
-                String timeMsg = retryAfterSeconds >= 60 
-                    ? (retryAfterSeconds / 60) + " phut" 
-                    : retryAfterSeconds + " giay";
+                String timeMsg = retryAfterSeconds >= 60
+                    ? (long) Math.ceil(retryAfterSeconds / 60.0) + " phút"
+                    : retryAfterSeconds + " giây";
                     
                 throw new AccountLockedException(
-                        "Ban da gui yeu cau qua nhanh. Vui long thu lai sau " + timeMsg + ".",
+                        "Bạn đã gửi yêu cầu quá nhanh. Vui lòng thử lại sau " + timeMsg + ".",
                         retryAfterSeconds
                 );
             }
@@ -49,7 +49,7 @@ public class ForgotPasswordRateLimiter {
         } catch (Exception e) {
             log.error("Redis unavailable when checking forgot password rate limit. Fail-closed: {}. Email: {}", failClosed, email, e);
             if (failClosed) {
-                throw new AccountLockedException("He thong tam ngung. Thu lai sau.", WINDOW_DURATION.toSeconds());
+                throw new AccountLockedException("Hệ thống tạm ngưng. Vui lòng thử lại sau.", WINDOW_DURATION.toSeconds());
             }
         }
     }
@@ -64,7 +64,7 @@ public class ForgotPasswordRateLimiter {
         } catch (Exception e) {
             log.error("Redis unavailable when recording forgot password request. Email: {}", email, e);
             if (failClosed) {
-                throw new AccountLockedException("He thong tam ngung. Thu lai sau.", WINDOW_DURATION.toSeconds());
+                throw new AccountLockedException("Hệ thống tạm ngưng. Vui lòng thử lại sau.", WINDOW_DURATION.toSeconds());
             }
         }
     }

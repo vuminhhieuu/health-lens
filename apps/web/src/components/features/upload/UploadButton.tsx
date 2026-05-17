@@ -34,10 +34,10 @@ export function UploadButton({
 
   const validateFile = (file: File) => {
     if (!ALLOWED_FILE_TYPES.includes(file.type as (typeof ALLOWED_FILE_TYPES)[number])) {
-      return "Chỉ chấp nhận file PDF/JPG/PNG.";
+      return "Chỉ chấp nhận tệp PDF/JPG/PNG.";
     }
     if (file.size > UPLOAD_MAX_SIZE_BYTES) {
-      return "File vượt quá giới hạn 20MB.";
+      return "Tệp vượt quá giới hạn 20MB.";
     }
     return null;
   };
@@ -90,7 +90,7 @@ export function UploadButton({
       // Redirect to review page
       router.push(`/health-records/review/${uploadInfo.recordId}`);
     } catch {
-      const message = "Upload thất bại. Vui lòng thử lại.";
+      const message = "Tải lên thất bại. Vui lòng thử lại.";
       setStatus("error");
       setError(message);
       notify.error(message);

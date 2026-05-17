@@ -111,12 +111,12 @@ public class ConsentController {
      */
     private void validatePrincipal(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Cần đăng nhập để thực hiện thao tác này");
         }
 
         Object principal = authentication.getPrincipal();
         if (principal == null || "anonymousUser".equals(principal.toString())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid principal");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Phiên đăng nhập không hợp lệ");
         }
     }
 }

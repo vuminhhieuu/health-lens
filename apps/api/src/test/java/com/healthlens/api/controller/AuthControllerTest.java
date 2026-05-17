@@ -94,7 +94,7 @@ class AuthControllerTest {
         @DisplayName("POST /api/v1/auth/register -> 409 khi email da ton tai")
         void register_duplicateEmail() throws Exception {
                 when(authService.register(any(RegisterRequest.class)))
-                                .thenThrow(new EmailAlreadyExistsException("Email nay da duoc dang ky"));
+                                .thenThrow(new EmailAlreadyExistsException("Email này đã được đăng ký"));
 
                 mockMvc.perform(post("/api/v1/auth/register")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -161,14 +161,16 @@ class AuthControllerTest {
         @DisplayName("POST /api/v1/auth/login -> 401 khi sai password (AC #5, khong lo email)")
         void login_wrongPassword() throws Exception {
                 when(authService.login(any(LoginRequest.class)))
-                                .thenThrow(new BadCredentialsException("Email hoac mat khau khong dung"));
+                                .thenThrow(new BadCredentialsException("Email hoặc mật khẩu không đúng."));
 
                 mockMvc.perform(post("/api/v1/auth/login")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"email\":\"user@example.com\",\"password\":\"WrongPass1\"}"))
                                 .andExpect(status().isUnauthorized())
                                 .andExpect(jsonPath("$.type").value("https://healthlens.vn/errors/unauthorized"))
-                                .andExpect(jsonPath("$.status").value(401));
+                                .andExpect(jsonPath("$.status").value(401))
+                                .andExpect(jsonPath("$.errorCode").value("INVALID_CREDENTIALS"))
+                                .andExpect(jsonPath("$.detail").value("Email hoặc mật khẩu không đúng."));
         }
 
         @Test
@@ -176,13 +178,14 @@ class AuthControllerTest {
         void login_accountLocked() throws Exception {
                 when(authService.login(any(LoginRequest.class)))
                                 .thenThrow(new AccountLockedException(
-                                                "Tai khoan bi khoa tam thoi. Thu lai sau 900 giay."));
+                                                "Tài khoản bị khóa tạm thời. Vui lòng thử lại sau 900 giây."));
 
                 mockMvc.perform(post("/api/v1/auth/login")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"email\":\"user@example.com\",\"password\":\"AnyPass1\"}"))
                                 .andExpect(status().isTooManyRequests())
                                 .andExpect(jsonPath("$.type").value("https://healthlens.vn/errors/account-locked"))
+                                .andExpect(jsonPath("$.errorCode").value("ACCOUNT_LOCKED"))
                                 .andExpect(jsonPath("$.retryAfterSeconds").value(900));
         }
 
@@ -219,7 +222,8 @@ class AuthControllerTest {
                 mockMvc.perform(post("/api/v1/auth/refresh")
                                 .contentType(MediaType.APPLICATION_JSON))
                                 .andExpect(status().isUnauthorized())
-                                .andExpect(jsonPath("$.detail").value("Refresh token khong ton tai"));
+                                .andExpect(jsonPath("$.detail").value("Refresh token không tồn tại"))
+                                .andExpect(jsonPath("$.errorCode").value("INVALID_CREDENTIALS"));
         }
 
         @Test

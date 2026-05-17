@@ -97,7 +97,7 @@ public class AuthService {
         String normalizedEmail = request.email().trim().toLowerCase();
 
         if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
-            throw new EmailAlreadyExistsException("Email nay da duoc dang ky");
+            throw new EmailAlreadyExistsException("Email này đã được đăng ký");
         }
 
         validatePasswordPolicy(request.password());
@@ -115,7 +115,7 @@ public class AuthService {
             // Flush ngay để bắt race condition unique email trong transaction hiện tại.
             savedUser = userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException ex) {
-            throw new EmailAlreadyExistsException("Email nay da duoc dang ky");
+            throw new EmailAlreadyExistsException("Email này đã được đăng ký");
         }
 
         String tokenValue = UUID.randomUUID().toString();
@@ -176,12 +176,12 @@ public class AuthService {
                 // Also record failure for non-existent emails to prevent timing attacks
                 rateLimiter.recordFailure(normalizedEmail);
             }
-            throw new BadCredentialsException("Email hoac mat khau khong dung");
+            throw new BadCredentialsException("Email hoặc mật khẩu không đúng.");
         }
 
         // Check email verified (AC #1: "đã xác thực email")
         if (!user.isEmailVerified()) {
-            throw new BadCredentialsException("Vui long xac thuc email truoc khi dang nhap");
+            throw new BadCredentialsException("Vui lòng xác thực email trước khi đăng nhập.");
         }
 
         // Reset rate limiter on success
@@ -219,12 +219,12 @@ public class AuthService {
 
         RefreshToken storedToken = refreshTokenRepository
                 .findByTokenHashAndRevokedAtIsNull(tokenHash)
-                .orElseThrow(() -> new BadCredentialsException("Refresh token khong hop le"));
+                .orElseThrow(() -> new BadCredentialsException("Refresh token không hợp lệ"));
 
         if (storedToken.isExpired()) {
             storedToken.setRevokedAt(Instant.now());
             refreshTokenRepository.save(storedToken);
-            throw new BadCredentialsException("Refresh token da het han");
+            throw new BadCredentialsException("Refresh token đã hết hạn");
         }
 
         // Revoke old refresh token (rotation)
@@ -233,7 +233,7 @@ public class AuthService {
 
         // Find user and generate new tokens
         User user = userRepository.findById(storedToken.getUserId())
-                .orElseThrow(() -> new BadCredentialsException("User khong ton tai"));
+                .orElseThrow(() -> new BadCredentialsException("Người dùng không tồn tại"));
 
         String newAccessToken = jwtUtil.generateAccessToken(user);
         String newRawRefreshToken = jwtUtil.generateRefreshToken();
@@ -272,12 +272,12 @@ public class AuthService {
 
         RefreshToken storedToken = refreshTokenRepository
                 .findByTokenHashAndRevokedAtIsNull(tokenHash)
-                .orElseThrow(() -> new BadCredentialsException("Refresh token khong hop le"));
+                .orElseThrow(() -> new BadCredentialsException("Refresh token không hợp lệ"));
 
         if (storedToken.isExpired()) {
             storedToken.setRevokedAt(Instant.now());
             refreshTokenRepository.save(storedToken);
-            throw new BadCredentialsException("Refresh token da het han");
+            throw new BadCredentialsException("Refresh token đã hết hạn");
         }
 
         // Revoke old refresh token (rotation)
@@ -286,7 +286,7 @@ public class AuthService {
 
         // Find user and generate new tokens
         User user = userRepository.findById(storedToken.getUserId())
-                .orElseThrow(() -> new BadCredentialsException("User khong ton tai"));
+                .orElseThrow(() -> new BadCredentialsException("Người dùng không tồn tại"));
 
         String newAccessToken = jwtUtil.generateAccessToken(user);
         String newRawRefreshToken = jwtUtil.generateRefreshToken();
@@ -383,10 +383,10 @@ public class AuthService {
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
         PasswordResetToken token = passwordResetTokenRepository.findByToken(request.token())
-                .orElseThrow(() -> new BadCredentialsException("Token khong hop le hoac da het han"));
+                .orElseThrow(() -> new BadCredentialsException("Token không hợp lệ hoặc đã hết hạn"));
 
         if (token.isUsed() || token.isExpired()) {
-            throw new BadCredentialsException("Token khong hop le hoac da het han");
+            throw new BadCredentialsException("Token không hợp lệ hoặc đã hết hạn");
         }
 
         // AC #3: Update password
@@ -406,7 +406,7 @@ public class AuthService {
     private void validatePasswordPolicy(String password) {
         if (password == null || password.length() < 8 || !password.matches(".*[A-Z].*")
                 || !password.matches(".*\\d.*")) {
-            throw new WeakPasswordException("Mat khau phai co it nhat 8 ky tu, gom 1 chu hoa va 1 chu so");
+            throw new WeakPasswordException("Mật khẩu phải có ít nhất 8 ký tự, gồm 1 chữ hoa và 1 chữ số");
         }
     }
 

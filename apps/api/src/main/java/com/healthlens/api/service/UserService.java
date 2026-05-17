@@ -26,7 +26,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserResponse getCurrentUser(UUID userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
         return mapToResponse(user);
     }
@@ -34,7 +34,7 @@ public class UserService {
     @Transactional
     public UserResponse updateCurrentUser(UUID userId, UpdateUserRequest request) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
         user.setFullName(request.fullName().trim());
         if (request.birthDate() != null) {

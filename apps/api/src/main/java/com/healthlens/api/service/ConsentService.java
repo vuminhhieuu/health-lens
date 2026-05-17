@@ -60,7 +60,7 @@ public class ConsentService {
         }
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UserNotFoundException("User not found with ID: " + userId));
+                .orElseThrow(() -> new UserNotFoundException("Không tìm thấy người dùng với mã: " + userId));
 
         ConsentLog log = new ConsentLog();
         log.setUser(user);

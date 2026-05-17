@@ -87,7 +87,7 @@ public class ProfileService {
             UUID profileId = share.getProfileId();
             Profile profile = profilesById.get(profileId);
             if (profile == null) {
-                throw new ResourceNotFoundException("Khong tim thay ho so duoc chia se");
+                throw new ResourceNotFoundException("Không tìm thấy hồ sơ được chia sẻ");
             }
             HealthRecord latest = latestRecordByProfileId.get(profileId);
             String latestStatus = "unverified";
@@ -165,7 +165,7 @@ public class ProfileService {
         }
 
         User user = userRepository.findByIdForUpdate(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
         // Re-check after acquiring lock to reduce race conditions.
         existing = profileRepository.findAllByUserId(userId);
@@ -204,7 +204,7 @@ public class ProfileService {
         }
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User khong ton tai"));
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
         Profile profile = new Profile();
         profile.setUser(user);
@@ -222,7 +222,7 @@ public class ProfileService {
     @Transactional
     public ProfileResponse updateProfile(UUID userId, UUID profileId, UpdateProfileRequest request) {
         Profile profile = profileRepository.findById(profileId)
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay ho so"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hồ sơ"));
 
         // Access check: Ensure user is owner OR has "edit" shared access
         UUID profileOwnerId = profile.getUser().getId();

@@ -1,6 +1,6 @@
 # Story 6.2: Replace Browser Alerts And Local Toasts
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 

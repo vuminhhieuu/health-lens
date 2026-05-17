@@ -193,7 +193,7 @@ class FollowUpReminderServiceTest {
 
         assertThatThrownBy(() -> service.delete(userId, profileId, UUID.randomUUID()))
                 .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessage("Khong tim thay ho so");
+                .hasMessage("Không tìm thấy hồ sơ");
 
         verify(reminderRepository, never()).delete(any());
     }

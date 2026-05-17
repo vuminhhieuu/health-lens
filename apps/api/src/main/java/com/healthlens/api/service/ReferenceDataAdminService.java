@@ -281,10 +281,10 @@ public class ReferenceDataAdminService {
         Instant now = clock.instant();
         pruneExpiredImportPreviewSessions(now);
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("Vui lòng chọn file CSV hoặc JSON để import.");
+            throw new IllegalArgumentException("Vui lòng chọn tệp CSV hoặc JSON để nhập.");
         }
         if (file.getSize() > IMPORT_FILE_MAX_BYTES) {
-            throw new IllegalArgumentException("File vượt quá 5MB. Vui lòng chọn file nhỏ hơn.");
+            throw new IllegalArgumentException("Tệp vượt quá 5MB. Vui lòng chọn tệp nhỏ hơn.");
         }
 
         String extension = resolveExtension(file.getOriginalFilename());
@@ -294,7 +294,7 @@ public class ReferenceDataAdminService {
 
         List<ImportRowEnvelope> rawRows = parseImportFileRaw(file, extension);
         if (rawRows.isEmpty()) {
-            throw new IllegalArgumentException("File import không có dữ liệu.");
+            throw new IllegalArgumentException("Tệp nhập không có dữ liệu.");
         }
 
         List<AdminReferenceImportPreviewRowResponse> validRows = new ArrayList<>();
@@ -972,15 +972,15 @@ public class ReferenceDataAdminService {
     public AdminReferenceChangeSetResponse publishChangeSet(UUID changeSetId, UUID adminId) {
         if (isMultiAdminMode()) {
             throw new IllegalStateException(
-                    "Chế độ multi-admin: không thể kích hoạt trực tiếp. Vui lòng gửi duyệt để admin khác phê duyệt.");
+                    "Chế độ nhiều quản trị viên: không thể kích hoạt trực tiếp. Vui lòng gửi duyệt để quản trị viên khác phê duyệt.");
         }
 
         ReferenceDataChangeSet cs = referenceDataChangeSetRepository.findById(changeSetId)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Không tìm thấy tập dữ liệu thay đổi  với ID: " + changeSetId));
+                        "Không tìm thấy tập dữ liệu thay đổi với mã: " + changeSetId));
 
         if (!List.of("draft", "pending").contains(cs.getStatus())) {
-            throw new IllegalArgumentException("Chỉ có thể kích hoạt tập dữ liệu thay đổi  ở trạng thái draft hoặc pending.");
+            throw new IllegalArgumentException("Chỉ có thể kích hoạt tập dữ liệu thay đổi ở trạng thái bản nháp hoặc chờ duyệt.");
         }
 
         if (!cs.getAdminId().equals(adminId)) {
@@ -1013,12 +1013,12 @@ public class ReferenceDataAdminService {
     public AdminReferenceChangeSetResponse approveChangeSet(UUID changeSetId, UUID reviewerId) {
         ReferenceDataChangeSet cs = referenceDataChangeSetRepository.findByIdAndStatus(changeSetId, "pending")
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Không tìm thấy tập dữ liệu thay đổi  đang chờ duyệt với ID: " + changeSetId));
+                    "Không tìm thấy tập dữ liệu thay đổi đang chờ duyệt với mã: " + changeSetId));
 
         // Block self-approval in multi-admin mode
         if (isMultiAdminMode() && cs.getAdminId().equals(reviewerId)) {
             throw new IllegalArgumentException(
-                    "Không thể phê duyệt tập dữ liệu thay đổi  do chính bạn tạo. Vui lòng nhờ admin khác duyệt.");
+                    "Không thể phê duyệt tập dữ liệu thay đổi do chính bạn tạo. Vui lòng nhờ quản trị viên khác duyệt.");
         }
 
         applyChangesToProduction(cs);
@@ -1048,12 +1048,12 @@ public class ReferenceDataAdminService {
 
         ReferenceDataChangeSet cs = referenceDataChangeSetRepository.findByIdAndStatus(changeSetId, "pending")
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Không tìm thấy tập dữ liệu thay đổi  đang chờ duyệt với ID: " + changeSetId));
+                    "Không tìm thấy tập dữ liệu thay đổi đang chờ duyệt với mã: " + changeSetId));
 
         // Block self-rejection in multi-admin mode
         if (isMultiAdminMode() && cs.getAdminId().equals(reviewerId)) {
             throw new IllegalArgumentException(
-                    "Không thể từ chối tập dữ liệu thay đổi  do chính bạn tạo. Vui lòng nhờ admin khác duyệt.");
+                    "Không thể từ chối tập dữ liệu thay đổi do chính bạn tạo. Vui lòng nhờ quản trị viên khác duyệt.");
         }
 
         cs.setStatus("rejected");
@@ -1081,12 +1081,12 @@ public class ReferenceDataAdminService {
     public AdminReferenceChangeSetResponse submitChangeSetForApproval(UUID changeSetId, UUID adminId) {
         if (!isMultiAdminMode()) {
             throw new IllegalStateException(
-                    "Chế độ single-admin: vui lòng sử dụng chức năng 'Kích hoạt' thay vì gửi duyệt.");
+                    "Chế độ một quản trị viên: vui lòng sử dụng chức năng 'Kích hoạt' thay vì gửi duyệt.");
         }
 
         ReferenceDataChangeSet cs = referenceDataChangeSetRepository.findByIdAndStatus(changeSetId, "draft")
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Không tìm thấy tập dữ liệu thay đổi  nháp với ID: " + changeSetId));
+                        "Không tìm thấy tập dữ liệu thay đổi nháp với mã: " + changeSetId));
 
         if (!cs.getAdminId().equals(adminId)) {
             throw new IllegalArgumentException("Chỉ người tạo bản nháp mới có thể gửi duyệt.");
@@ -1117,7 +1117,7 @@ public class ReferenceDataAdminService {
         if ("METRIC".equals(cs.getEntityType())) {
             applyMetricChanges(cs, snapshot);
         } else {
-            throw new IllegalStateException("Entity type không được hỗ trợ: " + cs.getEntityType());
+            throw new IllegalStateException("Loại dữ liệu không được hỗ trợ: " + cs.getEntityType());
         }
     }
 
@@ -1130,7 +1130,7 @@ public class ReferenceDataAdminService {
                 // createMetric() already persisted a pending metric; activate it on approval
                 ReferenceMetric metric = referenceMetricRepository.findById(cs.getEntityId())
                         .orElseThrow(() -> new IllegalStateException(
-                                "Không tìm thấy metric draft: " + cs.getEntityId()));
+                                "Không tìm thấy chỉ số bản nháp: " + cs.getEntityId()));
                 metric.setName(snapshot.getOrDefault("name", metric.getName()).toString());
                 metric.setDisplayNameVi(snapshot.getOrDefault("displayNameVi", metric.getDisplayNameVi()).toString());
                 metric.setUnit(snapshot.getOrDefault("unit", metric.getUnit()).toString());
@@ -1150,12 +1150,12 @@ public class ReferenceDataAdminService {
         } else if ("UPDATE".equals(operation)) {
             UUID metricId = cs.getEntityId();
             if (metricId == null) {
-                throw new IllegalStateException("UPDATE tập dữ liệu thay đổi  thiếu entityId");
+                throw new IllegalStateException("Bản thay đổi cập nhật thiếu mã định danh dữ liệu");
             }
 
             ReferenceMetric metric = referenceMetricRepository.findById(metricId)
                     .orElseThrow(() -> new IllegalStateException(
-                            "Không tìm thấy metric cần cập nhật: " + metricId));
+                            "Không tìm thấy chỉ số cần cập nhật: " + metricId));
 
             // Apply field updates
             metric.setName(snapshot.getOrDefault("name", metric.getName()).toString());

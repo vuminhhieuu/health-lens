@@ -33,7 +33,7 @@ const FAILURE_LABELS: Record<string, string> = {
   timeout: "Timeout",
   low_confidence: "Độ tin cậy thấp",
   api_error: "Lỗi API",
-  invalid_file: "File không hợp lệ",
+  invalid_file: "Tệp không hợp lệ",
 };
 
 type UploadQualitySummary = {

@@ -44,7 +44,7 @@ export const ConsentModal: React.FC = () => {
         try {
             await apiClient.post(ApiPaths.CONSENT.ME, { version: policyVersion, accepted: true });
             setConsent(policyVersion);
-            notify.success('Consent đã được ghi nhận thành công');
+            notify.success('Đồng thuận đã được ghi nhận thành công');
         } catch (error) {
             console.error('Failed to submit consent', error);
 
@@ -73,10 +73,10 @@ export const ConsentModal: React.FC = () => {
         setSubmitting(true);
         try {
             await apiClient.post(ApiPaths.CONSENT.ME, { version: policyVersion, accepted: false });
-            notify.info('Bạn đã từ chối consent. Vui lòng đăng nhập lại để tiếp tục.');
+            notify.info('Bạn đã từ chối đồng thuận. Vui lòng đăng nhập lại để tiếp tục.');
         } catch (error) {
             console.error('Failed to register rejection', error);
-            notify.error('Lỗi khi ghi nhận từ chối consent');
+            notify.error('Không thể ghi nhận từ chối đồng thuận');
         } finally {
             clearAuth(); // Log out the user immediately if they reject
             setTimeout(() => {
@@ -89,9 +89,9 @@ export const ConsentModal: React.FC = () => {
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4">
         <div className="w-full max-w-[700px] max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-2rem)] overflow-hidden rounded-xl bg-white shadow-[0_24px_80px_rgba(0,0,0,0.25)] flex flex-col">
           <div className="p-6 sm:p-8 text-center text-white bg-linear-to-r from-[#00685f] to-[#008378]">
-            <h2 className="text-2xl font-bold tracking-tight">Điều khoản & Consent dữ liệu y tế</h2>
+            <h2 className="text-2xl font-bold tracking-tight">Điều khoản & đồng thuận dữ liệu y tế</h2>
             <p className="mt-2 text-white/85">
-              Vui lòng đọc và xác nhận trước khi sử dụng tính năng upload/kết quả
+              Vui lòng đọc và xác nhận trước khi sử dụng tính năng tải lên/kết quả
             </p>
             <p className="mt-1 text-sm text-white/80">Theo NĐ 13/2023/NĐ-CP</p>
           </div>

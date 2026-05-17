@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { AxiosError } from 'axios';
 import { apiClient } from '../lib/api/apiClient';
 import { API_ROUTES } from '@/lib/api/routes';
+import { getApiErrorCode, messageCatalog } from '@/lib/i18n/messages';
 import { notify } from '@/lib/notify';
 
 interface DeleteAccountResponse {
@@ -45,7 +46,7 @@ export const useAccountDeletion = () => {
         err?.response?.data?.error ||
         err?.response?.data?.detail ||
         err?.message ||
-        'Có lỗi xảy ra', []);
+        messageCatalog.deletion.genericError, []);
 
     const requestDeletion = useCallback(async (password: string) => {
         setIsRequesting(true);
@@ -62,7 +63,7 @@ export const useAccountDeletion = () => {
             const data: DeleteAccountResponse = response.data;
 
             setRequestSuccess(true);
-            notify.success('Đã gửi yêu cầu xóa tài khoản.');
+            notify.success(messageCatalog.deletion.requestCreated);
             return data.data;
 
         } catch (err) {
@@ -92,18 +93,16 @@ export const useAccountDeletion = () => {
 
             const data: CancelDeletionResponse = response.data;
             setCancelSuccess(true);
-            notify.success('Đã hủy yêu cầu xóa tài khoản.');
+            notify.success(messageCatalog.deletion.requestCancelled);
             return data.data;
         } catch (err) {
             const error = err as ApiError;
-            const detail = error?.response?.data?.detail;
+            const errorCode = getApiErrorCode(error);
             const message =
-                error?.response?.status === 400
-                    ? (typeof detail === 'string' && detail.trim().length > 0
-                        ? detail
-                        : 'Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực.')
+                errorCode === 'DELETION_CANCEL_TOKEN_INVALID' || error?.response?.status === 400
+                    ? messageCatalog.deletion.cancelTokenInvalid
                     : error?.response?.status === 409
-                        ? 'Yêu cầu xóa này không thể hủy được'
+                        ? messageCatalog.deletion.cancelUnavailable
                         : getErrorMessage(error);
 
             setError(message);

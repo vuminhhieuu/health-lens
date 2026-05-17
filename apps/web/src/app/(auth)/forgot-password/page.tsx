@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+import { getApiErrorPayload, getApiErrorStatus, messageCatalog, retryAfterMinutes } from "@/lib/i18n/messages";
 import { notify } from "@/lib/notify";
 
 type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
@@ -38,28 +39,15 @@ export default function ForgotPasswordPage() {
         email: data.email,
       });
       setIsSuccess(true);
-      notify.success("Đã gửi hướng dẫn khôi phục mật khẩu đến email của bạn.");
+      notify.success(messageCatalog.auth.forgotPasswordSent);
     } catch (error: unknown) {
-      let message = "Không thể kết nối đến máy chủ. Vui lòng thử lại.";
-      if (
-        error &&
-        typeof error === "object" &&
-        "response" in error &&
-        error.response &&
-        typeof error.response === "object"
-      ) {
-        const resp = error.response as {
-          status?: number;
-          data?: { detail?: string; retryAfterSeconds?: number };
-        };
-        if (resp.status === 429) {
-          const retryAfter = resp.data?.retryAfterSeconds ?? 3600;
-          const minutes = Math.ceil(retryAfter / 60);
-          message = `Bạn đã gửi yêu cầu quá nhiều. Vui lòng thử lại sau ${minutes} phút.`;
-        } else {
-          message = "Đã có lỗi xảy ra. Vui lòng thử lại sau.";
-        }
-      }
+      const status = getApiErrorStatus(error);
+      const payload = getApiErrorPayload(error);
+      const message = status === 429
+        ? messageCatalog.auth.forgotPasswordRateLimited(retryAfterMinutes(payload, 3600))
+        : status
+          ? messageCatalog.auth.genericRetry
+          : messageCatalog.auth.networkError;
       setSubmitError(message);
       notify.error(message);
     }
