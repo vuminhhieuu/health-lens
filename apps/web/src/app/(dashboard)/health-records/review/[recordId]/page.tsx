@@ -43,6 +43,7 @@ import { ErrorState, InlineFieldError, LoadingState } from "@/components/ui";
 import { OcrFailureScreen } from "@/components/features/upload/OcrFailureScreen";
 import { DeleteRecordModal } from "@/components/features/health-records/DeleteRecordModal";
 import { toThreeLineExplanation } from "@/lib/utils/explanationFormatter";
+import { recommendationDisclaimerText } from "@/lib/utils/medicalDisclaimer";
 
 type MetricDto = {
   name: string;
@@ -1109,7 +1110,7 @@ export default function ReviewRecordPage() {
                   <div>
                     <p className="text-xs font-bold text-[#92700e]">Lưu ý quan trọng</p>
                     <p className="mt-0.5 text-xs leading-relaxed text-[#78650d]">
-                      {recommendationsData.disclaimer ?? "Thông tin trên được tạo bởi AI, chỉ mang tính tham khảo và không thay thế tư vấn của bác sĩ chuyên khoa."}
+                      {recommendationDisclaimerText(recommendationsData.disclaimer)}
                     </p>
                   </div>
                 </div>
@@ -1496,7 +1497,7 @@ export default function ReviewRecordPage() {
                   );
                 })}
                 <div className="mt-4 rounded-lg bg-[#f5f7f7] px-4 py-3 text-xs text-[#6d7a77] whitespace-pre-line">
-                  {recommendationsData.disclaimer}
+                  {recommendationDisclaimerText(recommendationsData.disclaimer)}
                 </div>
               </div>
             </div>

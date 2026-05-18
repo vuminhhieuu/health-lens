@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.chat.client.ChatClient;
@@ -187,6 +188,25 @@ class LlmServiceTest {
     }
 
     @Test
+    @DisplayName("Cache key thay đổi khi prompt-version thay đổi")
+    void generateExplanation_cacheKeyChangesWhenPromptVersionChanges() {
+        List<String> requestedKeys = new ArrayList<>();
+        when(valueOperations.get(anyString())).thenAnswer(invocation -> {
+            requestedKeys.add(invocation.getArgument(0));
+            return null;
+        });
+        mockAiChatSuccess("llm explanation");
+
+        ReflectionTestUtils.setField(llmService, "promptVersion", "v2");
+        llmService.generateExplanation("Glucose", "8.9", "abnormal", referenceRange(), "vi");
+        ReflectionTestUtils.setField(llmService, "promptVersion", "v3");
+        llmService.generateExplanation("Glucose", "8.9", "abnormal", referenceRange(), "vi");
+
+        assertThat(requestedKeys).hasSize(2);
+        assertThat(requestedKeys.get(0)).isNotEqualTo(requestedKeys.get(1));
+    }
+
+    @Test
     @DisplayName("Fallback sau 3 retries: source phải là fallback")
     void generateExplanation_afterMaxRetries_returnsFallbackSource() {
         ReflectionTestUtils.setField(llmService, "maxRetryAttempts", 3);
@@ -213,6 +233,18 @@ class LlmServiceTest {
         assertThat(prompt).contains("Metric relation:");
         assertThat(prompt).contains("Knowledge snippet:");
         assertThat(prompt).contains("Reference range: 3.9 - 6.4 mmol/L");
+    }
+
+    @Test
+    @DisplayName("Prompt builder: chỉ số abnormal phải yêu cầu follow-up và tránh chẩn đoán")
+    void buildMedicalPrompt_abnormalRequiresFollowUpAndNoDiagnosisLanguage() {
+        String prompt = llmService.buildMedicalPrompt("Glucose", "8.9", "abnormal", referenceRange(), "vi", "knowledge");
+
+        assertThat(prompt)
+                .contains("If Status is abnormal")
+                .contains("not a diagnosis")
+                .contains("follow-up with a doctor")
+                .contains("Status: abnormal");
     }
 
     @Test
@@ -243,6 +275,17 @@ class LlmServiceTest {
         assertThat(result).contains("Chỉ số này là gì:");
         assertThat(result).contains("Chỉ số này liên quan đến:");
         assertThat(result).contains("Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng:");
+    }
+
+    @Test
+    @DisplayName("Fallback explanation abnormal: phải nhắc không chẩn đoán và follow-up")
+    void getFallbackExplanation_abnormalStatus_containsFollowUpSafetyCopy() {
+        String result = llmService.getFallbackExplanation("Glucose", "abnormal");
+
+        assertThat(result)
+                .contains("Đây không phải chẩn đoán")
+                .contains("trao đổi với bác sĩ")
+                .contains("tái khám");
     }
 
     @Test
@@ -279,6 +322,27 @@ class LlmServiceTest {
                 "Chế độ sinh hoạt: Với Glucose, đi bộ sau ăn 20-30 phút"
         );
         verify(valueOperations).set(anyString(), anyString(), eq(Duration.ofDays(7)));
+    }
+
+    @Test
+    @DisplayName("Recommendations prompt: bắt buộc có disclaimer chuẩn và tránh ngôn ngữ chẩn đoán")
+    void generateRecommendations_promptContainsRequiredDisclaimerAndNoDiagnosisRules() {
+        when(valueOperations.get(anyString())).thenReturn(null);
+        mockAiChatSuccess("[\"Chế độ dinh dưỡng: Với Đường huyết, giảm đồ ngọt\", \"Chế độ sinh hoạt: Với Glucose, đi bộ nhẹ sau ăn\"]");
+
+        llmService.generateRecommendations(
+                List.of(new LlmService.RecommendationMetricInput("Glucose", "8.1", "mmol/L", "abnormal")),
+                45,
+                "female"
+        );
+
+        ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
+        verify(requestSpec).user(promptCaptor.capture());
+        assertThat(promptCaptor.getValue())
+                .contains(LlmService.MEDICAL_RECOMMENDATIONS_DISCLAIMER)
+                .contains("không thay thế tư vấn, chẩn đoán hoặc điều trị")
+                .contains("không được viết như kết luận chẩn đoán")
+                .contains("khuyến nghị người dùng trao đổi với bác sĩ");
     }
 
     @Test
@@ -335,6 +399,24 @@ class LlmServiceTest {
         assertThat(result.get(0)).contains("bất thường");
         assertThat(result.stream().anyMatch(line -> line.toLowerCase().contains("dinh dưỡng"))).isTrue();
         assertThat(result.stream().anyMatch(line -> line.toLowerCase().contains("sinh hoạt"))).isTrue();
+    }
+
+    @Test
+    @DisplayName("Recommendations fallback: chỉ số bất thường phải có theo dõi y tế và không tự chẩn đoán")
+    void generateRecommendations_abnormalFallbackIncludesFollowUpAndNoSelfDiagnosisLanguage() {
+        when(valueOperations.get(anyString())).thenReturn(null);
+        when(aiChatClient.prompt()).thenThrow(new RuntimeException("LLM down"));
+
+        List<String> result = llmService.generateRecommendations(
+                List.of(new LlmService.RecommendationMetricInput("Glucose", "8.1", "mmol/L", "abnormal")),
+                45,
+                "female"
+        );
+
+        assertThat(result).isNotEmpty();
+        assertThat(String.join(" ", result))
+                .contains("không tự chẩn đoán")
+                .contains("trao đổi với bác sĩ");
     }
 
     private void mockAiChatSuccess(String responseContent) {
