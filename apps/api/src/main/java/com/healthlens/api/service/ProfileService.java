@@ -22,6 +22,8 @@ import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
 import com.healthlens.api.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -39,6 +41,7 @@ import java.util.stream.Collectors;
 @Service
 public class ProfileService {
 
+    private static final Logger log = LoggerFactory.getLogger(ProfileService.class);
     private static final int MAX_PROFILES_PER_USER = 10;
 
     private final ProfileRepository profileRepository;
@@ -99,8 +102,21 @@ public class ProfileService {
 
         Map<UUID, Profile> profilesById = profileRepository.findAllById(profileIds).stream()
                 .collect(Collectors.toMap(Profile::getId, p -> p));
+        List<UUID> existingProfileIds = profileIds.stream()
+                .filter(profilesById::containsKey)
+                .toList();
+        if (existingProfileIds.size() < profileIds.size()) {
+            log.warn(
+                    "Skipped {} stale shared profile reference(s) for viewer {}",
+                    profileIds.size() - existingProfileIds.size(),
+                    userId
+            );
+        }
+        if (existingProfileIds.isEmpty()) {
+            return List.of();
+        }
         Map<UUID, HealthRecord> latestRecordByProfileId = healthRecordRepository
-                .findLatestByProfileIdsAndDeletedAtIsNullOrderByProfileIdAscExamDateDescCreatedAtDesc(profileIds)
+                .findLatestByProfileIdsAndDeletedAtIsNullOrderByProfileIdAscExamDateDescCreatedAtDesc(existingProfileIds)
                 .stream()
                 .collect(Collectors.toMap(HealthRecord::getProfileId, record -> record));
 
@@ -109,7 +125,7 @@ public class ProfileService {
             UUID profileId = share.getProfileId();
             Profile profile = profilesById.get(profileId);
             if (profile == null) {
-                throw new ResourceNotFoundException("Không tìm thấy hồ sơ được chia sẻ");
+                continue;
             }
             HealthRecord latest = latestRecordByProfileId.get(profileId);
             String latestStatus = "unverified";

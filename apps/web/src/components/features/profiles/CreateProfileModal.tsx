@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { X, UserPlus, Calendar, Info, Loader2 } from "lucide-react";
@@ -35,6 +35,12 @@ export function CreateProfileModal({
     },
   });
 
+  useEffect(() => {
+    if (!isOpen) {
+      reset();
+    }
+  }, [isOpen, reset]);
+
   const handleFormSubmit = (data: CreateProfileInput) => {
     const formattedData = {
       ...data,
@@ -43,7 +49,6 @@ export function CreateProfileModal({
       notes: data.notes || null,
     };
     onSubmit(formattedData);
-    reset();
   };
 
   if (!isOpen) return null;
@@ -57,8 +62,10 @@ export function CreateProfileModal({
         {/* Header */}
         <div className="relative p-8 pb-4">
           <button 
-            onClick={onClose}
-            className="absolute top-6 right-6 p-2 rounded-full hover:bg-[#e9f6f3] text-[#6d7a77] transition-colors"
+            onClick={isLoading ? undefined : onClose}
+            disabled={isLoading}
+            aria-label="Đóng"
+            className="absolute top-6 right-6 p-2 rounded-full hover:bg-[#e9f6f3] text-[#6d7a77] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <X size={20} />
           </button>
@@ -152,8 +159,9 @@ export function CreateProfileModal({
         <div className="p-8 pt-4 flex items-center justify-end gap-3 bg-[#f8faf9] border-t border-[#bcc9c6]/20">
           <button 
             type="button"
-            onClick={onClose}
-            className="px-6 py-3 rounded-xl font-bold text-[#3d4947] hover:bg-[#e9f6f3]/80 transition-colors"
+            onClick={isLoading ? undefined : onClose}
+            disabled={isLoading}
+            className="px-6 py-3 rounded-xl font-bold text-[#3d4947] hover:bg-[#e9f6f3]/80 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             Hủy
           </button>

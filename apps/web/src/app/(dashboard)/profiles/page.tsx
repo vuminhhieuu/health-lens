@@ -17,6 +17,14 @@ import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { notify } from "@/lib/notify";
 import {
+  mapIncomingInvitationsResponse,
+  mapProfilesResponse,
+  mapSharedProfilesResponse,
+} from "@/lib/profileMappings";
+import type {
+  Profile,
+} from "@/lib/profileMappings";
+import {
   ProfileCard,
   HealthStatus,
 } from "@/components/features/profiles/ProfileCard";
@@ -25,42 +33,6 @@ import { EditProfileModal } from "@/components/features/profiles/EditProfileModa
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
 import { CreateProfileInput, UpdateProfileInput } from "@healthlens/shared";
-
-type Profile = {
-  id: string;
-  displayName: string;
-  birthDate?: string;
-  gender?: string;
-  notes?: string;
-  isDefault: boolean;
-  createdAt: string;
-  updatedAt: string;
-  lastRecordAt?: string;
-  latestStatus?: string;
-};
-
-type IncomingInvitation = {
-  id: string;
-  profileId: string;
-  profileDisplayName: string;
-  inviterName: string;
-  expiresAt: string;
-  createdAt: string;
-  accessLevel: string;
-  acceptPath: string;
-};
-
-type SharedProfile = {
-  profileId: string;
-  displayName: string;
-  accessLevel: "view" | "edit" | string;
-  latestStatus: string;
-  lastUpdated?: string;
-  lastRecordAt?: string;
-  birthDate?: string;
-  gender?: string;
-  notes?: string;
-};
 
 function mapSharedStatusToCardStatus(
   status?: string,
@@ -106,7 +78,7 @@ export default function ProfilesPage() {
     queryKey: ["profiles"],
     queryFn: async () => {
       const resp = await apiClient.get(API_ROUTES.PROFILES.BASE);
-      return resp.data.data as Profile[];
+      return mapProfilesResponse(resp.data?.data);
     },
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
@@ -121,7 +93,7 @@ export default function ProfilesPage() {
     queryKey: ["profile-invitations-incoming"],
     queryFn: async () => {
       const resp = await apiClient.get(ApiPaths.INVITATIONS.INCOMING);
-      return (resp.data?.data ?? []) as IncomingInvitation[];
+      return mapIncomingInvitationsResponse(resp.data?.data);
     },
   });
 
@@ -134,7 +106,7 @@ export default function ProfilesPage() {
     queryKey: ["shared-profiles"],
     queryFn: async () => {
       const resp = await apiClient.get(ApiPaths.SHARED_PROFILES.LIST);
-      return (resp.data?.data ?? []) as SharedProfile[];
+      return mapSharedProfilesResponse(resp.data?.data);
     },
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
@@ -188,55 +160,13 @@ export default function ProfilesPage() {
         API_ROUTES.PROFILES.UPDATE(profileId),
         payload,
       );
-      return response.data.data as Profile;
-    },
-    onMutate: async ({ profileId, data }) => {
-      await queryClient.cancelQueries({ queryKey: ["profiles"] });
-      await queryClient.cancelQueries({ queryKey: ["shared-profiles"] });
-
-      const previousProfiles = queryClient.getQueryData<Profile[]>([
-        "profiles",
-      ]);
-      queryClient.setQueryData<Profile[]>(["profiles"], (old = []) =>
-        old.map((profile) => {
-          if (profile.id !== profileId) {
-            return profile;
-          }
-
-          return {
-            ...profile,
-            displayName: data.displayName.trim(),
-            birthDate: data.birthDate || undefined,
-            gender: data.gender || undefined,
-            notes: data.notes?.trim() || undefined,
-            updatedAt: new Date().toISOString(),
-          };
-        }),
-      );
-
-      queryClient.setQueryData<SharedProfile[]>(["shared-profiles"], (old = []) =>
-        old.map((profile) => {
-          if (profile.profileId !== profileId) {
-            return profile;
-          }
-          return {
-            ...profile,
-            displayName: data.displayName.trim(),
-            birthDate: data.birthDate || undefined,
-            gender: data.gender || undefined,
-            notes: data.notes?.trim() || undefined,
-            lastUpdated: new Date().toISOString(),
-          };
-        }),
-      );
-
-      return { previousProfiles };
-    },
-    onError: (error: unknown, _variables, context) => {
-      if (context?.previousProfiles) {
-        queryClient.setQueryData(["profiles"], context.previousProfiles);
+      const [updatedProfile] = mapProfilesResponse([response.data?.data]);
+      if (!updatedProfile) {
+        throw new Error("Invalid profile response");
       }
-
+      return updatedProfile;
+    },
+    onError: (error: unknown) => {
       notify.error(extractApiDetail(error, "Đã xảy ra lỗi khi cập nhật hồ sơ."));
     },
     onSuccess: (updatedProfile) => {
@@ -281,6 +211,8 @@ export default function ProfilesPage() {
       relationship:
         profile.accessLevel === "edit"
           ? "Được chia sẻ (chỉnh sửa)"
+          : profile.accessLevel === "unknown"
+            ? "Được chia sẻ (quyền chưa xác định)"
           : "Được chia sẻ (chỉ xem)",
       notes: profile.notes,
       latestStatus: mapSharedStatusToCardStatus(profile.latestStatus),
@@ -303,10 +235,11 @@ export default function ProfilesPage() {
     [allProfiles, editingProfileId],
   );
 
-  const isLimitReached = otherProfiles.length >= 10;
+  const familyProfileCount = otherProfiles.filter((p) => !p.isDefault).length;
+  const isLimitReached = familyProfileCount >= 10;
 
   const isLoading = isProfilesLoading || isInvitationsLoading || isSharedProfilesLoading;
-  const hasProfileListError = isProfilesError || isInvitationsError || isSharedProfilesError;
+  const hasProfileListError = isProfilesError || isInvitationsError;
 
   if (isLoading) {
     return (
@@ -405,6 +338,30 @@ export default function ProfilesPage() {
               </div>
             </div>
           ))}
+        </div>
+      ) : null}
+
+      {isSharedProfilesError ? (
+        <div className="mb-8 flex items-start gap-4 rounded-3xl border border-[#f59e0b]/20 bg-[#fffbeb] p-5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f59e0b]/10 text-[#92400e]">
+            <AlertCircle size={22} />
+          </div>
+          <div>
+            <h4 className="font-black text-[#92400e]">
+              Không tải được hồ sơ được chia sẻ
+            </h4>
+            <p className="text-sm font-medium text-[#92400e]/80">
+              Hồ sơ của bạn vẫn hiển thị bình thường. Vui lòng thử lại để cập nhật
+              quyền chia sẻ mới nhất.
+            </p>
+            <button
+              type="button"
+              onClick={() => void refetchSharedProfiles()}
+              className="mt-3 rounded-xl border border-[#f59e0b]/30 bg-white px-4 py-2 text-sm font-bold text-[#92400e] transition hover:bg-[#fff7df]"
+            >
+              Tải lại hồ sơ chia sẻ
+            </button>
+          </div>
         </div>
       ) : null}
 

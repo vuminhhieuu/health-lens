@@ -445,4 +445,24 @@ class ProfileServiceTest {
                 assertThat(responses.getFirst().latestStatus()).isEqualTo("abnormal");
                 assertThat(responses.getFirst().lastUpdated()).isEqualTo(Instant.parse("2026-05-07T11:00:00Z"));
         }
+
+        @Test
+        void getSharedProfiles_shouldSkipStaleShareWhenProfileIsMissing() {
+                UUID viewerId = UUID.randomUUID();
+                UUID missingProfileId = UUID.randomUUID();
+
+                ProfileShare staleShare = new ProfileShare();
+                staleShare.setId(UUID.randomUUID());
+                staleShare.setProfileId(missingProfileId);
+                staleShare.setViewerId(viewerId);
+                staleShare.setOwnerId(UUID.randomUUID());
+                staleShare.setAccessLevel("view");
+
+                when(profileShareRepository.findAllByViewerIdAndRevokedAtIsNull(viewerId)).thenReturn(List.of(staleShare));
+                when(profileRepository.findAllById(List.of(missingProfileId))).thenReturn(List.of());
+
+                List<SharedProfileResponse> responses = profileService.getSharedProfiles(viewerId);
+
+                assertThat(responses).isEmpty();
+        }
 }

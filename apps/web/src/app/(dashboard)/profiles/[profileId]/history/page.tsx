@@ -30,41 +30,13 @@ import { notify } from "@/lib/notify";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { DeleteRecordModal } from "@/components/features/health-records/DeleteRecordModal";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
-
-type HistoryItem = {
-  id: string;
-  status?: string | null;
-  examDate: string | null;
-  testType: string;
-  overallStatus: "normal" | "attention" | "abnormal" | string;
-  abnormalCount: number;
-  hospitalName: string | null;
-  sourceType: string | null;
-  createdAt: string;
-  canDelete?: boolean;
-};
-
-type HistoryPagination = {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-};
-
-type HistoryPageResponse = {
-  data: HistoryItem[];
-  pagination: HistoryPagination;
-};
-
-type Profile = {
-  id: string;
-  displayName: string;
-};
-
-type SharedProfile = {
-  profileId: string;
-  accessLevel: "view" | "edit" | string;
-};
+import {
+  mapHistoryPageResponse,
+  mapProfilesResponse,
+  mapSharedProfilesResponse,
+  resolveHistoryStatus,
+} from "@/lib/profileMappings";
+import type { HistoryItem } from "@/lib/profileMappings";
 
 const PAGE_SIZE = 20;
 
@@ -87,14 +59,14 @@ export default function ProfileHistoryPage() {
     queryKey: ["profiles-for-history-breadcrumb"],
     queryFn: async () => {
       const response = await apiClient.get(ApiPaths.PROFILES.BASE);
-      return (response.data?.data ?? []) as Profile[];
+      return mapProfilesResponse(response.data?.data);
     },
   });
   const { data: sharedProfiles = [] } = useQuery({
     queryKey: ["shared-profiles"],
     queryFn: async () => {
       const response = await apiClient.get(ApiPaths.SHARED_PROFILES.LIST);
-      return (response.data?.data ?? []) as SharedProfile[];
+      return mapSharedProfilesResponse(response.data?.data);
     },
   });
   const historyQuery = useInfiniteQuery({
@@ -108,10 +80,7 @@ export default function ProfileHistoryPage() {
           params: { page: pageParam, limit: PAGE_SIZE },
         },
       );
-      return {
-        data: (response.data?.data ?? []) as HistoryItem[],
-        pagination: response.data?.pagination as HistoryPagination,
-      } satisfies HistoryPageResponse;
+      return mapHistoryPageResponse(response.data);
     },
     getNextPageParam: (lastPage) => {
       const nextPage = lastPage.pagination.page + 1;
@@ -190,9 +159,11 @@ export default function ProfileHistoryPage() {
   const currentProfileName = useMemo(
     () =>
       profiles.find((profile) => profile.id === profileId)?.displayName ??
+      sharedProfiles.find((profile) => profile.profileId === profileId)
+        ?.displayName ??
       searchParams.get("displayName")?.trim() ??
       "Hồ sơ",
-    [profiles, profileId, searchParams],
+    [profiles, profileId, searchParams, sharedProfiles],
   );
   const canUpload = useMemo(() => {
     const isOwnedProfile = profiles.some((profile) => profile.id === profileId);
@@ -622,49 +593,4 @@ function statusLabel(status: string): string {
     default:
       return "Chưa xác thực";
   }
-}
-
-function resolveHistoryStatus(item: HistoryItem): string {
-  const fallbackStatus = item as unknown as {
-    recordStatus?: string | null;
-    verificationStatus?: string | null;
-  };
-  const recordStatus = (
-    item.status ??
-    fallbackStatus.recordStatus ??
-    fallbackStatus.verificationStatus
-  )?.toLowerCase();
-
-  if (recordStatus === "done") {
-    // Nếu đã xác nhận, ưu tiên hiển thị bất thường/chú ý, còn lại mặc định là bình thường
-    if (item.overallStatus === "abnormal" || item.overallStatus === "attention") {
-      return item.overallStatus;
-    }
-    return "normal";
-  }
-
-  if (
-    recordStatus === "review_required" ||
-    recordStatus === "processing" ||
-    recordStatus === "pending"
-  ) {
-    return "unverified";
-  }
-
-  if (
-    recordStatus === "ocr_failed" ||
-    recordStatus === "failed" ||
-    recordStatus === "error"
-  ) {
-    return "error";
-  }
-
-  // Fallback cho dữ liệu cũ hoặc không xác định
-  if (!item.examDate && item.sourceType === "ocr_partial") {
-    return "unverified";
-  }
-
-  return item.overallStatus === "abnormal" || item.overallStatus === "attention"
-    ? item.overallStatus
-    : "unverified";
 }
