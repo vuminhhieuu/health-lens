@@ -253,6 +253,16 @@ function LoginContent() {
             </div>
 
             {/* Submit */}
+            {submitError ? (
+              <p
+                id="login-submit-error"
+                role="alert"
+                className="text-center text-sm font-medium text-[#ba1a1a]"
+              >
+                {submitError}
+              </p>
+            ) : null}
+
             <button
               id="login-submit"
               type="submit"
@@ -274,13 +284,6 @@ function LoginContent() {
               )}
             </button>
           </form>
-
-          {/* Error message */}
-          {submitError ? (
-            <p className="mt-4 text-center text-sm text-[#ba1a1a]">
-              {submitError}
-            </p>
-          ) : null}
 
           {/* Register link */}
           <div className="mt-8 border-t border-[#d8e5e2] pt-6 text-center">

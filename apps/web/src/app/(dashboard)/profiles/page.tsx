@@ -4,10 +4,8 @@ import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
-  Users,
   Search,
   Filter,
-  Loader2,
   AlertCircle,
   Mail,
 } from "lucide-react";
@@ -25,6 +23,7 @@ import {
 import { CreateProfileModal } from "@/components/features/profiles/CreateProfileModal";
 import { EditProfileModal } from "@/components/features/profiles/EditProfileModal";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
 import { CreateProfileInput, UpdateProfileInput } from "@healthlens/shared";
 
 type Profile = {
@@ -98,7 +97,12 @@ export default function ProfilesPage() {
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { data: otherProfiles = [], isLoading: isProfilesLoading } = useQuery({
+  const {
+    data: otherProfiles = [],
+    isLoading: isProfilesLoading,
+    isError: isProfilesError,
+    refetch: refetchProfiles,
+  } = useQuery({
     queryKey: ["profiles"],
     queryFn: async () => {
       const resp = await apiClient.get(API_ROUTES.PROFILES.BASE);
@@ -108,7 +112,12 @@ export default function ProfilesPage() {
     refetchOnWindowFocus: true,
   });
 
-  const { data: incomingInvitations = [] } = useQuery({
+  const {
+    data: incomingInvitations = [],
+    isLoading: isInvitationsLoading,
+    isError: isInvitationsError,
+    refetch: refetchIncomingInvitations,
+  } = useQuery({
     queryKey: ["profile-invitations-incoming"],
     queryFn: async () => {
       const resp = await apiClient.get(ApiPaths.INVITATIONS.INCOMING);
@@ -116,7 +125,12 @@ export default function ProfilesPage() {
     },
   });
 
-  const { data: sharedProfiles = [] } = useQuery({
+  const {
+    data: sharedProfiles = [],
+    isLoading: isSharedProfilesLoading,
+    isError: isSharedProfilesError,
+    refetch: refetchSharedProfiles,
+  } = useQuery({
     queryKey: ["shared-profiles"],
     queryFn: async () => {
       const resp = await apiClient.get(ApiPaths.SHARED_PROFILES.LIST);
@@ -291,17 +305,35 @@ export default function ProfilesPage() {
 
   const isLimitReached = otherProfiles.length >= 10;
 
-  const isLoading = isProfilesLoading;
+  const isLoading = isProfilesLoading || isInvitationsLoading || isSharedProfilesLoading;
+  const hasProfileListError = isProfilesError || isInvitationsError || isSharedProfilesError;
 
   if (isLoading) {
     return (
       <div className="flex grow items-center justify-center bg-[#effcf9] p-8">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-10 w-10 animate-spin text-[#00685f]" />
-          <p className="font-bold text-[#6d7a77]">
-            Đang tải danh sách hồ sơ...
-          </p>
-        </div>
+        <LoadingState
+          title="Đang tải danh sách hồ sơ"
+          description="HealthLens đang chuẩn bị hồ sơ của bạn và các hồ sơ được chia sẻ."
+          className="w-full max-w-3xl"
+        />
+      </div>
+    );
+  }
+
+  if (hasProfileListError) {
+    return (
+      <div className="flex grow items-center justify-center bg-[#effcf9] p-8">
+        <ErrorState
+          title="Không tải được danh sách hồ sơ"
+          description="Vui lòng thử lại để tiếp tục quản lý hồ sơ sức khỏe."
+          actionLabel="Thử lại"
+          onAction={() => {
+            void refetchProfiles();
+            void refetchIncomingInvitations();
+            void refetchSharedProfiles();
+          }}
+          className="w-full max-w-3xl"
+        />
       </div>
     );
   }
@@ -417,25 +449,19 @@ export default function ProfilesPage() {
           ))}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center rounded-[40px] border-2 border-dashed border-[#bcc9c6]/30 bg-white/40 p-20 text-center">
-          <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-[#e9f6f3] text-[#00685f]">
-            <Users size={48} />
-          </div>
-          <h3 className="mb-2 text-2xl font-black text-[#121e1c]">
-            Chưa tìm thấy hồ sơ nào
-          </h3>
-          <p className="mb-8 max-w-xs font-medium text-[#6d7a77]">
-            Bắt đầu quản lý sức khỏe bằng cách thêm hồ sơ cho các thành viên
-            trong gia đình.
-          </p>
-          <button
-            type="button"
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 rounded-2xl border-2 border-[#00685f] px-8 py-3 font-bold text-[#00685f] transition-colors hover:bg-[#e9f6f3]"
-          >
-            Tạo hồ sơ đầu tiên
-          </button>
-        </div>
+        <EmptyState
+          title="Chưa tìm thấy hồ sơ nào"
+          description="Bắt đầu quản lý sức khỏe bằng cách thêm hồ sơ cho các thành viên trong gia đình."
+          action={
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-2xl border-2 border-[#00685f] px-8 py-3 font-bold text-[#00685f] transition-colors hover:bg-[#e9f6f3]"
+            >
+              Tạo hồ sơ đầu tiên
+            </button>
+          }
+        />
       )}
 
       {isLimitReached && (

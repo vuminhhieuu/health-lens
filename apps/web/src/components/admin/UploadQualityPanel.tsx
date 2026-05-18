@@ -19,6 +19,7 @@ import {
 } from "@/components/admin/UploadQualityDonutChart";
 import { adminApiClient } from "@/lib/api/adminApiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
 
 const SLA_TARGET = 0.95;
 
@@ -193,16 +194,15 @@ export function UploadQualityPanel() {
 
       <div className="p-6 space-y-6">
         {isLoading ? (
-          <div className="flex items-center justify-center py-20 text-slate-500">
-            <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-          </div>
+          <LoadingState title="Đang tải dữ liệu chất lượng tải lên" className="min-h-80" />
         ) : isError ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-700">
-            Không tải được dữ liệu.{" "}
-            <button type="button" onClick={() => refetch()} className="underline font-medium">
-              Thử lại
-            </button>
-          </div>
+          <ErrorState
+            title="Không tải được dữ liệu"
+            description="Vui lòng thử lại để xem chất lượng tải lên trong khoảng đã chọn."
+            actionLabel="Thử lại"
+            onAction={() => void refetch()}
+            className="min-h-80"
+          />
         ) : data ? (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -244,9 +244,11 @@ export function UploadQualityPanel() {
             )}
 
             {data.summary.totalUploads === 0 ? (
-              <p className="text-sm text-slate-500 py-16 text-center">
-                Chưa có upload hoàn tất trong khoảng thời gian này.
-              </p>
+              <EmptyState
+                title="Chưa có upload hoàn tất"
+                description="Thử đổi khoảng thời gian hoặc kiểm tra lại khi có dữ liệu mới."
+                className="min-h-72"
+              />
             ) : (
               <div className="grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-6 items-start">
                 <div className="rounded-xl border border-slate-100 bg-slate-50/40 p-4 sm:p-5">

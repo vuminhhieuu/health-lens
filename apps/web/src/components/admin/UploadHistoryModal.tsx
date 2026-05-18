@@ -3,10 +3,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, History, Loader2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, History, X } from "lucide-react";
 
 import { adminApiClient } from "@/lib/api/adminApiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
 
 export type UploadHistoryFilter = {
   status?: "done" | "ocr_failed";
@@ -134,20 +135,21 @@ export function UploadHistoryModal({
 
         <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-5 min-h-0">
           {isLoading ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-            </div>
+            <LoadingState title="Đang tải lịch sử upload" className="min-h-64 border-slate-200 bg-slate-50" />
           ) : isError ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              Không tải được lịch sử.{" "}
-              <button type="button" onClick={() => refetch()} className="underline font-medium">
-                Thử lại
-              </button>
-            </div>
+            <ErrorState
+              title="Không tải được lịch sử"
+              description="Vui lòng thử lại để xem các lượt upload."
+              actionLabel="Thử lại"
+              onAction={() => void refetch()}
+              className="min-h-64 border-slate-200 bg-slate-50"
+            />
           ) : data && data.items.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-16">
-              Không có bản ghi trong khoảng đã chọn.
-            </p>
+            <EmptyState
+              title="Không có bản ghi"
+              description="Không có lượt upload nào trong khoảng đã chọn."
+              className="min-h-64 border-slate-200 bg-slate-50"
+            />
           ) : data ? (
             <ul className="space-y-3">
               {data.items.map((item) => (

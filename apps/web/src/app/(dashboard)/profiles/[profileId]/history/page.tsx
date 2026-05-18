@@ -13,7 +13,6 @@ import {
   AlertTriangle,
   Calendar,
   Loader2,
-  Activity,
   Search,
   Filter,
   ShieldPlus,
@@ -30,6 +29,7 @@ import { apiClient } from "@/lib/api/apiClient";
 import { notify } from "@/lib/notify";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { DeleteRecordModal } from "@/components/features/health-records/DeleteRecordModal";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
 
 type HistoryItem = {
   id: string;
@@ -270,8 +270,32 @@ export default function ProfileHistoryPage() {
   if (historyQuery.isLoading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center bg-[#effcf9]">
-        <Loader2 className="h-8 w-8 animate-spin text-[#00685f]" />
+        <LoadingState
+          title="Đang tải lịch sử khám bệnh"
+          description="Danh sách kết quả sẽ hiển thị ngay khi dữ liệu sẵn sàng."
+          className="w-full max-w-3xl"
+        />
       </div>
+    );
+  }
+
+  if (historyQuery.isError) {
+    return (
+      <DashboardPageShell
+        title="Lịch sử khám bệnh"
+        subtitle="Xem diễn tiến sức khỏe theo thời gian, mới nhất ở trên cùng."
+        breadcrumbs={[
+          { label: "Kết quả khám", href: "/health-records" },
+          { label: currentProfileName },
+        ]}
+      >
+        <ErrorState
+          title="Không tải được lịch sử khám bệnh"
+          description="Vui lòng thử lại để xem các kết quả đã tải lên."
+          actionLabel="Thử lại"
+          onAction={() => void historyQuery.refetch()}
+        />
+      </DashboardPageShell>
     );
   }
 
@@ -285,21 +309,26 @@ export default function ProfileHistoryPage() {
       ]}
     >
       {allItems.length === 0 ? (
-        <section className="mt-3 rounded-3xl border-2 border-dashed border-[#b7d8d1] bg-white px-12 py-14 text-center shadow-sm">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#effcf9] text-[#00685f]">
-            <Activity className="h-7 w-7" />
-          </div>
-          <p className="mb-5 text-[#4e6360]">Hồ sơ này chưa có kết quả nào.</p>
-          {canUpload ? (
-            <div className="mx-auto w-fit">
+        <EmptyState
+          title="Hồ sơ này chưa có kết quả nào"
+          description="Tải kết quả khám đầu tiên để bắt đầu theo dõi diễn tiến sức khỏe."
+          action={
+            canUpload ? (
               <UploadButton
                 profileId={profileId}
                 label="Thêm kết quả đầu tiên"
                 size="compact"
               />
-            </div>
-          ) : null}
-        </section>
+            ) : (
+              <Link
+                href="/health-records"
+                className="inline-flex items-center justify-center rounded-xl bg-[#00685f] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00685f]"
+              >
+                Quay lại kết quả khám
+              </Link>
+            )
+          }
+        />
       ) : (
         <section className="mt-3 space-y-4">
           <article className="rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm">
