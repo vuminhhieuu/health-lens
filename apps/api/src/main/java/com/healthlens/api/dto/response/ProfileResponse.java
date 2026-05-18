@@ -11,6 +11,7 @@ public record ProfileResponse(
         String gender,
         String notes,
         boolean isDefault,
+        String latestStatus,
         Instant lastRecordAt,
         Instant createdAt,
         Instant updatedAt

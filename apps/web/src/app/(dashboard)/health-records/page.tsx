@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Loader2, Mail, Share2, Users } from "lucide-react";
+import { Mail, Share2 } from "lucide-react";
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
@@ -16,6 +16,15 @@ import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { apiClient } from "@/lib/api/apiClient";
 import { notify } from "@/lib/notify";
 import { InviteMemberModal } from "@/components/features/profiles/InviteMemberModal";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
+import {
+  buildSharedRecordProfileGroups,
+  latestValidDateValue,
+  mapRecordStateToCardStatus,
+  sortHubCardsByLatestActivity,
+  type HealthRecordHubCard,
+  type SharedHealthRecord,
+} from "@/lib/healthRecordHub";
 
 type Profile = {
   id: string;
@@ -44,18 +53,6 @@ type SharedProfile = {
   lastRecordAt?: string;
 };
 
-type SharedHealthRecord = {
-  recordId: string;
-  profileId: string;
-  profileDisplayName: string;
-  recordType?: string | null;
-  examDate?: string | null;
-  hospitalName?: string | null;
-  overallStatus?: string | null;
-  lastUpdated?: string | null;
-  sharedAt?: string | null;
-};
-
 type IncomingHealthRecordInvitation = {
   id: string;
   healthRecordId: string;
@@ -66,34 +63,8 @@ type IncomingHealthRecordInvitation = {
   acceptPath: string;
 };
 
-type HealthRecordHubCard = {
-  id: string;
-  displayName: string;
-  relationship: string;
-  notes?: string;
-  updatedAt?: string;
-  latestStatus?: HealthStatus;
-  lastRecordAt?: string;
-  isSharedProfile: boolean;
-  href: string;
-};
-
-type SharedHealthRecordProfileGroup = {
-  profileId: string;
-  profileDisplayName: string;
-  totalRecords: number;
-  latestStatus?: string | null;
-  latestUpdatedAt?: string | null;
-  latestSharedAt?: string | null;
-};
-
 function mapSharedStatusToCardStatus(status?: string): HealthStatus | undefined {
-  if (!status) return undefined;
-  const normalized = status.toLowerCase();
-  if (normalized === "normal") return "normal";
-  if (normalized === "attention" || normalized === "warning") return "warning";
-  if (normalized === "abnormal") return "critical";
-  return undefined;
+  return mapRecordStateToCardStatus({ recordStatus: "done", overallStatus: status });
 }
 
 function extractApiDetail(error: unknown, fallback: string): string {
@@ -122,7 +93,12 @@ export default function HealthRecordsPage() {
     void apiClient.post(ApiPaths.PROFILES.ENSURE_DEFAULT);
   }, []);
 
-  const { data: profiles = [], isLoading } = useQuery({
+  const {
+    data: profiles = [],
+    isLoading: isProfilesLoading,
+    isError: isProfilesError,
+    refetch: refetchProfiles,
+  } = useQuery({
     queryKey: ["profiles-for-health-records-hub"],
     queryFn: async () => {
       const response = await apiClient.get(ApiPaths.PROFILES.BASE);
@@ -132,7 +108,12 @@ export default function HealthRecordsPage() {
     refetchOnWindowFocus: true,
   });
 
-  const { data: sharedProfiles = [] } = useQuery({
+  const {
+    data: sharedProfiles = [],
+    isLoading: isSharedProfilesLoading,
+    isError: isSharedProfilesError,
+    refetch: refetchSharedProfiles,
+  } = useQuery({
     queryKey: ["shared-profiles"],
     queryFn: async () => {
       const response = await apiClient.get(ApiPaths.SHARED_PROFILES.LIST);
@@ -142,7 +123,12 @@ export default function HealthRecordsPage() {
     refetchOnWindowFocus: true,
   });
 
-  const { data: sharedHealthRecords = [] } = useQuery({
+  const {
+    data: sharedHealthRecords = [],
+    isLoading: isSharedHealthRecordsLoading,
+    isError: isSharedHealthRecordsError,
+    refetch: refetchSharedHealthRecords,
+  } = useQuery({
     queryKey: ["shared-health-records"],
     queryFn: async () => {
       const response = await apiClient.get(ApiPaths.HEALTH_RECORDS.SHARED);
@@ -256,7 +242,7 @@ export default function HealthRecordsPage() {
         displayName: profile.displayName,
         notes: profile.notes,
         updatedAt: profile.updatedAt,
-        latestStatus: profile.latestStatus,
+        latestStatus: mapSharedStatusToCardStatus(profile.latestStatus),
         lastRecordAt: profile.lastRecordAt,
         relationship: "Người thân",
         isSharedProfile: false,
@@ -269,7 +255,7 @@ export default function HealthRecordsPage() {
           displayName: selfProfile.displayName,
           notes: selfProfile.notes,
           updatedAt: selfProfile.updatedAt,
-          latestStatus: selfProfile.latestStatus,
+          latestStatus: mapSharedStatusToCardStatus(selfProfile.latestStatus),
           lastRecordAt: selfProfile.lastRecordAt,
           relationship: "Chính chủ",
           isSharedProfile: false,
@@ -297,54 +283,22 @@ export default function HealthRecordsPage() {
       href: `/profiles/${profile.profileId}/history`,
     }));
 
-    return [...selfItem, ...familyItems, ...sharedItems];
+    return sortHubCardsByLatestActivity([...selfItem, ...familyItems, ...sharedItems]);
   }, [profiles, sharedProfiles]);
 
   const sharedRecordItems = useMemo<HealthRecordHubCard[]>(() => {
-    const groupedByProfile = sharedHealthRecords.reduce<Record<string, SharedHealthRecordProfileGroup>>((acc, record) => {
-      const existingGroup = acc[record.profileId];
-      const recordUpdatedAt = record.lastUpdated ?? null;
-      const recordSharedAt = record.sharedAt ?? null;
-
-      if (!existingGroup) {
-        acc[record.profileId] = {
-          profileId: record.profileId,
-          profileDisplayName: record.profileDisplayName,
-          totalRecords: 1,
-          latestStatus: record.overallStatus ?? null,
-          latestUpdatedAt: recordUpdatedAt,
-          latestSharedAt: recordSharedAt,
-        };
-        return acc;
-      }
-
-      const currentReferenceTime = existingGroup.latestUpdatedAt ?? existingGroup.latestSharedAt ?? "";
-      const nextReferenceTime = recordUpdatedAt ?? recordSharedAt ?? "";
-      acc[record.profileId] = {
-        ...existingGroup,
-        totalRecords: existingGroup.totalRecords + 1,
-        latestStatus: nextReferenceTime > currentReferenceTime ? record.overallStatus ?? existingGroup.latestStatus : existingGroup.latestStatus,
-        latestUpdatedAt: nextReferenceTime > currentReferenceTime ? recordUpdatedAt : existingGroup.latestUpdatedAt,
-        latestSharedAt: nextReferenceTime > currentReferenceTime ? recordSharedAt : existingGroup.latestSharedAt,
-      };
-      return acc;
-    }, {});
-
-    return Object.values(groupedByProfile).map((group) => ({
-      id: group.profileId,
-      displayName: group.profileDisplayName,
-      notes:
-        group.totalRecords > 1
-          ? `${group.totalRecords} kết quả khám đã được chia sẻ`
-          : "1 kết quả khám đã được chia sẻ",
-      updatedAt: group.latestUpdatedAt ?? group.latestSharedAt ?? undefined,
-      latestStatus: mapSharedStatusToCardStatus(group.latestStatus ?? undefined),
-      lastRecordAt: group.latestSharedAt ?? group.latestUpdatedAt ?? undefined,
-      relationship: "Kết quả được chia sẻ",
-      isSharedProfile: true,
-      href: `/profiles/${group.profileId}/history?displayName=${encodeURIComponent(group.profileDisplayName)}`,
-    }));
+    return sortHubCardsByLatestActivity(buildSharedRecordProfileGroups(sharedHealthRecords));
   }, [sharedHealthRecords]);
+
+  const hubItems = useMemo(
+    () => sortHubCardsByLatestActivity([...sharedRecordItems, ...profileItems]),
+    [profileItems, sharedRecordItems]
+  );
+  const isSharedDataLoading = isSharedProfilesLoading || isSharedHealthRecordsLoading;
+  const hasSharedDataError = isSharedProfilesError || isSharedHealthRecordsError;
+  const hasHubItems = hubItems.length > 0;
+  const isHubLoading = isProfilesLoading || (!hasHubItems && isSharedDataLoading);
+  const shouldShowFullHubError = !hasHubItems && (isProfilesError || hasSharedDataError);
 
   return (
     <DashboardPageShell
@@ -386,14 +340,28 @@ export default function HealthRecordsPage() {
         </div>
       ) : null}
 
-      {isLoading ? (
-        <div className="flex justify-center py-10">
-          <Loader2 className="h-8 w-8 animate-spin text-[#00685f]" />
-        </div>
-      ) : profileItems.length > 0 || sharedRecordItems.length > 0 ? (
+      {isHubLoading ? (
+        <LoadingState
+          title="Đang tải kết quả khám"
+          description="Hệ thống đang đồng bộ hồ sơ và kết quả được chia sẻ."
+        />
+      ) : shouldShowFullHubError ? (
+        <ErrorState
+          title="Không thể tải kết quả khám"
+          description="Vui lòng thử lại để cập nhật danh sách hồ sơ và kết quả được chia sẻ."
+          actionLabel="Thử lại"
+          onAction={() => {
+            void refetchProfiles();
+            void refetchSharedProfiles();
+            void refetchSharedHealthRecords();
+          }}
+        />
+      ) : hasHubItems ? (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {[...sharedRecordItems, ...profileItems].map((profile) => {
+          {hubItems.map((profile) => {
             const canOpenHistory = Boolean(profile.id);
+            const safeLastUpdated = latestValidDateValue(profile.updatedAt, profile.lastRecordAt);
+            const safeLastRecordAt = latestValidDateValue(profile.lastRecordAt);
             return (
               <ProfileCard
                 key={`${profile.relationship}-${profile.displayName}-${profile.id || "no-id"}`}
@@ -401,8 +369,8 @@ export default function HealthRecordsPage() {
                 relationship={profile.relationship}
                 notes={profile.notes}
                 latestStatus={profile.latestStatus}
-                lastUpdated={profile.updatedAt}
-                lastRecordAt={profile.lastRecordAt}
+                lastUpdated={safeLastUpdated}
+                lastRecordAt={safeLastRecordAt}
                 onPress={
                   canOpenHistory
                     ? () => router.push(profile.href)
@@ -411,7 +379,7 @@ export default function HealthRecordsPage() {
                 secondaryAction={
                   canOpenHistory && !profile.isSharedProfile
                     ? {
-                        label: "Share",
+                        label: "Chia sẻ",
                         icon: Share2,
                         onClick: () => {
                           setInvitingProfileId(profile.id);
@@ -425,17 +393,10 @@ export default function HealthRecordsPage() {
           })}
         </div>
       ) : (
-        <div className="rounded-4xl border-2 border-dashed border-[#bcc9c6]/30 bg-white/40 p-16 text-center">
-          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-[#e9f6f3] text-[#00685f]">
-            <Users className="h-10 w-10" />
-          </div>
-          <h3 className="text-2xl font-black text-[#121e1c]">
-            Chưa có hồ sơ nào
-          </h3>
-          <p className="mt-2 text-[#6d7a77]">
-            Vui lòng tạo hồ sơ để theo dõi lịch sử khám bệnh.
-          </p>
-        </div>
+        <EmptyState
+          title="Chưa có hồ sơ nào"
+          description="Vui lòng tạo hồ sơ để theo dõi lịch sử khám bệnh."
+        />
       )}
       <InviteMemberModal
         isOpen={inviteModalOpen}

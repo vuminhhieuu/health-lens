@@ -218,7 +218,7 @@ public class ReferenceDataService {
         }
 
         return selectedRange.map(range -> {
-                    log.info(
+                    log.debug(
                             "Applied reference rule metric_id={} reference_range_id={} gender={} age={}",
                             metric.getId(),
                             range.getId(),

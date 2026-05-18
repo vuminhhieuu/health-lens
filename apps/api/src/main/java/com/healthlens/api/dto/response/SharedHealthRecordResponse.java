@@ -11,6 +11,7 @@ public record SharedHealthRecordResponse(
         String recordType,
         LocalDate examDate,
         String hospitalName,
+        String status,
         String overallStatus,
         Instant lastUpdated,
         Instant sharedAt

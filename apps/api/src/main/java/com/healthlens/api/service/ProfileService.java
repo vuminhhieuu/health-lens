@@ -2,10 +2,12 @@ package com.healthlens.api.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.healthlens.api.dto.MetricClassificationDto;
 import com.healthlens.api.dto.MetricDto;
 import com.healthlens.api.audit.AuditActions;
 import com.healthlens.api.audit.AuditEventRecorder;
 import com.healthlens.api.audit.AuditResourceTypes;
+import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.dto.request.CreateProfileRequest;
 import com.healthlens.api.dto.request.UpdateProfileRequest;
 import com.healthlens.api.dto.response.ProfileResponse;
@@ -29,6 +31,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -42,6 +45,7 @@ public class ProfileService {
     private final ProfileShareRepository profileShareRepository;
     private final HealthRecordRepository healthRecordRepository;
     private final UserRepository userRepository;
+    private final ReferenceDataService referenceDataService;
     private final ObjectMapper objectMapper;
     private final AuditEventRecorder auditEventRecorder;
 
@@ -50,6 +54,7 @@ public class ProfileService {
             ProfileShareRepository profileShareRepository,
             HealthRecordRepository healthRecordRepository,
             UserRepository userRepository,
+            ReferenceDataService referenceDataService,
             ObjectMapper objectMapper,
             AuditEventRecorder auditEventRecorder
     ) {
@@ -57,15 +62,26 @@ public class ProfileService {
         this.profileShareRepository = profileShareRepository;
         this.healthRecordRepository = healthRecordRepository;
         this.userRepository = userRepository;
+        this.referenceDataService = referenceDataService;
         this.objectMapper = objectMapper;
         this.auditEventRecorder = auditEventRecorder;
     }
 
     @Transactional(readOnly = true)
     public List<ProfileResponse> getProfiles(UUID userId) {
-        return profileRepository.findAllByUserId(userId)
+        List<Profile> profiles = profileRepository.findAllByUserId(userId);
+        if (profiles.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> profileIds = profiles.stream().map(Profile::getId).toList();
+        Map<UUID, HealthRecord> latestRecordByProfileId = healthRecordRepository
+                .findLatestByProfileIdsAndDeletedAtIsNullOrderByProfileIdAscExamDateDescCreatedAtDesc(profileIds)
                 .stream()
-                .map(this::mapToResponse)
+                .collect(Collectors.toMap(HealthRecord::getProfileId, record -> record));
+
+        return profiles.stream()
+                .map(profile -> mapToResponse(profile, latestRecordByProfileId.get(profile.getId())))
                 .collect(Collectors.toList());
     }
 
@@ -84,9 +100,9 @@ public class ProfileService {
         Map<UUID, Profile> profilesById = profileRepository.findAllById(profileIds).stream()
                 .collect(Collectors.toMap(Profile::getId, p -> p));
         Map<UUID, HealthRecord> latestRecordByProfileId = healthRecordRepository
-            .findLatestByProfileIdsAndDeletedAtIsNullOrderByProfileIdAscExamDateDescCreatedAtDesc(profileIds)
-            .stream()
-            .collect(Collectors.toMap(HealthRecord::getProfileId, record -> record));
+                .findLatestByProfileIdsAndDeletedAtIsNullOrderByProfileIdAscExamDateDescCreatedAtDesc(profileIds)
+                .stream()
+                .collect(Collectors.toMap(HealthRecord::getProfileId, record -> record));
 
         List<SharedProfileResponse> responses = new ArrayList<>();
         for (ProfileShare share : uniqueSharesByProfileId.values()) {
@@ -99,7 +115,7 @@ public class ProfileService {
             String latestStatus = "unverified";
             Instant lastUpdated = profile.getUpdatedAt();
             if (latest != null) {
-                latestStatus = resolveLatestSharedStatus(latest);
+                latestStatus = resolveLatestProfileStatus(latest, profile);
                 lastUpdated = latest.getUpdatedAt();
             }
             responses.add(new SharedProfileResponse(
@@ -111,19 +127,18 @@ public class ProfileService {
                     profile.getLastRecordAt(),
                     profile.getBirthDate(),
                     profile.getGender(),
-                    profile.getNotes()
-            ));
+                    profile.getNotes()));
         }
         return responses;
     }
 
-    private String resolveLatestSharedStatus(HealthRecord latest) {
+    private String resolveLatestProfileStatus(HealthRecord latest, Profile profile) {
         List<MetricDto> metrics = parseMetrics(latest.getMetrics());
         String overallStatus = metrics.stream()
-                .map(MetricDto::getStatus)
+                .map(metric -> resolveMetricStatus(metric, latest, profile))
                 .filter(status -> status != null && !status.isBlank())
                 .map(String::trim)
-                .map(String::toLowerCase)
+                .map(status -> status.toLowerCase(Locale.ROOT))
                 .max((left, right) -> Integer.compare(statusPriority(left), statusPriority(right)))
                 .orElse(null);
         if (overallStatus != null) {
@@ -132,10 +147,83 @@ public class ProfileService {
         if ("done".equals(latest.getStatus())) {
             return "normal";
         }
-        if ("ocr_failed".equals(latest.getStatus()) || "failed".equals(latest.getStatus()) || "error".equals(latest.getStatus())) {
+        if ("ocr_failed".equals(latest.getStatus()) || "failed".equals(latest.getStatus())
+                || "error".equals(latest.getStatus())) {
             return "error";
         }
         return "unverified";
+    }
+
+    private String resolveMetricStatus(MetricDto metric, HealthRecord record, Profile profile) {
+        if (metric == null) {
+            return null;
+        }
+        String currentStatus = metric.getStatus();
+        if (isRiskStatus(currentStatus)) {
+            return currentStatus;
+        }
+        String metricValue = metricValueForClassification(metric);
+        String documentRangeStatus = classifyByRange(metricValue, metric.getReferenceRange());
+        if (isRiskStatus(documentRangeStatus) || "normal".equals(documentRangeStatus)) {
+            return documentRangeStatus;
+        }
+        if (!shouldReclassifyMetric(currentStatus, metric, metricValue)) {
+            return currentStatus;
+        }
+        MetricClassificationDto classification = referenceDataService.classifyMetricWithoutAudit(
+                metric.getName(),
+                metricValue,
+                profile,
+                record.getExamDate());
+        String classifiedStatus = classification != null ? classification.status() : null;
+        return classifiedStatus != null ? classifiedStatus : currentStatus;
+    }
+
+    private String classifyByRange(String normalizedValue, ReferenceRangeDto range) {
+        if (range == null || range.min() == null || range.max() == null) {
+            return "no_data";
+        }
+        if (normalizedValue == null || normalizedValue.isBlank()) {
+            return "no_data";
+        }
+        try {
+            java.math.BigDecimal value = new java.math.BigDecimal(normalizedValue);
+            java.math.BigDecimal attentionMin = range.attentionMin() != null ? range.attentionMin() : range.min();
+            java.math.BigDecimal attentionMax = range.attentionMax() != null ? range.attentionMax() : range.max();
+            if (value.compareTo(attentionMin) < 0 || value.compareTo(attentionMax) > 0) {
+                return "abnormal";
+            }
+            if (value.compareTo(range.min()) < 0 || value.compareTo(range.max()) > 0) {
+                return "attention";
+            }
+            return "normal";
+        } catch (NumberFormatException ex) {
+            return "no_data";
+        }
+    }
+
+    private boolean shouldReclassifyMetric(String currentStatus, MetricDto metric, String metricValue) {
+        if (isRiskStatus(currentStatus)) {
+            return false;
+        }
+        return metric.getName() != null && !metric.getName().isBlank()
+                && metricValue != null
+                && !metricValue.isBlank();
+    }
+
+    private String metricValueForClassification(MetricDto metric) {
+        if (metric.getNormalizedValue() != null && !metric.getNormalizedValue().isBlank()) {
+            return metric.getNormalizedValue();
+        }
+        return metric.getValue();
+    }
+
+    private boolean isRiskStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return false;
+        }
+        String normalized = status.trim().toLowerCase(Locale.ROOT);
+        return "abnormal".equals(normalized) || "attention".equals(normalized) || "warning".equals(normalized);
     }
 
     private int statusPriority(String status) {
@@ -160,7 +248,8 @@ public class ProfileService {
     }
 
     /**
-     * Nếu user chưa có hồ sơ nào trong DB, tạo một hồ sơ mặc định từ thông tin tài khoản.
+     * Nếu user chưa có hồ sơ nào trong DB, tạo một hồ sơ mặc định từ thông tin tài
+     * khoản.
      * Idempotent: đã có hồ sơ thì không tạo thêm.
      */
     @Transactional
@@ -227,8 +316,7 @@ public class ProfileService {
                 AuditActions.CREATE_PROFILE,
                 AuditResourceTypes.PROFILE,
                 profile.getId(),
-                Map.of("displayName", profile.getDisplayName())
-        );
+                Map.of("displayName", profile.getDisplayName()));
 
         return mapToResponse(profile);
     }
@@ -241,9 +329,10 @@ public class ProfileService {
         // Access check: Ensure user is owner OR has "edit" shared access
         UUID profileOwnerId = profile.getUser().getId();
         boolean isOwner = userId.equals(profileOwnerId);
-        boolean hasEditAccess = profileShareRepository.existsByProfileIdAndViewerIdAndAccessLevelIgnoreCaseAndRevokedAtIsNull(
-                profileId, userId, "edit");
-        
+        boolean hasEditAccess = profileShareRepository
+                .existsByProfileIdAndViewerIdAndAccessLevelIgnoreCaseAndRevokedAtIsNull(
+                        profileId, userId, "edit");
+
         if (!isOwner && !hasEditAccess) {
             throw new AccessDeniedException("Không có quyền chỉnh sửa hồ sơ này");
         }
@@ -251,7 +340,8 @@ public class ProfileService {
         // Validate displayName with defensive programming:
         // DTO @NotBlank ensures non-null, but service validates after trimming
         // (covers case where user submits spaces-only input that passes DTO validation)
-        // Note: String.length() counts Java chars, not grapheme clusters. Vietnamese text is safe.
+        // Note: String.length() counts Java chars, not grapheme clusters. Vietnamese
+        // text is safe.
         String normalizedDisplayName = request.displayName().trim();
         if (normalizedDisplayName.isBlank()) {
             throw new IllegalArgumentException("Tên hiển thị không được để trống");
@@ -270,7 +360,7 @@ public class ProfileService {
         profile.setBirthDate(request.birthDate());
         profile.setGender(normalizeOptionalText(request.gender()));
         profile.setNotes(normalizedNotes);
-        
+
         // Sync with User entity if this is a default profile
         if (profile.isDefault()) {
             User user = profile.getUser();
@@ -287,8 +377,7 @@ public class ProfileService {
                 AuditActions.UPDATE_PROFILE,
                 AuditResourceTypes.PROFILE,
                 profileId,
-                Map.of("displayName", updatedProfile.getDisplayName())
-        );
+                Map.of("displayName", updatedProfile.getDisplayName()));
 
         return mapToResponse(updatedProfile);
     }
@@ -303,6 +392,10 @@ public class ProfileService {
     }
 
     private ProfileResponse mapToResponse(Profile profile) {
+        return mapToResponse(profile, null);
+    }
+
+    private ProfileResponse mapToResponse(Profile profile, HealthRecord latestRecord) {
         return new ProfileResponse(
                 profile.getId(),
                 profile.getDisplayName(),
@@ -310,9 +403,9 @@ public class ProfileService {
                 profile.getGender(),
                 profile.getNotes(),
                 profile.isDefault(),
+                latestRecord != null ? resolveLatestProfileStatus(latestRecord, profile) : null,
                 profile.getLastRecordAt(),
                 profile.getCreatedAt(),
-                profile.getUpdatedAt()
-        );
+                profile.getUpdatedAt());
     }
 }
