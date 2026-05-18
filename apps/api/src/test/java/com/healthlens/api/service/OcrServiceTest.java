@@ -449,7 +449,7 @@ class OcrServiceTest {
             assertThat(result.result().getSource()).isEqualTo("all-providers-failed");
             assertThat(result.result().getMimeType()).isEqualTo("application/pdf");
             assertThat(result.result().getPages()).hasSize(1);
-            assertThat(result.pages()).containsExactly(new OcrService.OcrPageResult(1, "textract", 0.0f, ""));
+            assertThat(result.pages()).containsExactly(new OcrService.OcrPageResult(1, "all-providers-failed", 0.0f, ""));
         }
 
         @Test
