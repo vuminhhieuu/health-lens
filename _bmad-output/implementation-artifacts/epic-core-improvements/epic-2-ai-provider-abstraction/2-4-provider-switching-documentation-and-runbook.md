@@ -1,6 +1,6 @@
 # Story 2.4: Provider Switching Documentation And Runbook
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 
@@ -20,11 +20,11 @@ As an operator, I want a provider switching runbook, so that changing LLM/OCR/em
 
 ## Tasks / Subtasks
 
-- [ ] Create provider compatibility matrix.
-- [ ] Document env-only provider switches vs adapter-required switches.
-- [ ] Add rollback steps for LLM, OCR, embedding, and vector store.
-- [ ] Add smoke test checklist.
-- [ ] Link from deployment/runbook docs.
+- [x] Create provider compatibility matrix.
+- [x] Document env-only provider switches vs adapter-required switches.
+- [x] Add rollback steps for LLM, OCR, embedding, and vector store.
+- [x] Add smoke test checklist.
+- [x] Link from deployment/runbook docs.
 
 ## Dev Notes
 
@@ -45,10 +45,32 @@ As an operator, I want a provider switching runbook, so that changing LLM/OCR/em
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+GPT-5 Codex
 
 ### Debug Log References
 
+- `git diff --check`
+- `cd apps/api && ./gradlew test`
+
 ### Completion Notes List
 
+- Added `docs/provider-switching-runbook.md` with compatibility matrix for LLM chat, embedding, Qdrant/RAG, and OCR providers.
+- Documented env-only switching boundaries versus adapter-required provider changes.
+- Added rollback steps for LLM chat, embedding, Qdrant/vector store, and OCR including fallback failure/manual recovery guidance.
+- Added smoke test checklist covering API readiness, AI/RAG health, LLM explanation, embedding/RAG retrieval, OCR extraction, OCR fallback, and rollback validation.
+- Linked the provider switching runbook from the docs index, operations runbook, deployment guide, and environment reference.
+- Full API regression suite passed after documentation changes; existing scheduled `EmailConsumer` test-context warnings were logged but did not fail the build.
+
 ### File List
+
+- `docs/provider-switching-runbook.md`
+- `docs/index.md`
+- `docs/operations-runbook.md`
+- `docs/deployment-guide.md`
+- `docs/environment-reference.md`
+- `_bmad-output/implementation-artifacts/epic-core-improvements/epic-2-ai-provider-abstraction/2-4-provider-switching-documentation-and-runbook.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+
+### Change Log
+
+- 2026-05-18: Added provider switching documentation and runbook, linked it from operational docs, and marked story ready for review.

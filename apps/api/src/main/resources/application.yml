@@ -2,6 +2,12 @@ server:
   port: ${PORT:8080}
   address: 0.0.0.0
 
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
 spring:
   application:
     name: healthlens-api
@@ -39,7 +45,7 @@ spring:
         use-tls: true
         collection-name: ${QDRANT_COLLECTION:healthlens}
         timeout: 30s
-        vector-dimension: ${QDRANT_VECTOR_DIMENSION:1024}
+        vector-dimension: ${QDRANT_VECTOR_DIMENSION:1536}
   data:
     redis:
       repositories:

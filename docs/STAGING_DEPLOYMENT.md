@@ -131,9 +131,10 @@ MINIO_BUCKET=healthlens-staging
 
 # === AI/Vector ===
 QDRANT_HOST=xxx.qdrant.io
-QDRANT_PORT=6333
+QDRANT_PORT=6334
 QDRANT_API_KEY=xxx
 QDRANT_COLLECTION=healthlens_staging
+QDRANT_VECTOR_DIMENSION=1536
 AI_CHAT_PROVIDER=openai-compatible
 AI_CHAT_API_KEY=gsk_xxx
 AI_CHAT_BASE_URL=https://api.groq.com/openai
