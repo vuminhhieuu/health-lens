@@ -194,8 +194,8 @@ development_status:
   core-1-6-external-ocr-fallback-consent-retention-and-kill-switch: ready-for-dev
   core-2-1-generic-ai-chat-provider-configuration: done
   core-2-2-ocr-provider-registry-and-capability-routing: done
-  core-2-3-embedding-and-vector-store-config-validation: ready-for-dev
-  core-2-4-provider-switching-documentation-and-runbook: ready-for-dev
+  core-2-3-embedding-and-vector-store-config-validation: done
+  core-2-4-provider-switching-documentation-and-runbook: done
   core-3-1-externalized-versioned-llm-prompt-templates: ready-for-dev
   core-3-2-structured-llm-output-schema-and-validation: ready-for-dev
   core-3-3-rag-corpus-governance-and-admin-review-workflow: ready-for-dev

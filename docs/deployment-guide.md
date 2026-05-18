@@ -36,6 +36,8 @@ The API requires:
 - `AI_CHAT_*` OpenAI-compatible chat provider configuration.
 - Embedding and Qdrant configuration when retrieval features are enabled.
 
+Provider changes should be promoted through staging using the compatibility matrix, smoke tests, and rollback steps in [provider-switching-runbook.md](./provider-switching-runbook.md). Env-only switching is supported only for providers compatible with the existing adapters.
+
 ## Web Deployment Concerns
 
 The web app requires:

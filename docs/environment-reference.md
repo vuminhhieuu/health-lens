@@ -66,6 +66,20 @@ This file collects the environment variables and runtime settings that matter mo
 
 Migration note: `GROQ_API_KEY`, `GROQ_BASE_URL`, and `GROQ_CHAT_MODEL` are accepted as a temporary legacy fallback when the matching `AI_CHAT_*` variable is absent. New deployments should use only `AI_CHAT_*`. Native non-OpenAI-compatible providers require a code adapter before they can be selected.
 
+Provider switching note: follow [provider-switching-runbook.md](./provider-switching-runbook.md) before changing LLM, OCR, embedding, or vector store providers. The runbook defines env-only compatibility, smoke tests, rollback steps, and adapter-required cases.
+
+Qdrant host rules: set `QDRANT_HOST` to the hostname only, for example `cluster-id.qdrant.io`; do not include protocol, port, path, query, fragment, or user-info. Use Qdrant gRPC port `6334` unless the provider explicitly gives another gRPC port. Production and staging fail fast on invalid host values. Local/dev can normalize URL-style `http://` or `https://` host values as a convenience, including an explicit URI port when `QDRANT_PORT` is not set.
+
+Embedding/vector reindex rule: `QDRANT_VECTOR_DIMENSION` must match the active `EMBEDDING_MODEL` output dimension and the existing Qdrant collection dimension. The default `text-embedding-3-small` uses 1536 dimensions in this project. Production and staging startup validation fails fast on dimension mismatch instead of recreating or reindexing a collection automatically.
+
+Reindex procedure when changing `EMBEDDING_MODEL`, `EMBEDDING_BASE_URL`, or `QDRANT_VECTOR_DIMENSION`:
+
+1. Confirm the new embedding model dimension with the provider documentation or a staging embedding call.
+2. Set `QDRANT_VECTOR_DIMENSION` to that dimension and point staging at a new or empty Qdrant collection.
+3. Reingest the trusted RAG corpus into the collection using the current ingestion job/admin flow.
+4. Run `/actuator/health` and verify the `aiRag` component is `UP`.
+5. Promote the same embedding/vector settings to production only after staging retrieval checks pass.
+
 ## Storage And Mail
 
 | Variable | Used by | Purpose |

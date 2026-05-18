@@ -39,7 +39,7 @@ spring:
         # Đúng:   ep-xxxx.cloud.qdrant.io
         # Sai:    https://ep-xxxx.cloud.qdrant.io  ← gây lỗi "Invalid host or port"
         host: ${QDRANT_HOST}
-        port: 6334
+        port: ${QDRANT_PORT:6334}
         api-key: ${QDRANT_API_KEY}
         use-tls: true
 
@@ -49,9 +49,8 @@ management:
     health:
       probes:
         enabled: true
+      show-details: always
   endpoints:
     web:
       exposure:
         include: health, info, metrics
-    health:
-      show-details: always

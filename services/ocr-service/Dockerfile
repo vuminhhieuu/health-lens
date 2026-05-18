@@ -67,7 +67,7 @@ EXPOSE 8001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD wget --no-verbose --tries=1 -q -O- http://localhost:8001/health || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=5).read()" || exit 1
 
 # Run with uvicorn
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8001"]

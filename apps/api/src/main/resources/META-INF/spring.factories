@@ -1,2 +1,3 @@
 org.springframework.boot.EnvironmentPostProcessor=\
-com.healthlens.api.config.AiChatProviderEnvironmentPostProcessor
+com.healthlens.api.config.AiChatProviderEnvironmentPostProcessor,\
+com.healthlens.api.config.QdrantVectorStoreEnvironmentPostProcessor

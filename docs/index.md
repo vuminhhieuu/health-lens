@@ -33,6 +33,7 @@ HealthLens là nền tảng giúp người dùng Việt Nam chuyển đổi tài
 | --- | --- | --- |
 | **Deployment Guide** | Local and staging deployment notes | [deployment-guide.md](./deployment-guide.md) |
 | **Operations Runbook** | Health checks and triage steps | [operations-runbook.md](./operations-runbook.md) |
+| **Provider Switching Runbook** | LLM/OCR/embedding/RAG switch, smoke test, rollback | [provider-switching-runbook.md](./provider-switching-runbook.md) |
 | **Staging Deployment** | Existing staging setup guide | [STAGING_DEPLOYMENT.md](./STAGING_DEPLOYMENT.md) |
 
 ## Quick Reference
