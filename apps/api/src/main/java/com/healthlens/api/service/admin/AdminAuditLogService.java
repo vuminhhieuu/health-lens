@@ -10,6 +10,7 @@ import com.healthlens.api.dto.admin.AuditLogPageDto;
 import com.healthlens.api.entity.AuditLog;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.entity.ReferenceMetric;
+import com.healthlens.api.persistence.json.JsonPathExpressions;
 import com.healthlens.api.repository.AuditLogRepository;
 import com.healthlens.api.repository.ReferenceMetricRepository;
 import java.util.Optional;
@@ -22,7 +23,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
-import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
@@ -30,6 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.io.FilterWriter;
 import java.io.IOException;
 import java.io.Writer;
 import java.time.Instant;
@@ -48,8 +49,13 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AdminAuditLogService {
 
+    private static final int EXPORT_PAGE_SIZE = 500;
+    private static final Sort EXPORT_CSV_SORT = Sort.by(Sort.Direction.DESC, "createdAt")
+            .and(Sort.by(Sort.Direction.DESC, "id"));
+
     private final AuditLogRepository auditLogRepository;
     private final ReferenceMetricRepository referenceMetricRepository;
+    private final JsonPathExpressions jsonPathExpressions;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
@@ -115,20 +121,26 @@ public class AdminAuditLogService {
                 .get();
 
         int cap = Math.min(Math.max(maxRows, 1), 50_000);
-        try (CSVPrinter printer = new CSVPrinter(writer, format)) {
-        int pageSize = 500;
-        int written = 0;
-        int pageNum = 0;
-        while (written < cap) {
+        Map<UUID, ReferenceMetric> metricsById = loadAllReferenceMetricsById();
+        // CSVPrinter.close() closes the delegate Writer; caller owns flush/close of `writer`.
+        try (CSVPrinter printer = new CSVPrinter(new NonClosingWriter(writer), format)) {
+            int written = 0;
+            Instant cursorCreatedAt = null;
+            UUID cursorId = null;
+            while (written < cap) {
+                int batchSize = Math.min(EXPORT_PAGE_SIZE, cap - written);
+                Specification<AuditLog> exportSpec = spec;
+                if (cursorCreatedAt != null && cursorId != null) {
+                    exportSpec = exportSpec.and(seekBeforeCursor(cursorCreatedAt, cursorId));
+                }
                 Page<AuditLog> page = auditLogRepository.findAll(
-                        withActorFetched(spec),
-                        PageRequest.of(pageNum, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"))
+                        withActorFetched(exportSpec),
+                        PageRequest.of(0, batchSize, EXPORT_CSV_SORT)
                 );
-                if (page.isEmpty()) {
+                List<AuditLog> rows = page.getContent();
+                if (rows.isEmpty()) {
                     break;
                 }
-                List<AuditLog> rows = page.getContent();
-                Map<UUID, ReferenceMetric> metricsById = loadReferenceMetrics(rows);
                 for (AuditLog row : rows) {
                     if (written >= cap) {
                         break;
@@ -150,14 +162,15 @@ public class AdminAuditLogService {
                     );
                     written++;
                 }
-                if (!page.hasNext()) {
+                if (written >= cap || rows.size() < batchSize) {
                     break;
                 }
-                pageNum++;
+                AuditLog lastRow = rows.get(rows.size() - 1);
+                cursorCreatedAt = lastRow.getCreatedAt();
+                cursorId = lastRow.getId();
             }
+            printer.flush();
         }
-
-        writer.flush();
     }
 
     /**
@@ -246,6 +259,12 @@ public class AdminAuditLogService {
         }
         return referenceMetricRepository.findAllById(metricIds).stream()
                 .collect(Collectors.toMap(ReferenceMetric::getId, Function.identity()));
+    }
+
+    /** Single query for CSV export; reference metric catalog is small and bounded. */
+    private Map<UUID, ReferenceMetric> loadAllReferenceMetricsById() {
+        return referenceMetricRepository.findAllByOrderByNameAsc().stream()
+                .collect(Collectors.toMap(ReferenceMetric::getId, Function.identity(), (left, right) -> left));
     }
 
     private String buildEntityLabel(AuditLog log, Map<UUID, ReferenceMetric> metricsById) {
@@ -537,7 +556,7 @@ public class AdminAuditLogService {
         String action = log.getAction();
 
         if (AuditActions.DELETE_HEALTH_RECORD.equals(action)) {
-            String ref = recordRef.isEmpty() ? "" : " #" + recordRef;
+            String ref = recordRef.isEmpty() ? "" : " " + recordRef;
             return "Xóa hồ sơ sức khỏe" + ref + " — " + subject;
         }
         if (AuditActions.CREATE_HEALTH_RECORD.equals(action)) {
@@ -689,35 +708,34 @@ public class AdminAuditLogService {
 
     /**
      * Match actor email on the linked user and on JSON payloads (anonymous / pre-auth events).
-     * Uses PostgreSQL {@code jsonb_extract_path_text} for {@code email} in old/new JSON.
      */
-    private static Predicate matchesActorEmail(Root<AuditLog> root, CriteriaBuilder cb, String normalizedEmail) {
+    private Predicate matchesActorEmail(Root<AuditLog> root, CriteriaBuilder cb, String normalizedEmail) {
         Predicate actorMatch = cb.equal(
                 cb.lower(root.join("actor", JoinType.LEFT).get("email")),
                 normalizedEmail
         );
         Predicate newJsonMatch = cb.equal(
-                cb.lower(jsonExtractText(root, cb, "newValueJson", "email")),
+                cb.lower(jsonPathExpressions.extractPathText(root, cb, "newValueJson", "email")),
                 normalizedEmail
         );
         Predicate oldJsonMatch = cb.equal(
-                cb.lower(jsonExtractText(root, cb, "oldValueJson", "email")),
+                cb.lower(jsonPathExpressions.extractPathText(root, cb, "oldValueJson", "email")),
                 normalizedEmail
         );
         return cb.or(actorMatch, newJsonMatch, oldJsonMatch);
     }
 
-    private static Expression<String> jsonExtractText(
-            Root<AuditLog> root,
-            CriteriaBuilder cb,
-            String column,
-            String jsonField
-    ) {
-        return cb.function(
-                "jsonb_extract_path_text",
-                String.class,
-                root.get(column),
-                cb.literal(jsonField)
+    /**
+     * Keyset predicate for {@link #EXPORT_CSV_SORT}: rows strictly older than the last exported row.
+     * Avoids offset drift when new audit rows are inserted during export.
+     */
+    private static Specification<AuditLog> seekBeforeCursor(Instant createdAt, UUID id) {
+        return (root, query, cb) -> cb.or(
+                cb.lessThan(root.get("createdAt"), createdAt),
+                cb.and(
+                        cb.equal(root.get("createdAt"), createdAt),
+                        cb.lessThan(root.get("id"), id)
+                )
         );
     }
 
@@ -738,5 +756,21 @@ public class AdminAuditLogService {
     private static boolean isCountQuery(CriteriaQuery<?> query) {
         Class<?> resultType = query.getResultType();
         return resultType == Long.class || resultType == long.class;
+    }
+
+    /**
+     * Prevents {@link CSVPrinter#close()} from closing a caller-owned {@link Writer}.
+     * On close, only flushes buffered content to the delegate.
+     */
+    private static final class NonClosingWriter extends FilterWriter {
+
+        NonClosingWriter(Writer delegate) {
+            super(delegate);
+        }
+
+        @Override
+        public void close() throws IOException {
+            flush();
+        }
     }
 }

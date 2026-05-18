@@ -316,7 +316,8 @@ public class ReferenceDataAdminService {
     }
 
     @Transactional
-    public AdminReferenceMetricResponse reactivateMetric(UUID metricId) {
+    public AdminReferenceMetricResponse reactivateMetric(UUID adminId, UUID metricId) {
+        Objects.requireNonNull(adminId, "adminId");
         ReferenceMetric metric = referenceMetricRepository.findById(metricId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy chỉ số cần kích hoạt lại"));
 
@@ -334,7 +335,7 @@ public class ReferenceDataAdminService {
                 .toList();
 
         recordReferenceAudit(
-                null,
+                adminId,
                 AuditActions.REACTIVATE_REFERENCE_METRIC,
                 metricId,
                 before,
@@ -504,6 +505,7 @@ public class ReferenceDataAdminService {
             Map<String, Object> oldValue,
             Map<String, Object> newValue
     ) {
+        Objects.requireNonNull(actorId, "actorId is required for reference data audit");
         unifiedAuditLogWriter.record(
                 actorId,
                 action,

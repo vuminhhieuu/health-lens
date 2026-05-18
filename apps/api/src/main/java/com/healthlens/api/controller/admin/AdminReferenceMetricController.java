@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -32,9 +33,11 @@ public class AdminReferenceMetricController {
 
     @PatchMapping("/{metricId}/display")
     public ResponseEntity<ReferenceMetricAdminDto> updateDisplay(
+            Authentication authentication,
             @PathVariable UUID metricId,
             @Valid @RequestBody UpdateReferenceMetricDisplayRequest request
     ) {
-        return ResponseEntity.ok(adminReferenceMetricService.updateDisplay(metricId, request));
+        UUID adminId = UUID.fromString(authentication.getName());
+        return ResponseEntity.ok(adminReferenceMetricService.updateDisplay(adminId, metricId, request));
     }
 }

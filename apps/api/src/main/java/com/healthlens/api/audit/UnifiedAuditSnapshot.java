@@ -3,8 +3,9 @@ package com.healthlens.api.audit;
 import java.util.UUID;
 
 /**
- * Thread-local payload consumed by {@link com.healthlens.api.aspect.AuditableAspect} when
- * {@link com.healthlens.api.annotation.Auditable#unifiedResourceType()} is set.
+ * Optional thread-local holder for unified audit payloads. Prefer
+ * {@link UnifiedAuditCoordinator#persistAndClear} in service methods so cleanup does not depend on
+ * AOP-based cleanup (removed); always clear in a {@code finally} block in the calling service.
  */
 public final class UnifiedAuditSnapshot {
 
@@ -14,13 +15,23 @@ public final class UnifiedAuditSnapshot {
 
     private UnifiedAuditSnapshot() {}
 
-    /** Must be invoked on the thread that runs the annotated method before it returns successfully. */
+    /**
+     * @deprecated Prefer building a {@link Payload} and calling
+     *     {@link UnifiedAuditCoordinator#persistAndClear}. If used, pair with {@link #clear()} in
+     *     {@code finally}.
+     */
+    @Deprecated
     public static void set(Payload payload) {
         HOLDER.set(payload);
     }
 
+    /** Removes any payload for the current thread; safe to call when none was set. */
+    public static void clear() {
+        HOLDER.remove();
+    }
+
     /**
-     * Called by AuditableAspect; clears the thread-local.
+     * Returns and clears the payload for the current thread.
      *
      * @return captured payload or null if none set
      */

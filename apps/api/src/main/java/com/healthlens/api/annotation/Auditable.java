@@ -5,14 +5,21 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+/**
+ * @deprecated Use explicit audit calls instead of AOP:
+ * <ul>
+ *   <li>Unified {@code audit_logs}: {@link com.healthlens.api.audit.UnifiedAuditCoordinator}</li>
+ *   <li>Legacy {@code health_record_audit_logs}: {@link com.healthlens.api.audit.HealthRecordLegacyAuditWriter}</li>
+ * </ul>
+ * The former {@link com.healthlens.api.aspect.AuditableAspect} inferred {@code (UUID userId, UUID recordId)}
+ * from join-point args and silently skipped mismatched signatures.
+ */
+@Deprecated(forRemoval = true)
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
 public @interface Auditable {
     String action();
 
-    /**
-     * When non-blank, a row is also written to {@code audit_logs} after the method succeeds.
-     * Callers populate JSON snapshots via {@link com.healthlens.api.audit.UnifiedAuditSnapshot}.
-     */
+    @Deprecated(forRemoval = true)
     String unifiedResourceType() default "";
 }

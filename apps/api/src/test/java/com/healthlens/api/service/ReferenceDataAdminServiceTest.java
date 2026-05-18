@@ -238,7 +238,8 @@ class ReferenceDataAdminServiceTest {
         when(referenceRangeRepository.findAllByMetric_IdOrderByGenderAscMinAgeAscMaxAgeAsc(metricId)).thenReturn(List.of(range));
         when(referenceRangeRepository.save(any(ReferenceRange.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        AdminReferenceMetricResponse response = referenceDataAdminService.reactivateMetric(metricId);
+        UUID adminId = UUID.randomUUID();
+        AdminReferenceMetricResponse response = referenceDataAdminService.reactivateMetric(adminId, metricId);
 
         assertThat(response.status()).isEqualTo("active");
         assertThat(response.ranges()).allMatch(item -> "active".equals(item.status()));

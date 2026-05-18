@@ -21,6 +21,10 @@ public class UnifiedAuditLogWriter {
     private final AuditLogRepository auditLogRepository;
     private final EntityManager entityManager;
 
+    /**
+     * Persist an audit row for an authenticated actor. Prefer passing a non-null {@code actorId} from
+     * the service layer; null falls back to {@link SecurityContextHolder} for legacy call sites only.
+     */
     public void record(
             UUID actorId,
             String action,
@@ -31,7 +35,11 @@ public class UnifiedAuditLogWriter {
     ) {
         UUID resolvedActorId = actorId != null ? actorId : resolveCurrentActorId();
         if (resolvedActorId == null) {
-            log.warn("Skip unified audit action={} resourceType={}: no actor", action, resourceType);
+            log.warn(
+                    "Skip unified audit action={} resourceType={}: pass actorId explicitly or use recordWithoutActor",
+                    action,
+                    resourceType
+            );
             return;
         }
 

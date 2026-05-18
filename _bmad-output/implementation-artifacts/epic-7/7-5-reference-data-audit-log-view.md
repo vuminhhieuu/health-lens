@@ -56,6 +56,10 @@ so that tôi truy vết ai đã sửa gì và khi nào.
 
 ## Dev Notes
 
+### Flyway (số version)
+
+- Bảng `audit_logs`: **`V034__create_audit_logs_table.sql`** — đây là migration của story này.
+
 ### Audit Log Table
 
 ```sql

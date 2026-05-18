@@ -191,17 +191,56 @@ function validateDateRange(from: string, to: string): string | null {
   return null;
 }
 
-function buildAuditLogUrl(scope: AuditViewScope, filters: Omit<ListQuery, "page" | "limit">): string {
-  const params = new URLSearchParams();
-  if (scope === "all") {
-    params.set("view", "all");
-    if (filters.resourceType.trim()) {
-      params.set("resourceType", filters.resourceType.trim());
-    }
+function auditFiltersFromSearchParams(
+  searchParams: URLSearchParams,
+  viewScope: AuditViewScope,
+): Omit<ListQuery, "page" | "limit"> {
+  const resourceId = searchParams.get("resourceId")?.trim() ?? "";
+  const resourceType =
+    viewScope === "reference"
+      ? RESOURCE_TYPE_REFERENCE_DATA
+      : (searchParams.get("resourceType")?.trim() ?? "");
+  return {
+    resourceType,
+    resourceId,
+    actorEmail: searchParams.get("actorEmail")?.trim() ?? "",
+    action: searchParams.get("action")?.trim() ?? "",
+    from: searchParams.get("from") ?? "",
+    to: searchParams.get("to") ?? "",
+  };
+}
+
+function appendAuditFilterParams(
+  params: URLSearchParams,
+  scope: AuditViewScope,
+  filters: Omit<ListQuery, "page" | "limit">,
+): void {
+  if (scope === "all" && filters.resourceType.trim()) {
+    params.set("resourceType", filters.resourceType.trim());
   }
   if (filters.resourceId.trim()) {
     params.set("resourceId", filters.resourceId.trim());
   }
+  if (filters.actorEmail.trim()) {
+    params.set("actorEmail", filters.actorEmail.trim());
+  }
+  if (filters.action.trim()) {
+    params.set("action", filters.action.trim());
+  }
+  if (filters.from) {
+    params.set("from", filters.from);
+  }
+  if (filters.to) {
+    params.set("to", filters.to);
+  }
+}
+
+function buildAuditLogUrl(scope: AuditViewScope, filters: Omit<ListQuery, "page" | "limit">): string {
+  const params = new URLSearchParams();
+  if (scope === "all") {
+    params.set("view", "all");
+  }
+  appendAuditFilterParams(params, scope, filters);
   const qs = params.toString();
   return qs ? `/admin/audit-log?${qs}` : "/admin/audit-log";
 }
@@ -600,21 +639,9 @@ function resolveInitialAuditState(searchParams: URLSearchParams): {
 } {
   const viewScope: AuditViewScope =
     searchParams.get("view") === "all" ? "all" : "reference";
-  const resourceId = searchParams.get("resourceId") ?? "";
-  const resourceType =
-    viewScope === "reference"
-      ? RESOURCE_TYPE_REFERENCE_DATA
-      : (searchParams.get("resourceType") ?? "");
   return {
     viewScope,
-    filters: {
-      resourceType,
-      resourceId,
-      actorEmail: "",
-      action: "",
-      from: "",
-      to: "",
-    },
+    filters: auditFiltersFromSearchParams(searchParams, viewScope),
   };
 }
 
@@ -635,6 +662,17 @@ export default function AuditLogPage() {
   const [exporting, setExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [dateRangeError, setDateRangeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const resolved = resolveInitialAuditState(searchParams);
+    setViewScope(resolved.viewScope);
+    setDraft(resolved.filters);
+    setApplied((prev) => ({
+      ...resolved.filters,
+      page: 0,
+      limit: prev.limit,
+    }));
+  }, [searchParams]);
 
   useEffect(() => {
     const id = "hl-material-symbols-outlined";

@@ -21,20 +21,19 @@ import com.healthlens.api.dto.MetricDto;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.healthlens.api.annotation.Auditable;
 import com.healthlens.api.audit.AuditActions;
 import com.healthlens.api.audit.AuditEventRecorder;
 import com.healthlens.api.audit.AuditResourceTypes;
+import com.healthlens.api.audit.HealthRecordLegacyAuditWriter;
+import com.healthlens.api.audit.UnifiedAuditCoordinator;
 import com.healthlens.api.audit.UnifiedAuditSnapshot;
 import com.healthlens.api.entity.HealthRecord;
-import com.healthlens.api.entity.HealthRecordAuditLog;
 import com.healthlens.api.entity.HealthRecordShare;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ProfileAccessRevokedException;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
-import com.healthlens.api.repository.HealthRecordAuditLogRepository;
 import com.healthlens.api.repository.HealthRecordShareRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
@@ -90,7 +89,8 @@ public class HealthRecordService {
     private final MetricExplanationRetrievalService metricExplanationRetrievalService;
     private final LlmService llmService;
     private final HealthRecordPdfService healthRecordPdfService;
-    private final HealthRecordAuditLogRepository healthRecordAuditLogRepository;
+    private final HealthRecordLegacyAuditWriter healthRecordLegacyAuditWriter;
+    private final UnifiedAuditCoordinator unifiedAuditCoordinator;
     private final AuditEventRecorder auditEventRecorder;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -106,7 +106,8 @@ public class HealthRecordService {
             MetricExplanationRetrievalService metricExplanationRetrievalService,
             LlmService llmService,
             HealthRecordPdfService healthRecordPdfService,
-            HealthRecordAuditLogRepository healthRecordAuditLogRepository,
+            HealthRecordLegacyAuditWriter healthRecordLegacyAuditWriter,
+            UnifiedAuditCoordinator unifiedAuditCoordinator,
             AuditEventRecorder auditEventRecorder,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper,
@@ -121,7 +122,8 @@ public class HealthRecordService {
         this.metricExplanationRetrievalService = metricExplanationRetrievalService;
         this.llmService = llmService;
         this.healthRecordPdfService = healthRecordPdfService;
-        this.healthRecordAuditLogRepository = healthRecordAuditLogRepository;
+        this.healthRecordLegacyAuditWriter = healthRecordLegacyAuditWriter;
+        this.unifiedAuditCoordinator = unifiedAuditCoordinator;
         this.auditEventRecorder = auditEventRecorder;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
@@ -562,16 +564,7 @@ public class HealthRecordService {
     }
 
     private void writePdfDownloadAudit(UUID actorId, HealthRecord record, String shareScope) {
-        HealthRecordAuditLog auditLog = new HealthRecordAuditLog();
-        auditLog.setId(UUID.randomUUID());
-        auditLog.setUserId(actorId);
-        auditLog.setAction("DOWNLOAD_HEALTH_RECORD_PDF");
-        auditLog.setRecordId(record.getId());
-        auditLog.setProfileId(record.getProfileId());
-        auditLog.setViewerId(actorId);
-        auditLog.setShareScope(shareScope);
-        auditLog.setResourceType("HEALTH_RECORD");
-        healthRecordAuditLogRepository.save(auditLog);
+        healthRecordLegacyAuditWriter.recordPdfDownload(actorId, record, shareScope);
 
         auditEventRecorder.recordEvent(
                 actorId,
@@ -937,10 +930,6 @@ public class HealthRecordService {
     }
 
     @Transactional
-    @Auditable(
-            action = AuditActions.DELETE_HEALTH_RECORD,
-            unifiedResourceType = AuditResourceTypes.HEALTH_RECORD
-    )
     public void deleteHealthRecord(UUID userId, UUID recordId) {
         HealthRecord record = healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("Kết quả khám không tồn tại"));
@@ -949,22 +938,35 @@ public class HealthRecordService {
             throw new AccessDeniedException("Bạn không có quyền xóa kết quả khám này");
         }
 
+        Instant deletedAt = Instant.now();
+        final UnifiedAuditSnapshot.Payload auditPayload;
         try {
             Map<String, Object> before = healthRecordAuditSnapshot(record);
-            UnifiedAuditSnapshot.set(
-                    new UnifiedAuditSnapshot.Payload(
-                            recordId,
-                            objectMapper.writeValueAsString(before),
-                            objectMapper.writeValueAsString(Map.of("deleted", true, "deletedAt", Instant.now().toString()))
-                    )
+            auditPayload = new UnifiedAuditSnapshot.Payload(
+                    recordId,
+                    objectMapper.writeValueAsString(before),
+                    objectMapper.writeValueAsString(Map.of("deleted", true, "deletedAt", deletedAt.toString()))
             );
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize health record audit snapshot", e);
         }
 
-        record.setDeletedAt(Instant.now());
-        healthRecordRepository.save(record);
-        redisTemplate.delete("health-record-status:" + userId + ":" + recordId);
+        try {
+            record.setDeletedAt(deletedAt);
+            healthRecordRepository.save(record);
+            redisTemplate.delete("health-record-status:" + userId + ":" + recordId);
+
+            unifiedAuditCoordinator.persist(
+                    userId,
+                    AuditActions.DELETE_HEALTH_RECORD,
+                    AuditResourceTypes.HEALTH_RECORD,
+                    auditPayload
+            );
+
+            healthRecordLegacyAuditWriter.record(userId, AuditActions.DELETE_HEALTH_RECORD, recordId);
+        } finally {
+            UnifiedAuditSnapshot.clear();
+        }
     }
 
     private static Map<String, Object> healthRecordAuditSnapshot(HealthRecord record) {

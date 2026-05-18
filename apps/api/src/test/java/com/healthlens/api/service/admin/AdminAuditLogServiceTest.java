@@ -8,6 +8,7 @@ import com.healthlens.api.dto.admin.AuditLogPageDto;
 import com.healthlens.api.entity.AuditLog;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.entity.ReferenceMetric;
+import com.healthlens.api.persistence.json.PostgreSqlJsonPathExpressions;
 import com.healthlens.api.repository.AuditLogRepository;
 import com.healthlens.api.repository.ReferenceMetricRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.io.StringWriter;
@@ -27,10 +29,13 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -50,6 +55,7 @@ class AdminAuditLogServiceTest {
         adminAuditLogService = new AdminAuditLogService(
                 auditLogRepository,
                 referenceMetricRepository,
+                new PostgreSqlJsonPathExpressions(),
                 new ObjectMapper()
         );
     }
@@ -215,7 +221,7 @@ class AdminAuditLogServiceTest {
         metric.setId(metricId);
         metric.setName("Glucose");
         metric.setDisplayNameVi("Đường huyết");
-        when(referenceMetricRepository.findAllById(Set.of(metricId))).thenReturn(List.of(metric));
+        when(referenceMetricRepository.findAllByOrderByNameAsc()).thenReturn(List.of(metric));
         when(auditLogRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(row)))
                 .thenReturn(new PageImpl<>(List.of()));
@@ -238,6 +244,54 @@ class AdminAuditLogServiceTest {
         assertThat(csv).contains("admin@healthlens.vn");
         assertThat(csv).contains("UPDATE_REFERENCE_METRIC_DISPLAY");
         assertThat(csv).contains("203.0.113.10");
+    }
+
+    @Test
+    @DisplayName("writeCsv dùng keyset pagination (luôn page 0, sort createdAt + id DESC)")
+    void writeCsv_usesKeysetPaginationAcrossBatches() throws Exception {
+        Instant base = Instant.parse("2026-05-01T12:00:00Z");
+        List<AuditLog> firstBatch = IntStream.range(0, 500)
+                .mapToObj(i -> auditRow(base.minusSeconds(i), "batch-a-" + i))
+                .toList();
+        AuditLog secondBatchRow = auditRow(base.minusSeconds(500), "batch-b-tail");
+
+        when(referenceMetricRepository.findAllByOrderByNameAsc()).thenReturn(List.of());
+
+        AtomicInteger calls = new AtomicInteger();
+        when(auditLogRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenAnswer(invocation -> {
+                    if (calls.incrementAndGet() == 1) {
+                        return new PageImpl<>(firstBatch);
+                    }
+                    return new PageImpl<>(List.of(secondBatchRow));
+                });
+
+        StringWriter writer = new StringWriter();
+        adminAuditLogService.writeCsv(null, null, null, null, null, null, writer, 10_000);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(auditLogRepository, times(2)).findAll(any(Specification.class), pageableCaptor.capture());
+        assertThat(pageableCaptor.getAllValues())
+                .allMatch(p -> p.getPageNumber() == 0)
+                .allMatch(p -> p.getPageSize() == 500)
+                .allMatch(p -> p.getSort().equals(Sort.by(Sort.Direction.DESC, "createdAt")
+                        .and(Sort.by(Sort.Direction.DESC, "id"))));
+
+        long dataLines = writer.toString().lines().filter(line -> line.contains("batch-")).count();
+        assertThat(dataLines).isEqualTo(501);
+        verify(referenceMetricRepository, times(1)).findAllByOrderByNameAsc();
+    }
+
+    private static AuditLog auditRow(Instant createdAt, String marker) {
+        AuditLog row = new AuditLog();
+        row.setId(UUID.randomUUID());
+        row.setAction("LOGIN");
+        row.setResourceType(AuditResourceTypes.AUTH);
+        row.setCreatedAt(createdAt);
+        User actor = new User();
+        actor.setEmail(marker + "@healthlens.vn");
+        row.setActor(actor);
+        return row;
     }
 
     @Test

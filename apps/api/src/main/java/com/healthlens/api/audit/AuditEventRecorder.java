@@ -32,8 +32,8 @@ public class AuditEventRecorder {
                 action,
                 resourceType,
                 resourceId,
-                toJson(oldValue),
-                toJson(newValue)
+                toJson(action, oldValue),
+                toJson(action, newValue)
         );
     }
 
@@ -59,18 +59,18 @@ public class AuditEventRecorder {
                 resourceType,
                 resourceId,
                 null,
-                toJson(details)
+                toJson(action, details)
         );
     }
 
-    private String toJson(Map<String, ?> value) {
+    private String toJson(String action, Map<String, ?> value) {
         if (value == null || value.isEmpty()) {
             return null;
         }
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException e) {
-            log.warn("Failed to serialize audit payload for action={}", value, e);
+            log.warn("Failed to serialize audit payload for action={}", action, e);
             return null;
         }
     }
