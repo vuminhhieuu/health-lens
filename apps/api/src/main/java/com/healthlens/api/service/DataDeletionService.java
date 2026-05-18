@@ -1,5 +1,8 @@
 package com.healthlens.api.service;
 
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditEventRecorder;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.dto.request.DeleteAccountRequest;
 import com.healthlens.api.dto.response.CancelDeletionResponse;
 import com.healthlens.api.dto.response.DeleteAccountResponse;
@@ -32,6 +35,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -71,6 +75,7 @@ public class DataDeletionService {
     private final StorageService storageService;
     private final DataDeletionService selfProxy;
     private final AccountStatusCache accountStatusCache;
+    private final AuditEventRecorder auditEventRecorder;
     private final String webCancellationUrl;
 
     public DataDeletionService(
@@ -86,6 +91,7 @@ public class DataDeletionService {
             ConsentLogRepository consentLogRepository,
             StorageService storageService,
             AccountStatusCache accountStatusCache,
+            AuditEventRecorder auditEventRecorder,
             @Lazy DataDeletionService selfProxy,
             @Value("${app.frontend.cancellation-url:http://localhost:3000/cancel-deletion}") String webCancellationUrl) {
         this.deletionRequestRepository = deletionRequestRepository;
@@ -100,6 +106,7 @@ public class DataDeletionService {
         this.consentLogRepository = consentLogRepository;
         this.storageService = storageService;
         this.accountStatusCache = accountStatusCache;
+        this.auditEventRecorder = auditEventRecorder;
         this.selfProxy = selfProxy;
         this.webCancellationUrl = webCancellationUrl;
     }
@@ -159,6 +166,17 @@ public class DataDeletionService {
             log.error("Gửi email xác nhận yêu cầu xóa tài khoản thất bại cho userId={}", userId, e);
         }
 
+        auditEventRecorder.recordEvent(
+                userId,
+                AuditActions.REQUEST_ACCOUNT_DELETION,
+                AuditResourceTypes.USER,
+                userId,
+                Map.of(
+                        "email", user.getEmail(),
+                        "scheduledDeletionAt", deletionRequest.getScheduledDeletionAt().toString()
+                )
+        );
+
         return new DeleteAccountResponse(
                 "Yêu cầu xóa tài khoản của bạn đã được nhận. Tài khoản sẽ bị xóa sau 72 giờ. Vui lòng kiểm tra email để hủy yêu cầu nếu cần thiết.",
                 deletionRequest.getId().toString(),
@@ -203,6 +221,14 @@ public class DataDeletionService {
         accountStatusCache.put(deletionRequest.getUserId(), AccountStatus.ACTIVE);
 
         log.info("Deletion request cancelled: userId={}", deletionRequest.getUserId());
+
+        auditEventRecorder.recordEvent(
+                deletionRequest.getUserId(),
+                AuditActions.CANCEL_ACCOUNT_DELETION,
+                AuditResourceTypes.USER,
+                deletionRequest.getUserId(),
+                Map.of("email", user.getEmail())
+        );
 
         try {
             emailService.sendCancellationConfirmationEmail(user);

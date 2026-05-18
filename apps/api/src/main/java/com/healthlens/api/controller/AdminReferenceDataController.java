@@ -92,8 +92,11 @@ public class AdminReferenceDataController {
     }
 
     @PostMapping("/metrics/{metricId}/reactivate")
-    public ResponseEntity<Map<String, Object>> reactivateMetric(@PathVariable UUID metricId) {
-        AdminReferenceMetricResponse response = referenceDataAdminService.reactivateMetric(metricId);
+    public ResponseEntity<Map<String, Object>> reactivateMetric(
+            Authentication authentication,
+            @PathVariable UUID metricId) {
+        UUID adminId = UUID.fromString(authentication.getName());
+        AdminReferenceMetricResponse response = referenceDataAdminService.reactivateMetric(adminId, metricId);
         return ResponseEntity.ok(Map.of("data", response));
     }
 

@@ -1,5 +1,8 @@
 package com.healthlens.api.service;
 
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditEventRecorder;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.dto.request.AdminLoginRequest;
 import com.healthlens.api.dto.response.AdminLoginResponse;
 import com.healthlens.api.dto.response.AdminTotpSetupResponse;
@@ -26,6 +29,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -43,6 +47,7 @@ public class AdminAuthService {
     private final AdminAuthRateLimiter rateLimiter;
     private final StringRedisTemplate redisTemplate;
     private final GoogleAuthenticator googleAuth;
+    private final AuditEventRecorder auditEventRecorder;
 
     @Autowired
     public AdminAuthService(
@@ -52,8 +57,9 @@ public class AdminAuthService {
             JwtUtil jwtUtil,
             TotpSecretCryptoService cryptoService,
             AdminAuthRateLimiter rateLimiter,
-            StringRedisTemplate redisTemplate) {
-        this(userRepository, totpSecretRepository, passwordEncoder, jwtUtil, cryptoService, rateLimiter, redisTemplate, new GoogleAuthenticator());
+            StringRedisTemplate redisTemplate,
+            AuditEventRecorder auditEventRecorder) {
+        this(userRepository, totpSecretRepository, passwordEncoder, jwtUtil, cryptoService, rateLimiter, redisTemplate, new GoogleAuthenticator(), auditEventRecorder);
     }
 
     // Constructor for testing
@@ -65,7 +71,8 @@ public class AdminAuthService {
             TotpSecretCryptoService cryptoService,
             AdminAuthRateLimiter rateLimiter,
             StringRedisTemplate redisTemplate,
-            GoogleAuthenticator googleAuth) {
+            GoogleAuthenticator googleAuth,
+            AuditEventRecorder auditEventRecorder) {
         this.userRepository = userRepository;
         this.totpSecretRepository = totpSecretRepository;
         this.passwordEncoder = passwordEncoder;
@@ -74,6 +81,7 @@ public class AdminAuthService {
         this.rateLimiter = rateLimiter;
         this.redisTemplate = redisTemplate;
         this.googleAuth = googleAuth;
+        this.auditEventRecorder = auditEventRecorder;
     }
 
     /**
@@ -171,6 +179,13 @@ public class AdminAuthService {
         String accessToken = jwtUtil.generateAdminAccessToken(user, true);
         rateLimiter.resetAttempts(request.email());
         log.info("Admin login successful for user: {}", user.getId());
+        auditEventRecorder.recordEvent(
+                user.getId(),
+                AuditActions.ADMIN_LOGIN,
+                AuditResourceTypes.AUTH,
+                user.getId(),
+                Map.of("email", user.getEmail())
+        );
         return new AdminLoginResponse(accessToken, false, false, user.getEmail());
     }
 
@@ -217,6 +232,13 @@ public class AdminAuthService {
                 URLEncoder.encode(ISSUER, StandardCharsets.UTF_8).replace("+", "%20"));
 
         log.info("TOTP setup initiated for admin user: {}", userId);
+        auditEventRecorder.recordEvent(
+                userId,
+                AuditActions.ADMIN_TOTP_SETUP,
+                AuditResourceTypes.AUTH,
+                userId,
+                Map.of("email", user.getEmail())
+        );
         return new AdminTotpSetupResponse(secret, qrCodeUrl, generatedCodes);
     }
 
@@ -280,6 +302,20 @@ public class AdminAuthService {
         String accessToken = jwtUtil.generateAdminAccessToken(user, true);
         rateLimiter.resetAttempts(user.getEmail());
         log.info("TOTP verified successfully for admin user: {}", userId);
+        auditEventRecorder.recordEvent(
+                userId,
+                AuditActions.ADMIN_TOTP_VERIFY,
+                AuditResourceTypes.AUTH,
+                userId,
+                Map.of("email", user.getEmail())
+        );
+        auditEventRecorder.recordEvent(
+                userId,
+                AuditActions.ADMIN_LOGIN,
+                AuditResourceTypes.AUTH,
+                userId,
+                Map.of("email", user.getEmail(), "via", "totp_setup")
+        );
         return new AdminLoginResponse(accessToken, false, false, user.getEmail());
     }
 }

@@ -67,6 +67,9 @@ class ReferenceDataAdminServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private com.healthlens.api.audit.UnifiedAuditLogWriter unifiedAuditLogWriter;
+
     private ReferenceDataAdminService referenceDataAdminService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -82,7 +85,8 @@ class ReferenceDataAdminServiceTest {
                 referenceRangeAuditLogRepository,
                 userRepository,
                 objectMapper,
-                clock
+                clock,
+                unifiedAuditLogWriter
         );
     }
 
@@ -97,7 +101,13 @@ class ReferenceDataAdminServiceTest {
         when(referenceMetricRepository.findByNameIgnoreCase("Glucose")).thenReturn(Optional.empty());
         when(referenceMetricRepository.save(any(ReferenceMetric.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(referenceRangeRepository.save(any(ReferenceRange.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(referenceDataChangeSetRepository.save(any(ReferenceDataChangeSet.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(referenceDataChangeSetRepository.save(any(ReferenceDataChangeSet.class))).thenAnswer(invocation -> {
+            ReferenceDataChangeSet cs = invocation.getArgument(0);
+            if (cs.getId() == null) {
+                cs.setId(UUID.randomUUID());
+            }
+            return cs;
+        });
 
         AdminReferenceMetricResponse response = referenceDataAdminService.createMetric(adminId, request);
 
@@ -228,7 +238,8 @@ class ReferenceDataAdminServiceTest {
         when(referenceRangeRepository.findAllByMetric_IdOrderByGenderAscMinAgeAscMaxAgeAsc(metricId)).thenReturn(List.of(range));
         when(referenceRangeRepository.save(any(ReferenceRange.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        AdminReferenceMetricResponse response = referenceDataAdminService.reactivateMetric(metricId);
+        UUID adminId = UUID.randomUUID();
+        AdminReferenceMetricResponse response = referenceDataAdminService.reactivateMetric(adminId, metricId);
 
         assertThat(response.status()).isEqualTo("active");
         assertThat(response.ranges()).allMatch(item -> "active".equals(item.status()));
@@ -848,7 +859,8 @@ class ReferenceDataAdminServiceTest {
                 referenceRangeAuditLogRepository,
                 userRepository,
                 objectMapper,
-                mockClock
+                mockClock,
+                unifiedAuditLogWriter
         );
 
         UUID adminId = UUID.randomUUID();

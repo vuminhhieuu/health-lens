@@ -152,7 +152,7 @@ development_status:
   7-2-admin-crud-metric-reference-data: done
   7-3-import-reference-data-csv-json: done
   7-4-approve-reference-data-change-set: done
-  7-5-reference-data-audit-log-view: sprint-3
+  7-5-reference-data-audit-log-view: done
   epic-7-retrospective: optional
 
   # Epic 8: Dashboard (3 stories) - SPRINT 3

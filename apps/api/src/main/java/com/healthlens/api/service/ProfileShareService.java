@@ -1,5 +1,8 @@
 package com.healthlens.api.service;
 
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditEventRecorder;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.dto.response.AcceptInvitationResultResponse;
 import com.healthlens.api.dto.response.IncomingProfileInvitationResponse;
 import com.healthlens.api.dto.response.ProfileInvitationResponse;
@@ -40,6 +43,7 @@ public class ProfileShareService {
     private final ProfileShareRepository profileShareRepository;
     private final UserRepository userRepository;
     private final EmailService emailService;
+    private final AuditEventRecorder auditEventRecorder;
 
     @Value("${app.frontend.base-url:http://localhost:3000}")
     private String frontendBaseUrl;
@@ -58,7 +62,8 @@ public class ProfileShareService {
             ProfileShareAuditLogRepository profileShareAuditLogRepository,
             ProfileShareRepository profileShareRepository,
             UserRepository userRepository,
-            EmailService emailService
+            EmailService emailService,
+            AuditEventRecorder auditEventRecorder
     ) {
         this.profileRepository = profileRepository;
         this.profileInvitationRepository = profileInvitationRepository;
@@ -66,6 +71,7 @@ public class ProfileShareService {
         this.profileShareRepository = profileShareRepository;
         this.userRepository = userRepository;
         this.emailService = emailService;
+        this.auditEventRecorder = auditEventRecorder;
     }
 
     @Transactional
@@ -183,6 +189,18 @@ public class ProfileShareService {
             emailService.sendProfileInvitationEmail(inviter, normalizedEmail, link);
         }
 
+        writeUnifiedProfileAudit(
+                ownerId,
+                AuditActions.INVITE_PROFILE_SHARE,
+                profileId,
+                Map.of(
+                        "invitationId", inv.getId(),
+                        "inviteeEmail", normalizedEmail,
+                        "accessLevel", resolvedAccessLevel,
+                        "status", inv.getStatus()
+                )
+        );
+
         return mapToResponse(inv);
     }
 
@@ -194,6 +212,12 @@ public class ProfileShareService {
         if (!"pending".equals(inv.getStatus())) {
             throw new IllegalStateException("Chỉ có thể hủy lời mời đang chờ.");
         }
+        writeUnifiedProfileAudit(
+                ownerId,
+                AuditActions.CANCEL_PROFILE_INVITATION,
+                profileId,
+                Map.of("invitationId", invitationId, "inviteeEmail", inv.getInviteeEmail())
+        );
         profileInvitationRepository.delete(inv);
     }
 
@@ -234,6 +258,13 @@ public class ProfileShareService {
 
         String link = buildInvitationLink(inv.getToken());
         emailService.sendProfileInvitationEmail(inviter, inv.getInviteeEmail(), link);
+
+        writeUnifiedProfileAudit(
+                ownerId,
+                AuditActions.RESEND_PROFILE_INVITATION,
+                profileId,
+                Map.of("invitationId", invitationId, "inviteeEmail", inv.getInviteeEmail())
+        );
 
         return mapToResponse(inv);
     }
@@ -292,6 +323,13 @@ public class ProfileShareService {
         invitation.setAcceptedAt(now);
         profileInvitationRepository.save(invitation);
 
+        writeUnifiedProfileAudit(
+                userId,
+                AuditActions.ACCEPT_PROFILE_INVITATION,
+                profileId,
+                Map.of("invitationId", invitation.getId(), "ownerId", ownerId.toString())
+        );
+
         return new AcceptInvitationResultResponse("accepted", FAMILY_PROFILES_PATH, profileId);
     }
 
@@ -315,6 +353,13 @@ public class ProfileShareService {
             invitation.setStatus("rejected");
         }
         profileInvitationRepository.save(invitation);
+
+        writeUnifiedProfileAudit(
+                userId,
+                AuditActions.REJECT_PROFILE_INVITATION,
+                invitation.getProfileId(),
+                Map.of("invitationId", invitationId, "status", invitation.getStatus())
+        );
     }
 
     private void ensureShareForInvitation(ProfileInvitation invitation, UUID viewerId, UUID ownerId) {
@@ -418,5 +463,29 @@ public class ProfileShareService {
         auditLog.setResourceType("PROFILE_SHARE");
         auditLog.setResourceId(shareId);
         profileShareAuditLogRepository.save(auditLog);
+
+        writeUnifiedProfileAudit(
+                actorId,
+                AuditActions.REVOKE_PROFILE_SHARE,
+                profileId,
+                Map.of("shareId", shareId, "viewerId", viewerId.toString())
+        );
+    }
+
+    private void writeUnifiedProfileAudit(
+            UUID actorId,
+            String action,
+            UUID profileId,
+            Map<String, Object> details
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        profileRepository.findById(profileId).ifPresent(profile -> {
+            String displayName = profile.getDisplayName();
+            if (displayName != null && !displayName.isBlank()) {
+                payload.put("displayName", displayName.trim());
+            }
+        });
+        payload.putAll(details);
+        auditEventRecorder.recordEvent(actorId, action, AuditResourceTypes.PROFILE, profileId, payload);
     }
 }

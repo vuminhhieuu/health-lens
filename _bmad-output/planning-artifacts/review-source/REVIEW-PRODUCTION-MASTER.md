@@ -98,7 +98,7 @@ Các gate dưới đây là “điều kiện cần” trước khi gọi produc
 
 Theo `_bmad-output/implementation-artifacts/sprint-status.yaml` (last_updated 2026-05-10):
 - Epic 1,2,3,4,5,6 phần lớn `done`/`review`.
-- Epic 7: `7-3-import-reference-data-csv-json` và `7-5-reference-data-audit-log-view` đang `sprint-3` (chưa done).
+- Epic 7: `7-3-import-reference-data-csv-json` done; `7-5-reference-data-audit-log-view` done (audit log tại `/admin/audit-log`).
 - Epic 8: `8-1/8-2/8-3` đang `sprint-3` (chưa done).
 - Mobile Epic 9 backlog (không thuộc scope web production hiện tại).
 
@@ -306,7 +306,7 @@ Mục tiêu của bảng này: khi bạn dùng BMAD tạo user stories/plan, b�
 | Security | Admin token sessionStorage (XSS risk) | P0 | New story (Admin auth hardening) | `apps/web/src/lib/api/adminApiClient.ts`, `apps/web/src/app/admin/login/page.tsx`, `apps/web/src/app/admin/layout.tsx` |
 | Security | Sensitive token ở URL query (invite accept) | P0 | Epic 6 (extend) | `apps/web/.../invitations/accept/page.tsx`, `apps/api/.../ProfileShareService.java` |
 | Security | Sensitive token + email ở URL query (cancel deletion) | P1 | Epic 1.6 (extend) | `apps/web/.../CancelDeletionClient.tsx`, `apps/api/.../DataDeletionService.java` |
-| Admin | Audit log viewer (Story 7.5) chưa implement UI | P1 | Story 7.5 | `apps/web/src/app/admin/audit-log/page.tsx` |
+| Admin | Audit log viewer (Story 7.5) — đã có UI tại `/admin/audit-log` | — | Story 7.5 | `apps/web/src/app/admin/audit-log/page.tsx` |
 | Admin | Analytics 8.1/8.2/8.3 (required) | P1 | Stories 8.1/8.2/8.3 | `apps/web/src/app/admin/page.tsx` (stub) |
 | UI | Detail view dead buttons + reorder AI + merge explanation + giữ preview original | P1 | Epic 4/5 (extend) | `apps/web` route `/health-records/review/[recordId]` |
 | Ops | Monitoring/metrics/backup/restore/SLA runbooks | P0/P1 | New “Ops readiness” story | `docs/STAGING_DEPLOYMENT.md`, `docker/*`, deploy manifests |

@@ -58,6 +58,7 @@ class AuthServiceTest {
     @Mock private ForgotPasswordRateLimiter forgotPasswordRateLimiter;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ConsentService consentService;
+    @Mock private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private StreamOperations<String, Object, Object> streamOperations;
 
@@ -68,7 +69,7 @@ class AuthServiceTest {
         authService = new AuthService(
                 userRepository, tokenRepository, passwordResetTokenRepository,
                 refreshTokenRepository, passwordEncoder, emailService,
-                jwtUtil, rateLimiter, forgotPasswordRateLimiter, redisTemplate, consentService, "email.events"
+                jwtUtil, rateLimiter, forgotPasswordRateLimiter, redisTemplate, consentService, auditEventRecorder, "email.events"
         );
     }
 

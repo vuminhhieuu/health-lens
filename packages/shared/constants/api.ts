@@ -125,6 +125,15 @@ export const ApiPaths = {
     DOWNLOAD: (id: string) => `/api/${API_VERSION}/documents/${id}/download`,
   },
 
+  /** Admin (requires ROLE_ADMIN in JWT — login lại sau khi đổi role trong DB) */
+  ADMIN: {
+    AUDIT_LOGS: `/api/${API_VERSION}/admin/audit-logs`,
+    AUDIT_LOGS_EXPORT: `/api/${API_VERSION}/admin/audit-logs/export`,
+    REFERENCE_METRICS: `/api/${API_VERSION}/admin/reference-metrics`,
+    REFERENCE_METRIC_DISPLAY_PATCH: (id: string) =>
+      `/api/${API_VERSION}/admin/reference-metrics/${id}/display`,
+  },
+
   /** Reference data endpoints (medical terms, etc.) */
   REFERENCE_DATA: {
     BASE: `/api/${API_VERSION}/reference-data`,

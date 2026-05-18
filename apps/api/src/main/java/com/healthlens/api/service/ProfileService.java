@@ -3,6 +3,9 @@ package com.healthlens.api.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.MetricDto;
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditEventRecorder;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.dto.request.CreateProfileRequest;
 import com.healthlens.api.dto.request.UpdateProfileRequest;
 import com.healthlens.api.dto.response.ProfileResponse;
@@ -40,19 +43,22 @@ public class ProfileService {
     private final HealthRecordRepository healthRecordRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final AuditEventRecorder auditEventRecorder;
 
     public ProfileService(
             ProfileRepository profileRepository,
             ProfileShareRepository profileShareRepository,
             HealthRecordRepository healthRecordRepository,
             UserRepository userRepository,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            AuditEventRecorder auditEventRecorder
     ) {
         this.profileRepository = profileRepository;
         this.profileShareRepository = profileShareRepository;
         this.healthRecordRepository = healthRecordRepository;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
+        this.auditEventRecorder = auditEventRecorder;
     }
 
     @Transactional(readOnly = true)
@@ -216,6 +222,14 @@ public class ProfileService {
 
         profile = profileRepository.save(profile);
 
+        auditEventRecorder.recordEvent(
+                userId,
+                AuditActions.CREATE_PROFILE,
+                AuditResourceTypes.PROFILE,
+                profile.getId(),
+                Map.of("displayName", profile.getDisplayName())
+        );
+
         return mapToResponse(profile);
     }
 
@@ -267,6 +281,15 @@ public class ProfileService {
         }
 
         Profile updatedProfile = profileRepository.save(profile);
+
+        auditEventRecorder.recordEvent(
+                userId,
+                AuditActions.UPDATE_PROFILE,
+                AuditResourceTypes.PROFILE,
+                profileId,
+                Map.of("displayName", updatedProfile.getDisplayName())
+        );
+
         return mapToResponse(updatedProfile);
     }
 

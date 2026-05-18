@@ -12,13 +12,11 @@ import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.entity.HealthRecord;
-import com.healthlens.api.entity.HealthRecordAuditLog;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.HealthRecordShareRepository;
-import com.healthlens.api.repository.HealthRecordAuditLogRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,7 +60,9 @@ class HealthRecordServiceTest {
     @Mock private ProfileRepository profileRepository;
     @Mock private HealthRecordRepository healthRecordRepository;
     @Mock private HealthRecordShareRepository healthRecordShareRepository;
-    @Mock private HealthRecordAuditLogRepository healthRecordAuditLogRepository;
+    @Mock private com.healthlens.api.audit.HealthRecordLegacyAuditWriter healthRecordLegacyAuditWriter;
+    @Mock private com.healthlens.api.audit.UnifiedAuditCoordinator unifiedAuditCoordinator;
+    @Mock private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
     @Mock private ProfileShareRepository profileShareRepository;
     @Mock private ReferenceDataService referenceDataService;
     @Mock private MetricExplanationRetrievalService metricExplanationRetrievalService;
@@ -86,7 +86,9 @@ class HealthRecordServiceTest {
                 metricExplanationRetrievalService,
                 llmService,
                 healthRecordPdfService,
-                healthRecordAuditLogRepository,
+                healthRecordLegacyAuditWriter,
+                unifiedAuditCoordinator,
+                auditEventRecorder,
                 redisTemplate,
                 new ObjectMapper(),
                 "ocr.events"
@@ -271,9 +273,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
 
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
@@ -295,9 +295,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("processing"); // invalid status
 
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
@@ -333,9 +331,7 @@ class HealthRecordServiceTest {
     void confirmRecord_allowOcrFailedWhenKeepPartial() {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("ocr_failed");
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
 
@@ -355,9 +351,7 @@ class HealthRecordServiceTest {
     void confirmRecord_allowOcrFailedManualRecovery() {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("ocr_failed");
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
 
@@ -379,9 +373,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("done");
 
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
@@ -402,9 +394,7 @@ class HealthRecordServiceTest {
     void confirmRecord_setsSourceTypePartialWhenKeepPartialRequested() {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
 
@@ -430,9 +420,7 @@ class HealthRecordServiceTest {
     void confirmRecord_recomputesSourceTypeWhenNotKeepPartial() {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
         record.setSourceType("ocr_partial");
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
@@ -495,9 +483,7 @@ class HealthRecordServiceTest {
 
         UUID profileId = UUID.randomUUID();
         Profile profile = buildProfile(userId, profileId);
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setProfileId(profileId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
@@ -554,9 +540,7 @@ class HealthRecordServiceTest {
         UUID recordId = UUID.randomUUID();
 
         MetricDto metric = MetricDto.builder().name("HbA1c").build();
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
         when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
 
@@ -671,9 +655,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
         record.setSourceType("ocr");
 
@@ -705,9 +687,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
         record.setSourceType("manual");
 
@@ -731,9 +711,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("done");
         record.setSourceType("ocr");
 
@@ -758,9 +736,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
         record.setSourceType("ocr");
 
@@ -812,9 +788,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("processing");
 
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
@@ -832,9 +806,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
         record.setSourceType("ocr");
 
@@ -869,9 +841,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
 
         when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
@@ -949,9 +919,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("done");
         record.setSourceType("ocr");
 
@@ -971,9 +939,7 @@ class HealthRecordServiceTest {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setStatus("review_required");
         record.setSourceType("ocr");
 
@@ -1004,9 +970,7 @@ class HealthRecordServiceTest {
     void deleteHealthRecord_success() {
         UUID userId = UUID.randomUUID();
         UUID recordId = UUID.randomUUID();
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
 
         when(healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)).thenReturn(Optional.of(record));
 
@@ -1014,6 +978,13 @@ class HealthRecordServiceTest {
 
         assertThat(record.getDeletedAt()).isNotNull();
         verify(healthRecordRepository).save(record);
+        verify(unifiedAuditCoordinator).persist(
+                eq(userId),
+                eq(com.healthlens.api.audit.AuditActions.DELETE_HEALTH_RECORD),
+                eq(com.healthlens.api.audit.AuditResourceTypes.HEALTH_RECORD),
+                any()
+        );
+        verify(healthRecordLegacyAuditWriter).record(userId, com.healthlens.api.audit.AuditActions.DELETE_HEALTH_RECORD, recordId);
     }
 
     @Test
@@ -1058,14 +1029,7 @@ class HealthRecordServiceTest {
         assertThat(response.bytes()).startsWith("%PDF".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         assertThat(response.filename()).isEqualTo("healthlens-ket-qua-xet-nghiem-mau.pdf");
         verify(healthRecordPdfService).generatePdf(any());
-        ArgumentCaptor<HealthRecordAuditLog> auditCaptor = ArgumentCaptor.forClass(HealthRecordAuditLog.class);
-        verify(healthRecordAuditLogRepository).save(auditCaptor.capture());
-        assertThat(auditCaptor.getValue().getAction()).isEqualTo("DOWNLOAD_HEALTH_RECORD_PDF");
-        assertThat(auditCaptor.getValue().getRecordId()).isEqualTo(recordId);
-        assertThat(auditCaptor.getValue().getProfileId()).isEqualTo(profileId);
-        assertThat(auditCaptor.getValue().getViewerId()).isEqualTo(userId);
-        assertThat(auditCaptor.getValue().getShareScope()).isEqualTo("owner");
-        assertThat(auditCaptor.getValue().getResourceType()).isEqualTo("HEALTH_RECORD");
+        verify(healthRecordLegacyAuditWriter).recordPdfDownload(eq(userId), eq(record), eq("owner"));
         verify(metricExplanationRetrievalService, never()).retrieve(anyString(), anyString(), any(), anyString());
         verify(llmService, never()).generateExplanationResult(anyString(), anyString(), anyString(), any(), anyString(), nullable(String.class));
     }
@@ -1099,7 +1063,7 @@ class HealthRecordServiceTest {
         DownloadHealthRecordPdfResponse response = healthRecordService.downloadHealthRecordPdf(viewerId, recordId);
 
         assertThat(response.bytes()).isNotEmpty();
-        verify(healthRecordAuditLogRepository).save(any());
+        verify(healthRecordLegacyAuditWriter).recordPdfDownload(eq(viewerId), eq(record), anyString());
     }
 
     @Test
@@ -1125,9 +1089,7 @@ class HealthRecordServiceTest {
         DownloadHealthRecordPdfResponse response = healthRecordService.downloadHealthRecordPdf(viewerId, recordId);
 
         assertThat(response.bytes()).isNotEmpty();
-        ArgumentCaptor<HealthRecordAuditLog> auditCaptor = ArgumentCaptor.forClass(HealthRecordAuditLog.class);
-        verify(healthRecordAuditLogRepository).save(auditCaptor.capture());
-        assertThat(auditCaptor.getValue().getShareScope()).isEqualTo("profile");
+        verify(healthRecordLegacyAuditWriter).recordPdfDownload(eq(viewerId), eq(record), eq("profile"));
     }
 
     @Test
@@ -1147,7 +1109,8 @@ class HealthRecordServiceTest {
         assertThatThrownBy(() -> healthRecordService.downloadHealthRecordPdf(requesterId, recordId))
                 .isInstanceOf(com.healthlens.api.exception.ProfileAccessRevokedException.class);
         verify(healthRecordPdfService, never()).generatePdf(any());
-        verify(healthRecordAuditLogRepository, never()).save(any());
+        verify(healthRecordLegacyAuditWriter, never()).recordPdfDownload(any(), any(), any());
+        verify(healthRecordLegacyAuditWriter, never()).record(any(), any(), any());
     }
 
     @Test
@@ -1162,7 +1125,8 @@ class HealthRecordServiceTest {
         assertThatThrownBy(() -> healthRecordService.downloadHealthRecordPdf(userId, recordId))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(healthRecordPdfService, never()).generatePdf(any());
-        verify(healthRecordAuditLogRepository, never()).save(any());
+        verify(healthRecordLegacyAuditWriter, never()).recordPdfDownload(any(), any(), any());
+        verify(healthRecordLegacyAuditWriter, never()).record(any(), any(), any());
     }
 
     @Test
@@ -1190,9 +1154,7 @@ class HealthRecordServiceTest {
                 ))
                 .build();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setProfileId(profileId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
@@ -1231,9 +1193,7 @@ class HealthRecordServiceTest {
                 ))
                 .build();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setProfileId(profileId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
@@ -1274,9 +1234,7 @@ class HealthRecordServiceTest {
                 ))
                 .build();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setProfileId(profileId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
@@ -1316,9 +1274,7 @@ class HealthRecordServiceTest {
                 ))
                 .build();
 
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setProfileId(profileId);
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
@@ -1331,6 +1287,14 @@ class HealthRecordServiceTest {
 
         assertThat(response.allNormal()).isFalse();
         verify(llmService).generateRecommendations(any(), any(), eq("female"), any());
+    }
+
+    private HealthRecord newOwnedRecord(UUID userId, UUID recordId) {
+        HealthRecord record = new HealthRecord();
+        record.setId(recordId);
+        record.setUserId(userId);
+        record.setProfileId(UUID.randomUUID());
+        return record;
     }
 
     private Profile buildProfile(UUID userId, UUID profileId) {
@@ -1349,9 +1313,7 @@ class HealthRecordServiceTest {
                 .unit("mmol/L")
                 .status("normal")
                 .build();
-        HealthRecord record = new HealthRecord();
-        record.setId(recordId);
-        record.setUserId(userId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
         record.setProfileId(profileId);
         record.setStatus("done");
         record.setSourceType("ocr");

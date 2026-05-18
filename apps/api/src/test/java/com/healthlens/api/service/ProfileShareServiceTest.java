@@ -51,6 +51,8 @@ class ProfileShareServiceTest {
     private UserRepository userRepository;
     @Mock
     private EmailService emailService;
+    @Mock
+    private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
 
     private ProfileShareService profileShareService;
 
@@ -62,7 +64,8 @@ class ProfileShareServiceTest {
                 profileShareAuditLogRepository,
                 profileShareRepository,
                 userRepository,
-                emailService
+                emailService,
+                auditEventRecorder
         );
         ReflectionTestUtils.setField(profileShareService, "frontendBaseUrl", "http://localhost:3000");
     }

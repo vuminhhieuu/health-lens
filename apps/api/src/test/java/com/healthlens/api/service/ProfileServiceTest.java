@@ -49,6 +49,9 @@ class ProfileServiceTest {
     @Mock
     private HealthRecordRepository healthRecordRepository;
 
+    @Mock
+    private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
+
     private ProfileService profileService;
 
     private User testUser;
@@ -63,7 +66,8 @@ class ProfileServiceTest {
                 profileShareRepository,
                 healthRecordRepository,
                 userRepository,
-                new ObjectMapper()
+                new ObjectMapper(),
+                auditEventRecorder
         );
     }
 

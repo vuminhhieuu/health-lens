@@ -28,7 +28,7 @@ const adminNavItems: AdminNavItem[] = [
     alsoActiveWhenPathnameStartsWith: ["/admin/reference-data/import"],
   },
   { name: "Phê duyệt", href: "/admin/reference-data/approvals", icon: ShieldCheck, exact: false },
-  { name: "Audit Log", href: "/admin/audit-log", icon: ClipboardList, exact: false },
+  { name: "Nhật ký hoạt động", href: "/admin/audit-log", icon: ClipboardList, exact: false },
 ];
 
 export default function AdminLayout({

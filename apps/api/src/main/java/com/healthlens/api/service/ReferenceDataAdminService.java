@@ -3,6 +3,9 @@ package com.healthlens.api.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditResourceTypes;
+import com.healthlens.api.audit.UnifiedAuditLogWriter;
 import com.healthlens.api.dto.request.AdminReferenceMetricRequest;
 import com.healthlens.api.dto.request.AdminReferenceRangeRequest;
 import com.healthlens.api.dto.response.AdminReferenceImportConfirmResponse;
@@ -72,6 +75,7 @@ public class ReferenceDataAdminService {
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final Map<UUID, ImportPreviewSession> importPreviewSessions = new ConcurrentHashMap<>();
+    private final UnifiedAuditLogWriter unifiedAuditLogWriter;
 
     public ReferenceDataAdminService(
             ReferenceMetricRepository referenceMetricRepository,
@@ -80,7 +84,8 @@ public class ReferenceDataAdminService {
             ReferenceRangeAuditLogRepository referenceRangeAuditLogRepository,
             UserRepository userRepository,
             ObjectMapper objectMapper,
-            Clock clock
+            Clock clock,
+            UnifiedAuditLogWriter unifiedAuditLogWriter
     ) {
         this.referenceMetricRepository = referenceMetricRepository;
         this.referenceRangeRepository = referenceRangeRepository;
@@ -89,6 +94,7 @@ public class ReferenceDataAdminService {
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
         this.clock = clock;
+        this.unifiedAuditLogWriter = unifiedAuditLogWriter;
     }
 
     @Transactional(readOnly = true)
@@ -147,7 +153,33 @@ public class ReferenceDataAdminService {
                 .toList();
 
         if (isMulti) {
-            persistChangeSet(adminId, savedMetric.getId(), "METRIC", "CREATE", buildSnapshot(savedMetric, request, "pending"), "pending");
+            UUID changeSetId = persistChangeSet(
+                    adminId,
+                    savedMetric.getId(),
+                    "METRIC",
+                    "CREATE",
+                    buildSnapshot(savedMetric, request, "pending"),
+                    "pending"
+            );
+            recordReferenceAudit(
+                    adminId,
+                    AuditActions.SUBMIT_REFERENCE_CHANGE_SET,
+                    savedMetric.getId(),
+                    null,
+                    Map.of(
+                            "changeSetId", changeSetId,
+                            "operation", "CREATE",
+                            "snapshot", buildSnapshot(savedMetric, request, "pending")
+                    )
+            );
+        } else {
+            recordReferenceAudit(
+                    adminId,
+                    AuditActions.CREATE_REFERENCE_METRIC,
+                    savedMetric.getId(),
+                    null,
+                    buildSnapshot(savedMetric, request, "active")
+            );
         }
 
         return new AdminReferenceMetricResponse(
@@ -174,6 +206,7 @@ public class ReferenceDataAdminService {
                 });
 
         if (!isMultiAdminMode()) {
+            Map<String, Object> before = buildSnapshot(metric, null, metric.getStatus());
             metric.setName(request.name().trim());
             metric.setDisplayNameVi(request.displayNameVi().trim());
             metric.setUnit(request.unit().trim());
@@ -183,6 +216,13 @@ public class ReferenceDataAdminService {
             }
             referenceMetricRepository.save(metric);
             replaceRanges(metric, request.ranges(), "active");
+            recordReferenceAudit(
+                    adminId,
+                    AuditActions.UPDATE_REFERENCE_METRIC,
+                    metricId,
+                    before,
+                    buildSnapshot(metric, request, "active")
+            );
             return new AdminReferenceChangeSetResponse(
                     null,
                     "active",
@@ -191,6 +231,7 @@ public class ReferenceDataAdminService {
             );
         }
 
+        Map<String, Object> before = buildSnapshot(metric, null, metric.getStatus());
         UUID changeSetId = persistChangeSet(
                 adminId,
                 metricId,
@@ -198,6 +239,17 @@ public class ReferenceDataAdminService {
                 "UPDATE",
                 buildSnapshot(metric, request, "pending"),
                 "pending"
+        );
+        recordReferenceAudit(
+                adminId,
+                AuditActions.SUBMIT_REFERENCE_CHANGE_SET,
+                metricId,
+                before,
+                Map.of(
+                        "changeSetId", changeSetId,
+                        "operation", "UPDATE",
+                        "snapshot", buildSnapshot(metric, request, "pending")
+                )
         );
 
         return new AdminReferenceChangeSetResponse(
@@ -214,6 +266,7 @@ public class ReferenceDataAdminService {
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy chỉ số cần xóa"));
 
         if (!isMultiAdminMode()) {
+            Map<String, Object> before = buildSnapshot(metric, null, metric.getStatus());
             metric.setStatus("deactivated");
             referenceMetricRepository.save(metric);
             List<ReferenceRange> ranges = referenceRangeRepository
@@ -222,6 +275,13 @@ public class ReferenceDataAdminService {
                 range.setStatus("deactivated");
                 referenceRangeRepository.save(range);
             }
+            recordReferenceAudit(
+                    adminId,
+                    AuditActions.DEACTIVATE_REFERENCE_METRIC,
+                    metricId,
+                    before,
+                    Map.of("status", "deactivated")
+            );
             return new AdminReferenceChangeSetResponse(
                     null,
                     "deactivated",
@@ -230,6 +290,7 @@ public class ReferenceDataAdminService {
             );
         }
 
+        Map<String, Object> before = buildSnapshot(metric, null, metric.getStatus());
         UUID changeSetId = persistChangeSet(
                 adminId,
                 metricId,
@@ -237,6 +298,13 @@ public class ReferenceDataAdminService {
                 "DEACTIVATE",
                 Map.of("status", "deactivated"),
                 "pending"
+        );
+        recordReferenceAudit(
+                adminId,
+                AuditActions.SUBMIT_REFERENCE_CHANGE_SET,
+                metricId,
+                before,
+                Map.of("changeSetId", changeSetId, "operation", "DEACTIVATE", "status", "pending")
         );
 
         return new AdminReferenceChangeSetResponse(
@@ -248,10 +316,12 @@ public class ReferenceDataAdminService {
     }
 
     @Transactional
-    public AdminReferenceMetricResponse reactivateMetric(UUID metricId) {
+    public AdminReferenceMetricResponse reactivateMetric(UUID adminId, UUID metricId) {
+        Objects.requireNonNull(adminId, "adminId");
         ReferenceMetric metric = referenceMetricRepository.findById(metricId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy chỉ số cần kích hoạt lại"));
 
+        Map<String, Object> before = buildSnapshot(metric, null, metric.getStatus());
         metric.setStatus("active");
         ReferenceMetric savedMetric = referenceMetricRepository.save(metric);
         List<AdminReferenceRangeResponse> ranges = referenceRangeRepository
@@ -263,6 +333,14 @@ public class ReferenceDataAdminService {
                 })
                 .map(this::toRangeResponse)
                 .toList();
+
+        recordReferenceAudit(
+                adminId,
+                AuditActions.REACTIVATE_REFERENCE_METRIC,
+                metricId,
+                before,
+                buildSnapshot(savedMetric, null, "active")
+        );
 
         return new AdminReferenceMetricResponse(
                 savedMetric.getId(),
@@ -417,6 +495,24 @@ public class ReferenceDataAdminService {
                 changeSetIds.size(),
                 changeSetIds,
                 "Đã tạo tập dữ liệu thay đổi  nháp từ dữ liệu import."
+        );
+    }
+
+    private void recordReferenceAudit(
+            UUID actorId,
+            String action,
+            UUID resourceId,
+            Map<String, Object> oldValue,
+            Map<String, Object> newValue
+    ) {
+        Objects.requireNonNull(actorId, "actorId is required for reference data audit");
+        unifiedAuditLogWriter.record(
+                actorId,
+                action,
+                AuditResourceTypes.REFERENCE_DATA,
+                resourceId,
+                oldValue != null ? writeJson(oldValue) : null,
+                newValue != null ? writeJson(newValue) : null
         );
     }
 
@@ -994,7 +1090,7 @@ public class ReferenceDataAdminService {
         cs.setReviewerId(adminId);
         referenceDataChangeSetRepository.save(cs);
 
-        writeApprovalAuditLog("PUBLISH_CHANGE_SET", changeSetId, adminId, cs.getEntityType(), cs.getEntityId());
+        writeUnifiedChangeSetAudit(AuditActions.PUBLISH_CHANGE_SET, changeSetId, adminId, cs);
 
         log.info("tập dữ liệu thay đổi  {} published directly by admin {} (single-admin mode)", changeSetId, adminId);
 
@@ -1028,7 +1124,7 @@ public class ReferenceDataAdminService {
         cs.setReviewerId(reviewerId);
         referenceDataChangeSetRepository.save(cs);
 
-        writeApprovalAuditLog("APPROVE_CHANGE_SET", changeSetId, reviewerId, cs.getEntityType(), cs.getEntityId());
+        writeUnifiedChangeSetAudit(AuditActions.APPROVE_CHANGE_SET, changeSetId, reviewerId, cs);
 
         log.info("tập dữ liệu thay đổi  {} approved by reviewer {}", changeSetId, reviewerId);
 
@@ -1061,7 +1157,7 @@ public class ReferenceDataAdminService {
         cs.setRejectionReason(reason);
         referenceDataChangeSetRepository.save(cs);
 
-        writeApprovalAuditLog("REJECT_CHANGE_SET", changeSetId, reviewerId, cs.getEntityType(), cs.getEntityId());
+        writeUnifiedChangeSetAudit(AuditActions.REJECT_CHANGE_SET, changeSetId, reviewerId, cs);
 
         log.info("tập dữ liệu thay đổi  {} rejected by reviewer {} — reason: {}", changeSetId, reviewerId, reason);
 
@@ -1094,6 +1190,14 @@ public class ReferenceDataAdminService {
 
         cs.setStatus("pending");
         referenceDataChangeSetRepository.save(cs);
+
+        recordReferenceAudit(
+                adminId,
+                AuditActions.SUBMIT_REFERENCE_CHANGE_SET,
+                cs.getEntityId(),
+                null,
+                Map.of("changeSetId", changeSetId, "operation", cs.getOperation(), "status", "pending")
+        );
 
         log.info("tập dữ liệu thay đổi  {} submitted for approval by admin {}", changeSetId, adminId);
 
@@ -1269,6 +1373,29 @@ public class ReferenceDataAdminService {
         }
 
         cs.setEntityId(savedMetric.getId());
+    }
+
+    private void writeUnifiedChangeSetAudit(String action, UUID changeSetId, UUID actorId, ReferenceDataChangeSet cs) {
+        if (cs.getEntityId() == null) {
+            return;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("changeSetId", changeSetId);
+        payload.put("operation", cs.getOperation());
+        payload.put("entityType", cs.getEntityType());
+        payload.put("changesJson", cs.getChangesJson());
+        if (cs.getRejectionReason() != null) {
+            payload.put("rejectionReason", cs.getRejectionReason());
+        }
+        unifiedAuditLogWriter.record(
+                actorId,
+                action,
+                AuditResourceTypes.REFERENCE_DATA,
+                cs.getEntityId(),
+                null,
+                writeJson(payload)
+        );
+        writeApprovalAuditLog(action, changeSetId, actorId, cs.getEntityType(), cs.getEntityId());
     }
 
     private void writeApprovalAuditLog(String action, UUID changeSetId, UUID reviewerId,
