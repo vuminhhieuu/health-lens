@@ -29,7 +29,6 @@ import {
   ShieldAlert,
   Shield,
   ChevronDown,
-  ChevronUp,
   Mail,
   UserPlus,
 } from "lucide-react";
@@ -42,7 +41,6 @@ import { HealthMetricCard } from "@/components/ui/HealthMetricCard";
 import { ErrorState, InlineFieldError, LoadingState } from "@/components/ui";
 import { OcrFailureScreen } from "@/components/features/upload/OcrFailureScreen";
 import { DeleteRecordModal } from "@/components/features/health-records/DeleteRecordModal";
-import { toThreeLineExplanation } from "@/lib/utils/explanationFormatter";
 import { recommendationDisclaimerText } from "@/lib/utils/medicalDisclaimer";
 
 type MetricDto = {
@@ -196,6 +194,41 @@ function slugifyFilenamePart(value: string | null | undefined): string {
   return slug || "kham";
 }
 
+function getResponse(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+  return (error as { response?: { headers?: Record<string, unknown>; status?: number } }).response;
+}
+
+function getResponseCorrelationId(error: unknown) {
+  const headers = getResponse(error)?.headers;
+  const rawId =
+    headers?.["x-correlation-id"] ??
+    headers?.["x-request-id"] ??
+    headers?.["X-Correlation-Id"] ??
+    headers?.["X-Request-Id"];
+  return typeof rawId === "string" ? rawId : undefined;
+}
+
+function isPdfFileUrl(fileUrl: string) {
+  try {
+    return new URL(fileUrl).pathname.toLowerCase().endsWith(".pdf");
+  } catch {
+    return fileUrl.split(/[?#]/, 1)[0]?.toLowerCase().endsWith(".pdf") ?? false;
+  }
+}
+
+function logReviewActionError(action: string, error: unknown) {
+  const response = getResponse(error);
+  console.error("Health record review action failed", {
+    action,
+    status: response?.status,
+    correlationId: getResponseCorrelationId(error),
+    errorType: error instanceof Error ? error.name : typeof error,
+  });
+}
+
 export default function ReviewRecordPage() {
   const params = useParams();
   const router = useRouter();
@@ -216,7 +249,7 @@ export default function ReviewRecordPage() {
   const [showFullDoc, setShowFullDoc] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const [selectedMetricIndex, setSelectedMetricIndex] = useState<number | null>(null);
+  const [documentPreviewFailed, setDocumentPreviewFailed] = useState(false);
   const [isKeepingPartial, setIsKeepingPartial] = useState(false);
   const [isRetryUploading, setIsRetryUploading] = useState(false);
   const [retryUploadError, setRetryUploadError] = useState<string | null>(null);
@@ -386,23 +419,6 @@ export default function ReviewRecordPage() {
     [recommendationsData?.recommendations]
   );
 
-  const selectedMetric = selectedMetricIndex !== null ? metrics[selectedMetricIndex] : null;
-  const selectedMetricStaticExplanation = selectedMetric?.explanation?.trim() || "";
-  const { data: popupExplanationData, isLoading: isExplanationLoading } = useQuery({
-    queryKey: ["metric-explanation", recordId, selectedMetric?.name, selectedMetric?.value, selectedMetric?.status],
-    queryFn: async () => {
-      if (!recordId || !selectedMetric) return { explanation: "", source: "fallback" };
-      const res = await apiClient.get(ApiPaths.HEALTH_RECORDS.EXPLANATION(recordId, selectedMetric.name));
-      const payload = res.data?.data;
-      return {
-        explanation: (payload?.explanation as string | undefined) ?? "",
-        source: (payload?.source as string | undefined) ?? "fallback",
-      };
-    },
-    enabled: selectedMetricIndex !== null && !selectedMetricStaticExplanation && Boolean(recordId),
-    staleTime: 7 * 24 * 60 * 60 * 1000,
-  });
-
   const initialized = useRef(false);
   const initialSnapshotRef = useRef<string>("");
   const skipUnloadWarningRef = useRef(false);
@@ -449,6 +465,11 @@ export default function ReviewRecordPage() {
       );
     }
   }, [data, manualMode]);
+
+  useEffect(() => {
+    setDocumentPreviewFailed(false);
+    setShowFullDoc(false);
+  }, [data?.fileUrl]);
 
   const isDirty = useMemo(() => {
     if (!initialized.current) {
@@ -713,7 +734,8 @@ export default function ReviewRecordPage() {
       initialized.current = false;
       await refetch();
       router.replace(`/health-records/review/${uploadInfo.recordId}`);
-    } catch {
+    } catch (error) {
+      logReviewActionError("retry-upload", error);
       const message = "Tải tệp mới thất bại. Vui lòng thử lại.";
       setRetryUploadError(message);
       notify.error(message);
@@ -732,7 +754,8 @@ export default function ReviewRecordPage() {
       notify.success("Đã xóa kết quả khám thành công.");
       const redirectPath = data?.profileId ? `/profiles/${data.profileId}/history` : "/health-records";
       router.push(redirectPath);
-    } catch {
+    } catch (error) {
+      logReviewActionError("delete-record", error);
       const message = "Xóa kết quả thất bại. Vui lòng thử lại.";
       setDeleteRecordError(message);
       notify.error(message);
@@ -762,7 +785,8 @@ export default function ReviewRecordPage() {
       link.click();
       link.remove();
       URL.revokeObjectURL(objectUrl);
-    } catch {
+    } catch (error) {
+      logReviewActionError("download-pdf", error);
       const message = "Tải PDF thất bại. Vui lòng thử lại.";
       setPdfDownloadError(message);
       notify.error(message);
@@ -795,6 +819,137 @@ export default function ReviewRecordPage() {
       isPending={isDeletingRecord}
     />
   );
+  const renderOriginalDocumentPreview = (
+    fileUrlValue: string | null | undefined,
+    options: { compact?: boolean; fit?: "contain" | "width"; unavailableReason?: string } = {}
+  ) => {
+    const resolvedFileUrl = fileUrlValue?.trim() ?? "";
+    const resolvedIsPdf = isPdfFileUrl(resolvedFileUrl);
+    const isCompact = options.compact ?? false;
+    const canRenderPreview = Boolean(resolvedFileUrl) && !documentPreviewFailed;
+    const imageClassName =
+      options.fit === "contain"
+        ? "max-h-[22rem] w-auto max-w-full rounded-lg shadow-sm"
+        : "max-w-none h-auto w-full rounded-lg shadow-sm";
+
+    return (
+      <div
+        className={`overflow-hidden rounded-2xl border border-[#b7d8d1] bg-white shadow-sm ${
+          isCompact ? "" : "flex h-[calc(100vh-180px)] flex-col"
+        }`}
+      >
+        <div className="flex items-center justify-between border-b border-[#b7d8d1] bg-[#effcf9] px-4 py-3">
+          <div className="flex items-center gap-2 font-semibold text-[#005049]">
+            <FileText className="h-4 w-4" />
+            Hồ sơ gốc
+          </div>
+          {canRenderPreview ? (
+            <button
+              type="button"
+              onClick={() => setShowFullDoc(true)}
+              className="rounded-lg p-1.5 transition hover:bg-[#c5dfd9]"
+              title="Xem toàn màn hình"
+              aria-label="Xem hồ sơ gốc toàn màn hình"
+            >
+              <Maximize2 className="h-4 w-4 text-[#00685f]" />
+            </button>
+          ) : null}
+        </div>
+        <div
+          className={`flex items-start justify-center overflow-auto bg-gray-100 p-4 ${
+            isCompact ? "min-h-72 lg:min-h-80" : "flex-1"
+          }`}
+        >
+          {canRenderPreview ? (
+            resolvedIsPdf ? (
+              <iframe
+                src={resolvedFileUrl}
+                className="h-full min-h-72 w-full rounded-lg lg:min-h-80"
+                title="Hồ sơ gốc PDF"
+                sandbox="allow-scripts allow-same-origin allow-downloads"
+                referrerPolicy="no-referrer"
+                onError={() => setDocumentPreviewFailed(true)}
+              />
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={resolvedFileUrl}
+                alt="Hồ sơ gốc"
+                className={`${imageClassName} cursor-zoom-in`}
+                onClick={() => setShowFullDoc(true)}
+                onError={() => setDocumentPreviewFailed(true)}
+              />
+            )
+          ) : (
+            <div className="flex min-h-56 w-full flex-col items-center justify-center rounded-xl border border-dashed border-[#b7d8d1] bg-white px-6 py-10 text-center">
+              <FileText className="h-8 w-8 text-[#8aa09c]" />
+              <p className="mt-3 text-sm font-semibold text-[#274d48]">Không thể mở hồ sơ gốc</p>
+              <p className="mt-1 max-w-sm text-xs text-[#6d7a77]">
+                {options.unavailableReason ?? "Tệp gốc không còn khả dụng hoặc bạn chưa có quyền truy cập tệp này."}
+              </p>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2 border-t border-[#b7d8d1] bg-white px-4 py-3 text-xs text-[#4e6360]">
+          <AlertOctagon className="h-3 w-3" />
+          <span>
+            {canRenderPreview
+              ? "Dùng con lăn chuột để cuộn dọc xem hết hồ sơ"
+              : "Bạn vẫn có thể xem hoặc chỉnh sửa dữ liệu đã trích xuất nếu có quyền."}
+          </span>
+        </div>
+      </div>
+    );
+  };
+  const renderFullscreenDocumentModal = (fileUrlValue: string | null | undefined) => {
+    const resolvedFileUrl = fileUrlValue?.trim() ?? "";
+    if (!showFullDoc || !resolvedFileUrl || documentPreviewFailed) return null;
+    const resolvedIsPdf = isPdfFileUrl(resolvedFileUrl);
+
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-sm">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="source-document-dialog-title"
+          className="relative flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        >
+          <div className="flex items-center justify-between border-b border-[#d7e7e3] px-5 py-4">
+            <h3 id="source-document-dialog-title" className="text-base font-bold text-[#005049]">
+              Hồ sơ gốc
+            </h3>
+            <button
+              onClick={() => setShowFullDoc(false)}
+              className="rounded-full p-2 text-[#0f1f1c] transition hover:bg-[#eaf5f2]"
+              aria-label="Đóng hồ sơ gốc"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="flex min-h-[52vh] flex-1 items-center justify-center overflow-auto bg-[#eef1f3] p-4 sm:p-6">
+            {resolvedIsPdf ? (
+              <iframe
+                src={resolvedFileUrl}
+                className="h-[62vh] w-full rounded-lg bg-white shadow-sm"
+                title="Hồ sơ gốc PDF"
+                sandbox="allow-scripts allow-same-origin allow-downloads"
+                referrerPolicy="no-referrer"
+                onError={() => setDocumentPreviewFailed(true)}
+              />
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={resolvedFileUrl}
+                alt="Hồ sơ gốc chi tiết"
+                className="max-h-[62vh] max-w-full rounded-lg bg-white object-contain shadow-lg"
+                onError={() => setDocumentPreviewFailed(true)}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
   const recordShareModal = (
     <RecordShareModal
       open={showRecordShareModal}
@@ -867,16 +1022,29 @@ export default function ReviewRecordPage() {
         </nav>
       </div>
       <div className="mx-auto w-full max-w-[1360px] px-6 pb-10 pt-6">{content}</div>
+      {renderFullscreenDocumentModal(data?.fileUrl)}
     </main>
   );
 
   if (isLoading || data?.status === "processing") {
     return renderReviewStateShell(
       "Review kết quả khám",
-      <LoadingState
-        title="Hệ thống đang xử lý OCR"
-        description="Quá trình này có thể mất một chút thời gian, vui lòng không đóng trang."
-      />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {data ? (
+          <div className="order-2 lg:order-1 lg:col-span-5 xl:col-span-4">
+            {renderOriginalDocumentPreview(data.fileUrl, {
+              compact: true,
+              unavailableReason: "Tệp gốc chưa sẵn sàng hoặc quyền truy cập tệp chưa được cấp.",
+            })}
+          </div>
+        ) : null}
+        <div className={data ? "order-1 lg:order-2 lg:col-span-7 xl:col-span-8" : "lg:col-span-12"}>
+          <LoadingState
+            title="Hệ thống đang xử lý OCR"
+            description="Quá trình này có thể mất một chút thời gian, vui lòng không đóng trang."
+          />
+        </div>
+      </div>
     );
   }
 
@@ -910,6 +1078,10 @@ export default function ReviewRecordPage() {
           isKeepingPartial={isKeepingPartial}
           isRetryUploading={isRetryUploading}
           retryUploadError={retryUploadError}
+          originalDocumentPreview={renderOriginalDocumentPreview(data.fileUrl, {
+            compact: true,
+            unavailableReason: "Tệp gốc không còn khả dụng để đối chiếu sau lỗi OCR.",
+          })}
           onRetry={() => retryFileInputRef.current?.click()}
           onManualInput={() => router.push(`/health-records/review/${recordId}?mode=manual`)}
           onKeepPartial={handleKeepPartial}
@@ -934,13 +1106,12 @@ export default function ReviewRecordPage() {
   const canToggleEditResults = data?.status === "done" || (data?.status === "ocr_failed" && manualMode);
   const isOwner = data.isOwner ?? true;
   const canEdit = data.canEdit ?? isOwner;
-  const canShareRecord = isOwner;
+  const canShareRecord = isOwner && data.status === "done";
   const canDeleteRecord = isOwner;
   const showMetricCards = !editMode;
   const showEditableTable = editMode;
   const showConfidenceColumn = canConfirm;
-  const fileUrl = data.fileUrl ?? "";
-  const isPdf = fileUrl.toLowerCase().includes(".pdf");
+  const fileUrl = data.fileUrl?.trim() ?? "";
   const isDoneView = data.status === "done" && showMetricCards;
   const displayRecordType = recordType?.trim() || "Phiếu khám bệnh";
   const displayExamDate = examDate?.trim() || "Chưa có ngày khám";
@@ -999,6 +1170,22 @@ export default function ReviewRecordPage() {
                 </p>
               </div>
               <div className="flex items-center gap-1.5">
+                {fileUrl && !documentPreviewFailed ? (
+                  <button
+                    type="button"
+                    title="Mở hồ sơ gốc"
+                    aria-label="Mở hồ sơ gốc"
+                    onClick={() => setShowFullDoc(true)}
+                    className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-[#e9f6f3] px-3 text-sm font-bold text-[#00685f] transition hover:brightness-95"
+                  >
+                    <FileText className="h-4 w-4" />
+                    <span className="hidden sm:inline">Hồ sơ gốc</span>
+                  </button>
+                ) : (
+                  <span className="rounded-xl border border-[#d7e5e1] bg-[#f7fbfa] px-3 py-2 text-xs font-semibold text-[#6d7a77]">
+                    Không mở được hồ sơ gốc
+                  </span>
+                )}
                 {canEdit ? (
                   <button
                     type="button"
@@ -1124,194 +1311,25 @@ export default function ReviewRecordPage() {
                   Tổng {metrics.length}
                 </span>
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {metrics.map((metric, idx) => {
-                  const metricValue = metric.value?.trim() || "--";
-                  const metricUnit = metric.unit?.trim() || "";
-                  const metricRangeText = compactRangeText(metric);
-                  const metricPercent = compactMetricPercent(metric);
-                  const isNormal = (metric.status ?? "no_data") === "normal";
-                  return (
-                    <article
-                      key={`${metric.name}-${idx}`}
-                      role="button"
-                      tabIndex={0}
-                      className="group cursor-pointer rounded-3xl bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:ring-2 hover:ring-[#00685f]/15"
-                      onClick={() => setSelectedMetricIndex(idx)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setSelectedMetricIndex(idx);
-                        }
-                      }}
-                    >
-                      <div className="mb-5 flex items-start justify-between gap-2">
-                        <span className="line-clamp-2 text-xs font-extrabold tracking-wide text-[#3d4947] uppercase">
-                          {metric.displayNameVi || metric.name}
-                        </span>
-                        <CheckCircle className={`h-4 w-4 shrink-0 ${isNormal ? "text-[#00685f]" : "text-[#6d7a77]"}`} />
-                      </div>
-                      <div className="flex items-end gap-1.5">
-                        <span className="text-[44px] leading-none font-black tracking-tight text-[#121e1c]">{metricValue}</span>
-                        <span className="pb-1 text-2xs font-semibold text-[#3d4947]">{metricUnit}</span>
-                      </div>
-                      <div className="mt-4 h-2 w-full rounded-full bg-[#deebe8]">
-                        <div
-                          className="h-full rounded-full bg-[#008378] transition-all"
-                          style={{ width: `${metricPercent}%` }}
-                        />
-                      </div>
-                      <div className="mt-3 flex items-center justify-between text-xs font-extrabold uppercase tracking-wide">
-                        <span className="text-[#4e6360]">Ngưỡng: {metricRangeText}</span>
-                        <span className={isNormal ? "text-[#00685f]" : "text-[#773215]"}>{recordStatusLabel(metric.status)}</span>
-                      </div>
-                    </article>
-                  );
-                })}
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {metrics.map((metric, idx) => (
+                  <HealthMetricCard
+                    key={`${metric.name}-${idx}`}
+                    recordId={recordId}
+                    metricName={metric.name}
+                    displayNameVi={metric.displayNameVi}
+                    value={metric.value}
+                    unit={metric.unit}
+                    referenceRange={metric.referenceRange}
+                    rangeContext={metric.rangeContext}
+                    referenceRangeSource={metric.referenceRangeSource}
+                    status={metric.status ?? "no_data"}
+                    critical={metric.critical}
+                    explanation={metric.explanation}
+                  />
+                ))}
               </div>
             </section>
-
-            {/* Metric Detail Popup */}
-            {selectedMetricIndex !== null && metrics[selectedMetricIndex] && (() => {
-              const m = metrics[selectedMetricIndex];
-              const mValue = m.value?.trim() || "--";
-              const mUnit = m.unit?.trim() || "";
-              const mPercent = compactMetricPercent(m);
-              const mIsNormal = (m.status ?? "no_data") === "normal";
-              const mDisplayRef = m.referenceRange
-                ? `${m.referenceRange.min} - ${m.referenceRange.max} ${m.referenceRange.unit ?? m.unit}`
-                : "Không có dữ liệu tham chiếu";
-              const mRangeCtx = m.rangeContext;
-              const mCtxNote = mRangeCtx && (mRangeCtx.gender || mRangeCtx.ageRange)
-                ? `Ngưỡng áp dụng cho: ${[mRangeCtx.gender === "female" ? "Nữ" : mRangeCtx.gender === "male" ? "Nam" : null, mRangeCtx.ageRange ? `${mRangeCtx.ageRange} tuổi` : null].filter(Boolean).join(", ")}`
-                : null;
-              return (
-                <div
-                  className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-                  onClick={() => setSelectedMetricIndex(null)}
-                >
-                  <div
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="metric-detail-title"
-                    className="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {/* Header */}
-                    <div className="relative overflow-hidden bg-gradient-to-br from-[#00685f] to-[#008378] px-6 pt-6 pb-5 text-white">
-                      <div className="relative z-10">
-                        <div className="flex items-start justify-between gap-3">
-                          <h3 id="metric-detail-title" className="text-lg font-bold leading-snug">
-                            {m.displayNameVi || m.name}
-                          </h3>
-                          <button
-                            type="button"
-                            aria-label="Đóng chi tiết chỉ số"
-                            onClick={() => setSelectedMetricIndex(null)}
-                            className="-mr-1 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 transition hover:bg-white/30"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                        <div className="mt-4 flex items-end gap-2">
-                          <span className="text-4xl font-black tracking-tight">{mValue}</span>
-                          <span className="pb-0.5 text-sm font-semibold text-white/80">{mUnit}</span>
-                        </div>
-                        <div className="mt-3 h-1.5 w-full rounded-full bg-white/20">
-                          <div className="h-full rounded-full bg-white/80 transition-all" style={{ width: `${mPercent}%` }} />
-                        </div>
-                        <div className="mt-2 flex items-center justify-between text-xs font-bold">
-                          <span className="text-white/70">Ngưỡng: {compactRangeText(m)}</span>
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${mIsNormal ? "bg-white/20 text-white" : "bg-[#ffdad6] text-[#ba1a1a]"
-                            }`}>
-                            {recordStatusLabel(m.status)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="pointer-events-none absolute -right-8 -bottom-10 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
-                    </div>
-
-                    {/* Detail Body */}
-                    <div className="px-6 py-5 space-y-3">
-                      <div className="rounded-xl bg-[#f7fbfa] p-4 text-sm leading-relaxed text-[#35514c] space-y-2.5">
-                        <p>
-                          <span className="font-semibold">Ngưỡng tham chiếu: </span>
-                          {mDisplayRef}
-                        </p>
-                        {m.referenceRangeSource && m.referenceRangeSource !== "none" ? (
-                          <p>
-                            <span className="font-semibold">Nguồn ngưỡng: </span>
-                            {m.referenceRangeSource === "document" ? "Theo phiếu xét nghiệm" : "Theo hệ thống tham chiếu"}
-                          </p>
-                        ) : null}
-                        {m.referenceRangeSource === "system" ? (
-                          <p>
-                            <span className="font-semibold">Ngữ cảnh ngưỡng: </span>
-                            {mCtxNote ?? "Ngưỡng tham chiếu chung"}
-                          </p>
-                        ) : null}
-                        {m.critical ? (
-                          <p className="rounded-lg bg-[#fff2f2] px-3 py-2 text-[#ba1a1a]">
-                            Chỉ số có dấu hiệu vượt ngưỡng nguy cấp, nên liên hệ bác sĩ để được tư vấn sớm.
-                          </p>
-                        ) : null}
-                        {(() => {
-                          const staticExp = m.explanation?.trim() || "";
-                          const explanationText = staticExp
-                            ? toThreeLineExplanation(staticExp)
-                            : !isExplanationLoading
-                              ? toThreeLineExplanation(popupExplanationData?.explanation)
-                              : "";
-                          const showSkeleton = !staticExp && isExplanationLoading;
-                          return (
-                            <>
-                              {showSkeleton ? (
-                                <div className="space-y-2 pt-1">
-                                  <div className="h-3 w-full animate-pulse rounded bg-[#d4e7e3]" />
-                                  <div className="h-3 w-4/5 animate-pulse rounded bg-[#d4e7e3]" />
-                                  <div className="h-3 w-3/5 animate-pulse rounded bg-[#d4e7e3]" />
-                                </div>
-                              ) : null}
-                              {explanationText ? (
-                                <p className="whitespace-pre-line">
-                                  <span className="font-semibold">Giải thích: </span>
-                                  {explanationText}
-                                </p>
-                              ) : null}
-                            </>
-                          );
-                        })()}
-                      </div>
-
-                      {/* Navigation arrows */}
-                      <div className="flex items-center justify-between pt-1">
-                        <button
-                          type="button"
-                          disabled={selectedMetricIndex <= 0}
-                          onClick={() => setSelectedMetricIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev))}
-                          className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold text-[#00685f] transition hover:bg-[#e9f6f3] disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          <ChevronUp className="h-3.5 w-3.5 -rotate-90" />
-                          Trước
-                        </button>
-                        <span className="text-xs text-[#6d7a77]">
-                          {selectedMetricIndex + 1} / {metrics.length}
-                        </span>
-                        <button
-                          type="button"
-                          disabled={selectedMetricIndex >= metrics.length - 1}
-                          onClick={() => setSelectedMetricIndex((prev) => (prev !== null && prev < metrics.length - 1 ? prev + 1 : prev))}
-                          className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold text-[#00685f] transition hover:bg-[#e9f6f3] disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          Sau
-                          <ChevronDown className="h-3.5 w-3.5 -rotate-90" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
 
             {!canEdit ? (
               <p className="rounded-xl border border-[#d7e5e1] bg-white px-4 py-3 text-sm text-[#4e6360]">
@@ -1322,6 +1340,7 @@ export default function ReviewRecordPage() {
         </div>
         {deleteRecordModal}
         {recordShareModal}
+        {renderFullscreenDocumentModal(fileUrl)}
       </main>
     );
   }
@@ -1343,42 +1362,7 @@ export default function ReviewRecordPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Column: Original Document */}
         <div className="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-10">
-          <div className="rounded-2xl border border-[#b7d8d1] bg-white overflow-hidden shadow-md flex flex-col h-[calc(100vh-180px)]">
-            <div className="bg-[#effcf9] px-4 py-3 border-b border-[#b7d8d1] flex justify-between items-center">
-              <div className="flex items-center gap-2 font-semibold text-[#005049]">
-                <FileText className="h-4 w-4" />
-                Hồ sơ gốc
-              </div>
-              <button
-                onClick={() => setShowFullDoc(true)}
-                className="p-1.5 hover:bg-[#c5dfd9] rounded-lg transition"
-                title="Xem toàn màn hình"
-              >
-                <Maximize2 className="h-4 w-4 text-[#00685f]" />
-              </button>
-            </div>
-            <div className="flex-1 bg-gray-100 overflow-auto p-4 flex items-start justify-center">
-              {isPdf ? (
-                <iframe
-                  src={fileUrl}
-                  className="w-full h-full rounded-lg"
-                  title="PDF Viewer"
-                />
-              ) : (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={fileUrl}
-                  alt="Original Document"
-                  className="max-w-none w-full h-auto shadow-sm rounded-lg cursor-zoom-in"
-                  onClick={() => setShowFullDoc(true)}
-                />
-              )}
-            </div>
-            <div className="px-4 py-3 text-xs text-[#4e6360] bg-white border-t border-[#b7d8d1] flex items-center gap-2">
-              <AlertOctagon className="h-3 w-3" />
-              <span>Dùng con lăn chuột để cuộn dọc xem hết hồ sơ</span>
-            </div>
-          </div>
+          {renderOriginalDocumentPreview(fileUrl)}
         </div>
 
         {/* Right Column: Verification Form */}
@@ -1845,30 +1829,7 @@ export default function ReviewRecordPage() {
         </div>
       )}
 
-      {/* Fullscreen Document Modal */}
-      {showFullDoc && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
-          <div className="relative w-full max-w-[95vw] h-[95vh] bg-white rounded-2xl overflow-hidden flex flex-col">
-            <div className="flex justify-between items-center px-6 py-4 border-b">
-              <h3 className="font-bold text-lg text-[#005049]">Hồ sơ gốc (Chi tiết)</h3>
-              <button
-                onClick={() => setShowFullDoc(false)}
-                className="p-2 hover:bg-gray-100 rounded-full transition"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-auto bg-gray-200 p-8 flex justify-center items-start">
-              {isPdf ? (
-                <iframe src={fileUrl} className="w-full h-full" title="Full PDF" />
-              ) : (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={fileUrl} alt="Full Document" className="max-w-none w-auto shadow-2xl rounded-lg" />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {renderFullscreenDocumentModal(fileUrl)}
     </div>
   );
 }
@@ -2111,39 +2072,6 @@ function SourceBadge({ source }: { source: string }) {
     </span>
   );
 }
-
-function compactRangeText(metric: MetricDto): string {
-  const min = metric.referenceRange?.min;
-  const max = metric.referenceRange?.max;
-  if (typeof min === "number" && typeof max === "number") {
-    return `${min}-${max}`;
-  }
-  if (typeof max === "number") {
-    return `<${max}`;
-  }
-  return "N/A";
-}
-
-function compactMetricPercent(metric: MetricDto): number {
-  const raw = metric.value?.replace(",", ".").trim() ?? "";
-  const numericValue = Number(raw);
-  const min = metric.referenceRange?.min;
-  const max = metric.referenceRange?.max;
-  if (!Number.isFinite(numericValue) || typeof min !== "number" || typeof max !== "number" || max <= min) {
-    return 60;
-  }
-  const ratio = ((numericValue - min) / (max - min)) * 100;
-  return Math.max(8, Math.min(100, Math.round(ratio)));
-}
-
-function recordStatusLabel(status?: MetricDto["status"]): string {
-  if (status === "abnormal") return "Bất thường";
-  if (status === "attention") return "Cần chú ý";
-  if (status === "normal") return "Bình thường";
-  return "Không rõ";
-}
-
-
 
 function recommendationCategory(item: string): RecommendationCategory {
   const content = item.toLowerCase();

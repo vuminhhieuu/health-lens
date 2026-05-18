@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Camera, CheckCircle2, PencilLine, ShieldCheck } from "lucide-react";
 
 type OcrFailureScreenProps = {
@@ -12,6 +13,7 @@ type OcrFailureScreenProps = {
   onManualInput: () => void;
   onKeepPartial: () => void;
   isKeepingPartial?: boolean;
+  originalDocumentPreview?: ReactNode;
 };
 
 const CAMERA_TIPS = [
@@ -30,50 +32,44 @@ export function OcrFailureScreen({
   onManualInput,
   onKeepPartial,
   isKeepingPartial = false,
+  originalDocumentPreview,
 }: OcrFailureScreenProps) {
   const failureReason = ocrFailureReason?.trim() || "Không thể nhận diện dữ liệu từ tệp đã tải lên.";
 
   return (
-    <div className="flex w-full flex-col gap-8">
-      <header className="space-y-3">
-        <h1 className="text-3xl font-extrabold tracking-tight text-[#11322e] sm:text-4xl">Không thể nhận diện dữ liệu</h1>
-        <p className="max-w-3xl text-sm text-[#48635f] sm:text-base">
-          Hệ thống gặp khó khăn khi đọc tệp của bạn. Hãy chọn cách xử lý phù hợp để tiếp tục xác nhận kết quả xét
-          nghiệm.
-        </p>
-      </header>
+    <div className="w-full">
+      <section className="grid gap-6 lg:grid-cols-12 lg:items-start">
+        <div className="order-2 space-y-6 lg:order-1 lg:sticky lg:top-28 lg:col-span-5 xl:col-span-4">
+          {originalDocumentPreview ?? (
+            <div className="flex aspect-square items-center justify-center rounded-3xl border border-[#c8ddd8] bg-gradient-to-b from-[#e4f1ee] to-[#dbe8e5] p-6">
+              <div className="rounded-full border border-[#bfd4cf] bg-white/70 px-3 py-1 text-xs font-medium text-[#45615c]">
+                Ảnh tải lên gốc
+              </div>
+            </div>
+          )}
 
-      <section className="grid gap-6 lg:grid-cols-12">
-        <div className="space-y-6 lg:col-span-4">
           <div className="overflow-hidden rounded-3xl border border-[#f2d4d2] bg-white shadow-sm">
             <div className="border-b border-[#f0e3e2] px-5 py-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-[#8c4b45]">Cảnh báo OCR</p>
               <p className="mt-1 text-sm font-semibold text-[#2d3f3c]">{failureReason}</p>
             </div>
-            <div className="flex aspect-square items-center justify-center bg-gradient-to-b from-[#e4f1ee] to-[#dbe8e5] p-6">
-              <div className="rounded-full border border-[#bfd4cf] bg-white/70 px-3 py-1 text-xs font-medium text-[#45615c]">
-                Ảnh tải lên gốc
-              </div>
-            </div>
             <div className="bg-[#f6f9f8] px-5 py-3 text-xs italic text-[#5d7470]">
               Vui lòng thử tải tệp rõ nét hơn hoặc chuyển sang nhập thủ công.
             </div>
           </div>
-
-          <div className="rounded-3xl border border-[#c8ddd8] bg-white p-5">
-            <p className="mb-4 text-sm font-semibold text-[#0e4f48]">Mẹo để OCR hoạt động tốt hơn</p>
-            <ul className="space-y-2">
-              {CAMERA_TIPS.map((tip) => (
-                <li key={tip} className="flex items-start gap-2 text-sm text-[#48635f]">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#0d8a7a]" />
-                  <span>{tip}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
         </div>
 
-        <div className="space-y-6 lg:col-span-8">
+        <div className="order-1 space-y-6 lg:order-2 lg:col-span-7 xl:col-span-8">
+          <header className="space-y-3">
+            <h1 className="text-3xl font-extrabold tracking-tight text-[#11322e] sm:text-4xl">
+              Không thể nhận diện dữ liệu
+            </h1>
+            <p className="max-w-3xl text-sm text-[#48635f] sm:text-base">
+              Hệ thống gặp khó khăn khi đọc tệp của bạn. Hãy chọn cách xử lý phù hợp để tiếp tục xác nhận kết quả xét
+              nghiệm.
+            </p>
+          </header>
+
           <div className="grid gap-4 md:grid-cols-2">
             <button
               type="button"
@@ -133,6 +129,18 @@ export function OcrFailureScreen({
               </div>
             </button>
           ) : null}
+
+          <div className="rounded-3xl border border-[#c8ddd8] bg-white p-5">
+            <p className="mb-4 text-sm font-semibold text-[#0e4f48]">Mẹo để OCR hoạt động tốt hơn</p>
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {CAMERA_TIPS.map((tip) => (
+                <li key={tip} className="flex items-start gap-2 text-sm text-[#48635f]">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#0d8a7a]" />
+                  <span>{tip}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
 
           <div className="rounded-3xl bg-[#007267] px-6 py-7 text-white">
             <p className="text-xl font-bold">Cần hỗ trợ trực tiếp?</p>
