@@ -36,7 +36,7 @@ type Profile = {
   createdAt: string;
   updatedAt: string;
   lastRecordAt?: string;
-  latestStatus?: HealthStatus;
+  latestStatus?: string;
 };
 
 type IncomingInvitation = {
@@ -265,7 +265,7 @@ export default function ProfilesPage() {
         displayName: profile.displayName,
         relationship: "Người thân",
         notes: profile.notes,
-        latestStatus: profile.latestStatus,
+        latestStatus: mapSharedStatusToCardStatus(profile.latestStatus),
         lastUpdated: profile.updatedAt,
         lastRecordAt: profile.lastRecordAt,
         isSharedProfile: false,

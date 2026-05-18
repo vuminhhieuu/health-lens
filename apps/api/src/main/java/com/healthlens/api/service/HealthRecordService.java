@@ -418,6 +418,7 @@ public class HealthRecordService {
                     record.getRecordType(),
                     record.getExamDate(),
                     record.getHospitalName(),
+                    record.getStatus(),
                     overallStatus,
                     record.getUpdatedAt(),
                     share.getGrantedAt()
