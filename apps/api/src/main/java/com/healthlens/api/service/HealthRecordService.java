@@ -74,8 +74,7 @@ public class HealthRecordService {
     private static final Duration UPLOAD_RESERVATION_TTL = Duration.ofMinutes(20);
     private static final String STATUS_PROCESSING = "processing";
     private static final int HISTORY_PAGE_SIZE = 20;
-    private static final String RECOMMENDATIONS_DISCLAIMER =
-            "Thông tin này chỉ mang tính tham khảo và không thay thế tư vấn của bác sĩ chuyên khoa.";
+    private static final String RECOMMENDATIONS_DISCLAIMER = LlmService.MEDICAL_RECOMMENDATIONS_DISCLAIMER;
 
     private final StorageService storageService;
     private final ProfileRepository profileRepository;

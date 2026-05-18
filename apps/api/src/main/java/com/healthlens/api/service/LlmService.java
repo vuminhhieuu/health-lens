@@ -38,7 +38,9 @@ public class LlmService {
     private static final String EXPLANATION_CACHE_PREFIX = "llm:explanation:";
     private static final Duration RECOMMENDATIONS_CACHE_TTL = Duration.ofDays(7);
     private static final String RECOMMENDATIONS_CACHE_PREFIX = "llm:recommendations:";
-    private static final String RECOMMENDATIONS_PROMPT_VERSION = "v7-required-modes-vi";
+    public static final String MEDICAL_RECOMMENDATIONS_DISCLAIMER =
+            "Thông tin do HealthLens cung cấp chỉ mang tính tham khảo, không thay thế tư vấn, chẩn đoán hoặc điều trị từ bác sĩ.";
+    private static final String RECOMMENDATIONS_PROMPT_VERSION = "v8-medical-disclaimer-vi";
     private static final String CACHE_VALUE_SEPARATOR = "||";
 
     private final ChatClient aiChatClient;
@@ -60,7 +62,7 @@ public class LlmService {
     @Value("${app.ai.retry.max-total-delay-ms:4500}")
     private long maxTotalDelayMs;
 
-    @Value("${app.ai.explanation.prompt-version:v2}")
+    @Value("${app.ai.explanation.prompt-version:v3}")
     private String promptVersion;
 
     @Value("${app.ai.explanation.retrieval-version:v1}")
@@ -174,7 +176,7 @@ public class LlmService {
 
         String prompt = buildMedicalPrompt(metricName, value, normalizedStatus, referenceRange, normalizedLang, knowledgeSnippet);
 
-        ExplanationResult result = callWithRetry(prompt, metricName);
+        ExplanationResult result = callWithRetry(prompt, metricName, normalizedStatus);
         safeCacheExplanation(cacheKey, result);
         return result;
     }
@@ -244,7 +246,7 @@ public class LlmService {
         return recommendations;
     }
 
-    private ExplanationResult callWithRetry(String prompt, String metricName) {
+    private ExplanationResult callWithRetry(String prompt, String metricName, String status) {
         long startTime = System.currentTimeMillis();
         long currentDelayMs = initialDelayMs;
 
@@ -286,7 +288,7 @@ public class LlmService {
 
         log.warn("All {} attempts failed for metric '{}'. Using fallback.",
                 maxRetryAttempts, metricName);
-        return new ExplanationResult(getFallbackExplanation(metricName), "fallback");
+        return new ExplanationResult(getFallbackExplanation(metricName, status), "fallback");
     }
 
     String buildMedicalPrompt(
@@ -318,6 +320,7 @@ public class LlmService {
                 Do not use complex medical terms without explanation.
                 Focus on helping non-medical users understand what this metric is and how it may affect health.
                 Do not provide treatment plan or disease diagnosis.
+                If Status is abnormal, line 3 must clearly say this is not a diagnosis and recommend appropriate follow-up with a doctor or re-check visit.
 
                 Required output format (exactly 3 short lines in Vietnamese):
                 1) Chỉ số này là gì: ...
@@ -337,16 +340,28 @@ public class LlmService {
     }
 
     String getFallbackExplanation(String metricName) {
+        return getFallbackExplanation(metricName, "unknown");
+    }
+
+    String getFallbackExplanation(String metricName, String status) {
         String metricContext = resolveMetricContext(metricName);
         String metricFallback = resolveFallbackByMetric(metricName);
+        String followUp = abnormalFollowUpSuffix(status);
         if (metricFallback != null) {
             return "Chỉ số này là gì: " + metricContext + "\n"
                     + "Chỉ số này liên quan đến: " + resolveMetricRelation(metricName) + ".\n"
-                    + "Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng: " + metricFallback;
+                    + "Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng: " + metricFallback + followUp;
         }
         return "Chỉ số này là gì: " + metricContext + "\n"
                 + "Chỉ số này liên quan đến: cân bằng miễn dịch, chuyển hóa và chức năng cơ quan tùy từng xét nghiệm.\n"
-                + "Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng: " + defaultFallbackExplanation;
+                + "Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng: " + defaultFallbackExplanation + followUp;
+    }
+
+    private String abnormalFollowUpSuffix(String status) {
+        if (!"abnormal".equals(normalizeStatus(status))) {
+            return "";
+        }
+        return " Đây không phải chẩn đoán; bạn nên trao đổi với bác sĩ hoặc tái khám để được đánh giá phù hợp.";
     }
 
     private String toCachedValue(ExplanationResult result) {
@@ -377,7 +392,7 @@ public class LlmService {
                 normalizeValue(value),
                 normalizeStatus(status),
                 normalizeLang(lang),
-                promptVersion == null ? "v2" : promptVersion.trim(),
+                promptVersion == null ? "v3" : promptVersion.trim(),
                 retrievalVersion == null ? "v1" : retrievalVersion.trim(),
                 referenceRange == null || referenceRange.min() == null ? "" : referenceRange.min().toPlainString(),
                 referenceRange == null || referenceRange.max() == null ? "" : referenceRange.max().toPlainString(),
@@ -555,14 +570,17 @@ public class LlmService {
                 - Nếu có từ hai chỉ số trở lên nằm ở nhóm sinh học khác nhau (ví dụ đường huyết và lipid), phải có gợi ý khác nhau về hành vi (không trùng một lời khuyên như nhau cho cả hai).
                 - Phân biệt nhóm chỉ số qua phần 'Gợi ý phạm vi sinh học': không lặp một khẩu phần kiểu "ăn ít ngọt/giảm đường" cho mọi loại chỉ số; ví dụ lipid máu khác đường huyết, huyết học khác men gan.
                 - Nếu khối NGỮ CẢNH PHIẾU không phải "(Không có thêm ngữ cảnh phiếu.)", **bắt buộc** có ít nhất một gợi ý phản ánh loại phiếu hoặc nội dung kết luận/ngữ cảnh đó (vd. tổng quan lipid, sàng lọc gan, đếm máu…), không được bỏ qua hoàn toàn.
-                - Không kê đơn thuốc, không đề xuất thủ thuật y kế; không chẩn đoán bệnh cụ thể; có thể nhắc trao đổi với bác sĩ hoặc tái khám.
+                - Không kê đơn thuốc, không đề xuất thủ thuật y tế; không được viết như kết luận chẩn đoán, không khẳng định người dùng mắc bệnh cụ thể.
+                - Với chỉ số bất thường, khuyến nghị người dùng trao đổi với bác sĩ hoặc tái khám phù hợp; không hướng dẫn tự điều trị hoặc tự chẩn đoán.
                 - Gợi ý lối sống phải gắn với chỉ số hoặc ngữ cảnh trên (ăn uống, vận động, giấc ngủ, căng thẳng), tránh một câu chung chung "sống lành mạnh" mà không nói rõ vì chỉ số/chủ đề nào.
                 - Bắt buộc có đủ 2 chế độ: (1) "Chế độ dinh dưỡng:" và (2) "Chế độ sinh hoạt:".
                 - Mỗi chuỗi phải bắt đầu bằng đúng tiền tố "Chế độ dinh dưỡng:" hoặc "Chế độ sinh hoạt:".
                 - Nội dung phải cá thể hóa theo chỉ số rủi ro đang có và phù hợp nhóm tuổi/giới ở trên, không viết khuyến nghị chung chung.
+                - Disclaimer chuẩn đi kèm phần khuyến nghị của HealthLens: "%s"
+                - Không lặp lại nguyên văn disclaimer trong từng chuỗi JSON; phải viết nội dung nhất quán với disclaimer này.
 
                 Định dạng đầu ra duy nhất (JSON array): ["...", "..."]
-                """.formatted(contextBlock, metricsText, ageGroupVi, genderVi);
+                """.formatted(contextBlock, metricsText, ageGroupVi, genderVi, MEDICAL_RECOMMENDATIONS_DISCLAIMER);
     }
 
     private String recommendationDisplayLabel(RecommendationMetricInput m) {
@@ -627,7 +645,7 @@ public class LlmService {
         List<String> fallback = new ArrayList<>();
         if ("abnormal".equals(normalizedStatus)) {
             fallback.add(
-                    "Với \"%s\" (%s), kết quả đang bất thường so với ngưỡng tham chiếu. Ưu tiên thói quen phù hợp với %s và trao đổi với bác sĩ để được hướng dẫn cụ thể."
+                    "Với \"%s\" (%s), kết quả đang bất thường so với ngưỡng tham chiếu nhưng đây không phải chẩn đoán. Ưu tiên thói quen phù hợp với %s, không tự chẩn đoán và trao đổi với bác sĩ để được hướng dẫn cụ thể."
                             .formatted(labelVi, valuePart, relation));
         } else {
             fallback.add(

@@ -64,7 +64,7 @@ app:
       multiplier: 2.0
       max-total-delay-ms: 4500
     explanation:
-      prompt-version: v2
+      prompt-version: v3
       retrieval-version: v1
       retrieval:
         top-k: ${APP_AI_EXPLANATION_RETRIEVAL_TOP_K:3}
