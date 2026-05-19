@@ -1,6 +1,8 @@
 package com.healthlens.api.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Metrics;
@@ -22,6 +24,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * LLM Service — Tích hợp AI chat provider để generate giải thích kết quả xét nghiệm
@@ -43,8 +47,40 @@ public class LlmService {
     private static final String RECOMMENDATIONS_CACHE_PREFIX = "llm:recommendations:";
     public static final String MEDICAL_RECOMMENDATIONS_DISCLAIMER =
             "Thông tin do HealthLens cung cấp chỉ mang tính tham khảo, không thay thế tư vấn, chẩn đoán hoặc điều trị từ bác sĩ.";
+    static final String EXPLANATION_OUTPUT_SCHEMA_JSON = """
+            {
+              "type": "object",
+              "required": ["explanation", "referenceRange", "disclaimer"],
+              "properties": {
+                "explanation": {"type": "string", "minLength": 20},
+                "referenceRange": {
+                  "type": "object",
+                  "required": ["min", "max", "unit"],
+                  "properties": {
+                    "min": {"type": ["string", "null"]},
+                    "max": {"type": ["string", "null"]},
+                    "unit": {"type": ["string", "null"]}
+                  },
+                  "additionalProperties": false
+                },
+                "disclaimer": {"type": "string", "minLength": 20}
+              },
+              "additionalProperties": false
+            }
+            """;
+    static final String RECOMMENDATIONS_OUTPUT_SCHEMA_JSON = """
+            {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 3,
+              "items": {"type": "string", "minLength": 20}
+            }
+            """;
+    private static final String EXPLANATION_OUTPUT_CONTRACT_VERSION = "schema-v1";
     private static final String RECOMMENDATIONS_PROMPT_VERSION = "v8-medical-disclaimer-vi";
     private static final String CACHE_VALUE_SEPARATOR = "||";
+    private static final Pattern REFERENCE_RANGE_IN_TEXT_PATTERN =
+            Pattern.compile("(\\d+(?:[.,]\\d+)?)\\s*(?:-|–|đến|to)\\s*(\\d+(?:[.,]\\d+)?)");
 
     private final ChatClient aiChatClient;
     private final StringRedisTemplate redisTemplate;
@@ -217,7 +253,7 @@ public class LlmService {
             );
         }
 
-        ExplanationResult result = callWithRetry(prompt, metricName, normalizedStatus);
+        ExplanationResult result = callWithRetry(prompt, metricName, normalizedStatus, referenceRange);
         safeCacheExplanation(cacheKey, result);
         return result;
     }
@@ -300,6 +336,7 @@ public class LlmService {
                     effectiveModelVersion()
             );
         }
+        long startedNanos = System.nanoTime();
         String llmOutput;
         try {
             llmOutput = aiChatClient.prompt()
@@ -311,6 +348,14 @@ public class LlmService {
             List<String> fallbackRecommendations = buildFallbackRecommendations(riskyMetrics);
             fallbackRecommendations = ensureRequiredRecommendationModes(fallbackRecommendations, riskyMetrics);
             safeCacheRecommendations(cacheKey, fallbackRecommendations);
+            recordAiGenerationMetrics(
+                    "recommendations",
+                    "fallback",
+                    "error",
+                    0,
+                    estimateTokenUsage(prompt, ""),
+                    startedNanos
+            );
             return new RecommendationResult(
                     fallbackRecommendations,
                     "fallback",
@@ -322,11 +367,20 @@ public class LlmService {
         List<String> recommendations = parseRecommendations(llmOutput);
         boolean usedFallback = false;
         if (recommendations.isEmpty() || isLowQualityRecommendations(recommendations, riskyMetrics)) {
+            recordSchemaValidationFailure("recommendations");
             recommendations = buildFallbackRecommendations(riskyMetrics);
             usedFallback = true;
         }
         recommendations = ensureRequiredRecommendationModes(recommendations, riskyMetrics);
         safeCacheRecommendations(cacheKey, recommendations);
+        recordAiGenerationMetrics(
+                "recommendations",
+                usedFallback ? "fallback" : "llm",
+                usedFallback ? "invalid" : "valid",
+                0,
+                estimateTokenUsage(prompt, llmOutput),
+                startedNanos
+        );
         return new RecommendationResult(
                 recommendations,
                 usedFallback ? "fallback" : "llm",
@@ -335,39 +389,52 @@ public class LlmService {
         );
     }
 
-    private ExplanationResult callWithRetry(String prompt, String metricName, String status) {
+    private ExplanationResult callWithRetry(
+            String prompt,
+            String metricName,
+            String status,
+            ReferenceRangeDto referenceRange
+    ) {
         long startTime = System.currentTimeMillis();
+        long startedNanos = System.nanoTime();
         long currentDelayMs = initialDelayMs;
+        int retryCount = 0;
+        int lastTokenEstimate = estimateTokenUsage(prompt, "");
 
         for (int attempt = 1; attempt <= maxRetryAttempts; attempt++) {
             try {
-                String result = aiChatClient.prompt()
+                String rawResult = aiChatClient.prompt()
                         .user(prompt)
                         .call()
                         .content();
+                lastTokenEstimate = estimateTokenUsage(prompt, rawResult);
+                String result = parseValidatedExplanation(rawResult, referenceRange, status);
 
                 if (attempt > 1) {
                     log.info("AI chat provider succeeded on attempt {}/{} for metric '{}'",
                             attempt, maxRetryAttempts, metricName);
                 }
+                recordAiGenerationMetrics("metric_explanation", "llm", "valid", retryCount, lastTokenEstimate, startedNanos);
                 return new ExplanationResult(result, "llm", effectivePromptVersion(), effectiveModelVersion());
 
+            } catch (SchemaValidationException e) {
+                recordSchemaValidationFailure("metric_explanation");
+                log.warn("AI chat provider returned invalid schema on attempt {}/{} for metric '{}': {}",
+                        attempt, maxRetryAttempts, metricName, e.getMessage());
+                if (attempt < maxRetryAttempts) {
+                    retryCount++;
+                    if (!sleepBeforeRetry(startTime, currentDelayMs, metricName)) {
+                        break;
+                    }
+                    currentDelayMs = (long) (currentDelayMs * retryMultiplier);
+                }
             } catch (Exception e) {
                 log.warn("AI chat provider attempt {}/{} failed for metric '{}': {}",
                         attempt, maxRetryAttempts, metricName, e.getMessage());
 
                 if (attempt < maxRetryAttempts) {
-                    long elapsedMs = System.currentTimeMillis() - startTime;
-                    if (elapsedMs + currentDelayMs > maxTotalDelayMs) {
-                        log.warn("Stop retry for metric '{}' due to delay budget exceeded (elapsed={}ms, nextDelay={}ms, budget={}ms)",
-                                metricName, elapsedMs, currentDelayMs, maxTotalDelayMs);
-                        break;
-                    }
-                    try {
-                        Thread.sleep(currentDelayMs);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        log.warn("Retry interrupted for metric '{}'", metricName);
+                    retryCount++;
+                    if (!sleepBeforeRetry(startTime, currentDelayMs, metricName)) {
                         break;
                     }
                     currentDelayMs = (long) (currentDelayMs * retryMultiplier);
@@ -377,6 +444,7 @@ public class LlmService {
 
         log.warn("All {} attempts failed for metric '{}'. Using fallback.",
                 maxRetryAttempts, metricName);
+        recordAiGenerationMetrics("metric_explanation", "fallback", "invalid", retryCount, lastTokenEstimate, startedNanos);
         return new ExplanationResult(
                 getFallbackExplanation(metricName, status),
                 "fallback",
@@ -408,7 +476,7 @@ public class LlmService {
             default -> "cần được đối chiếu thêm với ngưỡng tham chiếu";
         };
 
-        return promptTemplateRenderer.render(metricExplanationPromptTemplate, Map.of(
+        String basePrompt = promptTemplateRenderer.render(metricExplanationPromptTemplate, Map.of(
                 "promptLanguage", promptLanguage,
                 "metricName", safeMetric(metricName),
                 "value", safeValue(value),
@@ -419,6 +487,13 @@ public class LlmService {
                 "knowledgeSnippet", effectiveKnowledgeSnippet,
                 "statusExplanation", statusExplanation
         ));
+        return basePrompt + "\n\n"
+                + "Output contract: return only a JSON object matching this schema, no markdown:\n"
+                + EXPLANATION_OUTPUT_SCHEMA_JSON
+                + "\nUse exactly this referenceRange object: "
+                + expectedReferenceRangeJson(referenceRange)
+                + "\nThe explanation field must contain the 3 required Vietnamese lines. "
+                + "The disclaimer field must include: \"" + MEDICAL_RECOMMENDATIONS_DISCLAIMER + "\"";
     }
 
     String getFallbackExplanation(String metricName) {
@@ -432,11 +507,158 @@ public class LlmService {
         if (metricFallback != null) {
             return "Chỉ số này là gì: " + metricContext + "\n"
                     + "Chỉ số này liên quan đến: " + resolveMetricRelation(metricName) + ".\n"
-                    + "Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng: " + metricFallback + followUp;
+                    + "Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng: " + metricFallback + followUp + " " + MEDICAL_RECOMMENDATIONS_DISCLAIMER;
         }
         return "Chỉ số này là gì: " + metricContext + "\n"
                 + "Chỉ số này liên quan đến: cân bằng miễn dịch, chuyển hóa và chức năng cơ quan tùy từng xét nghiệm.\n"
-                + "Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng: " + defaultFallbackExplanation + followUp;
+                + "Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng: " + defaultFallbackExplanation + followUp + " " + MEDICAL_RECOMMENDATIONS_DISCLAIMER;
+    }
+
+    private boolean sleepBeforeRetry(long startTime, long currentDelayMs, String metricName) {
+        long elapsedMs = System.currentTimeMillis() - startTime;
+        if (elapsedMs + currentDelayMs > maxTotalDelayMs) {
+            log.warn("Stop retry for metric '{}' due to delay budget exceeded (elapsed={}ms, nextDelay={}ms, budget={}ms)",
+                    metricName, elapsedMs, currentDelayMs, maxTotalDelayMs);
+            return false;
+        }
+        try {
+            Thread.sleep(currentDelayMs);
+            return true;
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            log.warn("Retry interrupted for metric '{}'", metricName);
+            return false;
+        }
+    }
+
+    private String parseValidatedExplanation(String rawOutput, ReferenceRangeDto referenceRange, String status) {
+        if (rawOutput == null || rawOutput.isBlank()) {
+            throw new SchemaValidationException("empty output");
+        }
+        String cleaned = stripJsonFence(rawOutput);
+        JsonNode root;
+        try {
+            root = objectMapper.readTree(cleaned);
+        } catch (Exception ex) {
+            throw new SchemaValidationException("invalid json");
+        }
+        if (!root.isObject()) {
+            throw new SchemaValidationException("root must be object");
+        }
+        if (root.size() != 3 || !root.has("explanation") || !root.has("referenceRange") || !root.has("disclaimer")) {
+            throw new SchemaValidationException("unexpected explanation schema");
+        }
+        String explanation = requiredText(root.get("explanation"), "explanation");
+        String disclaimer = requiredText(root.get("disclaimer"), "disclaimer");
+        if (explanation.length() < 20) {
+            throw new SchemaValidationException("explanation too short");
+        }
+        if (!MEDICAL_RECOMMENDATIONS_DISCLAIMER.equals(disclaimer)) {
+            throw new SchemaValidationException("missing medical disclaimer");
+        }
+        validateReferenceRangeNode(root.get("referenceRange"), referenceRange);
+        validateExplanationFormat(explanation, status);
+        validateExplanationDoesNotInventReferenceRange(explanation, referenceRange);
+        return appendDisclaimer(explanation);
+    }
+
+    private String requiredText(JsonNode node, String field) {
+        if (node == null || !node.isTextual() || node.asText().isBlank()) {
+            throw new SchemaValidationException(field + " must be a non-empty string");
+        }
+        return node.asText().trim();
+    }
+
+    private void validateReferenceRangeNode(JsonNode node, ReferenceRangeDto referenceRange) {
+        if (node == null || !node.isObject()) {
+            throw new SchemaValidationException("referenceRange must be object");
+        }
+        if (node.size() != 3 || !node.has("min") || !node.has("max") || !node.has("unit")) {
+            throw new SchemaValidationException("referenceRange schema mismatch");
+        }
+        assertRangeField(node.get("min"), referenceRange == null || referenceRange.min() == null
+                ? null
+                : referenceRange.min().toPlainString(), "referenceRange.min");
+        assertRangeField(node.get("max"), referenceRange == null || referenceRange.max() == null
+                ? null
+                : referenceRange.max().toPlainString(), "referenceRange.max");
+        assertRangeField(node.get("unit"), referenceRange == null ? null : referenceRange.unit(), "referenceRange.unit");
+    }
+
+    private void validateExplanationFormat(String explanation, String status) {
+        String[] lines = explanation.lines()
+                .map(String::trim)
+                .filter(line -> !line.isBlank())
+                .toArray(String[]::new);
+        if (lines.length != 3
+                || !lines[0].startsWith("Chỉ số này là gì:")
+                || !lines[1].startsWith("Chỉ số này liên quan đến:")
+                || !lines[2].startsWith("Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng:")) {
+            throw new SchemaValidationException("explanation must follow required 3-line format");
+        }
+        if ("abnormal".equals(normalizeStatus(status))) {
+            String lower = lines[2].toLowerCase(Locale.ROOT);
+            if (!lower.contains("không phải chẩn đoán")
+                    || (!lower.contains("bác sĩ") && !lower.contains("tái khám"))) {
+                throw new SchemaValidationException("abnormal explanation missing safety follow-up language");
+            }
+        }
+    }
+
+    private void validateExplanationDoesNotInventReferenceRange(String explanation, ReferenceRangeDto referenceRange) {
+        if (referenceRange == null || referenceRange.min() == null || referenceRange.max() == null) {
+            return;
+        }
+        String expectedMin = normalizeDecimalText(referenceRange.min().toPlainString());
+        String expectedMax = normalizeDecimalText(referenceRange.max().toPlainString());
+        Matcher matcher = REFERENCE_RANGE_IN_TEXT_PATTERN.matcher(explanation);
+        while (matcher.find()) {
+            String actualMin = normalizeDecimalText(matcher.group(1));
+            String actualMax = normalizeDecimalText(matcher.group(2));
+            if (!Objects.equals(expectedMin, actualMin) || !Objects.equals(expectedMax, actualMax)) {
+                throw new SchemaValidationException("explanation text contains invented reference range");
+            }
+        }
+    }
+
+    private String appendDisclaimer(String explanation) {
+        if (explanation.contains(MEDICAL_RECOMMENDATIONS_DISCLAIMER)) {
+            return explanation;
+        }
+        return explanation + "\n" + MEDICAL_RECOMMENDATIONS_DISCLAIMER;
+    }
+
+    private void assertRangeField(JsonNode actualNode, String expected, String fieldName) {
+        String actual = actualNode == null || actualNode.isNull() ? null : actualNode.asText();
+        String normalizedExpected = expected == null || expected.isBlank() ? null : expected.trim();
+        String normalizedActual = actual == null || actual.isBlank() ? null : actual.trim();
+        if (!Objects.equals(normalizedExpected, normalizedActual)) {
+            throw new SchemaValidationException(fieldName + " differs from structured reference data");
+        }
+    }
+
+    private String expectedReferenceRangeJson(ReferenceRangeDto referenceRange) {
+        ObjectNode range = objectMapper.createObjectNode();
+        putNullableRangeField(range, "min", referenceRange == null || referenceRange.min() == null
+                ? null
+                : referenceRange.min().toPlainString());
+        putNullableRangeField(range, "max", referenceRange == null || referenceRange.max() == null
+                ? null
+                : referenceRange.max().toPlainString());
+        putNullableRangeField(range, "unit", referenceRange == null ? null : referenceRange.unit());
+        try {
+            return objectMapper.writeValueAsString(range);
+        } catch (Exception ex) {
+            return "{\"min\":null,\"max\":null,\"unit\":null}";
+        }
+    }
+
+    private void putNullableRangeField(ObjectNode node, String fieldName, String value) {
+        if (value == null || value.isBlank()) {
+            node.putNull(fieldName);
+        } else {
+            node.put(fieldName, value.trim());
+        }
     }
 
     private String abnormalFollowUpSuffix(String status) {
@@ -483,6 +705,7 @@ public class LlmService {
                 normalizeLang(lang),
                 promptVersion == null ? "v3" : promptVersion.trim(),
                 metricExplanationPromptTemplate == null ? "" : metricExplanationPromptTemplate.trim(),
+                EXPLANATION_OUTPUT_CONTRACT_VERSION,
                 retrievalVersion == null ? "v1" : retrievalVersion.trim(),
                 referenceRange == null || referenceRange.min() == null ? "" : referenceRange.min().toPlainString(),
                 referenceRange == null || referenceRange.max() == null ? "" : referenceRange.max().toPlainString(),
@@ -560,6 +783,13 @@ public class LlmService {
             return "";
         }
         return metric.replaceAll("[^A-Za-z0-9%]", "").toUpperCase();
+    }
+
+    private String normalizeDecimalText(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        return value.trim().replace(',', '.');
     }
 
     private String safeValue(String value) {
@@ -641,13 +871,16 @@ public class LlmService {
                 ? "(Không có thêm ngữ cảnh phiếu.)"
                 : examContext.trim();
 
-        return promptTemplateRenderer.render(recommendationsPromptTemplate, Map.of(
+        String basePrompt = promptTemplateRenderer.render(recommendationsPromptTemplate, Map.of(
                 "contextBlock", contextBlock,
                 "metricsText", metricsText,
                 "ageGroupVi", ageGroupVi,
                 "genderVi", genderVi,
                 "disclaimer", MEDICAL_RECOMMENDATIONS_DISCLAIMER
         ));
+        return basePrompt + "\n\n"
+                + "Output contract: return only a JSON array matching this schema, no markdown:\n"
+                + RECOMMENDATIONS_OUTPUT_SCHEMA_JSON;
     }
 
     private String recommendationDisplayLabel(RecommendationMetricInput m) {
@@ -670,28 +903,35 @@ public class LlmService {
         if (rawOutput == null || rawOutput.isBlank()) {
             return List.of();
         }
+        String cleaned = stripJsonFence(rawOutput);
+        try {
+            JsonNode root = objectMapper.readTree(cleaned);
+            if (!root.isArray() || root.size() < 2 || root.size() > 3) {
+                return List.of();
+            }
+            List<String> parsed = new ArrayList<>();
+            for (JsonNode item : root) {
+                if (!item.isTextual()) {
+                    return List.of();
+                }
+                String recommendation = item.asText().trim();
+                if (recommendation.length() < 20) {
+                    return List.of();
+                }
+                parsed.add(recommendation);
+            }
+            return parsed;
+        } catch (Exception ex) {
+            return List.of();
+        }
+    }
+
+    private String stripJsonFence(String rawOutput) {
         String cleaned = rawOutput.trim();
         if (cleaned.startsWith("```")) {
             cleaned = cleaned.replaceAll("(?s)^```(?:json)?\\s*", "").replaceAll("\\s*```$", "");
         }
-        if (!cleaned.startsWith("[") || !cleaned.endsWith("]")) {
-            return List.of();
-        }
-
-        try {
-            List<String> parsed = objectMapper.readValue(
-                    cleaned,
-                    objectMapper.getTypeFactory().constructCollectionType(List.class, String.class)
-            );
-            return parsed.stream()
-                    .filter(Objects::nonNull)
-                    .map(String::trim)
-                    .filter(s -> !s.isBlank())
-                    .limit(3)
-                    .toList();
-        } catch (Exception ex) {
-            return List.of();
-        }
+        return cleaned;
     }
 
     private List<String> buildFallbackRecommendations(List<RecommendationMetricInput> riskyMetrics) {
@@ -1014,6 +1254,53 @@ public class LlmService {
         meterRegistry.counter("healthlens.ai.prompt.render.failures", "prompt_type", promptType).increment();
     }
 
+    private void recordSchemaValidationFailure(String outputType) {
+        meterRegistry.counter("healthlens.ai.schema.validation.failures", "output_type", outputType).increment();
+    }
+
+    private void recordAiGenerationMetrics(
+            String outputType,
+            String outcome,
+            String validationStatus,
+            int retryCount,
+            int tokenUsage,
+            long startedNanos
+    ) {
+        String model = effectiveModelVersion();
+        String[] tags = {
+                "output_type", outputType,
+                "model", model,
+                "outcome", outcome,
+                "validation_status", validationStatus
+        };
+        meterRegistry.counter("healthlens.ai.generation.requests", tags).increment();
+        meterRegistry.timer("healthlens.ai.generation.latency", tags)
+                .record(Duration.ofNanos(Math.max(0L, System.nanoTime() - startedNanos)));
+        meterRegistry.summary(
+                "healthlens.ai.generation.token.usage",
+                "output_type", outputType,
+                "model", model,
+                "outcome", outcome,
+                "validation_status", validationStatus,
+                "token_type", "estimated_total"
+        ).record(Math.max(0, tokenUsage));
+        meterRegistry.summary(
+                "healthlens.ai.generation.retry.count",
+                "output_type", outputType,
+                "model", model,
+                "outcome", outcome,
+                "validation_status", validationStatus
+        ).record(Math.max(0, retryCount));
+    }
+
+    private int estimateTokenUsage(String prompt, String output) {
+        int charCount = (prompt == null ? 0 : prompt.length()) + (output == null ? 0 : output.length());
+        if (charCount == 0) {
+            return 0;
+        }
+        return Math.max(1, (int) Math.ceil(charCount / 4.0));
+    }
+
     private String effectivePromptVersion() {
         return promptVersion == null || promptVersion.isBlank() ? "v3" : promptVersion.trim();
     }
@@ -1085,6 +1372,12 @@ public class LlmService {
     ) {
         public RecommendationMetricInput(String name, String value, String unit, String status) {
             this(name, value, unit, status, null);
+        }
+    }
+
+    private static final class SchemaValidationException extends RuntimeException {
+        private SchemaValidationException(String message) {
+            super(message);
         }
     }
 }
