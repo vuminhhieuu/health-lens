@@ -94,8 +94,10 @@ public class AuthController {
     }
 
     @PostMapping("/verify-email")
-    public ResponseEntity<Map<String, Object>> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
-        authService.verifyEmail(request.token());
+    public ResponseEntity<Map<String, Object>> verifyEmail(
+            @Valid @RequestBody VerifyEmailRequest request,
+            HttpServletRequest httpRequest) {
+        authService.verifyEmail(request.token(), clientIp(httpRequest));
 
         Map<String, Object> body = Map.of(
                 "data", Map.of("message", "Email đã được xác thực thành công"),
@@ -106,6 +108,10 @@ public class AuthController {
         );
 
         return ResponseEntity.ok(body);
+    }
+
+    private String clientIp(HttpServletRequest request) {
+        return request.getRemoteAddr();
     }
 
     /**

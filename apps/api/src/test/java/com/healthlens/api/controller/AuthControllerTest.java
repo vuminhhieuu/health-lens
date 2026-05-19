@@ -7,6 +7,7 @@ import com.healthlens.api.dto.response.LoginResponse;
 import com.healthlens.api.exception.AccountLockedException;
 import com.healthlens.api.exception.EmailAlreadyExistsException;
 import com.healthlens.api.exception.GlobalExceptionHandler;
+import com.healthlens.api.exception.RateLimitExceededException;
 import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
 import com.healthlens.api.security.LoginRateLimiter;
@@ -31,6 +32,7 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -194,26 +196,51 @@ class AuthControllerTest {
         @Test
         @DisplayName("POST /api/v1/auth/verify-email -> 200 khi token hop le")
         void verifyEmail_success() throws Exception {
-                doNothing().when(authService).verifyEmail("valid-token");
+                doNothing().when(authService).verifyEmail(org.mockito.Mockito.eq("valid-token"), org.mockito.Mockito.anyString());
 
                 mockMvc.perform(post("/api/v1/auth/verify-email")
+                                .header("X-Forwarded-For", "198.51.100.99")
+                                .with(request -> {
+                                        request.setRemoteAddr("203.0.113.44");
+                                        return request;
+                                })
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"token\":\"valid-token\"}"))
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$.data.message").value("Email đã được xác thực thành công"));
+
+                verify(authService).verifyEmail("valid-token", "203.0.113.44");
         }
 
         @Test
-        @DisplayName("POST /api/v1/auth/verify-email -> 400 khi token khong hop le")
+        @DisplayName("POST /api/v1/auth/verify-email -> 400 voi thong diep chung khi token khong hop le")
         void verifyEmail_invalidToken() throws Exception {
-                org.mockito.Mockito.doThrow(new IllegalArgumentException("Token xác thực không hợp lệ"))
-                                .when(authService).verifyEmail("invalid-token");
+                org.mockito.Mockito.doThrow(new IllegalArgumentException("Không thể xác thực email bằng liên kết này."))
+                                .when(authService).verifyEmail(org.mockito.Mockito.eq("invalid-token"), org.mockito.Mockito.anyString());
 
                 mockMvc.perform(post("/api/v1/auth/verify-email")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"token\":\"invalid-token\"}"))
                         .andExpect(status().isBadRequest())
-                        .andExpect(jsonPath("$.detail").value("Token xác thực không hợp lệ"));
+                        .andExpect(jsonPath("$.detail").value("Không thể xác thực email bằng liên kết này."));
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/auth/verify-email -> 429 khi bi rate limit")
+        void verifyEmail_rateLimited() throws Exception {
+                org.mockito.Mockito.doThrow(new RateLimitExceededException(
+                                "Bạn đã gửi yêu cầu quá nhanh. Vui lòng thử lại sau 120 giây.",
+                                120
+                        )).when(authService).verifyEmail(org.mockito.Mockito.eq("limited-token"), org.mockito.Mockito.anyString());
+
+                mockMvc.perform(post("/api/v1/auth/verify-email")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"token\":\"limited-token\"}"))
+                        .andExpect(status().isTooManyRequests())
+                        .andExpect(jsonPath("$.type").value("https://healthlens.vn/errors/rate-limited"))
+                        .andExpect(jsonPath("$.errorCode").value("RATE_LIMITED"))
+                        .andExpect(jsonPath("$.retryAfterSeconds").value(120))
+                        .andExpect(jsonPath("$.detail").value("Bạn đã gửi yêu cầu quá nhanh. Vui lòng thử lại sau 120 giây."));
         }
 
         @Test

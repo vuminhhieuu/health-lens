@@ -20,6 +20,22 @@ import { useAuthStore } from "@/stores/authStore";
 type LoginInput = z.infer<typeof loginSchema>;
 const PENDING_DELETION_UI_MESSAGE = messageCatalog.auth.pendingDeletion;
 
+function safeInternalReturnUrl(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return "/";
+  }
+
+  try {
+    const parsed = new URL(value, window.location.origin);
+    if (parsed.origin !== window.location.origin) {
+      return "/";
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return "/";
+  }
+}
+
 export default function LoginPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-[#effcf9]" />}>
@@ -90,7 +106,7 @@ function LoginContent() {
         // Keep consent reset from setAuth until next refresh/bootstrap.
       }
 
-      const returnUrl = searchParams.get("returnUrl") || "/";
+      const returnUrl = safeInternalReturnUrl(searchParams.get("returnUrl"));
       router.push(returnUrl);
     } catch (error: unknown) {
       const errorCode = getApiErrorCode(error);

@@ -53,6 +53,23 @@ public class GlobalExceptionHandler {
                 .body(problem);
     }
 
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ProblemDetail> handleRateLimitExceeded(
+            RateLimitExceededException ex,
+            HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+        problem.setType(URI.create("https://healthlens.vn/errors/rate-limited"));
+        problem.setTitle("Quá nhiều yêu cầu");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        problem.setProperty("retryAfterSeconds", ex.getRetryAfterSeconds());
+        applyErrorCode(problem, ApiErrorCode.RATE_LIMITED);
+
+        return ResponseEntity
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .body(problem);
+    }
+
     @ExceptionHandler(AccountPendingDeletionException.class)
     public ProblemDetail handleAccountPendingDeletion(
             AccountPendingDeletionException ex,

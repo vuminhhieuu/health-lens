@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -63,6 +65,7 @@ public class UnifiedAuditLogWriter {
     /**
      * Persist an audit row with no actor (e.g. failed login before authentication).
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordWithoutActor(
             String action,
             String resourceType,

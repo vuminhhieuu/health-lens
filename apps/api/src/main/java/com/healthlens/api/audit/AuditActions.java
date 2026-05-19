@@ -36,6 +36,7 @@ public final class AuditActions {
     public static final String LOGOUT = "LOGOUT";
     public static final String REGISTER = "REGISTER";
     public static final String VERIFY_EMAIL = "VERIFY_EMAIL";
+    public static final String VERIFY_EMAIL_FAILED = "VERIFY_EMAIL_FAILED";
     public static final String REFRESH_TOKEN = "REFRESH_TOKEN";
     public static final String FORGOT_PASSWORD = "FORGOT_PASSWORD";
     public static final String RESET_PASSWORD = "RESET_PASSWORD";
