@@ -15,9 +15,24 @@ java {
 
 val springAiVersion = "2.0.0-M4"
 
+extra["netty.version"] = "4.2.13.Final"
+
 configurations {
 	compileOnly {
 		extendsFrom(configurations.annotationProcessor.get())
+	}
+}
+
+configurations.all {
+	resolutionStrategy.eachDependency {
+		if (requested.group == "io.netty") {
+			useVersion("4.2.13.Final")
+			because("Align Netty with patched release for CI security scans")
+		}
+		if (requested.group == "io.grpc" && requested.name == "grpc-netty-shaded") {
+			useVersion("1.75.0")
+			because("Align gRPC Netty with patched release for CI security scans")
+		}
 	}
 }
 

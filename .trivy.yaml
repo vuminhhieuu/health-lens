@@ -1,0 +1,19 @@
+# Trivy policy for local runs: trivy fs --config .trivy.yaml <path>
+# CI uses workflow inputs in .github/workflows/security.yml
+
+severity:
+  - CRITICAL
+  - HIGH
+
+scan:
+  skip-dirs:
+    - node_modules
+    - .gradle
+    - build
+    - dist
+    - .next
+    - _bmad-output
+    - .git
+
+vulnerability:
+  ignore-unfixed: true

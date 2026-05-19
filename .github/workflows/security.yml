@@ -1,0 +1,115 @@
+# Story 8.1: CI Security Scan Baseline (dev PR — essentials only)
+# PRs: secret + dependency scans. Full image/SAST gates run on main via deploy.yml.
+
+name: Security
+
+on:
+  push:
+    branches: [main, develop, dev]
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'services/**'
+      - 'docker/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - 'settings.gradle.kts'
+      - '.github/workflows/security.yml'
+      - '.gitleaks.toml'
+      - '.trivy.yaml'
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'services/**'
+      - 'docker/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - 'settings.gradle.kts'
+      - '.github/workflows/security.yml'
+      - '.gitleaks.toml'
+      - '.trivy.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+
+env:
+  TRIVY_FAIL_SEVERITY: CRITICAL,HIGH
+
+jobs:
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependency-scan:
+    name: dependency-scan (${{ matrix.id }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: java-api
+            target: apps/api
+            skip_dirs: node_modules,.gradle,build,dist,.next,_bmad-output,.git
+          - id: node-monorepo
+            target: .
+            skip_dirs: node_modules,.gradle,build,dist,.next,_bmad-output,.git,apps/mobile
+          - id: python-ocr
+            target: services/ocr-service
+            skip_dirs: node_modules,.gradle,build,dist,.next,_bmad-output,.git
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@v0.2.6
+        with:
+          cache: true
+
+      - name: Trivy filesystem scan (report)
+        run: |
+          trivy fs "${{ matrix.target }}" \
+            --scanners vuln \
+            --severity "${{ env.TRIVY_FAIL_SEVERITY }}" \
+            --ignore-unfixed \
+            --skip-dirs "${{ matrix.skip_dirs }}" \
+            --format sarif \
+            --output "trivy-deps-${{ matrix.id }}.sarif" \
+            --exit-code 0
+
+      - name: Trivy filesystem scan (gate)
+        run: |
+          trivy fs "${{ matrix.target }}" \
+            --scanners vuln \
+            --severity "${{ env.TRIVY_FAIL_SEVERITY }}" \
+            --ignore-unfixed \
+            --skip-dirs "${{ matrix.skip_dirs }}" \
+            --format table \
+            --exit-code 1
+
+      - name: Upload dependency scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-deps-${{ matrix.id }}
+          path: trivy-deps-${{ matrix.id }}.sarif
+          retention-days: 30
+          if-no-files-found: ignore

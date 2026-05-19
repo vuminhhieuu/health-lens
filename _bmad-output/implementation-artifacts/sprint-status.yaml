@@ -218,7 +218,7 @@ development_status:
   core-7-2-split-health-record-review-page-into-feature-components-and-hooks: ready-for-dev
   core-7-3-extract-shared-profile-sharing-hook: ready-for-dev
   core-7-4-email-template-cleanup: ready-for-dev
-  core-8-1-ci-security-scan-baseline: ready-for-dev
+  core-8-1-ci-security-scan-baseline: done
   core-8-2-ai-ocr-regression-test-corpus-in-ci: ready-for-dev
   core-8-3-release-smoke-tests-for-provider-and-infrastructure-config: ready-for-dev
   epic-core-improvements-retrospective: optional

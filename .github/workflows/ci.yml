@@ -10,7 +10,10 @@ on:
       - 'pnpm-workspace.yaml'
       - 'settings.gradle.kts'
       - 'package.json'
+      - 'services/**'
       - '.github/workflows/**'
+      - '.gitleaks.toml'
+      - '.trivy.yaml'
   pull_request:
     paths:
       - 'apps/**'
@@ -19,6 +22,10 @@ on:
       - 'pnpm-workspace.yaml'
       - 'settings.gradle.kts'
       - 'package.json'
+      - 'services/**'
+      - '.github/workflows/**'
+      - '.gitleaks.toml'
+      - '.trivy.yaml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

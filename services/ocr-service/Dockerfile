@@ -25,7 +25,7 @@ WORKDIR /app
 FROM base AS deps
 
 # Install system dependencies first
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
@@ -35,7 +35,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip wheel "jaraco.context>=6.1.0" \
+    && pip install --no-cache-dir -r requirements.txt
 
 # ============================================
 # Builder stage (for dev)
@@ -44,7 +45,8 @@ FROM deps AS builder
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip wheel "jaraco.context>=6.1.0" \
+    && pip install --no-cache-dir -r requirements.txt
 
 # ============================================
 # Runner stage (production)

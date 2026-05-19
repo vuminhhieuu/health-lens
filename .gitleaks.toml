@@ -1,0 +1,19 @@
+# Gitleaks configuration — Story 8.1 CI Security Scan Baseline
+# https://github.com/gitleaks/gitleaks
+
+title = "HealthLens gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Non-secret placeholders and generated docs"
+paths = [
+  '''\.env\.example$''',
+  '''(^|/)_bmad-output/''',
+  '''(^|/)docs/.*\.md$''',
+  '''\.github/workflows/.*\.md$''',
+]
+regexes = [
+  '''(?i)example|placeholder|changeme|your[-_]?api[-_]?key|xxx+''',
+]

@@ -101,13 +101,60 @@ jobs:
           cache-to: type=gha,mode=max
 
   # =========================================
+  # Container vulnerability scan (Story 8.1)
+  # =========================================
+  scan-images:
+    name: Scan Images
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [api, web, ocr]
+    steps:
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@v0.2.6
+        with:
+          cache: true
+
+      - name: Trivy image scan
+        run: |
+          trivy image "${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.component == 'ocr' && 'ocr-service' || matrix.component }}:main-${{ github.sha }}" \
+            --scanners vuln \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --format sarif \
+            --output "trivy-deploy-${{ matrix.component }}.sarif" \
+            --exit-code 1
+
+      - name: Upload image scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-deploy-${{ matrix.component }}
+          path: trivy-deploy-${{ matrix.component }}.sarif
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # =========================================
   # Deploy to Production (Main branch only)
   # =========================================
   deploy-production:
     name: Deploy Production
     runs-on: ubuntu-latest
     environment: production
-    needs: build
+    needs: [build, scan-images]
     if: github.ref == 'refs/heads/main'
     concurrency:
       group: production-deploy
@@ -178,8 +225,13 @@ jobs:
   notify-failure:
     name: Notify on Failure
     runs-on: ubuntu-latest
-    needs: [build, deploy-production]
-    if: failure()
+    needs: [build, scan-images, deploy-production]
+    if: >-
+      always() && (
+        needs.build.result == 'failure' ||
+        needs.scan-images.result == 'failure' ||
+        needs.deploy-production.result == 'failure'
+      )
     steps:
       - name: Failure Notification
         run: |
