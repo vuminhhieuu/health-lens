@@ -1,14 +1,21 @@
 package com.healthlens.api.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.response.UploadHistoryPageResponse;
 import com.healthlens.api.dto.response.UploadQualityResponse;
+import com.healthlens.api.dto.response.UserAnalyticsResponse;
+import com.healthlens.api.entity.UserRole;
 import com.healthlens.api.repository.AnalyticsRepository;
+import com.healthlens.api.repository.UserRepository;
+import com.healthlens.api.repository.projection.MonthlyUserGrowthProjection;
 import com.healthlens.api.repository.projection.UploadFailureBreakdownProjection;
 import com.healthlens.api.repository.projection.UploadHistoryProjection;
 import com.healthlens.api.repository.projection.UploadQualityBucketProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,13 +25,17 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -34,11 +45,25 @@ class AnalyticsServiceTest {
     @Mock
     private AnalyticsRepository analyticsRepository;
 
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private StringRedisTemplate redisTemplate;
+
+    @Mock
+    private ValueOperations<String, String> valueOperations;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     private AnalyticsService analyticsService;
 
     @BeforeEach
     void setUp() {
-        analyticsService = new AnalyticsService(analyticsRepository);
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        lenient().when(valueOperations.get(anyString())).thenReturn(null);
+        analyticsService = new AnalyticsService(
+                analyticsRepository, userRepository, redisTemplate, objectMapper);
     }
 
     @Test
@@ -111,6 +136,53 @@ class AnalyticsServiceTest {
     }
 
     @Test
+    @DisplayName("getUserAnalytics tra ve tong user va monthly breakdown voi thang trong")
+    void getUserAnalytics_returnsTotalsAndFillsMissingMonths() {
+        Instant from = Instant.parse("2026-01-01T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-04-01T00:00:00Z");
+
+        when(userRepository.countRegisteredProductUsers(UserRole.ROLE_USER)).thenReturn(1250L);
+        List<MonthlyUserGrowthProjection> growthRows = List.of(
+                monthlyGrowth(LocalDate.of(2026, 1, 1), 180),
+                monthlyGrowth(LocalDate.of(2026, 3, 1), 220));
+        when(userRepository.findMonthlyUserGrowth(from, toExclusive)).thenReturn(growthRows);
+
+        UserAnalyticsResponse response = analyticsService.getUserAnalytics(from, toExclusive);
+
+        assertThat(response.totalUsers()).isEqualTo(1250);
+        assertThat(response.monthlyGrowth()).hasSize(3);
+        assertThat(response.monthlyGrowth().get(0).month()).isEqualTo("2026-01");
+        assertThat(response.monthlyGrowth().get(0).newUsers()).isEqualTo(180);
+        assertThat(response.monthlyGrowth().get(1).month()).isEqualTo("2026-02");
+        assertThat(response.monthlyGrowth().get(1).newUsers()).isZero();
+        assertThat(response.monthlyGrowth().get(2).month()).isEqualTo("2026-03");
+        assertThat(response.monthlyGrowth().get(2).newUsers()).isEqualTo(220);
+    }
+
+    @Test
+    @DisplayName("validateUserAnalyticsRange reject khoang trong tuong lai")
+    void validateUserAnalyticsRange_rejectsFutureRange() {
+        YearMonth future = YearMonth.now(ZoneOffset.UTC).plusMonths(2);
+        Instant from = future.atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        Instant toExclusive = future.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+
+        assertThatThrownBy(() -> AnalyticsService.validateUserAnalyticsRange(from, toExclusive))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tương lai");
+    }
+
+    @Test
+    @DisplayName("validateUserAnalyticsRange reject khoang vuot 24 thang")
+    void validateUserAnalyticsRange_rejectsRangeOverMaxMonths() {
+        Instant from = Instant.parse("2024-01-01T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-02-01T00:00:00Z");
+
+        assertThatThrownBy(() -> AnalyticsService.validateUserAnalyticsRange(from, toExclusive))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("24");
+    }
+
+    @Test
     @DisplayName("normalizeGranularity mac dinh day va reject gia tri khong hop le")
     void normalizeGranularity_defaultsAndRejectsInvalid() {
         assertThat(AnalyticsService.normalizeGranularity(null)).isEqualTo("day");
@@ -165,6 +237,13 @@ class AnalyticsServiceTest {
         when(projection.getBucketDate()).thenReturn(date);
         when(projection.getFailureReason()).thenReturn(reason);
         when(projection.getFailureCount()).thenReturn(count);
+        return projection;
+    }
+
+    private static MonthlyUserGrowthProjection monthlyGrowth(LocalDate monthStart, long newUsers) {
+        MonthlyUserGrowthProjection projection = mock(MonthlyUserGrowthProjection.class);
+        when(projection.getMonthStart()).thenReturn(monthStart);
+        when(projection.getNewUsers()).thenReturn(newUsers);
         return projection;
     }
 }

@@ -157,7 +157,7 @@ development_status:
 
   # Epic 8: Dashboard (3 stories) - SPRINT 3
   epic-8: in-progress
-  8-1-dashboard-user-growth-overview: sprint-3
+  8-1-dashboard-user-growth-overview: done
   8-2-dashboard-wau-upload-volume: sprint-3
   8-3-dashboard-upload-success-failure-rate: done
   epic-8-retrospective: optional
