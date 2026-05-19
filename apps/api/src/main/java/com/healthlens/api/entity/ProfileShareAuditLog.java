@@ -22,7 +22,7 @@ public class ProfileShareAuditLog {
     @Column(name = "actor_id", nullable = false)
     private UUID actorId;
 
-    @Column(name = "profile_id", nullable = false)
+    @Column(name = "profile_id")
     private UUID profileId;
 
     @Column(name = "viewer_id", nullable = false)

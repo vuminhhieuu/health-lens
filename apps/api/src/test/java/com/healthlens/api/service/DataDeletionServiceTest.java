@@ -10,8 +10,15 @@ import com.healthlens.api.repository.ConsentLogRepository;
 import com.healthlens.api.repository.DataDeletionRequestRepository;
 import com.healthlens.api.repository.EmailVerificationTokenRepository;
 import com.healthlens.api.repository.HealthRecordRepository;
+import com.healthlens.api.repository.HealthRecordInvitationRepository;
+import com.healthlens.api.repository.HealthRecordShareRepository;
+import com.healthlens.api.repository.FollowUpReminderRepository;
+import com.healthlens.api.repository.OcrDeadLetterRepository;
+import com.healthlens.api.repository.OcrJobExecutionRepository;
 import com.healthlens.api.repository.PasswordResetTokenRepository;
+import com.healthlens.api.repository.ProfileInvitationRepository;
 import com.healthlens.api.repository.ProfileRepository;
+import com.healthlens.api.repository.ProfileShareRepository;
 import com.healthlens.api.repository.RefreshTokenRepository;
 import com.healthlens.api.repository.UserRepository;
 import com.healthlens.api.security.AccountStatusCache;
@@ -52,6 +59,13 @@ class DataDeletionServiceTest {
     @Mock private EmailService emailService;
     @Mock private HealthRecordRepository healthRecordRepository;
     @Mock private ProfileRepository profileRepository;
+    @Mock private ProfileShareRepository profileShareRepository;
+    @Mock private ProfileInvitationRepository profileInvitationRepository;
+    @Mock private HealthRecordShareRepository healthRecordShareRepository;
+    @Mock private HealthRecordInvitationRepository healthRecordInvitationRepository;
+    @Mock private FollowUpReminderRepository followUpReminderRepository;
+    @Mock private OcrDeadLetterRepository ocrDeadLetterRepository;
+    @Mock private OcrJobExecutionRepository ocrJobExecutionRepository;
     @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private EmailVerificationTokenRepository emailVerificationTokenRepository;
     @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
@@ -74,6 +88,13 @@ class DataDeletionServiceTest {
                 emailService,
                 healthRecordRepository,
                 profileRepository,
+                profileShareRepository,
+                profileInvitationRepository,
+                healthRecordShareRepository,
+                healthRecordInvitationRepository,
+                followUpReminderRepository,
+                ocrDeadLetterRepository,
+                ocrJobExecutionRepository,
                 refreshTokenRepository,
                 emailVerificationTokenRepository,
                 passwordResetTokenRepository,
@@ -115,8 +136,11 @@ class DataDeletionServiceTest {
         assertThat(response.requestId()).isNotNull();
         assertThat(response.scheduledDeletionAt()).isNotNull();
         assertThat(response.cancellationLink()).contains("cancel-deletion");
+        assertThat(response.cancellationLink()).contains("?token=");
         assertThat(response.cancellationLink()).doesNotContain("email=");
         assertThat(response.cancellationLink()).doesNotContain(testUser.getEmail());
+        assertThat(response.cancellationLink()).doesNotContain("requestedAt=");
+        assertThat(response.cancellationLink()).doesNotContain("scheduledDeletionAt=");
 
         ArgumentCaptor<DataDeletionRequest> captor = ArgumentCaptor.forClass(DataDeletionRequest.class);
         verify(deletionRequestRepository).saveAndFlush(captor.capture());
@@ -124,7 +148,9 @@ class DataDeletionServiceTest {
         DataDeletionRequest savedRequest = captor.getValue();
         assertThat(savedRequest.getUserId()).isEqualTo(userId);
         assertThat(savedRequest.getStatus()).isEqualTo(DeletionRequestStatus.PENDING);
-        assertThat(savedRequest.getCancellationToken()).isNotNull();
+        assertThat(savedRequest.getCancellationTokenHash()).isNotNull();
+        assertThat(savedRequest.getCancellationTokenHash()).hasSize(64);
+        assertThat(response.cancellationLink()).doesNotContain(savedRequest.getCancellationTokenHash());
         assertThat(savedRequest.getScheduledDeletionAt())
                 .isAfter(savedRequest.getRequestedAt().plusSeconds(72L * 3600 - 5));
 
@@ -226,16 +252,21 @@ class DataDeletionServiceTest {
         deletionRequest.setUserId(userId);
         deletionRequest.setStatus(DeletionRequestStatus.PENDING);
         deletionRequest.setScheduledDeletionAt(Instant.now().plusSeconds(3600));
-        deletionRequest.setCancellationToken(cancellationToken);
+        deletionRequest.setCancellationTokenHash(cancellationToken);
 
         User frozenUser = createTestUser();
         frozenUser.setAccountStatus(AccountStatus.PENDING_DELETION);
 
-        when(deletionRequestRepository.findByCancellationTokenForUpdate(cancellationToken))
+        when(deletionRequestRepository.findByCancellationTokenHashForUpdate(anyString()))
                 .thenReturn(Optional.of(deletionRequest));
         when(userRepository.findById(userId)).thenReturn(Optional.of(frozenUser));
 
         dataDeletionService.cancelDeletionRequest(cancellationToken);
+
+        ArgumentCaptor<String> tokenLookupCaptor = ArgumentCaptor.forClass(String.class);
+        verify(deletionRequestRepository).findByCancellationTokenHashForUpdate(tokenLookupCaptor.capture());
+        assertThat(tokenLookupCaptor.getValue()).hasSize(64);
+        assertThat(tokenLookupCaptor.getValue()).isNotEqualTo(cancellationToken);
 
         ArgumentCaptor<DataDeletionRequest> captor = ArgumentCaptor.forClass(DataDeletionRequest.class);
         verify(deletionRequestRepository).save(captor.capture());
@@ -258,7 +289,7 @@ class DataDeletionServiceTest {
     void cancelDeletionRequest_invalidToken() {
         String invalidToken = "invalid-token-xyz";
 
-        when(deletionRequestRepository.findByCancellationTokenForUpdate(invalidToken))
+        when(deletionRequestRepository.findByCancellationTokenHashForUpdate(anyString()))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> dataDeletionService.cancelDeletionRequest(invalidToken))
@@ -276,9 +307,9 @@ class DataDeletionServiceTest {
         DataDeletionRequest deletionRequest = new DataDeletionRequest();
         deletionRequest.setUserId(userId);
         deletionRequest.setStatus(DeletionRequestStatus.COMPLETED);
-        deletionRequest.setCancellationToken(token);
+        deletionRequest.setCancellationTokenHash(token);
 
-        when(deletionRequestRepository.findByCancellationTokenForUpdate(token))
+        when(deletionRequestRepository.findByCancellationTokenHashForUpdate(anyString()))
                 .thenReturn(Optional.of(deletionRequest));
 
         assertThatThrownBy(() -> dataDeletionService.cancelDeletionRequest(token))
@@ -296,9 +327,9 @@ class DataDeletionServiceTest {
         deletionRequest.setUserId(userId);
         deletionRequest.setStatus(DeletionRequestStatus.PENDING);
         deletionRequest.setScheduledDeletionAt(Instant.now().minusSeconds(60));
-        deletionRequest.setCancellationToken(token);
+        deletionRequest.setCancellationTokenHash(token);
 
-        when(deletionRequestRepository.findByCancellationTokenForUpdate(token))
+        when(deletionRequestRepository.findByCancellationTokenHashForUpdate(anyString()))
                 .thenReturn(Optional.of(deletionRequest));
 
         assertThatThrownBy(() -> dataDeletionService.cancelDeletionRequest(token))
@@ -319,12 +350,12 @@ class DataDeletionServiceTest {
         deletionRequest.setUserId(userId);
         deletionRequest.setStatus(DeletionRequestStatus.PENDING);
         deletionRequest.setScheduledDeletionAt(Instant.now().plusSeconds(3600));
-        deletionRequest.setCancellationToken(token);
+        deletionRequest.setCancellationTokenHash(token);
 
         User deletedUser = createTestUser();
         deletedUser.setAccountStatus(AccountStatus.DELETED);
 
-        when(deletionRequestRepository.findByCancellationTokenForUpdate(token)).thenReturn(Optional.of(deletionRequest));
+        when(deletionRequestRepository.findByCancellationTokenHashForUpdate(anyString())).thenReturn(Optional.of(deletionRequest));
         when(userRepository.findById(userId)).thenReturn(Optional.of(deletedUser));
 
         assertThatThrownBy(() -> dataDeletionService.cancelDeletionRequest(token))
@@ -340,33 +371,24 @@ class DataDeletionServiceTest {
     @Test
     @DisplayName("AC #2: processDeletionRequests dispatches each overdue request via the self-proxy")
     void processDeletionRequests_dispatchesOverdueRequests() {
-        DataDeletionRequest first = overdueRequest();
-        DataDeletionRequest second = overdueRequest();
-        when(deletionRequestRepository.findByStatusAndScheduledDeletionAtBefore(
-                eq(DeletionRequestStatus.PENDING), any(Instant.class)))
-                .thenReturn(List.of(first, second));
+        when(selfProxy.executeNextDueDataDeletion(any(Instant.class)))
+                .thenReturn(true, true, false);
 
         dataDeletionService.processDeletionRequests();
 
-        verify(selfProxy).executeDataDeletion(first.getId());
-        verify(selfProxy).executeDataDeletion(second.getId());
+        verify(selfProxy, times(3)).executeNextDueDataDeletion(any(Instant.class));
     }
 
     @Test
-    @DisplayName("AC #2: processDeletionRequests continues if one request fails")
+    @DisplayName("AC #2: processDeletionRequests stops current polling cycle if one claimed request fails")
     void processDeletionRequests_continuesAfterFailure() {
-        DataDeletionRequest first = overdueRequest();
-        DataDeletionRequest second = overdueRequest();
-        when(deletionRequestRepository.findByStatusAndScheduledDeletionAtBefore(
-                eq(DeletionRequestStatus.PENDING), any(Instant.class)))
-                .thenReturn(List.of(first, second));
-        org.mockito.Mockito.doThrow(new RuntimeException("boom"))
-                .when(selfProxy).executeDataDeletion(first.getId());
+        when(selfProxy.executeNextDueDataDeletion(any(Instant.class)))
+                .thenReturn(true)
+                .thenThrow(new RuntimeException("boom"));
 
         dataDeletionService.processDeletionRequests();
 
-        verify(selfProxy).executeDataDeletion(first.getId());
-        verify(selfProxy).executeDataDeletion(second.getId());
+        verify(selfProxy, times(2)).executeNextDueDataDeletion(any(Instant.class));
     }
 
     @Test
@@ -382,14 +404,35 @@ class DataDeletionServiceTest {
 
         when(deletionRequestRepository.findByIdForUpdate(requestId)).thenReturn(Optional.of(deletionRequest));
         when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
+        when(healthRecordRepository.findFileKeysByUserId(userId))
+                .thenReturn(List.of(
+                        "health-records/" + userId + "/profile/record/original.pdf",
+                        "custom-imports/" + userId + "/legacy-image.png"
+                ));
+        String originalEmail = testUser.getEmail();
 
         dataDeletionService.executeDataDeletion(requestId);
 
-        // S3 files wiped under the user-scoped prefix
+        // S3 objects are collected from reachable DB rows before those rows are deleted.
+        verify(healthRecordRepository).findFileKeysByUserId(userId);
+        verify(storageService).deleteObjects(List.of(
+                "health-records/" + userId + "/profile/record/original.pdf",
+                "custom-imports/" + userId + "/legacy-image.png"
+        ));
+        // Prefix cleanup remains as a backstop for abandoned upload reservations.
         verify(storageService).deleteObjectsByPrefix(startsWith("health-records/" + userId));
         verify(storageService).deleteObjectsByPrefix(startsWith("avatars/" + userId));
 
         // DB tables wiped in dependency order
+        verify(healthRecordShareRepository).deleteAllByUserParticipation(userId);
+        verify(healthRecordInvitationRepository).deleteAllByUserParticipation(userId);
+        verify(profileShareRepository).deleteAllByUserParticipation(userId);
+        verify(profileInvitationRepository).deleteAllByUserParticipation(userId);
+        verify(profileInvitationRepository).deleteAllByInviteeEmailIgnoreCase(originalEmail);
+        verify(healthRecordInvitationRepository).deleteAllByInviteeEmailIgnoreCase(originalEmail);
+        verify(followUpReminderRepository).deleteAllByUserId(userId);
+        verify(ocrDeadLetterRepository).deleteAllByUserId(userId);
+        verify(ocrJobExecutionRepository).deleteAllByUserId(userId);
         verify(healthRecordRepository).deleteAllByUserId(userId);
         verify(profileRepository).deleteAllByUserId(userId);
         verify(emailVerificationTokenRepository).deleteAllByUserId(userId);
@@ -414,6 +457,61 @@ class DataDeletionServiceTest {
 
         verify(accountStatusCache).put(userId, AccountStatus.DELETED);
         verify(emailService, times(1)).sendDeletionCompletionEmail(any(User.class));
+    }
+
+    @Test
+    @DisplayName("AC #4: executeDataDeletion does not make DB rows unreachable when exact object deletion fails")
+    void executeDataDeletion_abortsWhenExactObjectDeletionFails() {
+        DataDeletionRequest deletionRequest = new DataDeletionRequest();
+        UUID requestId = UUID.randomUUID();
+        deletionRequest.setId(requestId);
+        deletionRequest.setUserId(userId);
+        deletionRequest.setStatus(DeletionRequestStatus.PENDING);
+        deletionRequest.setRequestedAt(Instant.now().minusSeconds(72L * 3600 + 60));
+        deletionRequest.setScheduledDeletionAt(Instant.now().minusSeconds(60));
+
+        when(deletionRequestRepository.findByIdForUpdate(requestId)).thenReturn(Optional.of(deletionRequest));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
+        when(healthRecordRepository.findFileKeysByUserId(userId))
+                .thenReturn(List.of("custom/%s/report.pdf".formatted(userId)));
+        org.mockito.Mockito.doThrow(new IllegalStateException("storage unavailable"))
+                .when(storageService).deleteObjects(any());
+
+        assertThatThrownBy(() -> dataDeletionService.executeDataDeletion(requestId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("storage unavailable");
+
+        verify(healthRecordRepository, never()).deleteAllByUserId(any());
+        verify(profileRepository, never()).deleteAllByUserId(any());
+        verify(deletionRequestRepository, never()).save(any());
+        verify(userRepository, never()).save(any());
+        verify(emailService, never()).sendDeletionCompletionEmail(any());
+    }
+
+    @Test
+    @DisplayName("AC #1: executeNextDueDataDeletion keeps SKIP LOCKED row in the deletion transaction")
+    void executeNextDueDataDeletion_processesOneSkipLockedRequest() {
+        DataDeletionRequest deletionRequest = new DataDeletionRequest();
+        UUID requestId = UUID.randomUUID();
+        deletionRequest.setId(requestId);
+        deletionRequest.setUserId(userId);
+        deletionRequest.setStatus(DeletionRequestStatus.PENDING);
+        deletionRequest.setRequestedAt(Instant.now().minusSeconds(72L * 3600 + 60));
+        deletionRequest.setScheduledDeletionAt(Instant.now().minusSeconds(60));
+
+        when(deletionRequestRepository.findNextDuePendingForUpdateSkipLocked(
+                eq(DeletionRequestStatus.PENDING.name()), any(Instant.class)))
+                .thenReturn(Optional.of(deletionRequest));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
+        when(healthRecordRepository.findFileKeysByUserId(userId)).thenReturn(List.of());
+
+        boolean processed = dataDeletionService.executeNextDueDataDeletion(Instant.now());
+
+        assertThat(processed).isTrue();
+        verify(deletionRequestRepository).findNextDuePendingForUpdateSkipLocked(
+                eq(DeletionRequestStatus.PENDING.name()), any(Instant.class));
+        verify(deletionRequestRepository).save(deletionRequest);
+        assertThat(deletionRequest.getStatus()).isEqualTo(DeletionRequestStatus.COMPLETED);
     }
 
     @Test

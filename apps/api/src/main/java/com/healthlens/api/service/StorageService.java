@@ -39,11 +39,13 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 @Slf4j
 @Service
 public class StorageService {
+    static final int MAX_DELETE_OBJECTS_BATCH_SIZE = 1000;
 
     private final String bucket;
     private final S3Client s3Client;
@@ -274,6 +276,48 @@ public class StorageService {
                 .bucket(bucket)
                 .key(key)
                 .build());
+    }
+
+    public int deleteObjects(Collection<String> keys) {
+        if (keys == null || keys.isEmpty()) {
+            return 0;
+        }
+
+        List<ObjectIdentifier> identifiers = keys.stream()
+                .filter(key -> key != null && !key.isBlank())
+                .distinct()
+                .map(key -> ObjectIdentifier.builder().key(key).build())
+                .toList();
+        if (identifiers.isEmpty()) {
+            return 0;
+        }
+
+        int totalDeleted = 0;
+        try {
+            for (int start = 0; start < identifiers.size(); start += MAX_DELETE_OBJECTS_BATCH_SIZE) {
+                int end = Math.min(start + MAX_DELETE_OBJECTS_BATCH_SIZE, identifiers.size());
+                List<ObjectIdentifier> batch = identifiers.subList(start, end);
+                DeleteObjectsResponse deleteResponse = s3Client.deleteObjects(DeleteObjectsRequest.builder()
+                        .bucket(bucket)
+                        .delete(Delete.builder().objects(batch).quiet(true).build())
+                        .build());
+                if (deleteResponse.hasErrors() && !deleteResponse.errors().isEmpty()) {
+                    throw new IllegalStateException("Failed to delete " + deleteResponse.errors().size()
+                            + " explicit storage object(s)");
+                }
+                totalDeleted += batch.size();
+            }
+            return totalDeleted;
+        } catch (S3Exception ex) {
+            log.error("S3 error while deleting explicit objects: {}", ex.getMessage(), ex);
+            throw new IllegalStateException("Failed to delete explicit storage objects", ex);
+        } catch (SdkException ex) {
+            log.error("S3 client error while deleting explicit objects: {}", ex.getMessage(), ex);
+            throw new IllegalStateException("Failed to delete explicit storage objects", ex);
+        } catch (RuntimeException ex) {
+            log.error("Unexpected error while deleting explicit objects: {}", ex.getMessage(), ex);
+            throw ex;
+        }
     }
 
     @PreDestroy

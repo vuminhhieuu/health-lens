@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -40,8 +41,12 @@ public class DataDeletionRequest {
     @Column(name = "status", nullable = false, length = 20)
     private DeletionRequestStatus status;
 
-    @Column(name = "cancellation_token", nullable = false, unique = true, length = 255)
-    private String cancellationToken;
+    @Column(name = "cancellation_token_hash", nullable = false, unique = true, length = 64)
+    private String cancellationTokenHash;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
 
     @Column(name = "completed_at")
     private Instant completedAt;

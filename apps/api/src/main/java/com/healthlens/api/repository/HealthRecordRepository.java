@@ -35,6 +35,9 @@ public interface HealthRecordRepository extends JpaRepository<HealthRecord, UUID
 
     java.util.List<HealthRecord> findAllByUserId(UUID userId);
 
+    @Query("SELECT h.fileKey FROM HealthRecord h WHERE h.userId = :userId")
+    List<String> findFileKeysByUserId(@Param("userId") UUID userId);
+
     @Query("SELECT MAX(h.createdAt) FROM HealthRecord h WHERE h.profileId = :profileId AND h.deletedAt IS NULL")
     Optional<Instant> findMaxCreatedAtByProfileId(@Param("profileId") UUID profileId);
 

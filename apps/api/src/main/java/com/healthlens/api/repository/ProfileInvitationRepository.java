@@ -5,6 +5,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface ProfileInvitationRepository extends JpaRepository<ProfileInvitation, UUID> {
     Optional<ProfileInvitation> findByToken(String token);
@@ -17,4 +20,17 @@ public interface ProfileInvitationRepository extends JpaRepository<ProfileInvita
 
     Optional<ProfileInvitation> findByIdAndProfileId(UUID id, UUID profileId);
     void deleteAllByProfileIdAndInviteeEmailIgnoreCase(UUID profileId, String inviteeEmail);
+
+    @Modifying
+    int deleteAllByInviteeEmailIgnoreCase(String inviteeEmail);
+
+    @Modifying
+    @Query("""
+            DELETE FROM ProfileInvitation i
+            WHERE i.inviterId = :userId
+               OR i.profileId IN (
+                   SELECT p.id FROM Profile p WHERE p.user.id = :userId
+               )
+            """)
+    int deleteAllByUserParticipation(@Param("userId") UUID userId);
 }

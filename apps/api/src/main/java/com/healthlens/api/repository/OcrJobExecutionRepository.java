@@ -39,4 +39,13 @@ public interface OcrJobExecutionRepository extends JpaRepository<OcrJobExecution
             @Param("now") Instant now,
             @Param("claimUntil") Instant claimUntil
     );
+
+    @Modifying
+    @Query("""
+            DELETE FROM OcrJobExecution j
+            WHERE j.recordId IN (
+                SELECT h.id FROM HealthRecord h WHERE h.userId = :userId
+            )
+            """)
+    int deleteAllByUserId(@Param("userId") UUID userId);
 }
