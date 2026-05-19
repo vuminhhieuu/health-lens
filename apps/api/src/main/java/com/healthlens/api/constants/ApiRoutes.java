@@ -142,10 +142,13 @@ public final class ApiRoutes {
     // Relative variants (for @RequestMapping(ADMIN_ANALYTICS_BASE) controllers)
     public static final String ADMIN_ANALYTICS_UPLOAD_QUALITY_REL = "/upload-quality";
     public static final String ADMIN_ANALYTICS_UPLOAD_HISTORY_REL = "/upload-history";
+    public static final String ADMIN_ANALYTICS_USERS_REL = "/users";
     public static final String ADMIN_ANALYTICS_UPLOAD_QUALITY =
             ADMIN_ANALYTICS_BASE + ADMIN_ANALYTICS_UPLOAD_QUALITY_REL;
     public static final String ADMIN_ANALYTICS_UPLOAD_HISTORY =
             ADMIN_ANALYTICS_BASE + ADMIN_ANALYTICS_UPLOAD_HISTORY_REL;
+    public static final String ADMIN_ANALYTICS_USERS =
+            ADMIN_ANALYTICS_BASE + ADMIN_ANALYTICS_USERS_REL;
     public static final String ADMIN_REFERENCE_DATA_IMPORT_PREVIEW = ADMIN_REFERENCE_DATA_BASE + "/import/preview";
     public static final String ADMIN_REFERENCE_DATA_IMPORT_CONFIRM = ADMIN_REFERENCE_DATA_BASE + "/import/confirm";
     public static final String ADMIN_AUTH_LOGIN = ADMIN_AUTH_BASE + "/login";

@@ -4,10 +4,13 @@ Mục tiêu: đủ để viết story và triển khai admin analytics productio
 
 ## 8.1 User growth overview
 
-- Metric: `totalUsers = count(users)`.
-- Trend: `count(users.created_at)` theo tháng.
-- Default range: 6 tháng gần nhất.
-- Nếu cần chỉ tính user sản phẩm thì lọc `role = ROLE_USER`.
+**Status:** Implemented (Story `8-1-dashboard-user-growth-overview.md`, review).
+
+- Metric: `totalUsers = count(users WHERE role = ROLE_USER AND account_status <> DELETED)` — all-time, không lọc theo date picker.
+- Trend: `count(users.created_at)` theo tháng, `role = ROLE_USER`, trong `[from, toExclusive)` UTC; tháng trống → 0.
+- Default range: 6 tháng lịch gần nhất (UTC).
+- API: `GET /api/v1/admin/analytics/users?from=&to=`; cache Redis 1h (không invalidate on register).
+- UI: section `UserGrowthPanel` trên `/admin` (không phải trang riêng); `/admin/analytics` redirect.
 - Data source: bảng `users`.
 
 ## 8.2 WAU + upload volume
@@ -37,12 +40,13 @@ Mục tiêu: đủ để viết story và triển khai admin analytics productio
 - Chưa có persisted activity event table để tính WAU chuẩn.
 - Auth/filter code hiện chỉ log runtime, chưa ghi event để query analytics.
 - Failure reasons còn hẹp; nếu AC cần thêm `api_error` hoặc `invalid_file`, spec phải mở rộng.
-- Admin dashboard hiện vẫn là placeholder.
+- WAU (8.2) vẫn thiếu activity event table — xem story 8.2.
 
 ## Dashboard implications
 
-- Tạo `/admin/analytics`.
-- `8.1`: stat card + monthly growth line chart.
+- Route `/admin` = trang **Thống kê** (ghép 8.1 + 8.2 + 8.3).
+- `/admin/analytics` → redirect `/admin` (bookmark).
+- `8.1` **done (review):** stat card + monthly growth line chart + date range (`UserGrowthPanel`).
 - `8.2`: WAU line chart + upload volume bar chart + day/week toggle.
 - `8.3`: success/failure stacked chart + threshold + drill-down modal.
 - Pending states nên tách riêng hoặc loại khỏi rate charts.

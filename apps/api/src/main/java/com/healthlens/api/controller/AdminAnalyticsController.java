@@ -3,6 +3,7 @@ package com.healthlens.api.controller;
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.response.UploadHistoryPageResponse;
 import com.healthlens.api.dto.response.UploadQualityResponse;
+import com.healthlens.api.dto.response.UserAnalyticsResponse;
 import com.healthlens.api.service.AnalyticsService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +25,23 @@ public class AdminAnalyticsController {
 
     public AdminAnalyticsController(AnalyticsService analyticsService) {
         this.analyticsService = analyticsService;
+    }
+
+    @GetMapping(ApiRoutes.ADMIN_ANALYTICS_USERS_REL)
+    public ResponseEntity<Map<String, Object>> getUserAnalytics(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        Instant fromInstant = from != null
+                ? from.withDayOfMonth(1).atStartOfDay().toInstant(ZoneOffset.UTC)
+                : AnalyticsService.defaultUserAnalyticsFrom();
+        Instant toExclusive = to != null
+                ? to.plusMonths(1).withDayOfMonth(1).atStartOfDay().toInstant(ZoneOffset.UTC)
+                : AnalyticsService.defaultUserAnalyticsToExclusive();
+
+        AnalyticsService.validateUserAnalyticsRange(fromInstant, toExclusive);
+
+        UserAnalyticsResponse response = analyticsService.getUserAnalytics(fromInstant, toExclusive);
+        return ResponseEntity.ok(Map.of("data", response));
     }
 
     @GetMapping(ApiRoutes.ADMIN_ANALYTICS_UPLOAD_QUALITY_REL)

@@ -10,10 +10,7 @@ import { API_ROUTES } from "@/lib/api/routes";
 const DEFAULT_FROM = format(subDays(new Date(), 29), "yyyy-MM-dd");
 const DEFAULT_TO = format(new Date(), "yyyy-MM-dd");
 
-const STUB_CARDS = [
-  { label: "Người dùng", story: "8.1" },
-  { label: "Tải lên tuần này", story: "8.2" },
-] as const;
+const STUB_CARDS = [{ label: "Tải lên tuần này", story: "8.2" }] as const;
 
 function formatRate(rate: number) {
   return `${Math.round(rate * 1000) / 10}%`;
@@ -41,7 +38,7 @@ export function AdminGeneralStats() {
       <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">
         Thống kê chung
       </h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {STUB_CARDS.map((card) => (
           <div
             key={card.story}
