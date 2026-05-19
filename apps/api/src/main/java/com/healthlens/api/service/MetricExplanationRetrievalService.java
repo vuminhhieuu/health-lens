@@ -1,6 +1,8 @@
 package com.healthlens.api.service;
 
 import com.healthlens.api.dto.ReferenceRangeDto;
+import com.healthlens.api.entity.OnlineRagReviewStatus;
+import com.healthlens.api.service.rag.TrustedOnlineRagSourceAdapter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -9,11 +11,15 @@ import org.springframework.ai.document.Document;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -30,10 +36,12 @@ public class MetricExplanationRetrievalService {
     private static final String FALLBACK_QDRANT_ERROR_TO_REFERENCE_DATA = "qdrant_error_to_reference_data";
     private static final String FALLBACK_GENERIC = "reference_data_miss_to_generic";
     private static final int MAX_CURATED_CHUNK_CHARS = 1_200;
+    private static final int MAX_ONLINE_CITATION_RESOLUTION_DOCS = 1;
 
     private final VectorStoreService vectorStoreService;
     private final ReferenceDataService referenceDataService;
     private final RagCorpusGovernanceService governanceService;
+    private final TrustedOnlineRagSourceAdapter onlineRagSourceAdapter;
     private final MeterRegistry meterRegistry;
     private final int topK;
 
@@ -41,12 +49,14 @@ public class MetricExplanationRetrievalService {
             VectorStoreService vectorStoreService,
             ReferenceDataService referenceDataService,
             RagCorpusGovernanceService governanceService,
+            TrustedOnlineRagSourceAdapter onlineRagSourceAdapter,
             MeterRegistry meterRegistry,
             @Value("${app.ai.explanation.retrieval.top-k:3}") int topK
     ) {
         this.vectorStoreService = vectorStoreService;
         this.referenceDataService = referenceDataService;
         this.governanceService = governanceService;
+        this.onlineRagSourceAdapter = onlineRagSourceAdapter;
         this.meterRegistry = meterRegistry;
         this.topK = topK;
     }
@@ -79,7 +89,13 @@ public class MetricExplanationRetrievalService {
                         .filter(document -> matchesMetricOrAlias(document, safeMetric))
                         .collect(Collectors.toList());
                 if (!metricMatchedDocuments.isEmpty()) {
-                    String snippet = composeSnippet(metricMatchedDocuments, referenceRange, safeContext);
+                    OnlineCitationBundle onlineCitationBundle = resolveOnlineCitations(metricMatchedDocuments);
+                    String snippet = composeSnippet(
+                            metricMatchedDocuments,
+                            referenceRange,
+                            safeContext,
+                            onlineCitationBundle.approvedContent()
+                    );
                     double topScore = resolveTopScore(metricMatchedDocuments.get(0));
                     RetrievalTrace trace = new RetrievalTrace(SOURCE_QDRANT, true, topScore, FALLBACK_NONE);
                     recordMetrics(trace, startNanos);
@@ -87,7 +103,7 @@ public class MetricExplanationRetrievalService {
                             "metric_explanation_retrieval source={} hit={} metric={} topScore={} fallbackPath={} latencyMs={}",
                             SOURCE_QDRANT, true, safeMetric, topScore, FALLBACK_NONE, elapsedMs(startNanos)
                     );
-                    return new RetrievalResult(snippet, trace);
+                    return new RetrievalResult(snippet, trace, onlineCitationBundle.citations());
                 }
             }
         } catch (Exception ex) {
@@ -130,7 +146,12 @@ public class MetricExplanationRetrievalService {
                 + " && sourceVersion == '" + escapeFilterStringLiteral(activeVersion) + "'";
     }
 
-    private String composeSnippet(List<Document> documents, ReferenceRangeDto referenceRange, RetrievalContext retrievalContext) {
+    private String composeSnippet(
+            List<Document> documents,
+            ReferenceRangeDto referenceRange,
+            RetrievalContext retrievalContext,
+            List<String> approvedOnlineContent
+    ) {
         Document first = documents.get(0);
         String curatedChunk = first.getText() == null || first.getText().isBlank()
                 ? "N/A"
@@ -145,7 +166,89 @@ public class MetricExplanationRetrievalService {
                 Clinical relation: %s
                 Out-of-range impact: %s
                 """.formatted(curatedChunk, metricIdentity, relatedTo, impact);
+        if (approvedOnlineContent != null && !approvedOnlineContent.isEmpty()) {
+            snippet += "\nApproved online source context:\n" + String.join("\n---\n", approvedOnlineContent);
+        }
         return withStructuredContext(snippet, referenceRange, retrievalContext);
+    }
+
+    private OnlineCitationBundle resolveOnlineCitations(List<Document> documents) {
+        if (onlineRagSourceAdapter == null || documents == null || documents.isEmpty()) {
+            return OnlineCitationBundle.empty();
+        }
+
+        List<OnlineCitationMetadata> citations = new ArrayList<>();
+        List<String> approvedContent = new ArrayList<>();
+        for (Document document : documents.stream().limit(MAX_ONLINE_CITATION_RESOLUTION_DOCS).toList()) {
+            Optional<URI> sourceUri = onlineSourceUri(document);
+            if (sourceUri.isEmpty()) {
+                continue;
+            }
+            String publisher = metadata(document, "publisher", metadata(document, "sourcePublisher", ""));
+            TrustedOnlineRagSourceAdapter.OnlineRagRetrievalResult result;
+            try {
+                result = onlineRagSourceAdapter.retrieve(sourceUri.get(), publisher);
+            } catch (RuntimeException ex) {
+                log.warn("online_rag_citation_retrieval_failed sourceUrl={} error={}", sourceUri.get(), ex.getMessage());
+                citations.add(new OnlineCitationMetadata(
+                        null,
+                        sourceUri.get().toString(),
+                        publisher,
+                        null,
+                        "",
+                        OnlineRagReviewStatus.REVIEW_REQUIRED,
+                        true,
+                        false,
+                        false,
+                        true,
+                        false,
+                        false
+                ));
+                continue;
+            }
+            TrustedOnlineRagSourceAdapter.OnlineRagSourceMetadata metadata = result.metadata();
+            citations.add(new OnlineCitationMetadata(
+                    metadata.sourceSnapshotId(),
+                    metadata.sourceUrl(),
+                    metadata.publisher(),
+                    metadata.retrievedAt(),
+                    metadata.snapshotHash(),
+                    metadata.reviewStatus(),
+                    metadata.excluded(),
+                    result.cacheHit(),
+                    result.usableForAi(),
+                    result.reviewRequired(),
+                    result.rejected(),
+                    metadata.stale()
+            ));
+            if (result.usableForAi()) {
+                result.content()
+                        .map(String::trim)
+                        .filter(content -> !content.isBlank())
+                        .map(content -> truncate(content, MAX_CURATED_CHUNK_CHARS))
+                        .ifPresent(approvedContent::add);
+            }
+        }
+        return new OnlineCitationBundle(citations, approvedContent);
+    }
+
+    private Optional<URI> onlineSourceUri(Document document) {
+        if (document == null || document.getMetadata() == null) {
+            return Optional.empty();
+        }
+        String raw = metadata(document, "sourceUrl", "");
+        if (raw.isBlank()) {
+            raw = metadata(document, "onlineSourceUrl", "");
+        }
+        if (raw.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(URI.create(raw));
+        } catch (IllegalArgumentException ex) {
+            log.warn("Skipping invalid online RAG source URL metadata: {}", ex.getMessage());
+            return Optional.empty();
+        }
     }
 
     private String withStructuredContext(
@@ -294,25 +397,64 @@ public class MetricExplanationRetrievalService {
     public record RetrievalTrace(String source, boolean hit, double topScore, String fallbackPath) {
     }
 
+    public record OnlineCitationMetadata(
+            UUID sourceSnapshotId,
+            String sourceUrl,
+            String publisher,
+            Instant retrievedAt,
+            String snapshotHash,
+            OnlineRagReviewStatus reviewStatus,
+            boolean excluded,
+            boolean cacheHit,
+            boolean usableForAi,
+            boolean reviewRequired,
+            boolean rejected,
+            boolean stale
+    ) {
+    }
+
+    private record OnlineCitationBundle(
+            List<OnlineCitationMetadata> citations,
+            List<String> approvedContent
+    ) {
+        private static OnlineCitationBundle empty() {
+            return new OnlineCitationBundle(List.of(), List.of());
+        }
+    }
+
     public record RetrievalResult(
             String knowledgeSnippet,
             String source,
             boolean hit,
             double topScore,
-            RetrievalTrace trace
+            RetrievalTrace trace,
+            List<OnlineCitationMetadata> onlineCitations
     ) {
+        public RetrievalResult {
+            onlineCitations = onlineCitations == null ? List.of() : List.copyOf(onlineCitations);
+        }
+
         public RetrievalResult(String knowledgeSnippet, RetrievalTrace trace) {
+            this(knowledgeSnippet, trace, List.of());
+        }
+
+        public RetrievalResult(
+                String knowledgeSnippet,
+                RetrievalTrace trace,
+                List<OnlineCitationMetadata> onlineCitations
+        ) {
             this(
                     knowledgeSnippet,
                     requireTrace(trace).source(),
                     requireTrace(trace).hit(),
                     requireTrace(trace).topScore(),
-                    requireTrace(trace)
+                    requireTrace(trace),
+                    onlineCitations
             );
         }
 
         public RetrievalResult(String knowledgeSnippet, String source, boolean hit, double topScore) {
-            this(knowledgeSnippet, source, hit, topScore, new RetrievalTrace(source, hit, topScore, FALLBACK_NONE));
+            this(knowledgeSnippet, source, hit, topScore, new RetrievalTrace(source, hit, topScore, FALLBACK_NONE), List.of());
         }
 
         private static RetrievalTrace requireTrace(RetrievalTrace trace) {

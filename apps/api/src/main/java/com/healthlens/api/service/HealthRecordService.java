@@ -11,6 +11,7 @@ import com.healthlens.api.dto.response.HealthRecordDetailResponse;
 import com.healthlens.api.dto.response.HealthRecordHistoryItemResponse;
 import com.healthlens.api.dto.response.HealthRecordHistoryPageResponse;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
+import com.healthlens.api.dto.response.OnlineRagCitationResponse;
 import com.healthlens.api.dto.response.RecommendationsResponse;
 import com.healthlens.api.dto.response.RetrievalTraceResponse;
 import com.healthlens.api.dto.response.SharedHealthRecordResponse;
@@ -31,6 +32,7 @@ import com.healthlens.api.audit.UnifiedAuditSnapshot;
 import com.healthlens.api.constants.ConsentConstants;
 import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.HealthRecordShare;
+import com.healthlens.api.entity.OnlineRagAnswerCitation;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.exception.ConsentRequiredException;
@@ -38,9 +40,11 @@ import com.healthlens.api.exception.ProfileAccessRevokedException;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.HealthRecordShareRepository;
+import com.healthlens.api.repository.OnlineRagAnswerCitationRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -59,6 +63,10 @@ import java.time.LocalDate;
 import java.time.Period;
 import java.time.temporal.ChronoUnit;
 import java.text.Normalizer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -93,6 +101,7 @@ public class HealthRecordService {
     private final LlmService llmService;
     private final ConsentService consentService;
     private final HealthRecordPdfService healthRecordPdfService;
+    private final OnlineRagAnswerCitationRepository onlineRagAnswerCitationRepository;
     private final HealthRecordLegacyAuditWriter healthRecordLegacyAuditWriter;
     private final UnifiedAuditCoordinator unifiedAuditCoordinator;
     private final AuditEventRecorder auditEventRecorder;
@@ -111,6 +120,7 @@ public class HealthRecordService {
             LlmService llmService,
             ConsentService consentService,
             HealthRecordPdfService healthRecordPdfService,
+            OnlineRagAnswerCitationRepository onlineRagAnswerCitationRepository,
             HealthRecordLegacyAuditWriter healthRecordLegacyAuditWriter,
             UnifiedAuditCoordinator unifiedAuditCoordinator,
             AuditEventRecorder auditEventRecorder,
@@ -128,6 +138,7 @@ public class HealthRecordService {
         this.llmService = llmService;
         this.consentService = consentService;
         this.healthRecordPdfService = healthRecordPdfService;
+        this.onlineRagAnswerCitationRepository = onlineRagAnswerCitationRepository;
         this.healthRecordLegacyAuditWriter = healthRecordLegacyAuditWriter;
         this.unifiedAuditCoordinator = unifiedAuditCoordinator;
         this.auditEventRecorder = auditEventRecorder;
@@ -436,7 +447,6 @@ public class HealthRecordService {
         return responses;
     }
 
-    @Transactional(readOnly = true)
     public MetricExplanationResponse getMetricExplanation(UUID userId, UUID recordId, String metricName) {
         AccessibleRecord accessibleRecord = loadAccessibleRecord(userId, recordId);
         HealthRecord record = accessibleRecord.record();
@@ -465,13 +475,103 @@ public class HealthRecordService {
                 retrievalResult.knowledgeSnippet()
         );
 
+        List<OnlineRagCitationResponse> onlineCitations = toOnlineCitationResponses(retrievalResult.onlineCitations());
+        persistOnlineRagCitations(
+                recordId,
+                metric.getName(),
+                result,
+                retrievalResult,
+                onlineCitations
+        );
+
         return new MetricExplanationResponse(
                 result.explanation(),
                 result.source(),
                 result.promptVersion(),
                 result.modelVersion(),
-                toRetrievalTraceResponse(retrievalResult.trace())
+                toRetrievalTraceResponse(retrievalResult.trace()),
+                onlineCitations
         );
+    }
+
+    private void persistOnlineRagCitations(
+            UUID recordId,
+            String metricName,
+            LlmService.ExplanationResult explanationResult,
+            MetricExplanationRetrievalService.RetrievalResult retrievalResult,
+            List<OnlineRagCitationResponse> citations
+    ) {
+        if (citations == null || citations.isEmpty()) {
+            return;
+        }
+        String answerHash = sha256(explanationResult.explanation());
+        String retrievalSource = retrievalResult.trace() != null ? retrievalResult.trace().source() : retrievalResult.source();
+        for (OnlineRagCitationResponse citation : citations) {
+            String sourceUrl = safeString(citation.sourceUrl());
+            String snapshotHash = safeString(citation.snapshotHash());
+            if (onlineRagAnswerCitationRepository.existsByHealthRecordIdAndMetricNameAndAnswerHashAndSourceUrlAndSnapshotHash(
+                    recordId,
+                    metricName,
+                    answerHash,
+                    sourceUrl,
+                    snapshotHash
+            )) {
+                continue;
+            }
+            OnlineRagAnswerCitation entity = new OnlineRagAnswerCitation();
+            entity.setHealthRecordId(recordId);
+            entity.setMetricName(metricName);
+            entity.setAnswerHash(answerHash);
+            entity.setSourceSnapshotId(citation.sourceSnapshotId());
+            entity.setSourceUrl(sourceUrl);
+            entity.setPublisher(safeString(citation.publisher()));
+            entity.setRetrievedAt(citation.retrievedAt());
+            entity.setSnapshotHash(snapshotHash);
+            entity.setReviewStatus(com.healthlens.api.entity.OnlineRagReviewStatus.valueOf(citation.reviewStatus()));
+            entity.setExcluded(citation.excluded());
+            entity.setCacheHit(citation.cacheHit());
+            entity.setUsableForAi(citation.usableForAi());
+            entity.setReviewRequired(citation.reviewRequired());
+            entity.setRejected(citation.rejected());
+            entity.setRetrievalSource(safeString(retrievalSource));
+            entity.setPromptVersion(safeString(explanationResult.promptVersion()));
+            entity.setModelVersion(safeString(explanationResult.modelVersion()));
+            try {
+                onlineRagAnswerCitationRepository.saveAndFlush(entity);
+            } catch (DataIntegrityViolationException ex) {
+                log.debug(
+                        "online_rag_answer_citation_duplicate_ignored recordId={} metricName={} sourceUrl={} snapshotHash={}",
+                        recordId,
+                        metricName,
+                        sourceUrl,
+                        snapshotHash
+                );
+            }
+        }
+    }
+
+    private List<OnlineRagCitationResponse> toOnlineCitationResponses(
+            List<MetricExplanationRetrievalService.OnlineCitationMetadata> citations
+    ) {
+        if (citations == null || citations.isEmpty()) {
+            return List.of();
+        }
+        return citations.stream()
+                .map(citation -> new OnlineRagCitationResponse(
+                        citation.sourceSnapshotId(),
+                        citation.sourceUrl(),
+                        citation.publisher(),
+                        citation.retrievedAt(),
+                        citation.snapshotHash(),
+                        citation.reviewStatus().name(),
+                        citation.excluded(),
+                        citation.cacheHit(),
+                        citation.usableForAi(),
+                        citation.reviewRequired(),
+                        citation.rejected(),
+                        citation.stale()
+                ))
+                .toList();
     }
 
     private void assertConsentForProfileContext(UUID userId) {
@@ -537,6 +637,19 @@ public class HealthRecordService {
             return null;
         }
         return new RetrievalTraceResponse(trace.source(), trace.hit(), trace.topScore(), trace.fallbackPath());
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(safeString(value).getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is unavailable", ex);
+        }
+    }
+
+    private String safeString(String value) {
+        return value == null ? "" : value;
     }
 
     @Transactional(readOnly = true)

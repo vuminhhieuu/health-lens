@@ -91,6 +91,7 @@ class TrustedOnlineRagSourceAdapterTest {
         assertThat(result.metadata().publisher()).isEqualTo("CDC");
         assertThat(result.metadata().snapshotHash()).isEqualTo("a".repeat(64));
         assertThat(result.metadata().reviewStatus()).isEqualTo(OnlineRagReviewStatus.APPROVED);
+        assertThat(result.metadata().stale()).isFalse();
         verify(httpClient, never()).fetch(uri);
     }
 
@@ -161,6 +162,34 @@ class TrustedOnlineRagSourceAdapterTest {
         assertThat(result.cacheHit()).isFalse();
         assertThat(result.reviewRequired()).isTrue();
         assertThat(result.metadata().retrievedAt()).isEqualTo(FIXED_NOW);
+        assertThat(result.metadata().stale()).isFalse();
+        verify(httpClient).fetch(uri);
+    }
+
+    @Test
+    @DisplayName("Cache quá TTL nhưng fetch lỗi trả metadata snapshot cũ là stale và không dùng cho AI")
+    void retrieve_staleCachedSourceFetchFailure_returnsStaleMetadataOnly() {
+        URI uri = URI.create("https://cdc.gov/lab/stale-timeout");
+        OnlineRagSourceSnapshot staleSnapshot = snapshot(uri, OnlineRagReviewStatus.APPROVED, false, "stale content");
+        staleSnapshot.setRetrievedAt(FIXED_NOW.minus(Duration.ofHours(2)));
+        TrustedOnlineRagSourceAdapter shortTtlAdapter = new TrustedOnlineRagSourceAdapter(
+                new TrustedOnlineRagSourcePolicy("who.int,cdc.gov"),
+                snapshotRepository,
+                httpClient,
+                Clock.fixed(FIXED_NOW, ZoneOffset.UTC),
+                Duration.ofHours(1)
+        );
+        when(snapshotRepository.findFirstBySourceUrlOrderByRetrievedAtDesc(uri.toString())).thenReturn(Optional.of(staleSnapshot));
+        when(httpClient.fetch(uri)).thenThrow(new IllegalStateException("timeout"));
+
+        TrustedOnlineRagSourceAdapter.OnlineRagRetrievalResult result = shortTtlAdapter.retrieve(uri, "CDC");
+
+        assertThat(result.cacheHit()).isTrue();
+        assertThat(result.reviewRequired()).isTrue();
+        assertThat(result.usableForAi()).isFalse();
+        assertThat(result.content()).isEmpty();
+        assertThat(result.metadata().retrievedAt()).isEqualTo(FIXED_NOW.minus(Duration.ofHours(2)));
+        assertThat(result.metadata().stale()).isTrue();
         verify(httpClient).fetch(uri);
     }
 

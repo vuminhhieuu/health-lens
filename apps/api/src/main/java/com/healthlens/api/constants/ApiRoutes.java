@@ -176,5 +176,7 @@ public final class ApiRoutes {
     // =========================================
     public static final String ADMIN_AUDIT_LOGS = ADMIN_BASE + "/audit-logs";
     public static final String ADMIN_AUDIT_LOGS_EXPORT = ADMIN_AUDIT_LOGS + "/export";
+    public static final String ADMIN_ONLINE_RAG_CITATIONS = ADMIN_BASE + "/online-rag-citations";
+    public static final String ADMIN_ONLINE_RAG_CITATIONS_EXPORT = ADMIN_ONLINE_RAG_CITATIONS + "/export";
     public static final String ADMIN_REFERENCE_METRICS_BASE = ADMIN_BASE + "/reference-metrics";
 }
