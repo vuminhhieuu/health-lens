@@ -16,8 +16,63 @@ const apiClient = axios.create({
   },
 });
 
+const XSRF_COOKIE_NAME = "XSRF-TOKEN";
+const XSRF_HEADER_NAME = "X-XSRF-TOKEN";
+let csrfBootstrapPromise: Promise<void> | null = null;
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const encodedName = `${encodeURIComponent(name)}=`;
+  const cookie = document.cookie
+    .split(";")
+    .map((value) => value.trim())
+    .find((value) => value.startsWith(encodedName));
+
+  return cookie ? decodeURIComponent(cookie.slice(encodedName.length)) : null;
+}
+
+function isUnsafeAuthCookieEndpoint(url?: string, method?: string): boolean {
+  const normalizedMethod = method?.toUpperCase() ?? "GET";
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(normalizedMethod)) {
+    return false;
+  }
+
+  return Boolean(
+    url?.includes(API_ROUTES.AUTH.LOGIN) ||
+      url?.includes(API_ROUTES.AUTH.REFRESH) ||
+      url?.includes(API_ROUTES.AUTH.LOGOUT),
+  );
+}
+
+async function ensureCsrfToken(): Promise<void> {
+  if (typeof window === "undefined" || readCookie(XSRF_COOKIE_NAME)) {
+    return;
+  }
+
+  csrfBootstrapPromise ??= axios
+    .get(API_ROUTES.AUTH.CSRF, {
+      baseURL: apiBaseUrl,
+      withCredentials: true,
+      headers: { "Content-Type": "application/json" },
+    })
+    .then(() => undefined)
+    .finally(() => {
+      csrfBootstrapPromise = null;
+    });
+
+  await csrfBootstrapPromise;
+}
+
 // Request interceptor: attach Authorization header
-apiClient.interceptors.request.use((config) => {
+apiClient.interceptors.request.use(async (config) => {
+  const needsXsrfHeader = isUnsafeAuthCookieEndpoint(config.url, config.method);
+  if (needsXsrfHeader) {
+    await ensureCsrfToken();
+  }
+
   const { accessToken } = useAuthStore.getState();
   const headers = AxiosHeaders.from(config.headers);
   config.headers = headers;
@@ -32,6 +87,10 @@ apiClient.interceptors.request.use((config) => {
   }
   if (accessToken && !headers.has("Authorization") && !headers.has("authorization")) {
     headers.set("Authorization", `Bearer ${accessToken}`);
+  }
+  const xsrfToken = needsXsrfHeader ? readCookie(XSRF_COOKIE_NAME) : null;
+  if (xsrfToken && !headers.has(XSRF_HEADER_NAME)) {
+    headers.set(XSRF_HEADER_NAME, xsrfToken);
   }
   return config;
 });

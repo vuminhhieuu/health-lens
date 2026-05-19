@@ -1,6 +1,7 @@
 package com.healthlens.api.controller;
 
 import com.healthlens.api.constants.ApiRoutes;
+import com.healthlens.api.constants.SecurityConstants;
 import com.healthlens.api.dto.request.ForgotPasswordRequest;
 import com.healthlens.api.dto.request.LoginRequest;
 import com.healthlens.api.dto.request.RegisterRequest;
@@ -14,6 +15,8 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,7 +33,6 @@ import java.util.UUID;
 @RequestMapping(ApiRoutes.AUTH_BASE)
 public class AuthController {
 
-    private static final String REFRESH_TOKEN_COOKIE = "refresh_token";
     private static final int REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60; // 7 days in seconds
 
     private final AuthService authService;
@@ -57,6 +59,32 @@ public class AuthController {
         );
 
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
+    }
+
+    @GetMapping(ApiRoutes.AUTH_CSRF_REL)
+    public ResponseEntity<Map<String, Object>> csrf(HttpServletRequest request, CsrfToken csrfToken) {
+        CsrfToken effectiveToken = csrfTokenFromRequest(request, csrfToken);
+        Map<String, Object> body = Map.of(
+                "data", Map.of(
+                        "headerName", SecurityConstants.XSRF_HEADER,
+                        "cookieName", SecurityConstants.XSRF_COOKIE,
+                        "parameterName", effectiveToken.getParameterName()
+                ),
+                "meta", Map.of(
+                        "timestamp", Instant.now().toString(),
+                        "requestId", UUID.randomUUID().toString()
+                )
+        );
+
+        return ResponseEntity.ok(body);
+    }
+
+    private CsrfToken csrfTokenFromRequest(HttpServletRequest request, CsrfToken fallback) {
+        CsrfToken token = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
+        if (token == null) {
+            token = (CsrfToken) request.getAttribute("_csrf");
+        }
+        return token == null ? fallback : token;
     }
 
     /**
@@ -226,7 +254,7 @@ public class AuthController {
     }
 
     private void setRefreshTokenCookie(HttpServletResponse response, String value) {
-        Cookie cookie = new Cookie(REFRESH_TOKEN_COOKIE, value);
+        Cookie cookie = new Cookie(SecurityConstants.REFRESH_TOKEN_COOKIE, value);
         cookie.setHttpOnly(true);
         cookie.setSecure(cookieSecure);
         cookie.setPath(ApiRoutes.AUTH_REFRESH);
@@ -236,7 +264,7 @@ public class AuthController {
     }
 
     private void clearRefreshTokenCookie(HttpServletResponse response) {
-        Cookie cookie = new Cookie(REFRESH_TOKEN_COOKIE, "");
+        Cookie cookie = new Cookie(SecurityConstants.REFRESH_TOKEN_COOKIE, "");
         cookie.setHttpOnly(true);
         cookie.setSecure(cookieSecure);
         cookie.setPath(ApiRoutes.AUTH_REFRESH);
@@ -250,7 +278,7 @@ public class AuthController {
             return null;
         }
         return Arrays.stream(request.getCookies())
-                .filter(c -> REFRESH_TOKEN_COOKIE.equals(c.getName()))
+                .filter(c -> SecurityConstants.REFRESH_TOKEN_COOKIE.equals(c.getName()))
                 .map(Cookie::getValue)
                 .findFirst()
                 .orElse(null);
