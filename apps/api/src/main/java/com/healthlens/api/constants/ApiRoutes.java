@@ -29,6 +29,8 @@ public final class ApiRoutes {
     public static final String AUTH_BASE = API_V1 + "/auth";
     public static final String AUTH_REGISTER = AUTH_BASE + "/register";
     public static final String AUTH_LOGIN = AUTH_BASE + "/login";
+    public static final String AUTH_CSRF_REL = "/csrf";
+    public static final String AUTH_CSRF = AUTH_BASE + AUTH_CSRF_REL;
     public static final String AUTH_VERIFY_EMAIL = AUTH_BASE + "/verify-email";
     public static final String AUTH_REFRESH = AUTH_BASE + "/refresh";
     public static final String AUTH_LOGOUT = AUTH_BASE + "/logout";

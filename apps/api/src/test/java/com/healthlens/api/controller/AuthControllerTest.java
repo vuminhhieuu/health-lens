@@ -34,6 +34,8 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -138,6 +140,15 @@ class AuthControllerTest {
         // ========== LOGIN TESTS ==========
 
         @Test
+        @DisplayName("GET /api/v1/auth/csrf -> 200 va materialize CSRF token")
+        void csrf_success() throws Exception {
+                mockMvc.perform(get("/api/v1/auth/csrf"))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.data.headerName").value("X-XSRF-TOKEN"))
+                                .andExpect(jsonPath("$.data.parameterName").value("_csrf"));
+        }
+
+        @Test
         @DisplayName("POST /api/v1/auth/login -> 200 khi dang nhap thanh cong (AC #1)")
         void login_success() throws Exception {
                 UUID userId = UUID.randomUUID();
@@ -149,6 +160,7 @@ class AuthControllerTest {
                 when(authService.login(any(LoginRequest.class))).thenReturn(result);
 
                 mockMvc.perform(post("/api/v1/auth/login")
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"email\":\"user@example.com\",\"password\":\"StrongPass1\"}"))
                                 .andExpect(status().isOk())
@@ -166,6 +178,7 @@ class AuthControllerTest {
                                 .thenThrow(new BadCredentialsException("Email hoặc mật khẩu không đúng."));
 
                 mockMvc.perform(post("/api/v1/auth/login")
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"email\":\"user@example.com\",\"password\":\"WrongPass1\"}"))
                                 .andExpect(status().isUnauthorized())
@@ -183,6 +196,7 @@ class AuthControllerTest {
                                                 "Tài khoản bị khóa tạm thời. Vui lòng thử lại sau 900 giây."));
 
                 mockMvc.perform(post("/api/v1/auth/login")
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"email\":\"user@example.com\",\"password\":\"AnyPass1\"}"))
                                 .andExpect(status().isTooManyRequests())
@@ -268,6 +282,7 @@ class AuthControllerTest {
                 when(authService.refreshWithConsent("old-refresh-token")).thenReturn(result);
 
                 mockMvc.perform(post("/api/v1/auth/refresh")
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .cookie(new jakarta.servlet.http.Cookie("refresh_token", "old-refresh-token")))
                         .andExpect(status().isOk())
@@ -294,6 +309,7 @@ class AuthControllerTest {
                 when(authService.refreshWithConsent("old-refresh-token")).thenReturn(result);
 
                 mockMvc.perform(post("/api/v1/auth/refresh")
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .cookie(new jakarta.servlet.http.Cookie("refresh_token", "old-refresh-token")))
                         .andExpect(status().isOk())
@@ -311,6 +327,7 @@ class AuthControllerTest {
                 doNothing().when(authService).logout(any());
 
                 mockMvc.perform(post("/api/v1/auth/logout")
+                                .with(csrf())
                                 .header("Authorization", "Bearer some-access-token"))
                                 .andExpect(status().isNoContent());
         }
@@ -318,7 +335,8 @@ class AuthControllerTest {
         @Test
         @DisplayName("POST /api/v1/auth/logout -> 204 khi khong co Bearer header")
         void logout_noAuthHeader() throws Exception {
-                mockMvc.perform(post("/api/v1/auth/logout"))
+                mockMvc.perform(post("/api/v1/auth/logout")
+                                .with(csrf()))
                                 .andExpect(status().isNoContent());
         }
 

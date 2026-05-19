@@ -18,6 +18,7 @@ export const ApiPaths = {
     BASE: `/api/${API_VERSION}/auth`,
     REGISTER: `/api/${API_VERSION}/auth/register`,
     LOGIN: `/api/${API_VERSION}/auth/login`,
+    CSRF: `/api/${API_VERSION}/auth/csrf`,
     VERIFY_EMAIL: `/api/${API_VERSION}/auth/verify-email`,
     REFRESH: `/api/${API_VERSION}/auth/refresh`,
     LOGOUT: `/api/${API_VERSION}/auth/logout`,
