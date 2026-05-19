@@ -30,7 +30,25 @@ public class MetricExplanationIngestionJob implements CommandLineRunner {
         if (!ingestionEnabled) {
             return;
         }
-        int count = ingestionService.ingest(ingestionResource, retrievalVersion);
-        log.info("metric_explanation_ingestion completed points={} sourceVersion={}", count, retrievalVersion);
+        MetricExplanationIngestionService.IngestionReport report =
+                ingestionService.ingestWithReport(ingestionResource, retrievalVersion, "system-ingestion");
+        if (report.hasErrors()) {
+            log.warn(
+                    "metric_explanation_ingestion failed sourceVersion={} chunks={} embeddingModel={} embeddingDimension={} errors={}",
+                    report.sourceVersion(),
+                    report.chunkCount(),
+                    report.embeddingModel(),
+                    report.embeddingDimension(),
+                    report.errors()
+            );
+            throw new IllegalStateException("Metric explanation ingestion failed: " + report.errors());
+        }
+        log.info(
+                "metric_explanation_ingestion completed sourceVersion={} chunks={} embeddingModel={} embeddingDimension={}",
+                report.sourceVersion(),
+                report.chunkCount(),
+                report.embeddingModel(),
+                report.embeddingDimension()
+        );
     }
 }

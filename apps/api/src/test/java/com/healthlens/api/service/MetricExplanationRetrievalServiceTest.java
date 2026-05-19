@@ -17,6 +17,8 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,14 +28,18 @@ class MetricExplanationRetrievalServiceTest {
     private VectorStoreService vectorStoreService;
     @Mock
     private ReferenceDataService referenceDataService;
+    @Mock
+    private RagCorpusGovernanceService governanceService;
 
     private MetricExplanationRetrievalService retrievalService;
 
     @BeforeEach
     void setUp() {
+        lenient().when(governanceService.activeApprovedVersion()).thenReturn(java.util.Optional.of("v1"));
         retrievalService = new MetricExplanationRetrievalService(
                 vectorStoreService,
                 referenceDataService,
+                governanceService,
                 new SimpleMeterRegistry(),
                 3
         );
@@ -54,7 +60,8 @@ class MetricExplanationRetrievalServiceTest {
                         "score", 0.88
                 ))
                 .build();
-        when(vectorStoreService.semanticSearch(anyString(), eq(3), eq("language == 'vi'")))
+        when(vectorStoreService.semanticSearch(anyString(), eq(3),
+                eq("language == 'vi' && sourceVersion == 'v1'")))
                 .thenReturn(List.of(hit));
 
         MetricExplanationRetrievalService.RetrievalResult result = retrievalService.retrieve(
@@ -68,7 +75,8 @@ class MetricExplanationRetrievalServiceTest {
     @Test
     @DisplayName("Retrieve miss: fallback sang ReferenceData")
     void retrieve_miss_returnsReferenceDataSnippet() {
-        when(vectorStoreService.semanticSearch(anyString(), eq(3), eq("language == 'vi'")))
+        when(vectorStoreService.semanticSearch(anyString(), eq(3),
+                eq("language == 'vi' && sourceVersion == 'v1'")))
                 .thenReturn(List.of());
         when(referenceDataService.buildMetricKnowledgeSnippet(eq("ALT"), eq("abnormal"), eq(sampleRange())))
                 .thenReturn("Metric identity: reference snippet");
@@ -93,7 +101,8 @@ class MetricExplanationRetrievalServiceTest {
                         "whatIsIt", "AST là men gan."
                 ))
                 .build();
-        when(vectorStoreService.semanticSearch(anyString(), eq(3), eq("language == 'vi'")))
+        when(vectorStoreService.semanticSearch(anyString(), eq(3),
+                eq("language == 'vi' && sourceVersion == 'v1'")))
                 .thenReturn(List.of(unrelated));
         when(referenceDataService.buildMetricKnowledgeSnippet(eq("ALT"), eq("abnormal"), eq(sampleRange())))
                 .thenReturn("Metric identity: reference snippet");
@@ -109,7 +118,8 @@ class MetricExplanationRetrievalServiceTest {
     @Test
     @DisplayName("Retrieve timeout/error: fallback an toàn, không ném exception")
     void retrieve_timeout_returnsSafeFallback() {
-        when(vectorStoreService.semanticSearch(anyString(), eq(3), eq("language == 'vi'")))
+        when(vectorStoreService.semanticSearch(anyString(), eq(3),
+                eq("language == 'vi' && sourceVersion == 'v1'")))
                 .thenThrow(new RuntimeException("qdrant timeout"));
         when(referenceDataService.buildMetricKnowledgeSnippet(eq("ALT"), eq("abnormal"), eq(sampleRange())))
                 .thenReturn("Metric identity: fallback from reference");
@@ -119,6 +129,55 @@ class MetricExplanationRetrievalServiceTest {
 
         assertThat(result.source()).isEqualTo("reference-data");
         assertThat(result.knowledgeSnippet()).contains("fallback from reference");
+    }
+
+    @Test
+    @DisplayName("Retrieve governance: không dùng Qdrant nếu chưa có active approved corpus")
+    void retrieve_withoutActiveApprovedCorpus_fallbacksToReferenceData() {
+        RagCorpusGovernanceService emptyGovernance = mock(RagCorpusGovernanceService.class);
+        when(emptyGovernance.activeApprovedVersion()).thenReturn(java.util.Optional.empty());
+        retrievalService = new MetricExplanationRetrievalService(
+                vectorStoreService,
+                referenceDataService,
+                emptyGovernance,
+                new SimpleMeterRegistry(),
+                3
+        );
+        when(referenceDataService.buildMetricKnowledgeSnippet(eq("ALT"), eq("abnormal"), eq(sampleRange())))
+                .thenReturn("Metric identity: reference snippet");
+
+        MetricExplanationRetrievalService.RetrievalResult result = retrievalService.retrieve(
+                "ALT", "abnormal", sampleRange(), "vi");
+
+        assertThat(result.source()).isEqualTo("reference-data");
+        assertThat(result.hit()).isFalse();
+    }
+
+    @Test
+    @DisplayName("Rollback: retrieval dùng previous approved version sau khi rollback")
+    void retrieve_afterRollback_filtersToPreviousApprovedVersion() {
+        when(governanceService.activeApprovedVersion()).thenReturn(java.util.Optional.of("v1"));
+
+        Document hit = Document.builder()
+                .id("metric-expl:ALT:v1")
+                .text("ALT")
+                .metadata(Map.of(
+                        "metricKey", "ALT",
+                        "aliases", List.of("GPT"),
+                        "whatIsIt", "ALT là men gan.",
+                        "relatedTo", "chức năng gan.",
+                        "impactWhenOutOfRange", "ALT tăng có thể gợi ý tổn thương gan."
+                ))
+                .build();
+        when(vectorStoreService.semanticSearch(anyString(), eq(3),
+                eq("language == 'vi' && sourceVersion == 'v1'")))
+                .thenReturn(List.of(hit));
+
+        MetricExplanationRetrievalService.RetrievalResult result = retrievalService.retrieve(
+                "ALT", "abnormal", sampleRange(), "vi");
+
+        assertThat(result.source()).isEqualTo("qdrant");
+        assertThat(result.hit()).isTrue();
     }
 
     private ReferenceRangeDto sampleRange() {
