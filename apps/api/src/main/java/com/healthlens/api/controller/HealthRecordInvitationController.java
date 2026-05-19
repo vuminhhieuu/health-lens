@@ -3,7 +3,10 @@ package com.healthlens.api.controller;
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.response.AcceptHealthRecordInvitationResultResponse;
 import com.healthlens.api.dto.response.IncomingHealthRecordInvitationResponse;
+import com.healthlens.api.security.ClientIpResolver;
+import com.healthlens.api.security.PublicEndpointRateLimiter;
 import com.healthlens.api.service.HealthRecordShareService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -22,16 +25,22 @@ import org.springframework.web.bind.annotation.RestController;
 public class HealthRecordInvitationController {
 
     private final HealthRecordShareService healthRecordShareService;
+    private final PublicEndpointRateLimiter publicEndpointRateLimiter;
 
-    public HealthRecordInvitationController(HealthRecordShareService healthRecordShareService) {
+    public HealthRecordInvitationController(
+            HealthRecordShareService healthRecordShareService,
+            PublicEndpointRateLimiter publicEndpointRateLimiter) {
         this.healthRecordShareService = healthRecordShareService;
+        this.publicEndpointRateLimiter = publicEndpointRateLimiter;
     }
 
     @PostMapping("/accept")
     public ResponseEntity<Map<String, Object>> acceptInvitation(
             @RequestParam("token") String token,
-            Authentication authentication
+            Authentication authentication,
+            HttpServletRequest request
     ) {
+        publicEndpointRateLimiter.consumeHealthRecordInvitationAccept(ClientIpResolver.resolve(request), token);
         UUID userId = resolveUserId(authentication);
         AcceptHealthRecordInvitationResultResponse result = healthRecordShareService.acceptInvitation(token, userId);
         return ResponseEntity.ok(Map.of(
@@ -66,4 +75,5 @@ public class HealthRecordInvitationController {
             return null;
         }
     }
+
 }

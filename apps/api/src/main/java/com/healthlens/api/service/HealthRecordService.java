@@ -43,6 +43,7 @@ import com.healthlens.api.repository.HealthRecordShareRepository;
 import com.healthlens.api.repository.OnlineRagAnswerCitationRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
+import com.healthlens.api.security.PublicEndpointRateLimiter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -105,6 +106,7 @@ public class HealthRecordService {
     private final HealthRecordLegacyAuditWriter healthRecordLegacyAuditWriter;
     private final UnifiedAuditCoordinator unifiedAuditCoordinator;
     private final AuditEventRecorder auditEventRecorder;
+    private final PublicEndpointRateLimiter publicEndpointRateLimiter;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final String ocrStreamName;
@@ -124,6 +126,7 @@ public class HealthRecordService {
             HealthRecordLegacyAuditWriter healthRecordLegacyAuditWriter,
             UnifiedAuditCoordinator unifiedAuditCoordinator,
             AuditEventRecorder auditEventRecorder,
+            PublicEndpointRateLimiter publicEndpointRateLimiter,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper,
             @Value("${app.stream.ocr-events:ocr.events}") String ocrStreamName
@@ -142,6 +145,7 @@ public class HealthRecordService {
         this.healthRecordLegacyAuditWriter = healthRecordLegacyAuditWriter;
         this.unifiedAuditCoordinator = unifiedAuditCoordinator;
         this.auditEventRecorder = auditEventRecorder;
+        this.publicEndpointRateLimiter = publicEndpointRateLimiter;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.ocrStreamName = ocrStreamName;
@@ -206,6 +210,7 @@ public class HealthRecordService {
         } else if (!"ocr_failed".equals(record.getStatus()) && !"processing".equals(record.getStatus())) {
             throw new IllegalStateException("Chỉ được xác nhận tải lên cho kết quả khám mới hoặc OCR thất bại cần thử lại");
         }
+        publicEndpointRateLimiter.consumeOcrTrigger(userId.toString(), recordId.toString());
         record.setFileKey(reservation.fileKey());
         record.setStatus(STATUS_PROCESSING);
         record.setSourceType("ocr");

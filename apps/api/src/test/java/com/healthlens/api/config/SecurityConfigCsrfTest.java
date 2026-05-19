@@ -5,6 +5,7 @@ import com.healthlens.api.exception.GlobalExceptionHandler;
 import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
 import com.healthlens.api.security.LoginRateLimiter;
+import com.healthlens.api.security.PublicEndpointRateLimiter;
 import com.healthlens.api.service.AuthService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,9 @@ class SecurityConfigCsrfTest {
 
     @MockitoBean
     private LoginRateLimiter loginRateLimiter;
+
+    @MockitoBean
+    private PublicEndpointRateLimiter publicEndpointRateLimiter;
 
     @BeforeEach
     void setUp() throws Exception {

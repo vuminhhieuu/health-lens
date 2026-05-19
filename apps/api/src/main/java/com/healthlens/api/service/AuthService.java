@@ -468,15 +468,29 @@ public class AuthService {
                 token.setExpiresAt(Instant.now().plus(1, ChronoUnit.HOURS));
                 passwordResetTokenRepository.save(token);
 
-                // Send email
-                emailService.sendPasswordResetEmail(user, tokenValue);
-                auditEventRecorder.recordEvent(
-                        user.getId(),
-                        AuditActions.FORGOT_PASSWORD,
-                        AuditResourceTypes.AUTH,
-                        user.getId(),
-                        Map.of("email", normalizedEmail)
-                );
+                try {
+                    emailService.sendPasswordResetEmail(user, tokenValue);
+                    auditEventRecorder.recordEvent(
+                            user.getId(),
+                            AuditActions.FORGOT_PASSWORD,
+                            AuditResourceTypes.AUTH,
+                            user.getId(),
+                            Map.of("email", normalizedEmail)
+                    );
+                } catch (Exception emailException) {
+                    log.error("[AuthService] Password reset email provider failed for userId={}: {}",
+                            user.getId(), emailException.getMessage(), emailException);
+                    auditEventRecorder.recordEvent(
+                            user.getId(),
+                            AuditActions.EMAIL_PROVIDER_FAILURE,
+                            AuditResourceTypes.AUTH,
+                            user.getId(),
+                            Map.of(
+                                    "flow", "forgot_password",
+                                    "failureClass", emailException.getClass().getSimpleName()
+                            )
+                    );
+                }
             } else {
                 log.info("[AuthService] User NOT found for email: {}. Skipping email for security reasons.", normalizedEmail);
             }

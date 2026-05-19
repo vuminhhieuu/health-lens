@@ -11,6 +11,7 @@ import com.healthlens.api.exception.RateLimitExceededException;
 import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
 import com.healthlens.api.security.LoginRateLimiter;
+import com.healthlens.api.security.PublicEndpointRateLimiter;
 import com.healthlens.api.service.AuthService;
 import com.healthlens.api.service.ConsentService;
 import com.healthlens.api.util.JwtUtil;
@@ -52,6 +53,9 @@ class AuthControllerTest {
 
         @MockitoBean
         private LoginRateLimiter rateLimiter;
+
+        @MockitoBean
+        private PublicEndpointRateLimiter publicEndpointRateLimiter;
 
         @MockitoBean
         private JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -135,6 +139,25 @@ class AuthControllerTest {
                                 .andExpect(jsonPath("$.type")
                                                 .value("https://healthlens.vn/errors/email-already-exists"))
                                 .andExpect(jsonPath("$.status").value(409));
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/auth/register -> 429 khi bi rate limit")
+        void register_rateLimited() throws Exception {
+                org.mockito.Mockito.doThrow(new RateLimitExceededException(
+                                "Bạn đã gửi yêu cầu quá nhanh. Vui lòng thử lại sau 60 giây.",
+                                60
+                        )).when(publicEndpointRateLimiter)
+                                .consumeRegister(org.mockito.Mockito.anyString(), org.mockito.Mockito.eq("limited@example.com"));
+
+                mockMvc.perform(post("/api/v1/auth/register")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(toRegisterJson("Nguyen Van A", "limited@example.com", "1999-01-01",
+                                                "StrongPass1")))
+                                .andExpect(status().isTooManyRequests())
+                                .andExpect(jsonPath("$.type").value("https://healthlens.vn/errors/rate-limited"))
+                                .andExpect(jsonPath("$.errorCode").value("RATE_LIMITED"))
+                                .andExpect(jsonPath("$.retryAfterSeconds").value(60));
         }
 
         // ========== LOGIN TESTS ==========
@@ -223,7 +246,7 @@ class AuthControllerTest {
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$.data.message").value("Email đã được xác thực thành công"));
 
-                verify(authService).verifyEmail("valid-token", "203.0.113.44");
+                verify(authService).verifyEmail("valid-token", "198.51.100.99");
         }
 
         @Test
@@ -255,6 +278,23 @@ class AuthControllerTest {
                         .andExpect(jsonPath("$.errorCode").value("RATE_LIMITED"))
                         .andExpect(jsonPath("$.retryAfterSeconds").value(120))
                         .andExpect(jsonPath("$.detail").value("Bạn đã gửi yêu cầu quá nhanh. Vui lòng thử lại sau 120 giây."));
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/auth/forgot-password -> 429 voi RATE_LIMITED")
+        void forgotPassword_rateLimited() throws Exception {
+                org.mockito.Mockito.doThrow(new RateLimitExceededException(
+                                "Bạn đã gửi yêu cầu quá nhanh. Vui lòng thử lại sau 3600 giây.",
+                                3600
+                        )).when(authService).forgotPassword(any());
+
+                mockMvc.perform(post("/api/v1/auth/forgot-password")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"email\":\"limited@example.com\"}"))
+                                .andExpect(status().isTooManyRequests())
+                                .andExpect(jsonPath("$.type").value("https://healthlens.vn/errors/rate-limited"))
+                                .andExpect(jsonPath("$.errorCode").value("RATE_LIMITED"))
+                                .andExpect(jsonPath("$.retryAfterSeconds").value(3600));
         }
 
         @Test

@@ -4,6 +4,8 @@ import com.healthlens.api.dto.request.ForgotPasswordRequest;
 import com.healthlens.api.dto.request.LoginRequest;
 import com.healthlens.api.dto.request.ResetPasswordRequest;
 import com.healthlens.api.dto.response.ConsentResponse;
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.entity.EmailVerificationToken;
 import com.healthlens.api.entity.PasswordResetToken;
 import com.healthlens.api.entity.RefreshToken;
@@ -452,14 +454,40 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("forgotPassword throw exception khi bi rate limit (AC #2)")
+    @DisplayName("forgotPassword throw RATE_LIMITED khi bi rate limit (AC #2)")
     void forgotPassword_rateLimited() {
         ForgotPasswordRequest request = new ForgotPasswordRequest("limited@example.com");
 
-        doThrow(new AccountLockedException("Rate limit exceeded")).when(forgotPasswordRateLimiter).checkRateLimit("limited@example.com");
+        doThrow(new RateLimitExceededException("Rate limit exceeded", 3600))
+                .when(forgotPasswordRateLimiter).checkRateLimit("limited@example.com");
 
         assertThatThrownBy(() -> authService.forgotPassword(request))
-                .isInstanceOf(AccountLockedException.class);
+                .isInstanceOf(RateLimitExceededException.class);
+    }
+
+    @Test
+    @DisplayName("forgotPassword ghi telemetry khi email provider loi nhung van tra thanh cong")
+    void forgotPassword_emailProviderFailureAudited() {
+        User user = createVerifiedUser();
+        ForgotPasswordRequest request = new ForgotPasswordRequest("user@example.com");
+
+        when(userRepository.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
+        doThrow(new IllegalStateException("smtp down"))
+                .when(emailService).sendPasswordResetEmail(eq(user), anyString());
+
+        authService.forgotPassword(request);
+
+        verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
+        verify(auditEventRecorder).recordEvent(
+                eq(user.getId()),
+                eq(AuditActions.EMAIL_PROVIDER_FAILURE),
+                eq(AuditResourceTypes.AUTH),
+                eq(user.getId()),
+                argThat(details -> "forgot_password".equals(details.get("flow"))
+                        && "IllegalStateException".equals(details.get("failureClass"))
+                        && !details.containsValue("smtp down"))
+        );
+        verify(forgotPasswordRateLimiter).recordRequest("user@example.com");
     }
 
     @Test

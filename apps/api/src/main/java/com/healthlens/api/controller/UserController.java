@@ -6,8 +6,11 @@ import com.healthlens.api.dto.request.UpdateUserRequest;
 import com.healthlens.api.dto.response.CancelDeletionResponse;
 import com.healthlens.api.dto.response.DeleteAccountResponse;
 import com.healthlens.api.dto.response.UserResponse;
+import com.healthlens.api.security.ClientIpResolver;
+import com.healthlens.api.security.PublicEndpointRateLimiter;
 import com.healthlens.api.service.DataDeletionService;
 import com.healthlens.api.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -31,10 +34,15 @@ public class UserController {
 
     private final UserService userService;
     private final DataDeletionService dataDeletionService;
+    private final PublicEndpointRateLimiter publicEndpointRateLimiter;
 
-    public UserController(UserService userService, DataDeletionService dataDeletionService) {
+    public UserController(
+            UserService userService,
+            DataDeletionService dataDeletionService,
+            PublicEndpointRateLimiter publicEndpointRateLimiter) {
         this.userService = userService;
         this.dataDeletionService = dataDeletionService;
+        this.publicEndpointRateLimiter = publicEndpointRateLimiter;
     }
 
     @GetMapping(ApiRoutes.USERS_ME_REL)
@@ -82,7 +90,9 @@ public class UserController {
 
     @DeleteMapping("/deletion-requests/cancel")
     public ResponseEntity<Map<String, Object>> cancelDeletion(
-            @RequestParam(required = false) String token) {
+            @RequestParam(required = false) String token,
+            HttpServletRequest request) {
+        publicEndpointRateLimiter.consumeCancelDeletion(ClientIpResolver.resolve(request), token);
         CancelDeletionResponse response = dataDeletionService.cancelDeletionRequest(token);
         return ResponseEntity.ok(buildResponseBody(response));
     }

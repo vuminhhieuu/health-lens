@@ -4,6 +4,7 @@ import com.healthlens.api.config.SecurityConfig;
 import com.healthlens.api.dto.response.DownloadHealthRecordPdfResponse;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
 import com.healthlens.api.exception.GlobalExceptionHandler;
+import com.healthlens.api.exception.RateLimitExceededException;
 import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
 import com.healthlens.api.security.LoginRateLimiter;
@@ -31,6 +32,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -111,6 +113,23 @@ class HealthRecordControllerTest {
                 .andExpect(jsonPath("$.data.message").value("Đã xóa kết quả khám thành công"));
 
         verify(healthRecordService).deleteHealthRecord(userId, recordId);
+    }
+
+    @Test
+    @DisplayName("POST confirm-upload -> 429 khi OCR trigger bi rate limit")
+    void confirmUpload_rateLimited() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        when(healthRecordService.confirmUpload(userId, recordId))
+                .thenThrow(new RateLimitExceededException("Bạn đã gửi yêu cầu quá nhanh.", 30));
+
+        mockMvc.perform(post("/api/v1/health-records/{recordId}/confirm-upload", recordId)
+                        .with(SecurityMockMvcRequestPostProcessors.user(userId.toString()))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.type").value("https://healthlens.vn/errors/rate-limited"))
+                .andExpect(jsonPath("$.errorCode").value("RATE_LIMITED"))
+                .andExpect(jsonPath("$.retryAfterSeconds").value(30));
     }
 
     @Test
