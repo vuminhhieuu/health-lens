@@ -106,6 +106,17 @@ app:
   security:
     blacklist-fail-closed: ${APP_SECURITY_BLACKLIST_FAIL_CLOSED:false}
     rate-limit-fail-closed: ${APP_SECURITY_RATE_LIMIT_FAIL_CLOSED:false}
+    rate-limit:
+      profile-invitation-accept:
+        ip-max: ${APP_RATE_LIMIT_PROFILE_INVITATION_ACCEPT_IP_MAX:20}
+        ip-window-seconds: ${APP_RATE_LIMIT_PROFILE_INVITATION_ACCEPT_IP_WINDOW_SECONDS:3600}
+        token-max: ${APP_RATE_LIMIT_PROFILE_INVITATION_ACCEPT_TOKEN_MAX:5}
+        token-window-seconds: ${APP_RATE_LIMIT_PROFILE_INVITATION_ACCEPT_TOKEN_WINDOW_SECONDS:3600}
+      health-record-invitation-accept:
+        ip-max: ${APP_RATE_LIMIT_HEALTH_RECORD_INVITATION_ACCEPT_IP_MAX:20}
+        ip-window-seconds: ${APP_RATE_LIMIT_HEALTH_RECORD_INVITATION_ACCEPT_IP_WINDOW_SECONDS:3600}
+        token-max: ${APP_RATE_LIMIT_HEALTH_RECORD_INVITATION_ACCEPT_TOKEN_MAX:5}
+        token-window-seconds: ${APP_RATE_LIMIT_HEALTH_RECORD_INVITATION_ACCEPT_TOKEN_WINDOW_SECONDS:3600}
     # Short TTL: hot-path reads hit Redis; DataDeletionService writes through on every status change.
     account-status-cache-ttl: ${APP_SECURITY_ACCOUNT_STATUS_CACHE_TTL:60s}
   cors:
@@ -191,6 +202,20 @@ app:
   storage:
     bucket-auto-create: ${MINIO_BUCKET_AUTO_CREATE:true}
     cors-configure: ${MINIO_CORS_CONFIGURE:false}
+  cookie:
+    secure: false
+  security:
+    rate-limit:
+      profile-invitation-accept:
+        ip-max: 500
+        ip-window-seconds: 60
+        token-max: 200
+        token-window-seconds: 60
+      health-record-invitation-accept:
+        ip-max: 500
+        ip-window-seconds: 60
+        token-max: 200
+        token-window-seconds: 60
 
 jwt:
   secret: ${JWT_SECRET:healthlens-dev-secret-key-must-be-at-least-256-bits-long-for-hs256-algo}

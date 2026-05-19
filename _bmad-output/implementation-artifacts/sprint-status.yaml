@@ -254,7 +254,7 @@ development_status:
 
   # Epic 3: Family Sharing Lifecycle Correctness
   remaining-3-family-sharing-lifecycle: in-progress
-  remaining-3-1-invitation-accept-token-and-storage-hygiene: ready-for-dev
+  remaining-3-1-invitation-accept-token-and-storage-hygiene: done
   remaining-3-2-accept-revoke-race-and-share-enforcement: ready-for-dev
   remaining-3-3-sharing-lifecycle-audit-and-owner-notification: ready-for-dev
   remaining-3-retrospective: optional

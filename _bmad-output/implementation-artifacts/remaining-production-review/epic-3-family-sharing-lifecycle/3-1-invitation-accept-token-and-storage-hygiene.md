@@ -1,6 +1,6 @@
 # Story 3.1: Invitation Accept Token And Storage Hygiene
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 
@@ -24,11 +24,11 @@ so that accepting access is safe across browsers.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 - Harden token extraction and URL cleanup (AC: #1)
-- [ ] Task 2 - Wrap browser storage access safely (AC: #2)
-- [ ] Task 3 - Normalize invalid/expired invitation UI states (AC: #3)
-- [ ] Task 4 - Align frontend accept result type with backend contract (AC: #4)
-- [ ] Task 5 - Add accept endpoint rate limiting and tests (AC: #5)
+- [x] Task 1 - Harden token extraction and URL cleanup (AC: #1)
+- [x] Task 2 - Wrap browser storage access safely (AC: #2)
+- [x] Task 3 - Normalize invalid/expired invitation UI states (AC: #3)
+- [x] Task 4 - Align frontend accept result type with backend contract (AC: #4)
+- [x] Task 5 - Add accept endpoint rate limiting and tests (AC: #5)
 
 ## Dev Notes
 
@@ -54,10 +54,23 @@ so that accepting access is safe across browsers.
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Composer
 
 ### Debug Log References
 
 ### Completion Notes List
 
+- Profile accept page strips `token` from URL via `history.replaceState` before POST; token kept in closure/ref for API and login return flow.
+- `sessionStorage` wrapped via `@/lib/browser/sessionStorage`; in-memory ref fallback prevents 401 redirect loops when storage unavailable.
+- `outcome === "expired"` shows dedicated message instead of redirecting to `/profiles`.
+- Response validated with `parseAcceptProfileInvitationResult` (Zod: `accepted` | `require-login` | `expired`).
+- AC #5 already satisfied: `InvitationController` + `PublicEndpointRateLimiter` + controller tests.
+
 ### File List
+
+- `apps/web/src/app/(auth)/invitations/accept/page.tsx`
+- `apps/web/src/lib/browser/sessionStorage.ts`
+- `apps/web/src/lib/browser/sessionStorage.test.ts`
+- `apps/web/src/lib/sharing/acceptInvitationResult.ts`
+- `apps/web/src/lib/sharing/acceptInvitationResult.test.ts`
+- `apps/web/src/lib/i18n/messages.ts`

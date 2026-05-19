@@ -265,7 +265,8 @@ public class AuthController {
         cookie.setSecure(cookieSecure);
         cookie.setPath(ApiRoutes.AUTH_REFRESH);
         cookie.setMaxAge(REFRESH_TOKEN_MAX_AGE);
-        cookie.setAttribute("SameSite", "Strict");
+        // Lax allows refresh after top-level navigation from email / external links (Mailhog, Gmail).
+        cookie.setAttribute("SameSite", "Lax");
         response.addCookie(cookie);
     }
 
@@ -275,7 +276,7 @@ public class AuthController {
         cookie.setSecure(cookieSecure);
         cookie.setPath(ApiRoutes.AUTH_REFRESH);
         cookie.setMaxAge(0);
-        cookie.setAttribute("SameSite", "Strict");
+        cookie.setAttribute("SameSite", "Lax");
         response.addCookie(cookie);
     }
 

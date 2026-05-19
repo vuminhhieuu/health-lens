@@ -23,12 +23,36 @@ public class PublicEndpointRateLimiter {
 
     private final StringRedisTemplate redisTemplate;
     private final boolean failClosed;
+    private final int profileInvitationAcceptIpMax;
+    private final Duration profileInvitationAcceptIpWindow;
+    private final int profileInvitationAcceptTokenMax;
+    private final Duration profileInvitationAcceptTokenWindow;
+    private final int healthRecordInvitationAcceptIpMax;
+    private final Duration healthRecordInvitationAcceptIpWindow;
+    private final int healthRecordInvitationAcceptTokenMax;
+    private final Duration healthRecordInvitationAcceptTokenWindow;
 
     public PublicEndpointRateLimiter(
             StringRedisTemplate redisTemplate,
-            @Value("${app.security.rate-limit-fail-closed:false}") boolean failClosed) {
+            @Value("${app.security.rate-limit-fail-closed:false}") boolean failClosed,
+            @Value("${app.security.rate-limit.profile-invitation-accept.ip-max:20}") int profileInvitationAcceptIpMax,
+            @Value("${app.security.rate-limit.profile-invitation-accept.ip-window-seconds:3600}") long profileInvitationAcceptIpWindowSeconds,
+            @Value("${app.security.rate-limit.profile-invitation-accept.token-max:5}") int profileInvitationAcceptTokenMax,
+            @Value("${app.security.rate-limit.profile-invitation-accept.token-window-seconds:3600}") long profileInvitationAcceptTokenWindowSeconds,
+            @Value("${app.security.rate-limit.health-record-invitation-accept.ip-max:20}") int healthRecordInvitationAcceptIpMax,
+            @Value("${app.security.rate-limit.health-record-invitation-accept.ip-window-seconds:3600}") long healthRecordInvitationAcceptIpWindowSeconds,
+            @Value("${app.security.rate-limit.health-record-invitation-accept.token-max:5}") int healthRecordInvitationAcceptTokenMax,
+            @Value("${app.security.rate-limit.health-record-invitation-accept.token-window-seconds:3600}") long healthRecordInvitationAcceptTokenWindowSeconds) {
         this.redisTemplate = redisTemplate;
         this.failClosed = failClosed;
+        this.profileInvitationAcceptIpMax = profileInvitationAcceptIpMax;
+        this.profileInvitationAcceptIpWindow = Duration.ofSeconds(profileInvitationAcceptIpWindowSeconds);
+        this.profileInvitationAcceptTokenMax = profileInvitationAcceptTokenMax;
+        this.profileInvitationAcceptTokenWindow = Duration.ofSeconds(profileInvitationAcceptTokenWindowSeconds);
+        this.healthRecordInvitationAcceptIpMax = healthRecordInvitationAcceptIpMax;
+        this.healthRecordInvitationAcceptIpWindow = Duration.ofSeconds(healthRecordInvitationAcceptIpWindowSeconds);
+        this.healthRecordInvitationAcceptTokenMax = healthRecordInvitationAcceptTokenMax;
+        this.healthRecordInvitationAcceptTokenWindow = Duration.ofSeconds(healthRecordInvitationAcceptTokenWindowSeconds);
     }
 
     public void consumeRegister(String clientIp, String email) {
@@ -39,13 +63,13 @@ public class PublicEndpointRateLimiter {
     }
 
     public void consumeProfileInvitationAccept(String clientIp, String token) {
-        consume("profile-invitation-accept:ip:" + normalize(clientIp), 20, HOUR);
-        consume("profile-invitation-accept:token:" + tokenFingerprint(token), 5, HOUR);
+        consume("profile-invitation-accept:ip:" + normalize(clientIp), profileInvitationAcceptIpMax, profileInvitationAcceptIpWindow);
+        consume("profile-invitation-accept:token:" + tokenFingerprint(token), profileInvitationAcceptTokenMax, profileInvitationAcceptTokenWindow);
     }
 
     public void consumeHealthRecordInvitationAccept(String clientIp, String token) {
-        consume("health-record-invitation-accept:ip:" + normalize(clientIp), 20, HOUR);
-        consume("health-record-invitation-accept:token:" + tokenFingerprint(token), 5, HOUR);
+        consume("health-record-invitation-accept:ip:" + normalize(clientIp), healthRecordInvitationAcceptIpMax, healthRecordInvitationAcceptIpWindow);
+        consume("health-record-invitation-accept:token:" + tokenFingerprint(token), healthRecordInvitationAcceptTokenMax, healthRecordInvitationAcceptTokenWindow);
     }
 
     public void consumeCancelDeletion(String clientIp, String token) {

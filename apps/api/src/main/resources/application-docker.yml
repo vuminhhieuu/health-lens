@@ -43,6 +43,22 @@ spring:
         api-key: ${QDRANT_API_KEY}
         use-tls: true
 
+app:
+  cookie:
+    secure: false
+  security:
+    rate-limit:
+      profile-invitation-accept:
+        ip-max: 500
+        ip-window-seconds: 60
+        token-max: 200
+        token-window-seconds: 60
+      health-record-invitation-accept:
+        ip-max: 500
+        ip-window-seconds: 60
+        token-max: 200
+        token-window-seconds: 60
+
 # Actuator for Health Checks
 management:
   endpoint:

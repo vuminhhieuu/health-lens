@@ -16,12 +16,6 @@ export function useAuthBootstrap() {
 
   useEffect(() => {
     const bootstrap = async () => {
-      if (isAuthenticated) {
-        void syncActiveConsentVersion();
-        setIsLoading(false);
-        return;
-      }
-
       try {
         const response = await apiClient.post(API_ROUTES.AUTH.REFRESH);
         const {
@@ -32,21 +26,31 @@ export function useAuthBootstrap() {
         } = response.data?.data || {};
         const resolvedUser = refreshedUser ?? user;
 
-        // Backend refresh may return only accessToken on some versions.
         if (resolvedUser && accessToken) {
-          setAuth(resolvedUser, accessToken, {
-            consentGiven: consentGiven ?? false,
-            consentVersion:
-              consentVersion === undefined || consentVersion === null
-                ? null
-                : String(consentVersion),
-          });
+          setAuth(
+            {
+              id: String(resolvedUser.id),
+              email: resolvedUser.email,
+              role: resolvedUser.role,
+              fullName: resolvedUser.fullName ?? undefined,
+            },
+            accessToken,
+            {
+              consentGiven: consentGiven ?? false,
+              consentVersion:
+                consentVersion === undefined || consentVersion === null
+                  ? null
+                  : String(consentVersion),
+            },
+          );
           await syncActiveConsentVersion();
-        } else {
+        } else if (!isAuthenticated) {
           clearAuth();
         }
       } catch {
-        clearAuth();
+        if (!isAuthenticated) {
+          clearAuth();
+        }
       } finally {
         setIsLoading(false);
       }
