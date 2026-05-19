@@ -2,8 +2,11 @@ package com.healthlens.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.ReferenceRangeDto;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Metrics;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -46,6 +49,8 @@ public class LlmService {
     private final ChatClient aiChatClient;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final MeterRegistry meterRegistry;
+    private final PromptTemplateRenderer promptTemplateRenderer;
 
     @Value("${app.ai.fallback.explanation:Kết quả cần được bác sĩ chuyên khoa giải thích thêm.}")
     private String defaultFallbackExplanation;
@@ -63,10 +68,22 @@ public class LlmService {
     private long maxTotalDelayMs;
 
     @Value("${app.ai.explanation.prompt-version:v3}")
-    private String promptVersion;
+    private String promptVersion = "v3";
 
     @Value("${app.ai.explanation.retrieval-version:v1}")
-    private String retrievalVersion;
+    private String retrievalVersion = "v1";
+
+    @Value("${app.ai.explanation.prompt-template:ai/prompts/metric-explanation.v3.txt}")
+    private String metricExplanationPromptTemplate = "ai/prompts/metric-explanation.v3.txt";
+
+    @Value("${app.ai.recommendations.prompt-template:ai/prompts/recommendations.v8-medical-disclaimer-vi.txt}")
+    private String recommendationsPromptTemplate = "ai/prompts/recommendations.v8-medical-disclaimer-vi.txt";
+
+    @Value("${app.ai.recommendations.prompt-version:v8-medical-disclaimer-vi}")
+    private String recommendationsPromptVersion = RECOMMENDATIONS_PROMPT_VERSION;
+
+    @Value("${app.ai.chat.model:unknown}")
+    private String aiModelVersion = "unknown";
 
     private static final Map<String, String> FALLBACK_EXPLANATIONS = Map.of(
             "Glucose", "Đây là lượng đường trong máu của bạn tại thời điểm xét nghiệm. Bạn nên gặp bác sĩ để được tư vấn phù hợp với tình trạng cơ thể.",
@@ -133,9 +150,21 @@ public class LlmService {
     );
 
     public LlmService(ChatClient aiChatClient, StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+        this(aiChatClient, redisTemplate, objectMapper, Metrics.globalRegistry);
+    }
+
+    @Autowired
+    public LlmService(
+            ChatClient aiChatClient,
+            StringRedisTemplate redisTemplate,
+            ObjectMapper objectMapper,
+            MeterRegistry meterRegistry
+    ) {
         this.aiChatClient = aiChatClient;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.meterRegistry = meterRegistry;
+        this.promptTemplateRenderer = new PromptTemplateRenderer();
     }
 
     public String generateExplanation(
@@ -174,7 +203,19 @@ public class LlmService {
             return parseCachedExplanation(cachedExplanation);
         }
 
-        String prompt = buildMedicalPrompt(metricName, value, normalizedStatus, referenceRange, normalizedLang, knowledgeSnippet);
+        String prompt;
+        try {
+            prompt = buildMedicalPrompt(metricName, value, normalizedStatus, referenceRange, normalizedLang, knowledgeSnippet);
+        } catch (RuntimeException ex) {
+            recordPromptRenderingFailure("metric_explanation");
+            log.warn("Prompt rendering failed for metric '{}'. Using fallback: {}", metricName, ex.getMessage());
+            return new ExplanationResult(
+                    getFallbackExplanation(metricName, normalizedStatus),
+                    "fallback",
+                    effectivePromptVersion(),
+                    effectiveModelVersion()
+            );
+        }
 
         ExplanationResult result = callWithRetry(prompt, metricName, normalizedStatus);
         safeCacheExplanation(cacheKey, result);
@@ -182,7 +223,15 @@ public class LlmService {
     }
 
     public List<String> generateRecommendations(List<RecommendationMetricInput> metrics, Integer profileAge, String gender) {
-        return generateRecommendations(metrics, profileAge, gender, "");
+        return generateRecommendationsResult(metrics, profileAge, gender, "").recommendations();
+    }
+
+    public RecommendationResult generateRecommendationsResult(
+            List<RecommendationMetricInput> metrics,
+            Integer profileAge,
+            String gender
+    ) {
+        return generateRecommendationsResult(metrics, profileAge, gender, "");
     }
 
     /**
@@ -194,8 +243,17 @@ public class LlmService {
             String gender,
             String examContext
     ) {
+        return generateRecommendationsResult(metrics, profileAge, gender, examContext).recommendations();
+    }
+
+    public RecommendationResult generateRecommendationsResult(
+            List<RecommendationMetricInput> metrics,
+            Integer profileAge,
+            String gender,
+            String examContext
+    ) {
         if (metrics == null || metrics.isEmpty()) {
-            return List.of();
+            return new RecommendationResult(List.of(), "fallback", effectiveRecommendationsPromptVersion(), effectiveModelVersion());
         }
 
         List<RecommendationMetricInput> riskyMetrics = metrics.stream()
@@ -208,7 +266,7 @@ public class LlmService {
                 })
                 .toList();
         if (riskyMetrics.isEmpty()) {
-            return List.of();
+            return new RecommendationResult(List.of(), "fallback", effectiveRecommendationsPromptVersion(), effectiveModelVersion());
         }
 
         String cacheKey = buildRecommendationsCacheKey(riskyMetrics, profileAge, gender, examContext);
@@ -216,13 +274,32 @@ public class LlmService {
         if (cached != null && !cached.isBlank()) {
             List<String> cachedRecommendations = parseRecommendations(cached);
             if (!cachedRecommendations.isEmpty()) {
-                return ensureRequiredRecommendationModes(cachedRecommendations, riskyMetrics);
+                return new RecommendationResult(
+                        ensureRequiredRecommendationModes(cachedRecommendations, riskyMetrics),
+                        "cache",
+                        effectiveRecommendationsPromptVersion(),
+                        effectiveModelVersion()
+                );
             }
             // Cache value may be corrupted or stale format; continue with regeneration path.
             log.warn("Recommendations cache malformed for key '{}', regenerating.", cacheKey);
         }
 
-        String prompt = buildRecommendationsPrompt(riskyMetrics, profileAge, gender, examContext);
+        String prompt;
+        try {
+            prompt = buildRecommendationsPrompt(riskyMetrics, profileAge, gender, examContext);
+        } catch (RuntimeException ex) {
+            recordPromptRenderingFailure("recommendations");
+            log.warn("Recommendations prompt rendering failed, using fallback: {}", ex.getMessage());
+            List<String> fallbackRecommendations = buildFallbackRecommendations(riskyMetrics);
+            fallbackRecommendations = ensureRequiredRecommendationModes(fallbackRecommendations, riskyMetrics);
+            return new RecommendationResult(
+                    fallbackRecommendations,
+                    "fallback",
+                    effectiveRecommendationsPromptVersion(),
+                    effectiveModelVersion()
+            );
+        }
         String llmOutput;
         try {
             llmOutput = aiChatClient.prompt()
@@ -234,16 +311,28 @@ public class LlmService {
             List<String> fallbackRecommendations = buildFallbackRecommendations(riskyMetrics);
             fallbackRecommendations = ensureRequiredRecommendationModes(fallbackRecommendations, riskyMetrics);
             safeCacheRecommendations(cacheKey, fallbackRecommendations);
-            return fallbackRecommendations;
+            return new RecommendationResult(
+                    fallbackRecommendations,
+                    "fallback",
+                    effectiveRecommendationsPromptVersion(),
+                    effectiveModelVersion()
+            );
         }
 
         List<String> recommendations = parseRecommendations(llmOutput);
+        boolean usedFallback = false;
         if (recommendations.isEmpty() || isLowQualityRecommendations(recommendations, riskyMetrics)) {
             recommendations = buildFallbackRecommendations(riskyMetrics);
+            usedFallback = true;
         }
         recommendations = ensureRequiredRecommendationModes(recommendations, riskyMetrics);
         safeCacheRecommendations(cacheKey, recommendations);
-        return recommendations;
+        return new RecommendationResult(
+                recommendations,
+                usedFallback ? "fallback" : "llm",
+                effectiveRecommendationsPromptVersion(),
+                effectiveModelVersion()
+        );
     }
 
     private ExplanationResult callWithRetry(String prompt, String metricName, String status) {
@@ -261,7 +350,7 @@ public class LlmService {
                     log.info("AI chat provider succeeded on attempt {}/{} for metric '{}'",
                             attempt, maxRetryAttempts, metricName);
                 }
-                return new ExplanationResult(result, "llm");
+                return new ExplanationResult(result, "llm", effectivePromptVersion(), effectiveModelVersion());
 
             } catch (Exception e) {
                 log.warn("AI chat provider attempt {}/{} failed for metric '{}': {}",
@@ -288,7 +377,12 @@ public class LlmService {
 
         log.warn("All {} attempts failed for metric '{}'. Using fallback.",
                 maxRetryAttempts, metricName);
-        return new ExplanationResult(getFallbackExplanation(metricName, status), "fallback");
+        return new ExplanationResult(
+                getFallbackExplanation(metricName, status),
+                "fallback",
+                effectivePromptVersion(),
+                effectiveModelVersion()
+        );
     }
 
     String buildMedicalPrompt(
@@ -301,7 +395,7 @@ public class LlmService {
     ) {
         String safeStatus = (status != null) ? status : "unknown";
         String rangeText = formatReferenceRange(referenceRange);
-        String promptLanguage = "vi".equalsIgnoreCase(lang) ? "Vietnamese (tiếng Việt đơn giản)" : lang;
+        String promptLanguage = "vi".equalsIgnoreCase(lang) ? "Vietnamese (tiếng Việt đơn giản)" : normalizeLang(lang);
         String metricContext = resolveMetricContext(metricName);
         String metricRelation = resolveMetricRelation(metricName);
         String effectiveKnowledgeSnippet = (knowledgeSnippet == null || knowledgeSnippet.isBlank())
@@ -314,29 +408,17 @@ public class LlmService {
             default -> "cần được đối chiếu thêm với ngưỡng tham chiếu";
         };
 
-        return String.format("""
-                You are a health assistant.
-                Explain this health metric result in simple %s.
-                Do not use complex medical terms without explanation.
-                Focus on helping non-medical users understand what this metric is and how it may affect health.
-                Do not provide treatment plan or disease diagnosis.
-                If Status is abnormal, line 3 must clearly say this is not a diagnosis and recommend appropriate follow-up with a doctor or re-check visit.
-
-                Required output format (exactly 3 short lines in Vietnamese):
-                1) Chỉ số này là gì: ...
-                2) Chỉ số này liên quan đến: ...
-                3) Ảnh hưởng thường gặp nếu chỉ số lệch ngưỡng: ...
-
-                Metric: %s
-                Value: %s
-                Status: %s (normal/attention/abnormal)
-                Reference range: %s
-                Metric context: %s
-                Metric relation: %s
-                Knowledge snippet:
-                %s
-                Status meaning: %s
-                """, promptLanguage, safeMetric(metricName), safeValue(value), safeStatus.toLowerCase(), rangeText, metricContext, metricRelation, effectiveKnowledgeSnippet, statusExplanation);
+        return promptTemplateRenderer.render(metricExplanationPromptTemplate, Map.of(
+                "promptLanguage", promptLanguage,
+                "metricName", safeMetric(metricName),
+                "value", safeValue(value),
+                "safeStatus", safeStatus.toLowerCase(),
+                "rangeText", rangeText,
+                "metricContext", metricContext,
+                "metricRelation", metricRelation,
+                "knowledgeSnippet", effectiveKnowledgeSnippet,
+                "statusExplanation", statusExplanation
+        ));
     }
 
     String getFallbackExplanation(String metricName) {
@@ -365,18 +447,25 @@ public class LlmService {
     }
 
     private String toCachedValue(ExplanationResult result) {
-        return result.source() + CACHE_VALUE_SEPARATOR + result.explanation();
+        return result.source()
+                + CACHE_VALUE_SEPARATOR + result.promptVersion()
+                + CACHE_VALUE_SEPARATOR + result.modelVersion()
+                + CACHE_VALUE_SEPARATOR + result.explanation();
     }
 
     private ExplanationResult parseCachedExplanation(String rawCacheValue) {
-        int separatorIndex = rawCacheValue.indexOf(CACHE_VALUE_SEPARATOR);
-        if (separatorIndex < 0) {
+        String[] parts = rawCacheValue.split("\\Q" + CACHE_VALUE_SEPARATOR + "\\E", 4);
+        if (parts.length == 1) {
             // Backward-compatible with old cache format (plain explanation text only).
             return new ExplanationResult(rawCacheValue, "fallback");
         }
-        String source = rawCacheValue.substring(0, separatorIndex);
-        String explanation = rawCacheValue.substring(separatorIndex + CACHE_VALUE_SEPARATOR.length());
-        return new ExplanationResult(explanation, source);
+        if (parts.length == 2) {
+            return new ExplanationResult(parts[1], parts[0], effectivePromptVersion(), "unknown");
+        }
+        if (parts.length < 4) {
+            return new ExplanationResult(rawCacheValue, "fallback", effectivePromptVersion(), "unknown");
+        }
+        return new ExplanationResult(parts[3], parts[0], parts[1], parts[2]);
     }
 
     private String buildCacheKey(
@@ -393,6 +482,7 @@ public class LlmService {
                 normalizeStatus(status),
                 normalizeLang(lang),
                 promptVersion == null ? "v3" : promptVersion.trim(),
+                metricExplanationPromptTemplate == null ? "" : metricExplanationPromptTemplate.trim(),
                 retrievalVersion == null ? "v1" : retrievalVersion.trim(),
                 referenceRange == null || referenceRange.min() == null ? "" : referenceRange.min().toPlainString(),
                 referenceRange == null || referenceRange.max() == null ? "" : referenceRange.max().toPlainString(),
@@ -511,7 +601,9 @@ public class LlmService {
                 ageGroupFromAge(profileAge),
                 normalizeGender(gender),
                 examFingerprint,
-                RECOMMENDATIONS_PROMPT_VERSION);
+                effectiveRecommendationsPromptVersion(),
+                recommendationsPromptTemplate == null ? "" : recommendationsPromptTemplate.trim(),
+                effectiveModelVersion());
         return RECOMMENDATIONS_CACHE_PREFIX + sha256Hex(payload);
     }
 
@@ -549,38 +641,13 @@ public class LlmService {
                 ? "(Không có thêm ngữ cảnh phiếu.)"
                 : examContext.trim();
 
-        return """
-                Bạn là trợ lý sức khỏe cho người dùng Việt Nam đang xem phiếu xét nghiệm ngoại trú.
-
-                NGỮ CẢNH PHIẾU (tham khảo, không coi là chẩn đoán):
-                %s
-
-                CHỈ SỐ CẦN QUAN TÂM (đã loại chỉ số bình thường):
-                %s
-
-                NGƯỜI DÙNG: nhóm tuổi %s | giới %s
-
-                NHIỆM VỤ — CHỈ TRẢ VỀ MỘT JSON ARRAY gồm 2 hoặc 3 chuỗi tiếng Việt (Unicode đầy đủ dấu).
-                Không thêm markdown, không giải thích ngoài JSON.
-
-                Quy tắc nội dung:
-                - Viết hoàn toàn bằng tiếng Việt đơn giản, thân thiện, không dùng thuật ngữ khó hoặc giải thích ngắn nếu buộc phải dùng.
-                - Mỗi gợi ý 1–2 câu. Phải nhắc đúng **tên hiển thị** của chỉ số trong danh sách (vd. Đường huyết, LDL-C, Tiểu cầu): nếu có **hai chỉ số trở lên**, ít nhất **hai** gợi ý phải gọi tên cụ thể; nếu **chỉ một** chỉ số rủi ro thì **mọi** gợi ý đều phải xoay quanh chỉ số/ngữ cảnh đó — không được nói chung chung "các chỉ số của bạn".
-                - Ưu tiên chỉ số có mức **bất thường** trước **cảnh báo** trước **cần chú ý** khi có nhiều mức; gợi ý đầu tiên phản ánh đúng mức nghiêm trọng nhất.
-                - Nếu có từ hai chỉ số trở lên nằm ở nhóm sinh học khác nhau (ví dụ đường huyết và lipid), phải có gợi ý khác nhau về hành vi (không trùng một lời khuyên như nhau cho cả hai).
-                - Phân biệt nhóm chỉ số qua phần 'Gợi ý phạm vi sinh học': không lặp một khẩu phần kiểu "ăn ít ngọt/giảm đường" cho mọi loại chỉ số; ví dụ lipid máu khác đường huyết, huyết học khác men gan.
-                - Nếu khối NGỮ CẢNH PHIẾU không phải "(Không có thêm ngữ cảnh phiếu.)", **bắt buộc** có ít nhất một gợi ý phản ánh loại phiếu hoặc nội dung kết luận/ngữ cảnh đó (vd. tổng quan lipid, sàng lọc gan, đếm máu…), không được bỏ qua hoàn toàn.
-                - Không kê đơn thuốc, không đề xuất thủ thuật y tế; không được viết như kết luận chẩn đoán, không khẳng định người dùng mắc bệnh cụ thể.
-                - Với chỉ số bất thường, khuyến nghị người dùng trao đổi với bác sĩ hoặc tái khám phù hợp; không hướng dẫn tự điều trị hoặc tự chẩn đoán.
-                - Gợi ý lối sống phải gắn với chỉ số hoặc ngữ cảnh trên (ăn uống, vận động, giấc ngủ, căng thẳng), tránh một câu chung chung "sống lành mạnh" mà không nói rõ vì chỉ số/chủ đề nào.
-                - Bắt buộc có đủ 2 chế độ: (1) "Chế độ dinh dưỡng:" và (2) "Chế độ sinh hoạt:".
-                - Mỗi chuỗi phải bắt đầu bằng đúng tiền tố "Chế độ dinh dưỡng:" hoặc "Chế độ sinh hoạt:".
-                - Nội dung phải cá thể hóa theo chỉ số rủi ro đang có và phù hợp nhóm tuổi/giới ở trên, không viết khuyến nghị chung chung.
-                - Disclaimer chuẩn đi kèm phần khuyến nghị của HealthLens: "%s"
-                - Không lặp lại nguyên văn disclaimer trong từng chuỗi JSON; phải viết nội dung nhất quán với disclaimer này.
-
-                Định dạng đầu ra duy nhất (JSON array): ["...", "..."]
-                """.formatted(contextBlock, metricsText, ageGroupVi, genderVi, MEDICAL_RECOMMENDATIONS_DISCLAIMER);
+        return promptTemplateRenderer.render(recommendationsPromptTemplate, Map.of(
+                "contextBlock", contextBlock,
+                "metricsText", metricsText,
+                "ageGroupVi", ageGroupVi,
+                "genderVi", genderVi,
+                "disclaimer", MEDICAL_RECOMMENDATIONS_DISCLAIMER
+        ));
     }
 
     private String recommendationDisplayLabel(RecommendationMetricInput m) {
@@ -943,10 +1010,69 @@ public class LlmService {
         }
     }
 
-    public record ExplanationResult(String explanation, String source) {
+    private void recordPromptRenderingFailure(String promptType) {
+        meterRegistry.counter("healthlens.ai.prompt.render.failures", "prompt_type", promptType).increment();
+    }
+
+    private String effectivePromptVersion() {
+        return promptVersion == null || promptVersion.isBlank() ? "v3" : promptVersion.trim();
+    }
+
+    private String effectiveModelVersion() {
+        return aiModelVersion == null || aiModelVersion.isBlank() ? "unknown" : aiModelVersion.trim();
+    }
+
+    private String effectiveRecommendationsPromptVersion() {
+        String configuredVersion = recommendationsPromptVersion == null || recommendationsPromptVersion.isBlank()
+                ? RECOMMENDATIONS_PROMPT_VERSION
+                : recommendationsPromptVersion.trim();
+        String templateVersion = versionFromTemplatePath(recommendationsPromptTemplate);
+        if (templateVersion != null
+                && RECOMMENDATIONS_PROMPT_VERSION.equals(configuredVersion)
+                && !RECOMMENDATIONS_PROMPT_VERSION.equals(templateVersion)) {
+            return templateVersion;
+        }
+        return configuredVersion;
+    }
+
+    private String versionFromTemplatePath(String templatePath) {
+        if (templatePath == null || templatePath.isBlank()) {
+            return null;
+        }
+        String fileName = templatePath.substring(templatePath.lastIndexOf('/') + 1);
+        int firstDot = fileName.indexOf('.');
+        int lastDot = fileName.lastIndexOf('.');
+        if (firstDot < 0 || lastDot <= firstDot + 1) {
+            return null;
+        }
+        String candidate = fileName.substring(firstDot + 1, lastDot);
+        return candidate.startsWith("v") ? candidate : null;
+    }
+
+    public record ExplanationResult(String explanation, String source, String promptVersion, String modelVersion) {
+        public ExplanationResult(String explanation, String source) {
+            this(explanation, source, "unknown", "unknown");
+        }
+
         public ExplanationResult {
             explanation = Objects.requireNonNullElse(explanation, "");
             source = Objects.requireNonNullElse(source, "fallback");
+            promptVersion = Objects.requireNonNullElse(promptVersion, "unknown");
+            modelVersion = Objects.requireNonNullElse(modelVersion, "unknown");
+        }
+    }
+
+    public record RecommendationResult(
+            List<String> recommendations,
+            String source,
+            String promptVersion,
+            String modelVersion
+    ) {
+        public RecommendationResult {
+            recommendations = recommendations == null ? List.of() : List.copyOf(recommendations);
+            source = Objects.requireNonNullElse(source, "fallback");
+            promptVersion = Objects.requireNonNullElse(promptVersion, "unknown");
+            modelVersion = Objects.requireNonNullElse(modelVersion, "unknown");
         }
     }
 

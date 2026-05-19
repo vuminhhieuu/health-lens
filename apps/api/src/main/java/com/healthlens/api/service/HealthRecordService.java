@@ -454,7 +454,12 @@ public class HealthRecordService {
                 retrievalResult.knowledgeSnippet()
         );
 
-        return new MetricExplanationResponse(result.explanation(), result.source());
+        return new MetricExplanationResponse(
+                result.explanation(),
+                result.source(),
+                result.promptVersion(),
+                result.modelVersion()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -508,12 +513,18 @@ public class HealthRecordService {
                         recommendationStatusForLlm(rm.metric(), rm.priorStatus()),
                         rm.metric().getDisplayNameVi()))
                 .toList();
-        List<String> recommendations = llmService.generateRecommendations(
+        LlmService.RecommendationResult recommendationResult = llmService.generateRecommendationsResult(
                 llmInputs,
                 age,
                 profile.getGender(),
                 recommendationExamContext(record));
-        return new RecommendationsResponse(recommendations, RECOMMENDATIONS_DISCLAIMER, false);
+        return new RecommendationsResponse(
+                recommendationResult.recommendations(),
+                RECOMMENDATIONS_DISCLAIMER,
+                false,
+                recommendationResult.promptVersion(),
+                recommendationResult.modelVersion()
+        );
     }
 
     /** Ngữ cảnh phiếu khám giúp LLM không chỉ đưa khẩu phần chung cho mọi xét nghiệm. */
