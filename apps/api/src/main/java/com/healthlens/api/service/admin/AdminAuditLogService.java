@@ -368,6 +368,7 @@ public class AdminAuditLogService {
             case AuditActions.REGISTER -> "Đăng ký tài khoản mới";
             case AuditActions.VERIFY_EMAIL -> "Xác thực email";
             case AuditActions.REFRESH_TOKEN -> "Làm mới phiên";
+            case AuditActions.REFRESH_TOKEN_REUSE_FAILED -> "Phát hiện dùng lại refresh token";
             case AuditActions.FORGOT_PASSWORD -> "Yêu cầu đặt lại mật khẩu";
             case AuditActions.RESET_PASSWORD -> "Đặt lại mật khẩu";
             case AuditActions.ADMIN_LOGIN -> "Phiên đăng nhập admin";
@@ -441,6 +442,9 @@ public class AdminAuditLogService {
         }
         if (AuditActions.REFRESH_TOKEN.equals(action)) {
             return appendIpSuffix("Làm mới phiên truy cập (refresh token)", ip);
+        }
+        if (AuditActions.REFRESH_TOKEN_REUSE_FAILED.equals(action)) {
+            return appendIpSuffix("Phát hiện dùng lại refresh token đã xoay và thu hồi session family", ip);
         }
         if (AuditActions.FORGOT_PASSWORD.equals(action)) {
             return appendIpSuffix("Gửi yêu cầu đặt lại mật khẩu qua email", ip);

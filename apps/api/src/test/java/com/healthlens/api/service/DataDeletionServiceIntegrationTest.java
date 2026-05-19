@@ -98,10 +98,11 @@ class DataDeletionServiceIntegrationTest extends PostgresTestContainerBase {
                     (id, record_id, job_id, idempotency_key, sanitized_payload, failure_category, attempts)
                 VALUES (?, ?, 'job-1', ?, '{"fileKey":"custom/file.pdf"}'::jsonb, 'api_error', 3)
                 """, UUID.randomUUID(), recordId, "dead-" + userId);
+        UUID refreshTokenId = UUID.randomUUID();
         jdbcTemplate.update("""
-                INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at)
-                VALUES (?, ?, ?, NOW() + INTERVAL '1 day')
-                """, UUID.randomUUID(), userId, "refresh-" + userId);
+                INSERT INTO refresh_tokens (id, user_id, session_family_id, token_hash, expires_at)
+                VALUES (?, ?, ?, ?, NOW() + INTERVAL '1 day')
+                """, refreshTokenId, userId, refreshTokenId, "refresh-" + userId);
         jdbcTemplate.update("""
                 INSERT INTO email_verification_tokens (id, user_id, token, expires_at)
                 VALUES (?, ?, ?, NOW() + INTERVAL '1 day')

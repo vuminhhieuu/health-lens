@@ -264,6 +264,7 @@ public class AuthService {
 
         RefreshToken refreshToken = new RefreshToken();
         refreshToken.setUserId(user.getId());
+        refreshToken.setSessionFamilyId(UUID.randomUUID());
         refreshToken.setTokenHash(tokenHash);
         refreshToken.setExpiresAt(Instant.now().plusMillis(jwtUtil.getRefreshTtl()));
         refreshTokenRepository.save(refreshToken);
@@ -289,37 +290,11 @@ public class AuthService {
      * Implements refresh token rotation (invalidate old, issue new).
      * Returns refresh response including consent information.
      */
-    @Transactional
+    @Transactional(noRollbackFor = BadCredentialsException.class)
     public RefreshResult refreshWithConsent(String rawRefreshToken) {
-        String tokenHash = sha256(rawRefreshToken);
-
-        RefreshToken storedToken = refreshTokenRepository
-                .findByTokenHashAndRevokedAtIsNull(tokenHash)
-                .orElseThrow(() -> new BadCredentialsException("Refresh token không hợp lệ"));
-
-        if (storedToken.isExpired()) {
-            storedToken.setRevokedAt(Instant.now());
-            refreshTokenRepository.save(storedToken);
-            throw new BadCredentialsException("Refresh token đã hết hạn");
-        }
-
-        // Revoke old refresh token (rotation)
-        storedToken.setRevokedAt(Instant.now());
-        refreshTokenRepository.save(storedToken);
-
-        // Find user and generate new tokens
-        User user = userRepository.findById(storedToken.getUserId())
-                .orElseThrow(() -> new BadCredentialsException("Người dùng không tồn tại"));
-
+        RotatedRefreshToken rotated = rotateRefreshToken(rawRefreshToken);
+        User user = rotated.user();
         String newAccessToken = jwtUtil.generateAccessToken(user);
-        String newRawRefreshToken = jwtUtil.generateRefreshToken();
-        String newTokenHash = sha256(newRawRefreshToken);
-
-        RefreshToken newRefreshToken = new RefreshToken();
-        newRefreshToken.setUserId(user.getId());
-        newRefreshToken.setTokenHash(newTokenHash);
-        newRefreshToken.setExpiresAt(Instant.now().plusMillis(jwtUtil.getRefreshTtl()));
-        refreshTokenRepository.save(newRefreshToken);
 
         // Fetch current consent status
         com.healthlens.api.dto.response.ConsentResponse consentStatus =
@@ -340,7 +315,7 @@ public class AuthService {
                 Map.of("email", user.getEmail())
         );
 
-        return new RefreshResult(response, newRawRefreshToken);
+        return new RefreshResult(response, rotated.rawRefreshToken());
     }
 
     /**
@@ -349,38 +324,12 @@ public class AuthService {
      * Implements refresh token rotation (invalidate old, issue new).
      * @deprecated Use {@link #refreshWithConsent(String)} instead for new endpoints
      */
-    @Transactional
+    @Transactional(noRollbackFor = BadCredentialsException.class)
     @Deprecated
     public LoginResult refresh(String rawRefreshToken) {
-        String tokenHash = sha256(rawRefreshToken);
-
-        RefreshToken storedToken = refreshTokenRepository
-                .findByTokenHashAndRevokedAtIsNull(tokenHash)
-                .orElseThrow(() -> new BadCredentialsException("Refresh token không hợp lệ"));
-
-        if (storedToken.isExpired()) {
-            storedToken.setRevokedAt(Instant.now());
-            refreshTokenRepository.save(storedToken);
-            throw new BadCredentialsException("Refresh token đã hết hạn");
-        }
-
-        // Revoke old refresh token (rotation)
-        storedToken.setRevokedAt(Instant.now());
-        refreshTokenRepository.save(storedToken);
-
-        // Find user and generate new tokens
-        User user = userRepository.findById(storedToken.getUserId())
-                .orElseThrow(() -> new BadCredentialsException("Người dùng không tồn tại"));
-
+        RotatedRefreshToken rotated = rotateRefreshToken(rawRefreshToken);
+        User user = rotated.user();
         String newAccessToken = jwtUtil.generateAccessToken(user);
-        String newRawRefreshToken = jwtUtil.generateRefreshToken();
-        String newTokenHash = sha256(newRawRefreshToken);
-
-        RefreshToken newRefreshToken = new RefreshToken();
-        newRefreshToken.setUserId(user.getId());
-        newRefreshToken.setTokenHash(newTokenHash);
-        newRefreshToken.setExpiresAt(Instant.now().plusMillis(jwtUtil.getRefreshTtl()));
-        refreshTokenRepository.save(newRefreshToken);
 
         LoginResponse response = new LoginResponse(
                 newAccessToken,
@@ -394,7 +343,73 @@ public class AuthService {
                 Map.of("email", user.getEmail())
         );
 
-        return new LoginResult(response, newRawRefreshToken);
+        return new LoginResult(response, rotated.rawRefreshToken());
+    }
+
+    private RotatedRefreshToken rotateRefreshToken(String rawRefreshToken) {
+        String tokenHash = sha256(rawRefreshToken);
+        Instant now = Instant.now();
+
+        RefreshToken storedToken = refreshTokenRepository
+                .findByTokenHashAndRevokedAtIsNull(tokenHash)
+                .orElseGet(() -> handleMissingActiveRefreshToken(tokenHash, now));
+
+        if (storedToken.isExpired()) {
+            refreshTokenRepository.revokeByIdIfActive(storedToken.getId(), now);
+            throw new BadCredentialsException("Refresh token đã hết hạn");
+        }
+
+        int rotatedRows = refreshTokenRepository.rotateActiveToken(storedToken.getId(), now);
+        if (rotatedRows != 1) {
+            throw new BadCredentialsException("Refresh token không hợp lệ");
+        }
+
+        User user = userRepository.findById(storedToken.getUserId())
+                .orElseThrow(() -> new BadCredentialsException("Người dùng không tồn tại"));
+
+        String newRawRefreshToken = jwtUtil.generateRefreshToken();
+        String newTokenHash = sha256(newRawRefreshToken);
+
+        RefreshToken newRefreshToken = new RefreshToken();
+        newRefreshToken.setUserId(user.getId());
+        newRefreshToken.setSessionFamilyId(storedToken.getSessionFamilyId());
+        newRefreshToken.setTokenHash(newTokenHash);
+        newRefreshToken.setExpiresAt(now.plusMillis(jwtUtil.getRefreshTtl()));
+        refreshTokenRepository.save(newRefreshToken);
+
+        return new RotatedRefreshToken(user, newRawRefreshToken);
+    }
+
+    private RefreshToken handleMissingActiveRefreshToken(String tokenHash, Instant now) {
+        RefreshToken knownToken = refreshTokenRepository.findByTokenHash(tokenHash)
+                .orElseThrow(() -> new BadCredentialsException("Refresh token không hợp lệ"));
+
+        if (knownToken.isRevoked()) {
+            invalidateRefreshTokenFamily(knownToken, now, "reused_refresh_token");
+        }
+
+        if (knownToken.isExpired()) {
+            refreshTokenRepository.revokeByIdIfActive(knownToken.getId(), now);
+            throw new BadCredentialsException("Refresh token đã hết hạn");
+        }
+
+        throw new BadCredentialsException("Refresh token không hợp lệ");
+    }
+
+    private void invalidateRefreshTokenFamily(RefreshToken token, Instant now, String reason) {
+        refreshTokenRepository.revokeAllBySessionFamilyId(token.getSessionFamilyId(), now);
+        auditEventRecorder.recordEvent(
+                token.getUserId(),
+                AuditActions.REFRESH_TOKEN_REUSE_FAILED,
+                AuditResourceTypes.AUTH,
+                token.getUserId(),
+                Map.of(
+                        "reason", reason,
+                        "sessionFamilyId", token.getSessionFamilyId().toString(),
+                        "refreshTokenId", token.getId().toString()
+                )
+        );
+        throw new BadCredentialsException("Refresh token không hợp lệ");
     }
 
     /**
@@ -591,6 +606,9 @@ public class AuthService {
      * Result record pairing the API response with the raw refresh token (for
      * HttpOnly cookie).
      */
+    private record RotatedRefreshToken(User user, String rawRefreshToken) {
+    }
+
     public record LoginResult(LoginResponse response, String rawRefreshToken) {
     }
 

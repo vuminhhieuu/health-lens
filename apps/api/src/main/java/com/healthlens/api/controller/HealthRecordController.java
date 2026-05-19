@@ -7,6 +7,7 @@ import com.healthlens.api.dto.request.InviteHealthRecordRequest;
 import com.healthlens.api.dto.request.UpdateMetricsRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.DownloadHealthRecordPdfResponse;
+import com.healthlens.api.dto.response.DownloadOriginalDocumentResponse;
 import com.healthlens.api.dto.response.HealthRecordInvitationResponse;
 import com.healthlens.api.dto.response.HealthRecordDetailResponse;
 import com.healthlens.api.dto.response.HealthRecordStatusResponse;
@@ -101,6 +102,19 @@ public class HealthRecordController {
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + response.filename() + "\"")
+                .body(response.bytes());
+    }
+
+    @GetMapping(value = "/{recordId}/original-document")
+    public ResponseEntity<byte[]> downloadOriginalDocument(
+            Authentication authentication,
+            @PathVariable UUID recordId
+    ) {
+        UUID userId = UUID.fromString(authentication.getName());
+        DownloadOriginalDocumentResponse response = healthRecordService.downloadOriginalDocument(userId, recordId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(response.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + response.filename() + "\"")
                 .body(response.bytes());
     }
 

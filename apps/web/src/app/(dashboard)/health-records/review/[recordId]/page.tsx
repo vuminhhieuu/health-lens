@@ -253,6 +253,8 @@ export default function ReviewRecordPage() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [documentPreviewFailed, setDocumentPreviewFailed] = useState(false);
+  const [pdfPreviewObjectUrl, setPdfPreviewObjectUrl] = useState<string | null>(null);
+  const [isPdfPreviewLoading, setIsPdfPreviewLoading] = useState(false);
   const [selectedMetricIndex, setSelectedMetricIndex] = useState<number | null>(null);
   const [isKeepingPartial, setIsKeepingPartial] = useState(false);
   const [isRetryUploading, setIsRetryUploading] = useState(false);
@@ -490,6 +492,53 @@ export default function ReviewRecordPage() {
     setDocumentPreviewFailed(false);
     setShowFullDoc(false);
   }, [data?.fileUrl]);
+
+  useEffect(() => {
+    const fileUrl = data?.fileUrl?.trim() ?? "";
+    const shouldLoadPdfPreview = Boolean(fileUrl) && isPdfFileUrl(fileUrl);
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    setPdfPreviewObjectUrl(null);
+    setIsPdfPreviewLoading(false);
+
+    if (!shouldLoadPdfPreview) {
+      return () => undefined;
+    }
+
+    setIsPdfPreviewLoading(true);
+
+    apiClient
+      .get<Blob>(ApiPaths.HEALTH_RECORDS.ORIGINAL_DOCUMENT(recordId), {
+        responseType: "blob",
+        headers: { Accept: "application/pdf" },
+      })
+      .then((response) => {
+        if (cancelled) return;
+        const blob = response.data instanceof Blob && response.data.type
+          ? response.data
+          : new Blob([response.data], { type: "application/pdf" });
+        objectUrl = URL.createObjectURL(blob);
+        setPdfPreviewObjectUrl(objectUrl);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        logReviewActionError("load-original-document-preview", error);
+        setDocumentPreviewFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPdfPreviewLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [data?.fileUrl, recordId]);
 
   const isDirty = useMemo(() => {
     if (!initialized.current) {
@@ -850,7 +899,9 @@ export default function ReviewRecordPage() {
     const resolvedFileUrl = fileUrlValue?.trim() ?? "";
     const resolvedIsPdf = isPdfFileUrl(resolvedFileUrl);
     const isCompact = options.compact ?? false;
-    const canRenderPreview = Boolean(resolvedFileUrl) && !documentPreviewFailed;
+    const pdfPreviewUrl = resolvedIsPdf ? pdfPreviewObjectUrl : null;
+    const canRenderPreview = Boolean(resolvedFileUrl) && !documentPreviewFailed && (!resolvedIsPdf || Boolean(pdfPreviewUrl));
+    const isPreviewLoading = resolvedIsPdf && Boolean(resolvedFileUrl) && isPdfPreviewLoading && !documentPreviewFailed;
     const imageClassName =
       options.fit === "contain"
         ? "max-h-[22rem] w-auto max-w-full rounded-lg shadow-sm"
@@ -884,16 +935,32 @@ export default function ReviewRecordPage() {
             isCompact ? "min-h-72 lg:min-h-80" : "flex-1"
           }`}
         >
-          {canRenderPreview ? (
+          {isPreviewLoading ? (
+            <div className="flex min-h-56 w-full flex-col items-center justify-center rounded-xl border border-[#d7e5e1] bg-white px-6 py-10 text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-[#00685f]" />
+              <p className="mt-3 text-sm font-semibold text-[#274d48]">Đang tải hồ sơ gốc...</p>
+            </div>
+          ) : canRenderPreview ? (
             resolvedIsPdf ? (
-              <iframe
-                src={resolvedFileUrl}
+              <object
+                data={pdfPreviewUrl ?? undefined}
+                type="application/pdf"
                 className="h-full min-h-72 w-full rounded-lg lg:min-h-80"
-                title="Hồ sơ gốc PDF"
-                sandbox="allow-scripts allow-same-origin allow-downloads"
-                referrerPolicy="no-referrer"
+                aria-label="Hồ sơ gốc PDF"
                 onError={() => setDocumentPreviewFailed(true)}
-              />
+              >
+                <div className="flex min-h-56 w-full flex-col items-center justify-center rounded-xl border border-dashed border-[#b7d8d1] bg-white px-6 py-10 text-center">
+                  <FileText className="h-8 w-8 text-[#8aa09c]" />
+                  <p className="mt-3 text-sm font-semibold text-[#274d48]">Không thể hiển thị PDF trong trình duyệt</p>
+                  <button
+                    type="button"
+                    onClick={() => setDocumentPreviewFailed(true)}
+                    className="mt-4 rounded-lg bg-[#00685f] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+                  >
+                    Hiển thị trạng thái lỗi
+                  </button>
+                </div>
+              </object>
             ) : (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
@@ -929,6 +996,7 @@ export default function ReviewRecordPage() {
     const resolvedFileUrl = fileUrlValue?.trim() ?? "";
     if (!showFullDoc || !resolvedFileUrl || documentPreviewFailed) return null;
     const resolvedIsPdf = isPdfFileUrl(resolvedFileUrl);
+    const pdfPreviewUrl = resolvedIsPdf ? pdfPreviewObjectUrl : null;
 
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-sm">
@@ -951,15 +1019,31 @@ export default function ReviewRecordPage() {
             </button>
           </div>
           <div className="flex min-h-[52vh] flex-1 items-center justify-center overflow-auto bg-[#eef1f3] p-4 sm:p-6">
-            {resolvedIsPdf ? (
-              <iframe
-                src={resolvedFileUrl}
+            {resolvedIsPdf && !pdfPreviewUrl ? (
+              <div className="flex min-h-56 w-full flex-col items-center justify-center rounded-xl bg-white px-6 py-10 text-center shadow-sm">
+                <Loader2 className="h-8 w-8 animate-spin text-[#00685f]" />
+                <p className="mt-3 text-sm font-semibold text-[#274d48]">Đang tải hồ sơ gốc...</p>
+              </div>
+            ) : resolvedIsPdf ? (
+              <object
+                data={pdfPreviewUrl ?? undefined}
+                type="application/pdf"
                 className="h-[62vh] w-full rounded-lg bg-white shadow-sm"
-                title="Hồ sơ gốc PDF"
-                sandbox="allow-scripts allow-same-origin allow-downloads"
-                referrerPolicy="no-referrer"
+                aria-label="Hồ sơ gốc PDF"
                 onError={() => setDocumentPreviewFailed(true)}
-              />
+              >
+                <div className="flex min-h-56 w-full flex-col items-center justify-center rounded-xl bg-white px-6 py-10 text-center shadow-sm">
+                  <FileText className="h-8 w-8 text-[#8aa09c]" />
+                  <p className="mt-3 text-sm font-semibold text-[#274d48]">Không thể hiển thị PDF trong trình duyệt</p>
+                  <button
+                    type="button"
+                    onClick={() => setDocumentPreviewFailed(true)}
+                    className="mt-4 rounded-lg bg-[#00685f] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+                  >
+                    Hiển thị trạng thái lỗi
+                  </button>
+                </div>
+              </object>
             ) : (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img

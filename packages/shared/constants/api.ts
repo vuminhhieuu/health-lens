@@ -110,6 +110,7 @@ export const ApiPaths = {
     EXPLANATION: (id: string, metricName: string) =>
       `/api/${API_VERSION}/health-records/${id}/metrics/explanation?metricName=${encodeURIComponent(metricName)}`,
     RECOMMENDATIONS: (id: string) => `/api/${API_VERSION}/health-records/${id}/recommendations`,
+    ORIGINAL_DOCUMENT: (id: string) => `/api/${API_VERSION}/health-records/${id}/original-document`,
     DOWNLOAD_PDF: (id: string) => `/api/${API_VERSION}/health-records/${id}/pdf`,
     UPLOAD_IMAGE: (id: string) => `/api/${API_VERSION}/health-records/${id}/image`,
     ANALYZE: (id: string) => `/api/${API_VERSION}/health-records/${id}/analyze`,
