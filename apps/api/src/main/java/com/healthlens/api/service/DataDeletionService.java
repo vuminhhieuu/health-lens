@@ -16,9 +16,16 @@ import com.healthlens.api.exception.DeletionCancellationTokenException;
 import com.healthlens.api.repository.ConsentLogRepository;
 import com.healthlens.api.repository.DataDeletionRequestRepository;
 import com.healthlens.api.repository.EmailVerificationTokenRepository;
+import com.healthlens.api.repository.FollowUpReminderRepository;
 import com.healthlens.api.repository.HealthRecordRepository;
+import com.healthlens.api.repository.HealthRecordInvitationRepository;
+import com.healthlens.api.repository.HealthRecordShareRepository;
+import com.healthlens.api.repository.OcrDeadLetterRepository;
+import com.healthlens.api.repository.OcrJobExecutionRepository;
 import com.healthlens.api.repository.PasswordResetTokenRepository;
+import com.healthlens.api.repository.ProfileInvitationRepository;
 import com.healthlens.api.repository.ProfileRepository;
+import com.healthlens.api.repository.ProfileShareRepository;
 import com.healthlens.api.repository.RefreshTokenRepository;
 import com.healthlens.api.repository.UserRepository;
 import com.healthlens.api.security.AccountStatusCache;
@@ -33,10 +40,13 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URLEncoder;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -71,6 +81,13 @@ public class DataDeletionService {
     private final EmailService emailService;
     private final HealthRecordRepository healthRecordRepository;
     private final ProfileRepository profileRepository;
+    private final ProfileShareRepository profileShareRepository;
+    private final ProfileInvitationRepository profileInvitationRepository;
+    private final HealthRecordShareRepository healthRecordShareRepository;
+    private final HealthRecordInvitationRepository healthRecordInvitationRepository;
+    private final FollowUpReminderRepository followUpReminderRepository;
+    private final OcrDeadLetterRepository ocrDeadLetterRepository;
+    private final OcrJobExecutionRepository ocrJobExecutionRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
@@ -88,6 +105,13 @@ public class DataDeletionService {
             EmailService emailService,
             HealthRecordRepository healthRecordRepository,
             ProfileRepository profileRepository,
+            ProfileShareRepository profileShareRepository,
+            ProfileInvitationRepository profileInvitationRepository,
+            HealthRecordShareRepository healthRecordShareRepository,
+            HealthRecordInvitationRepository healthRecordInvitationRepository,
+            FollowUpReminderRepository followUpReminderRepository,
+            OcrDeadLetterRepository ocrDeadLetterRepository,
+            OcrJobExecutionRepository ocrJobExecutionRepository,
             RefreshTokenRepository refreshTokenRepository,
             EmailVerificationTokenRepository emailVerificationTokenRepository,
             PasswordResetTokenRepository passwordResetTokenRepository,
@@ -103,6 +127,13 @@ public class DataDeletionService {
         this.emailService = emailService;
         this.healthRecordRepository = healthRecordRepository;
         this.profileRepository = profileRepository;
+        this.profileShareRepository = profileShareRepository;
+        this.profileInvitationRepository = profileInvitationRepository;
+        this.healthRecordShareRepository = healthRecordShareRepository;
+        this.healthRecordInvitationRepository = healthRecordInvitationRepository;
+        this.followUpReminderRepository = followUpReminderRepository;
+        this.ocrDeadLetterRepository = ocrDeadLetterRepository;
+        this.ocrJobExecutionRepository = ocrJobExecutionRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.emailVerificationTokenRepository = emailVerificationTokenRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
@@ -131,6 +162,7 @@ public class DataDeletionService {
         }
 
         String cancellationToken = generateCancellationToken();
+        String cancellationTokenHash = hashCancellationToken(cancellationToken);
         Instant requestedAt = Instant.now();
 
         DataDeletionRequest deletionRequest = new DataDeletionRequest();
@@ -138,7 +170,7 @@ public class DataDeletionService {
         deletionRequest.setRequestedAt(requestedAt);
         deletionRequest.setScheduledDeletionAt(requestedAt.plusSeconds(72L * 3600));
         deletionRequest.setStatus(DeletionRequestStatus.PENDING);
-        deletionRequest.setCancellationToken(cancellationToken);
+        deletionRequest.setCancellationTokenHash(cancellationTokenHash);
         try {
             // Flush immediately so partial unique index catches concurrent creates (READ_COMMITTED + check-then-insert is not enough).
             deletionRequestRepository.saveAndFlush(deletionRequest);
@@ -158,9 +190,7 @@ public class DataDeletionService {
         log.info("Deletion request created: userId={} scheduledAt={}", userId, deletionRequest.getScheduledDeletionAt());
 
         String cancellationLink = webCancellationUrl
-                + "?token=" + encodeQueryParam(cancellationToken)
-                + "&requestedAt=" + encodeQueryParam(requestedAt.toString())
-                + "&scheduledDeletionAt=" + encodeQueryParam(deletionRequest.getScheduledDeletionAt().toString());
+                + "?token=" + encodeQueryParam(cancellationToken);
         try {
             emailService.sendDeletionConfirmationEmail(user, deletionRequest, cancellationLink);
         } catch (Exception e) {
@@ -193,7 +223,8 @@ public class DataDeletionService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public CancelDeletionResponse cancelDeletionRequest(String cancellationToken) {
         String normalizedToken = normalizeCancellationToken(cancellationToken);
-        DataDeletionRequest deletionRequest = deletionRequestRepository.findByCancellationTokenForUpdate(normalizedToken)
+        String tokenHash = hashCancellationToken(normalizedToken);
+        DataDeletionRequest deletionRequest = deletionRequestRepository.findByCancellationTokenHashForUpdate(tokenHash)
                 .orElseThrow(() -> new DeletionCancellationTokenException(
                         "Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực."));
 
@@ -247,23 +278,24 @@ public class DataDeletionService {
     }
 
     /**
-     * AC #2 — scheduler driver: process every PENDING request whose 72-hour grace period has lapsed.
-     * Each request is wiped in its own transaction so a single failure never poisons the batch.
+     * AC #2 — scheduler driver: process PENDING requests whose 72-hour grace period has lapsed.
+     * Each request is wiped in its own transaction; a failure stops the current scheduler cycle.
      */
     public void processDeletionRequests() {
-        List<DataDeletionRequest> overdue = deletionRequestRepository.findByStatusAndScheduledDeletionAtBefore(
-                DeletionRequestStatus.PENDING, Instant.now());
-
-        log.info("Processing {} overdue deletion request(s)", overdue.size());
-
-        for (DataDeletionRequest deletionRequest : overdue) {
+        Instant now = Instant.now();
+        int processed = 0;
+        while (true) {
             try {
-                selfProxy.executeDataDeletion(deletionRequest.getId());
+                if (!selfProxy.executeNextDueDataDeletion(now)) {
+                    break;
+                }
+                processed++;
             } catch (Exception e) {
-                log.error("Failed to execute deletion for requestId={}: {}",
-                        deletionRequest.getId(), e.getMessage(), e);
+                log.error("Failed to execute a due deletion request: {}", e.getMessage(), e);
+                break;
             }
         }
+        log.info("Processed {} overdue deletion request(s)", processed);
     }
 
     /**
@@ -271,10 +303,30 @@ public class DataDeletionService {
      * Public so Spring can wrap it via the self-proxy with REQUIRES_NEW; never call directly.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean executeNextDueDataDeletion(Instant now) {
+        return deletionRequestRepository.findNextDuePendingForUpdateSkipLocked(
+                        DeletionRequestStatus.PENDING.name(), now)
+                .map(deletionRequest -> {
+                    executeLockedDataDeletion(deletionRequest);
+                    return true;
+                })
+                .orElse(false);
+    }
+
+    /**
+     * AC #2 — wipe all user data in the order required by the foreign key graph.
+     * Public so Spring can wrap it via the self-proxy with REQUIRES_NEW; direct invocations still lock by id.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void executeDataDeletion(UUID deletionRequestId) {
         DataDeletionRequest deletionRequest = deletionRequestRepository.findByIdForUpdate(deletionRequestId)
                 .orElseThrow(() -> new IllegalArgumentException("Deletion request not found: " + deletionRequestId));
 
+        executeLockedDataDeletion(deletionRequest);
+    }
+
+    private void executeLockedDataDeletion(DataDeletionRequest deletionRequest) {
+        UUID deletionRequestId = deletionRequest.getId();
         if (deletionRequest.getStatus() != DeletionRequestStatus.PENDING) {
             log.info("Skipping non-pending deletion request: requestId={} status={}",
                     deletionRequestId, deletionRequest.getStatus());
@@ -284,14 +336,29 @@ public class DataDeletionService {
         UUID userId = deletionRequest.getUserId();
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+        String originalEmail = user.getEmail();
 
         log.info("Starting data deletion: userId={} requestId={}", userId, deletionRequestId);
 
-        // 1. Object storage (PDFs / images / avatar) — best-effort, before DB rows so the keys remain available for tracing.
+        // 1. Object storage (PDFs / images / avatar): exact-key deletion is fail-fast before DB rows
+        // become unreachable; prefix deletion is a best-effort backstop.
+        List<String> healthRecordFileKeys = healthRecordRepository.findFileKeysByUserId(userId);
+        int exactFilesDeleted = storageService.deleteObjects(healthRecordFileKeys);
         int filesDeleted = storageService.deleteObjectsByPrefix("health-records/" + userId + "/");
         int avatarFilesDeleted = storageService.deleteObjectsByPrefix("avatars/" + userId + "/");
 
-        // 2-3. Health data tables (children of profile/user)
+        // 2. Delete sharing/invitation/job/reminder children that can otherwise restrict owner/viewer anonymisation.
+        int healthRecordSharesDeleted = healthRecordShareRepository.deleteAllByUserParticipation(userId);
+        int healthRecordInvitesDeleted = healthRecordInvitationRepository.deleteAllByUserParticipation(userId);
+        int profileSharesDeleted = profileShareRepository.deleteAllByUserParticipation(userId);
+        int profileInvitesDeleted = profileInvitationRepository.deleteAllByUserParticipation(userId);
+        int profileInviteeEmailDeleted = deleteProfileInvitationsByInviteeEmail(originalEmail);
+        int healthRecordInviteeEmailDeleted = deleteHealthRecordInvitationsByInviteeEmail(originalEmail);
+        int followUpRemindersDeleted = followUpReminderRepository.deleteAllByUserId(userId);
+        int ocrDeadLettersDeleted = ocrDeadLetterRepository.deleteAllByUserId(userId);
+        int ocrJobsDeleted = ocrJobExecutionRepository.deleteAllByUserId(userId);
+
+        // 3-4. Health data tables (children of profile/user)
         int healthRecordsDeleted = healthRecordRepository.deleteAllByUserId(userId);
         int profilesDeleted = profileRepository.deleteAllByUserId(userId);
 
@@ -329,8 +396,11 @@ public class DataDeletionService {
         accountStatusCache.put(userId, AccountStatus.DELETED);
 
         // AC #2 audit-trail line per architecture.md "Chiến Lược Audit Logging"
-        log.info("User data deleted per right-to-delete request: userId={} requestId={} files={} avatarFiles={} records={} profiles={} emailTokens={} resetTokens={} refreshTokens={} consentLogs={}",
-                userId, deletionRequestId, filesDeleted, avatarFilesDeleted, healthRecordsDeleted, profilesDeleted,
+        log.info("User data deleted per right-to-delete request: userId={} requestId={} exactFiles={} prefixFiles={} avatarFiles={} recordShares={} recordInvites={} profileShares={} profileInvites={} profileInviteeEmails={} recordInviteeEmails={} reminders={} ocrDeadLetters={} ocrJobs={} records={} profiles={} emailTokens={} resetTokens={} refreshTokens={} consentLogs={}",
+                userId, deletionRequestId, exactFilesDeleted, filesDeleted, avatarFilesDeleted,
+                healthRecordSharesDeleted, healthRecordInvitesDeleted, profileSharesDeleted, profileInvitesDeleted,
+                profileInviteeEmailDeleted, healthRecordInviteeEmailDeleted, followUpRemindersDeleted,
+                ocrDeadLettersDeleted, ocrJobsDeleted, healthRecordsDeleted, profilesDeleted,
                 emailVerificationDeleted, passwordResetDeleted, refreshTokensDeleted, consentLogsDeleted);
     }
 
@@ -350,6 +420,30 @@ public class DataDeletionService {
                     "Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực.");
         }
         return cancellationToken.trim();
+    }
+
+    private int deleteProfileInvitationsByInviteeEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return 0;
+        }
+        return profileInvitationRepository.deleteAllByInviteeEmailIgnoreCase(email);
+    }
+
+    private int deleteHealthRecordInvitationsByInviteeEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return 0;
+        }
+        return healthRecordInvitationRepository.deleteAllByInviteeEmailIgnoreCase(email);
+    }
+
+    private String hashCancellationToken(String cancellationToken) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashed = digest.digest(cancellationToken.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hashed);
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 digest is not available", ex);
+        }
     }
 
     private static boolean isDuplicatePendingDeletionConstraint(DataIntegrityViolationException ex) {

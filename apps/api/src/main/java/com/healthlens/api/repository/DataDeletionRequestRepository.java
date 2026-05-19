@@ -11,7 +11,6 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -24,24 +23,34 @@ public interface DataDeletionRequestRepository extends JpaRepository<DataDeletio
     Optional<DataDeletionRequest> findFirstByUserIdOrderByRequestedAtDesc(UUID userId);
 
     /**
-     * Find all pending deletion requests that have passed their scheduled deletion time.
+     * Claim one due request and hold its row lock for the caller's deletion transaction.
      */
-    List<DataDeletionRequest> findByStatusAndScheduledDeletionAtBefore(
-        DeletionRequestStatus status,
-        Instant now
+    @Query(value = """
+            SELECT *
+            FROM data_deletion_requests
+            WHERE status = :status
+              AND scheduled_deletion_at <= :now
+            ORDER BY scheduled_deletion_at ASC
+            LIMIT 1
+            FOR UPDATE SKIP LOCKED
+            """, nativeQuery = true)
+    Optional<DataDeletionRequest> findNextDuePendingForUpdateSkipLocked(
+            @Param("status") String status,
+            @Param("now") Instant now
     );
 
     /**
-     * Find a deletion request by cancellation token.
+     * Find a deletion request by cancellation token hash.
      */
-    Optional<DataDeletionRequest> findByCancellationToken(String cancellationToken);
+    Optional<DataDeletionRequest> findByCancellationTokenHash(String cancellationTokenHash);
 
     /**
-     * Lock a deletion request by token while a cancellation is being validated and applied.
+     * Lock a deletion request by token hash while a cancellation is being validated and applied.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT r FROM DataDeletionRequest r WHERE r.cancellationToken = :cancellationToken")
-    Optional<DataDeletionRequest> findByCancellationTokenForUpdate(@Param("cancellationToken") String cancellationToken);
+    @Query("SELECT r FROM DataDeletionRequest r WHERE r.cancellationTokenHash = :cancellationTokenHash")
+    Optional<DataDeletionRequest> findByCancellationTokenHashForUpdate(
+            @Param("cancellationTokenHash") String cancellationTokenHash);
 
     /**
      * Lock a deletion request before the scheduler mutates account data.
