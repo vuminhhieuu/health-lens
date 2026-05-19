@@ -15,6 +15,7 @@ import com.healthlens.api.entity.UserRole;
 import com.healthlens.api.entity.AccountStatus;
 import com.healthlens.api.exception.EmailAlreadyExistsException;
 import com.healthlens.api.exception.WeakPasswordException;
+import com.healthlens.api.exception.RateLimitExceededException;
 import com.healthlens.api.exception.AccountPendingDeletionException;
 import com.healthlens.api.repository.EmailVerificationTokenRepository;
 import com.healthlens.api.repository.PasswordResetTokenRepository;
@@ -26,6 +27,7 @@ import com.healthlens.api.constants.ConsentConstants;
 import com.healthlens.api.repository.UserRepository;
 import com.healthlens.api.security.ForgotPasswordRateLimiter;
 import com.healthlens.api.security.LoginRateLimiter;
+import com.healthlens.api.security.VerifyEmailRateLimiter;
 import com.healthlens.api.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -63,6 +65,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final LoginRateLimiter rateLimiter;
     private final ForgotPasswordRateLimiter forgotPasswordRateLimiter;
+    private final VerifyEmailRateLimiter verifyEmailRateLimiter;
     private final StringRedisTemplate redisTemplate;
     private final ConsentService consentService;
     private final AuditEventRecorder auditEventRecorder;
@@ -78,6 +81,7 @@ public class AuthService {
             JwtUtil jwtUtil,
             LoginRateLimiter rateLimiter,
             ForgotPasswordRateLimiter forgotPasswordRateLimiter,
+            VerifyEmailRateLimiter verifyEmailRateLimiter,
             StringRedisTemplate redisTemplate,
             ConsentService consentService,
             AuditEventRecorder auditEventRecorder,
@@ -92,6 +96,7 @@ public class AuthService {
         this.jwtUtil = jwtUtil;
         this.rateLimiter = rateLimiter;
         this.forgotPasswordRateLimiter = forgotPasswordRateLimiter;
+        this.verifyEmailRateLimiter = verifyEmailRateLimiter;
         this.redisTemplate = redisTemplate;
         this.consentService = consentService;
         this.auditEventRecorder = auditEventRecorder;
@@ -145,15 +150,34 @@ public class AuthService {
     }
 
     @Transactional
-    public void verifyEmail(String token) {
-        EmailVerificationToken verificationToken = tokenRepository.findByToken(token)
-                .orElseThrow(() -> new IllegalArgumentException("Token xác thực không hợp lệ"));
+    public void verifyEmail(String token, String clientIp) {
+        EmailVerificationToken verificationToken = tokenRepository.findByToken(token).orElse(null);
 
-        if (verificationToken.getUsedAt() != null || verificationToken.getExpiresAt().isBefore(Instant.now())) {
-            throw new IllegalArgumentException("Token xác thực đã hết hạn hoặc đã được sử dụng");
+        if (verificationToken == null) {
+            try {
+                verifyEmailRateLimiter.consumeAttempt(clientIp, null);
+            } catch (RateLimitExceededException e) {
+                auditVerifyEmailFailure(null, "rate_limited");
+                throw e;
+            }
+            auditVerifyEmailFailure(null, "invalid");
+            throw new IllegalArgumentException("Không thể xác thực email bằng liên kết này.");
         }
 
         User user = verificationToken.getUser();
+        String email = user.getEmail();
+        try {
+            verifyEmailRateLimiter.consumeAttempt(clientIp, email);
+        } catch (RateLimitExceededException e) {
+            auditVerifyEmailFailure(user.getId(), "rate_limited");
+            throw e;
+        }
+
+        if (verificationToken.getUsedAt() != null || verificationToken.getExpiresAt().isBefore(Instant.now())) {
+            auditVerifyEmailFailure(user.getId(), "invalid");
+            throw new IllegalArgumentException("Không thể xác thực email bằng liên kết này.");
+        }
+
         user.setEmailVerified(true);
         userRepository.save(user);
 
@@ -166,6 +190,15 @@ public class AuthService {
                 AuditResourceTypes.AUTH,
                 user.getId(),
                 Map.of("email", user.getEmail())
+        );
+    }
+
+    private void auditVerifyEmailFailure(UUID userId, String reason) {
+        auditEventRecorder.recordAnonymous(
+                AuditActions.VERIFY_EMAIL_FAILED,
+                AuditResourceTypes.AUTH,
+                userId,
+                Map.of("outcome", "failure", "reason", reason, "tokenSupplied", true)
         );
     }
 

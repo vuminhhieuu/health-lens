@@ -10,12 +10,14 @@ import com.healthlens.api.entity.RefreshToken;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.entity.UserRole;
 import com.healthlens.api.exception.AccountLockedException;
+import com.healthlens.api.exception.RateLimitExceededException;
 import com.healthlens.api.repository.EmailVerificationTokenRepository;
 import com.healthlens.api.repository.PasswordResetTokenRepository;
 import com.healthlens.api.repository.RefreshTokenRepository;
 import com.healthlens.api.repository.UserRepository;
 import com.healthlens.api.security.ForgotPasswordRateLimiter;
 import com.healthlens.api.security.LoginRateLimiter;
+import com.healthlens.api.security.VerifyEmailRateLimiter;
 import com.healthlens.api.util.JwtUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -39,8 +41,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -56,6 +60,7 @@ class AuthServiceTest {
     @Mock private JwtUtil jwtUtil;
     @Mock private LoginRateLimiter rateLimiter;
     @Mock private ForgotPasswordRateLimiter forgotPasswordRateLimiter;
+    @Mock private VerifyEmailRateLimiter verifyEmailRateLimiter;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ConsentService consentService;
     @Mock private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
@@ -69,7 +74,8 @@ class AuthServiceTest {
         authService = new AuthService(
                 userRepository, tokenRepository, passwordResetTokenRepository,
                 refreshTokenRepository, passwordEncoder, emailService,
-                jwtUtil, rateLimiter, forgotPasswordRateLimiter, redisTemplate, consentService, auditEventRecorder, "email.events"
+                jwtUtil, rateLimiter, forgotPasswordRateLimiter, verifyEmailRateLimiter,
+                redisTemplate, consentService, auditEventRecorder, "email.events"
         );
     }
 
@@ -105,21 +111,109 @@ class AuthServiceTest {
 
         when(tokenRepository.findByToken("valid-token")).thenReturn(Optional.of(token));
 
-        authService.verifyEmail("valid-token");
+        authService.verifyEmail("valid-token", "203.0.113.10");
 
         assertThat(user.isEmailVerified()).isTrue();
+        verify(verifyEmailRateLimiter).consumeAttempt("203.0.113.10", "user@example.com");
         verify(userRepository).save(user);
         verify(tokenRepository).save(token);
     }
 
     @Test
-    @DisplayName("verifyEmail voi token khong hop le throw IllegalArgumentException")
+    @DisplayName("verifyEmail voi token khong hop le tra loi chung va audit khong ghi raw token")
     void verifyEmail_invalidToken() {
         when(tokenRepository.findByToken("invalid-token")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.verifyEmail("invalid-token"))
+        assertThatThrownBy(() -> authService.verifyEmail("invalid-token", "203.0.113.10"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("không hợp lệ");
+                .hasMessage("Không thể xác thực email bằng liên kết này.");
+
+        verify(verifyEmailRateLimiter).consumeAttempt("203.0.113.10", null);
+        verify(auditEventRecorder).recordAnonymous(
+                eq("VERIFY_EMAIL_FAILED"),
+                eq("AUTH"),
+                eq(null),
+                argThat(details -> details.containsKey("tokenSupplied")
+                        && Boolean.TRUE.equals(details.get("tokenSupplied"))
+                        && !details.containsValue("invalid-token"))
+        );
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("verifyEmail voi token het han tra loi chung va audit khong ghi raw token")
+    void verifyEmail_expiredToken() {
+        User user = createUnverifiedUser();
+        EmailVerificationToken token = new EmailVerificationToken();
+        token.setToken("expired-token");
+        token.setUser(user);
+        token.setExpiresAt(Instant.now().minus(1, ChronoUnit.HOURS));
+
+        when(tokenRepository.findByToken("expired-token")).thenReturn(Optional.of(token));
+
+        assertThatThrownBy(() -> authService.verifyEmail("expired-token", "203.0.113.10"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Không thể xác thực email bằng liên kết này.");
+
+        verify(verifyEmailRateLimiter).consumeAttempt("203.0.113.10", "user@example.com");
+        verify(auditEventRecorder).recordAnonymous(
+                eq("VERIFY_EMAIL_FAILED"),
+                eq("AUTH"),
+                eq(user.getId()),
+                argThat(details -> "failure".equals(details.get("outcome"))
+                        && !details.containsValue("expired-token"))
+        );
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("verifyEmail voi token da dung tra loi chung va audit khong ghi raw token")
+    void verifyEmail_usedToken() {
+        User user = createUnverifiedUser();
+        EmailVerificationToken token = new EmailVerificationToken();
+        token.setToken("used-token");
+        token.setUser(user);
+        token.setExpiresAt(Instant.now().plus(1, ChronoUnit.HOURS));
+        token.setUsedAt(Instant.now().minus(5, ChronoUnit.MINUTES));
+
+        when(tokenRepository.findByToken("used-token")).thenReturn(Optional.of(token));
+
+        assertThatThrownBy(() -> authService.verifyEmail("used-token", "203.0.113.10"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Không thể xác thực email bằng liên kết này.");
+
+        verify(verifyEmailRateLimiter).consumeAttempt("203.0.113.10", "user@example.com");
+        verify(auditEventRecorder).recordAnonymous(
+                eq("VERIFY_EMAIL_FAILED"),
+                eq("AUTH"),
+                eq(user.getId()),
+                argThat(details -> "failure".equals(details.get("outcome"))
+                        && "invalid".equals(details.get("reason"))
+                        && !details.containsValue("used-token"))
+        );
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("verifyEmail khi bi rate limit van audit khong ghi raw token")
+    void verifyEmail_rateLimitedAudited() {
+        when(tokenRepository.findByToken("limited-token")).thenReturn(Optional.empty());
+        doThrow(new RateLimitExceededException("Bạn đã gửi yêu cầu quá nhanh.", 120))
+                .when(verifyEmailRateLimiter).consumeAttempt("203.0.113.10", null);
+
+        assertThatThrownBy(() -> authService.verifyEmail("limited-token", "203.0.113.10"))
+                .isInstanceOf(RateLimitExceededException.class);
+
+        verify(auditEventRecorder).recordAnonymous(
+                eq("VERIFY_EMAIL_FAILED"),
+                eq("AUTH"),
+                eq(null),
+                argThat(details -> "failure".equals(details.get("outcome"))
+                        && "rate_limited".equals(details.get("reason"))
+                        && !details.containsValue("limited-token"))
+        );
+        verify(tokenRepository).findByToken("limited-token");
+        verify(userRepository, never()).save(any(User.class));
     }
 
     @Test

@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-05-19T08:37:46+07:00
+last_updated: 2026-05-19T09:46:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -242,7 +242,7 @@ development_status:
 
   # Epic 2: Auth Token And Email-Link Hardening
   remaining-2-auth-token-email-link-hardening: in-progress
-  remaining-2-1-verify-email-token-hygiene-and-rate-limiting: ready-for-dev
+  remaining-2-1-verify-email-token-hygiene-and-rate-limiting: done
   remaining-2-2-verify-email-frontend-resilience-and-accessibility: ready-for-dev
   remaining-2-3-cancel-deletion-link-and-token-flow-hardening: ready-for-dev
   remaining-2-4-public-auth-endpoint-rate-limit-and-error-semantics: ready-for-dev

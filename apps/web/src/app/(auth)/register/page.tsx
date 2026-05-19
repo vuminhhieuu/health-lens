@@ -13,6 +13,22 @@ import { messageCatalog, registerErrorMessage } from "@/lib/i18n/messages";
 
 const POST_REGISTER_RETURN_URL_KEY = "post-register-return-url";
 
+function safeInternalReturnUrl(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(value, window.location.origin);
+    if (parsed.origin !== window.location.origin) {
+      return null;
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
+}
+
 const registerPageSchema = registerSchema.extend({
   fullName: z.string().min(1, "Vui lòng nhập họ và tên"),
   birthDate: z.string().min(1, "Vui lòng chọn ngày sinh"),
@@ -26,7 +42,7 @@ type RegisterPageInput = z.infer<typeof registerPageSchema>;
 export default function RegisterPage() {
   const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const inviteToken = searchParams?.get("inviteToken") ?? null;
-  const returnUrl = searchParams?.get("returnUrl") ?? null;
+  const returnUrl = typeof window !== "undefined" ? safeInternalReturnUrl(searchParams?.get("returnUrl") ?? null) : null;
   const [successMessage, setSuccessMessage] = useState("");
   const [submitError, setSubmitError] = useState("");
 
