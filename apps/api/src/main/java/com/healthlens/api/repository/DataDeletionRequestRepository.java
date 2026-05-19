@@ -2,7 +2,9 @@ package com.healthlens.api.repository;
 
 import com.healthlens.api.entity.DataDeletionRequest;
 import com.healthlens.api.entity.DeletionRequestStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -33,6 +35,20 @@ public interface DataDeletionRequestRepository extends JpaRepository<DataDeletio
      * Find a deletion request by cancellation token.
      */
     Optional<DataDeletionRequest> findByCancellationToken(String cancellationToken);
+
+    /**
+     * Lock a deletion request by token while a cancellation is being validated and applied.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM DataDeletionRequest r WHERE r.cancellationToken = :cancellationToken")
+    Optional<DataDeletionRequest> findByCancellationTokenForUpdate(@Param("cancellationToken") String cancellationToken);
+
+    /**
+     * Lock a deletion request before the scheduler mutates account data.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM DataDeletionRequest r WHERE r.id = :id")
+    Optional<DataDeletionRequest> findByIdForUpdate(@Param("id") UUID id);
 
     /**
      * Check if a user has a pending deletion request.

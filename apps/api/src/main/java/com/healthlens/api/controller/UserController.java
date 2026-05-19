@@ -82,7 +82,7 @@ public class UserController {
 
     @DeleteMapping("/deletion-requests/cancel")
     public ResponseEntity<Map<String, Object>> cancelDeletion(
-            @RequestParam String token) {
+            @RequestParam(required = false) String token) {
         CancelDeletionResponse response = dataDeletionService.cancelDeletionRequest(token);
         return ResponseEntity.ok(buildResponseBody(response));
     }

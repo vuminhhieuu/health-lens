@@ -10,6 +10,9 @@ import com.healthlens.api.entity.AccountStatus;
 import com.healthlens.api.entity.DataDeletionRequest;
 import com.healthlens.api.entity.DeletionRequestStatus;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.exception.DeletionCancellationConflictException;
+import com.healthlens.api.exception.DeletionCancellationForbiddenException;
+import com.healthlens.api.exception.DeletionCancellationTokenException;
 import com.healthlens.api.repository.ConsentLogRepository;
 import com.healthlens.api.repository.DataDeletionRequestRepository;
 import com.healthlens.api.repository.EmailVerificationTokenRepository;
@@ -29,9 +32,9 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.SecureRandom;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -157,8 +160,7 @@ public class DataDeletionService {
         String cancellationLink = webCancellationUrl
                 + "?token=" + encodeQueryParam(cancellationToken)
                 + "&requestedAt=" + encodeQueryParam(requestedAt.toString())
-                + "&scheduledDeletionAt=" + encodeQueryParam(deletionRequest.getScheduledDeletionAt().toString())
-                + "&email=" + encodeQueryParam(user.getEmail());
+                + "&scheduledDeletionAt=" + encodeQueryParam(deletionRequest.getScheduledDeletionAt().toString());
         try {
             emailService.sendDeletionConfirmationEmail(user, deletionRequest, cancellationLink);
         } catch (Exception e) {
@@ -172,7 +174,7 @@ public class DataDeletionService {
                 AuditResourceTypes.USER,
                 userId,
                 Map.of(
-                        "email", user.getEmail(),
+                        "requestId", deletionRequest.getId().toString(),
                         "scheduledDeletionAt", deletionRequest.getScheduledDeletionAt().toString()
                 )
         );
@@ -190,26 +192,27 @@ public class DataDeletionService {
      */
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public CancelDeletionResponse cancelDeletionRequest(String cancellationToken) {
-        DataDeletionRequest deletionRequest = deletionRequestRepository.findByCancellationToken(cancellationToken)
-                .orElseThrow(() -> new IllegalArgumentException(
+        String normalizedToken = normalizeCancellationToken(cancellationToken);
+        DataDeletionRequest deletionRequest = deletionRequestRepository.findByCancellationTokenForUpdate(normalizedToken)
+                .orElseThrow(() -> new DeletionCancellationTokenException(
                         "Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực."));
 
         if (!deletionRequest.isPending()) {
-            throw new IllegalStateException("Yêu cầu xóa này không thể hủy được");
+            throw new DeletionCancellationConflictException("Yêu cầu xóa này không thể hủy được");
         }
 
         // Grace period ended but scheduler may not have run yet — still reject cancellation (ND13 semantics).
         if (deletionRequest.isOverdue()) {
-            throw new IllegalStateException(
+            throw new DeletionCancellationTokenException(
                     "Thời gian cho phép hủy yêu cầu xóa đã kết thúc. Tài khoản đã hoặc sắp được xóa theo lịch đã đặt.");
         }
 
         User user = userRepository.findById(deletionRequest.getUserId())
-                .orElseThrow(() -> new IllegalArgumentException("Người dùng không tồn tại"));
+                .orElseThrow(() -> new DeletionCancellationForbiddenException("Người dùng không tồn tại"));
 
         // Avoid reactivating an account if deletion already ran (or DB is inconsistent): only cancel while still frozen.
         if (user.getAccountStatus() != AccountStatus.PENDING_DELETION) {
-            throw new IllegalStateException(
+            throw new DeletionCancellationForbiddenException(
                     "Không thể hủy yêu cầu xóa: tài khoản không còn trong trạng thái chờ xóa.");
         }
 
@@ -227,7 +230,7 @@ public class DataDeletionService {
                 AuditActions.CANCEL_ACCOUNT_DELETION,
                 AuditResourceTypes.USER,
                 deletionRequest.getUserId(),
-                Map.of("email", user.getEmail())
+                Map.of("requestId", deletionRequest.getId().toString())
         );
 
         try {
@@ -269,7 +272,7 @@ public class DataDeletionService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void executeDataDeletion(UUID deletionRequestId) {
-        DataDeletionRequest deletionRequest = deletionRequestRepository.findById(deletionRequestId)
+        DataDeletionRequest deletionRequest = deletionRequestRepository.findByIdForUpdate(deletionRequestId)
                 .orElseThrow(() -> new IllegalArgumentException("Deletion request not found: " + deletionRequestId));
 
         if (deletionRequest.getStatus() != DeletionRequestStatus.PENDING) {
@@ -339,6 +342,14 @@ public class DataDeletionService {
 
     private String encodeQueryParam(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private String normalizeCancellationToken(String cancellationToken) {
+        if (cancellationToken == null || cancellationToken.isBlank()) {
+            throw new DeletionCancellationTokenException(
+                    "Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực.");
+        }
+        return cancellationToken.trim();
     }
 
     private static boolean isDuplicatePendingDeletionConstraint(DataIntegrityViolationException ex) {
