@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, CalendarCheck, CheckCircle2, HelpCircle, Info, Loader, Mail, RefreshCcw, Timer, Undo2 } from "lucide-react";
@@ -10,6 +10,13 @@ import { useAccountDeletion } from '../../hooks/useAccountDeletion';
 interface ApiErrorData {
     error?: string;
     detail?: string;
+    title?: string;
+    errorCode?: string;
+    retryAfterSeconds?: number;
+    properties?: {
+        errorCode?: string;
+        retryAfterSeconds?: number;
+    };
 }
 
 /** Chuẩn hóa token từ query (trình đọc mail đôi khi mã hóa ký tự thêm một lần). */
@@ -30,6 +37,120 @@ const parseTimestamp = (value?: string | null) => {
     return new Date(normalizedValue).getTime();
 };
 
+const consumedTokenStorageKey = "healthlens.cancelDeletion.consumedTokens";
+
+async function tokenFingerprint(token: string): Promise<string | null> {
+    if (typeof window === "undefined" || !window.crypto?.subtle) {
+        return null;
+    }
+
+    try {
+        const tokenBytes = new TextEncoder().encode(token);
+        const digest = await window.crypto.subtle.digest("SHA-256", tokenBytes);
+        return Array.from(new Uint8Array(digest))
+            .map((byte) => byte.toString(16).padStart(2, "0"))
+            .join("");
+    } catch {
+        return null;
+    }
+}
+
+function readConsumedTokenFingerprints(): string[] {
+    if (typeof window === "undefined") return [];
+
+    try {
+        const raw = window.localStorage.getItem(consumedTokenStorageKey);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+    } catch {
+        return [];
+    }
+}
+
+async function isTokenConsumedLocally(token: string): Promise<boolean> {
+    const fingerprint = await tokenFingerprint(token);
+    if (!fingerprint) return false;
+    return readConsumedTokenFingerprints().includes(fingerprint);
+}
+
+function rememberConsumedToken(token: string): void {
+    if (typeof window === "undefined") return;
+
+    void tokenFingerprint(token)
+        .then((fingerprint) => {
+            if (!fingerprint) return;
+
+            const fingerprints = readConsumedTokenFingerprints();
+            if (!fingerprints.includes(fingerprint)) {
+                fingerprints.push(fingerprint);
+                window.localStorage.setItem(consumedTokenStorageKey, JSON.stringify(fingerprints.slice(-20)));
+            }
+        })
+        .catch(() => undefined);
+}
+
+type CancellationStatus = "ready" | "loading" | "success" | "error";
+type CancellationErrorState =
+    | "missing-token"
+    | "invalid-token"
+    | "replayed"
+    | "unauthorized"
+    | "forbidden"
+    | "rate-limited"
+    | "server-error"
+    | "network"
+    | "unknown";
+
+function getErrorState(error: AxiosError<ApiErrorData>): CancellationErrorState {
+    const status = error?.response?.status;
+    if (status === 409) return "replayed";
+    if (status === 401) return "unauthorized";
+    if (status === 403) return "forbidden";
+    if (status === 429) return "rate-limited";
+    if (status !== undefined && status >= 500) return "server-error";
+    if (!status) return "network";
+    return "invalid-token";
+}
+
+const errorContent: Record<CancellationErrorState, { title: string; message: string }> = {
+    "missing-token": {
+        title: "Liên kết thiếu mã bảo mật",
+        message: "Liên kết hủy yêu cầu không có mã bảo mật hợp lệ. Vui lòng mở lại email mới nhất từ HealthLens hoặc liên hệ hỗ trợ.",
+    },
+    "invalid-token": {
+        title: "Liên kết không hợp lệ hoặc đã hết hạn",
+        message: "Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực. Vui lòng kiểm tra email mới nhất từ HealthLens.",
+    },
+    replayed: {
+        title: "Yêu cầu đã được xử lý",
+        message: "Yêu cầu xóa này đã được hủy, hoàn tất, hoặc không còn ở trạng thái có thể hủy. Vui lòng đăng nhập để kiểm tra trạng thái tài khoản.",
+    },
+    unauthorized: {
+        title: "Mã hủy đã hết hiệu lực",
+        message: "Hệ thống không còn chấp nhận mã hủy này. Nếu bạn vẫn cần hỗ trợ khôi phục tài khoản, vui lòng liên hệ HealthLens ngay.",
+    },
+    forbidden: {
+        title: "Không thể khôi phục bằng liên kết này",
+        message: "Tài khoản không còn ở trạng thái chờ xóa nên liên kết email không thể dùng để khôi phục.",
+    },
+    "rate-limited": {
+        title: "Thao tác tạm thời bị giới hạn",
+        message: "Bạn đã thử quá nhiều lần. Vui lòng thử lại sau ít phút để bảo vệ tài khoản.",
+    },
+    "server-error": {
+        title: "Chưa thể xử lý yêu cầu",
+        message: "Hệ thống đang gặp sự cố khi xử lý liên kết hủy xóa. Vui lòng thử lại sau hoặc liên hệ hỗ trợ.",
+    },
+    network: {
+        title: "Không thể kết nối",
+        message: "Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng và thử lại.",
+    },
+    unknown: {
+        title: "Không thể hoàn tất hủy yêu cầu",
+        message: "Không thể hoàn tất hủy yêu cầu. Vui lòng thử lại hoặc liên hệ hỗ trợ.",
+    },
+};
+
 /**
  * Story 1.6 — UI tham chiếu Stitch (project 2069125245324220624):
  * Xác nhận hủy, thành công, liên kết không hợp lệ (không hiển thị mã lỗi kỹ thuật).
@@ -37,16 +158,18 @@ const parseTimestamp = (value?: string | null) => {
 export default function CancelDeletionClient() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const token = normalizeCancellationToken(searchParams.get("token"));
-    const requestedAt = searchParams.get("requestedAt");
-    const scheduledDeletionAt = searchParams.get("scheduledDeletionAt");
+    const [token] = useState(() => normalizeCancellationToken(searchParams.get("token")));
+    const [requestedAt] = useState(() => searchParams.get("requestedAt"));
+    const [scheduledDeletionAt] = useState(() => searchParams.get("scheduledDeletionAt"));
 
-    const [status, setStatus] = useState<"ready" | "loading" | "success" | "error">("ready");
+    const [status, setStatus] = useState<CancellationStatus>("ready");
+    const [errorState, setErrorState] = useState<CancellationErrorState>("unknown");
     const [message, setMessage] = useState("");
     const [confirmedEmail, setConfirmedEmail] = useState<string | null>(null);
     const [cancelledAt, setCancelledAt] = useState<string | null>(null);
     const [redirectSecondsLeft, setRedirectSecondsLeft] = useState(3);
     const [nowMs, setNowMs] = useState(() => Date.now());
+    const submitInFlightRef = useRef(false);
     const { cancelDeletion } = useAccountDeletion();
     const successMessage =
         "Tài khoản của bạn đã được khôi phục và có thể đăng nhập bình thường.";
@@ -97,8 +220,6 @@ export default function CancelDeletionClient() {
         return deletionTimestamp - nowMs;
     }, [deletionTimestamp, nowMs]);
 
-    const isExpired = remainingMs !== null && remainingMs <= 0;
-
     const remainingTimeDisplay = useMemo(() => {
         if (remainingMs === null) return "72 giờ";
         if (remainingMs <= 0) return "0 phút";
@@ -113,51 +234,73 @@ export default function CancelDeletionClient() {
     }, [remainingMs]);
 
     const maskedEmail = useMemo(() => {
-        const email = confirmedEmail || searchParams.get("email");
-        if (!email || !email.includes("@")) return "a...r@email.com";
+        const email = confirmedEmail;
+        if (!email || !email.includes("@")) return "Email sẽ được xác nhận";
         const [name, domain] = email.split("@");
         if (!name) return `...@${domain}`;
         const first = name[0];
         const last = name[name.length - 1];
         return `${first}...${last}@${domain}`;
-    }, [confirmedEmail, searchParams]);
+    }, [confirmedEmail]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        if (!window.location.search) return;
+        window.history.replaceState(window.history.state, "", window.location.pathname);
+    }, []);
+
+    useEffect(() => {
+        if (token) return;
+        setErrorState("missing-token");
+        setMessage(errorContent["missing-token"].message);
+        setStatus("error");
+    }, [token]);
+
+    useEffect(() => {
+        if (!token) return;
+
+        let cancelled = false;
+        void isTokenConsumedLocally(token).then((consumed) => {
+            if (cancelled || !consumed) return;
+            setErrorState("replayed");
+            setMessage(errorContent.replayed.message);
+            setStatus("error");
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [token]);
 
     const handleConfirmCancel = async () => {
+        if (submitInFlightRef.current) return;
         if (!token) {
+            setErrorState("missing-token");
             setStatus("error");
-            setMessage(
-                "Liên kết có thể đã hết hạn hoặc không đúng định dạng. Vui lòng kiểm tra email mới nhất từ HealthLens, hoặc đăng nhập nếu tài khoản vẫn hoạt động — và liên hệ privacy@healthlens.vn nếu bạn cần hỗ trợ.",
-            );
-            return;
-        }
-        if (isExpired) {
-            setStatus("error");
-            setMessage("Thời gian hủy yêu cầu đã hết. Vui lòng đăng nhập để kiểm tra trạng thái tài khoản.");
+            setMessage(errorContent["missing-token"].message);
             return;
         }
 
+        submitInFlightRef.current = true;
         setStatus("loading");
         try {
             const result = await cancelDeletion(token);
+            rememberConsumedToken(token);
             if (result?.email) setConfirmedEmail(result.email);
             setCancelledAt(result?.cancelledAt ?? new Date().toISOString());
             setRedirectSecondsLeft(3);
             setStatus("success");
         } catch (err) {
             const error = err as AxiosError<ApiErrorData>;
-            if (error?.response?.status === 409) {
-                setCancelledAt(new Date().toISOString());
-                setRedirectSecondsLeft(3);
-                setStatus("success");
-                return;
+            const nextErrorState = getErrorState(error);
+            if (nextErrorState === "replayed") {
+                rememberConsumedToken(token);
             }
+            setErrorState(nextErrorState);
             setStatus("error");
-            setMessage(
-                error?.response?.data?.detail ||
-                error?.response?.data?.error ||
-                error?.message ||
-                "Không thể hoàn tất hủy yêu cầu. Vui lòng thử lại hoặc liên hệ hỗ trợ.",
-            );
+            setMessage(errorContent[nextErrorState].message);
+        } finally {
+            submitInFlightRef.current = false;
         }
     };
 
@@ -172,12 +315,10 @@ export default function CancelDeletionClient() {
                                     <HelpCircle className="h-8 w-8" />
                                 </div>
                                 <h1 className="mb-1 text-2xl font-bold tracking-tight text-[#00685f]">
-                                    {isExpired ? "Liên kết đã hết hạn" : "Xác nhận hủy yêu cầu xóa"}
+                                    Xác nhận hủy yêu cầu xóa
                                 </h1>
                                 <p className="text-sm text-[#3d4947]">
-                                    {isExpired
-                                        ? "Bạn đã quá thời gian 72 giờ để hủy yêu cầu xóa. Liên kết từ email không còn hiệu lực"
-                                        : "Yêu cầu xóa tài khoản của bạn đang trong thời gian chờ xử lý."}
+                                    Hệ thống sẽ xác minh hiệu lực liên kết trước khi khôi phục tài khoản.
                                 </p>
                             </div>
                             <div className="space-y-8 p-8">
@@ -211,7 +352,7 @@ export default function CancelDeletionClient() {
                                     </div>
                                     <div className="h-px bg-[#d8e5e2]/40" />
                                     <p className="text-center font-semibold text-[#121e1c]">
-                                        {isExpired ? "Liên kết này không còn hiệu lực để khôi phục tài khoản." : "Bạn có muốn hủy yêu cầu xóa không?"}
+                                        Bạn có muốn hủy yêu cầu xóa không?
                                     </p>
                                 </div>
 
@@ -219,11 +360,7 @@ export default function CancelDeletionClient() {
                                     <button
                                         type="button"
                                         onClick={handleConfirmCancel}
-                                        disabled={isExpired}
-                                        className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl font-semibold text-white shadow-md transition-all ${isExpired
-                                            ? "cursor-not-allowed bg-[#bcc9c6]"
-                                            : "bg-gradient-to-r from-[#00685f] to-[#008378] hover:shadow-lg"
-                                            }`}
+                                        className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00685f] to-[#008378] font-semibold text-white shadow-md transition-all hover:shadow-lg disabled:cursor-not-allowed disabled:bg-[#bcc9c6] disabled:from-[#bcc9c6] disabled:to-[#bcc9c6]"
                                     >
                                         <Undo2 className="h-4 w-4" />
                                         Hủy yêu cầu xóa (khôi phục tài khoản)
@@ -316,10 +453,10 @@ export default function CancelDeletionClient() {
                                 </div>
                                 <div className="space-y-3">
                                     <h2 className="text-2xl font-bold tracking-tight text-[#121e1c]">
-                                        Liên kết không hợp lệ hoặc đã hết hạn
+                                        {errorContent[errorState].title}
                                     </h2>
                                     <p className="mx-auto max-w-md text-base leading-relaxed text-[#3d4947]">
-                                        {message || "Có vẻ như liên kết này không còn khả dụng. Điều này có thể xảy ra nếu yêu cầu đã được xử lý xong hoặc mã bảo mật đã hết thời gian hiệu lực."}
+                                        {message || errorContent[errorState].message}
                                     </p>
                                 </div>
                             </div>

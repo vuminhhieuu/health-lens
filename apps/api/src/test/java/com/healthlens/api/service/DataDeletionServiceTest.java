@@ -27,6 +27,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -114,6 +115,8 @@ class DataDeletionServiceTest {
         assertThat(response.requestId()).isNotNull();
         assertThat(response.scheduledDeletionAt()).isNotNull();
         assertThat(response.cancellationLink()).contains("cancel-deletion");
+        assertThat(response.cancellationLink()).doesNotContain("email=");
+        assertThat(response.cancellationLink()).doesNotContain(testUser.getEmail());
 
         ArgumentCaptor<DataDeletionRequest> captor = ArgumentCaptor.forClass(DataDeletionRequest.class);
         verify(deletionRequestRepository).saveAndFlush(captor.capture());
@@ -134,6 +137,12 @@ class DataDeletionServiceTest {
 
         // AC #4: confirmation email
         verify(emailService).sendDeletionConfirmationEmail(any(User.class), any(DataDeletionRequest.class), anyString());
+
+        ArgumentCaptor<Map<String, ?>> auditCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(auditEventRecorder).recordEvent(eq(userId), anyString(), anyString(), eq(userId), auditCaptor.capture());
+        assertThat(auditCaptor.getValue()).containsKey("requestId");
+        assertThat(auditCaptor.getValue()).containsKey("scheduledDeletionAt");
+        assertThat(auditCaptor.getValue()).doesNotContainKey("email");
     }
 
     @Test
@@ -222,7 +231,7 @@ class DataDeletionServiceTest {
         User frozenUser = createTestUser();
         frozenUser.setAccountStatus(AccountStatus.PENDING_DELETION);
 
-        when(deletionRequestRepository.findByCancellationToken(cancellationToken))
+        when(deletionRequestRepository.findByCancellationTokenForUpdate(cancellationToken))
                 .thenReturn(Optional.of(deletionRequest));
         when(userRepository.findById(userId)).thenReturn(Optional.of(frozenUser));
 
@@ -238,6 +247,10 @@ class DataDeletionServiceTest {
         verify(accountStatusCache).put(userId, AccountStatus.ACTIVE);
 
         verify(emailService).sendCancellationConfirmationEmail(any(User.class));
+        ArgumentCaptor<Map<String, ?>> auditCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(auditEventRecorder).recordEvent(eq(userId), anyString(), anyString(), eq(userId), auditCaptor.capture());
+        assertThat(auditCaptor.getValue()).containsKey("requestId");
+        assertThat(auditCaptor.getValue()).doesNotContainKey("email");
     }
 
     @Test
@@ -245,11 +258,11 @@ class DataDeletionServiceTest {
     void cancelDeletionRequest_invalidToken() {
         String invalidToken = "invalid-token-xyz";
 
-        when(deletionRequestRepository.findByCancellationToken(invalidToken))
+        when(deletionRequestRepository.findByCancellationTokenForUpdate(invalidToken))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> dataDeletionService.cancelDeletionRequest(invalidToken))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(com.healthlens.api.exception.DeletionCancellationTokenException.class)
                 .hasMessage("Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực.");
 
         verify(userRepository, never()).save(any());
@@ -265,11 +278,11 @@ class DataDeletionServiceTest {
         deletionRequest.setStatus(DeletionRequestStatus.COMPLETED);
         deletionRequest.setCancellationToken(token);
 
-        when(deletionRequestRepository.findByCancellationToken(token))
+        when(deletionRequestRepository.findByCancellationTokenForUpdate(token))
                 .thenReturn(Optional.of(deletionRequest));
 
         assertThatThrownBy(() -> dataDeletionService.cancelDeletionRequest(token))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(com.healthlens.api.exception.DeletionCancellationConflictException.class)
                 .hasMessage("Yêu cầu xóa này không thể hủy được");
 
         verify(userRepository, never()).save(any());
@@ -285,11 +298,11 @@ class DataDeletionServiceTest {
         deletionRequest.setScheduledDeletionAt(Instant.now().minusSeconds(60));
         deletionRequest.setCancellationToken(token);
 
-        when(deletionRequestRepository.findByCancellationToken(token))
+        when(deletionRequestRepository.findByCancellationTokenForUpdate(token))
                 .thenReturn(Optional.of(deletionRequest));
 
         assertThatThrownBy(() -> dataDeletionService.cancelDeletionRequest(token))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(com.healthlens.api.exception.DeletionCancellationTokenException.class)
                 .hasMessageContaining("Thời gian cho phép hủy");
 
         verify(userRepository, never()).save(any());
@@ -311,11 +324,11 @@ class DataDeletionServiceTest {
         User deletedUser = createTestUser();
         deletedUser.setAccountStatus(AccountStatus.DELETED);
 
-        when(deletionRequestRepository.findByCancellationToken(token)).thenReturn(Optional.of(deletionRequest));
+        when(deletionRequestRepository.findByCancellationTokenForUpdate(token)).thenReturn(Optional.of(deletionRequest));
         when(userRepository.findById(userId)).thenReturn(Optional.of(deletedUser));
 
         assertThatThrownBy(() -> dataDeletionService.cancelDeletionRequest(token))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(com.healthlens.api.exception.DeletionCancellationForbiddenException.class)
                 .hasMessageContaining("không còn trong trạng thái chờ xóa");
 
         verify(deletionRequestRepository, never()).save(any());
@@ -367,7 +380,7 @@ class DataDeletionServiceTest {
         deletionRequest.setRequestedAt(Instant.now().minusSeconds(72L * 3600 + 60));
         deletionRequest.setScheduledDeletionAt(Instant.now().minusSeconds(60));
 
-        when(deletionRequestRepository.findById(requestId)).thenReturn(Optional.of(deletionRequest));
+        when(deletionRequestRepository.findByIdForUpdate(requestId)).thenReturn(Optional.of(deletionRequest));
         when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
 
         dataDeletionService.executeDataDeletion(requestId);
@@ -412,7 +425,7 @@ class DataDeletionServiceTest {
         deletionRequest.setUserId(userId);
         deletionRequest.setStatus(DeletionRequestStatus.CANCELLED);
 
-        when(deletionRequestRepository.findById(requestId)).thenReturn(Optional.of(deletionRequest));
+        when(deletionRequestRepository.findByIdForUpdate(requestId)).thenReturn(Optional.of(deletionRequest));
 
         dataDeletionService.executeDataDeletion(requestId);
 

@@ -214,6 +214,42 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(DeletionCancellationTokenException.class)
+    public ProblemDetail handleDeletionCancellationToken(
+            DeletionCancellationTokenException ex,
+            HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problem.setType(URI.create("https://healthlens.vn/errors/deletion-cancel-token-invalid"));
+        problem.setTitle("Liên kết hủy xóa không hợp lệ");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.DELETION_CANCEL_TOKEN_INVALID);
+        return problem;
+    }
+
+    @ExceptionHandler(DeletionCancellationConflictException.class)
+    public ProblemDetail handleDeletionCancellationConflict(
+            DeletionCancellationConflictException ex,
+            HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setType(URI.create("https://healthlens.vn/errors/deletion-cancel-conflict"));
+        problem.setTitle("Yêu cầu xóa không còn có thể hủy");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.INVALID_STATE);
+        return problem;
+    }
+
+    @ExceptionHandler(DeletionCancellationForbiddenException.class)
+    public ProblemDetail handleDeletionCancellationForbidden(
+            DeletionCancellationForbiddenException ex,
+            HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        problem.setType(URI.create("https://healthlens.vn/errors/deletion-cancel-forbidden"));
+        problem.setTitle("Không thể hủy yêu cầu xóa");
+        problem.setInstance(URI.create(request.getRequestURI()));
+        applyErrorCode(problem, ApiErrorCode.FORBIDDEN);
+        return problem;
+    }
+
     @ExceptionHandler(BusinessException.class)
     public ProblemDetail handleBusinessException(BusinessException ex, HttpServletRequest request) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());

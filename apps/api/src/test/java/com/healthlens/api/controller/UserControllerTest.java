@@ -1,6 +1,7 @@
 package com.healthlens.api.controller;
 
 import com.healthlens.api.dto.response.UserResponse;
+import com.healthlens.api.exception.DeletionCancellationTokenException;
 import com.healthlens.api.service.DataDeletionService;
 import com.healthlens.api.service.UserService;
 import org.junit.jupiter.api.DisplayName;
@@ -13,6 +14,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -58,6 +60,18 @@ class UserControllerTest {
         verify(userService).removeAvatar(userId);
         assertThat(body).isNotNull();
         assertThat(body.get("data")).isEqualTo(response);
+    }
+
+    @Test
+    @DisplayName("DELETE /users/deletion-requests/cancel delegates missing token to cancellation semantics")
+    void cancelDeletion_MissingTokenDelegatesToService() {
+        when(dataDeletionService.cancelDeletionRequest(null))
+                .thenThrow(new DeletionCancellationTokenException(
+                        "Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực."));
+
+        assertThatThrownBy(() -> controller.cancelDeletion(null))
+                .isInstanceOf(DeletionCancellationTokenException.class);
+        verify(dataDeletionService).cancelDeletionRequest(null);
     }
 
     private UserResponse userResponse(UUID userId, String avatarUrl) {
