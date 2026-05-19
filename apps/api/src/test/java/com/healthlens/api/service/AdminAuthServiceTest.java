@@ -11,6 +11,7 @@ import com.healthlens.api.repository.UserRepository;
 import com.healthlens.api.security.AdminAuthRateLimiter;
 import com.healthlens.api.util.JwtUtil;
 
+import io.jsonwebtoken.Claims;
 import com.warrenstrange.googleauth.GoogleAuthenticatorKey;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -24,6 +25,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import com.warrenstrange.googleauth.GoogleAuthenticator;
 
 import java.time.Instant;
+import java.util.Date;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -334,6 +336,26 @@ class AdminAuthServiceTest {
             verify(valueOperations).set(anyString(), eq("1"), any(java.time.Duration.class));
             assertThat(totpSecret.isVerified()).isTrue();
         }
+    }
+
+    // ========== LOGOUT TESTS ==========
+
+    @Test
+    @DisplayName("logout blacklist admin access token theo thời hạn còn lại")
+    void logout_blacklistAdminToken() {
+        Claims claims = org.mockito.Mockito.mock(Claims.class);
+        when(jwtUtil.extractJti("admin-token")).thenReturn("admin-jti");
+        when(jwtUtil.extractClaims("admin-token")).thenReturn(claims);
+        when(claims.getExpiration()).thenReturn(new Date(System.currentTimeMillis() + 120_000));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        adminAuthService.logout("admin-token");
+
+        verify(valueOperations).set(
+                eq("blacklist:token:admin-jti"),
+                eq("1"),
+                any(java.time.Duration.class)
+        );
     }
 
     // ========== HELPERS ==========

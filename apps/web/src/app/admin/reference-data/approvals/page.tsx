@@ -135,38 +135,6 @@ function formatBulkChangeSetNotice(
   };
 }
 
-function getAdminIdentity(): AdminIdentity | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const token = sessionStorage.getItem("admin_access_token");
-  if (!token) {
-    return null;
-  }
-
-  const parts = token.split(".");
-  if (parts.length < 2) {
-    return null;
-  }
-
-  try {
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))) as {
-      sub?: string;
-      email?: string;
-    };
-    if (!payload.sub) {
-      return null;
-    }
-    return {
-      id: payload.sub,
-      email: payload.email ?? null,
-    };
-  } catch {
-    return null;
-  }
-}
-
 function formatDate(dateStr: string) {
   const date = new Date(dateStr);
   return new Intl.DateTimeFormat("vi-VN", {
@@ -241,7 +209,18 @@ export default function ApprovalsPage() {
     type: "success" | "error";
     message: string;
   } | null>(null);
-  const adminIdentity = useMemo(() => getAdminIdentity(), []);
+  const { data: adminIdentity } = useQuery<AdminIdentity | null>({
+    queryKey: ["admin-identity"],
+    queryFn: async () => {
+      const response = await adminApiClient.get(API_ROUTES.ADMIN_AUTH.SESSION);
+      const session = response.data?.data as { userId?: string; email?: string | null } | undefined;
+      if (!session?.userId) {
+        return null;
+      }
+      return { id: session.userId, email: session.email ?? null };
+    },
+    retry: false,
+  });
 
   // Detect multi-admin mode
   const { data: adminConfig, isLoading: isConfigLoading } = useQuery<{ multiAdminMode: boolean }>({
@@ -709,6 +688,7 @@ export default function ApprovalsPage() {
                             <ChangeSetDiffPanel
                               changeSet={cs}
                               snapshot={snapshot}
+                              adminIdentity={adminIdentity ?? null}
                             />
                           </td>
                         </tr>
@@ -943,15 +923,16 @@ export default function ApprovalsPage() {
 function ChangeSetDiffPanel({
   changeSet,
   snapshot,
+  adminIdentity,
 }: {
   changeSet: ChangeSetDetail;
   snapshot: ParsedSnapshot | null;
+  adminIdentity: AdminIdentity | null;
 }) {
   const currentSnapshot = useMemo(
     () => tryParseSnapshot(changeSet.currentSnapshotJson),
     [changeSet.currentSnapshotJson]
   );
-  const adminIdentity = useMemo(() => getAdminIdentity(), []);
   const createdByLabel = adminIdentity?.id === changeSet.adminId
     ? "Bạn"
     : changeSet.adminName || changeSet.adminEmail || changeSet.adminId;

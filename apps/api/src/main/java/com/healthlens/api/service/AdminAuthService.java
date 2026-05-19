@@ -29,6 +29,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,6 +38,7 @@ import java.util.UUID;
 public class AdminAuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AdminAuthService.class);
+    private static final String BLACKLIST_KEY_PREFIX = "blacklist:token:";
     private static final String ISSUER = "HealthLens";
 
     private final UserRepository userRepository;
@@ -317,5 +319,20 @@ public class AdminAuthService {
                 Map.of("email", user.getEmail(), "via", "totp_setup")
         );
         return new AdminLoginResponse(accessToken, false, false, user.getEmail());
+    }
+
+    public void logout(String accessToken) {
+        if (accessToken == null || accessToken.isBlank()) {
+            return;
+        }
+
+        try {
+            String jti = jwtUtil.extractJti(accessToken);
+            Instant expiry = jwtUtil.extractClaims(accessToken).getExpiration().toInstant();
+            long ttlSeconds = Math.max(1, Instant.now().until(expiry, ChronoUnit.SECONDS));
+            redisTemplate.opsForValue().set(BLACKLIST_KEY_PREFIX + jti, "1", Duration.ofSeconds(ttlSeconds));
+        } catch (Exception e) {
+            log.warn("Failed to blacklist admin access token on logout", e);
+        }
     }
 }

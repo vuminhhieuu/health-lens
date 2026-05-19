@@ -174,6 +174,8 @@ export const ApiPaths = {
   ADMIN_AUTH: {
     BASE: `/api/${API_VERSION}/admin/auth`,
     LOGIN: `/api/${API_VERSION}/admin/auth/login`,
+    LOGOUT: `/api/${API_VERSION}/admin/auth/logout`,
+    SESSION: `/api/${API_VERSION}/admin/auth/session`,
     TOTP_SETUP: `/api/${API_VERSION}/admin/auth/totp/setup`,
     TOTP_VERIFY: `/api/${API_VERSION}/admin/auth/totp/verify`,
   },

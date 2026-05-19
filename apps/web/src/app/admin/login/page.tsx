@@ -4,16 +4,12 @@ import { ShieldCheck, LogIn, KeyRound, QrCode, Copy, Check } from "lucide-react"
 import { useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 
-import { apiClient } from "@/lib/api/apiClient";
+import { adminApiClient } from "@/lib/api/adminApiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { notify } from "@/lib/notify";
 
 type LoginStep = "credentials" | "totp" | "totp-method" | "totp-setup" | "totp-success";
 
-interface AdminLoginState {
-  accessToken: string;
-  email: string;
-}
 
 export default function AdminLoginPage() {
   const [step, setStep] = useState<LoginStep>("credentials");
@@ -24,7 +20,6 @@ export default function AdminLoginPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [secretCopied, setSecretCopied] = useState(false);
-  const [adminState, setAdminState] = useState<AdminLoginState | null>(null);
   const [totpSetup, setTotpSetup] = useState<{
     secret: string;
     qrCodeUrl: string;
@@ -37,20 +32,19 @@ export default function AdminLoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await apiClient.post(API_ROUTES.ADMIN_AUTH.LOGIN, {
+      const response = await adminApiClient.post(API_ROUTES.ADMIN_AUTH.LOGIN, {
         email,
         password,
       });
 
       const data = response.data.data;
-      setAdminState({ accessToken: data.accessToken, email: data.email });
 
       if (data.totpSetupRequired) {
         setStep("totp-method");
       } else if (data.totpRequired) {
         setStep("totp");
       } else {
-        handleLoginSuccess(data.accessToken);
+        handleLoginSuccess();
       }
     } catch (err: unknown) {
       if (
@@ -79,14 +73,10 @@ export default function AdminLoginPage() {
     }
   };
 
-  const fetchTotpSetup = async (token: string) => {
+  const fetchTotpSetup = async () => {
     try {
       setIsLoading(true);
-      const setupRes = await apiClient.post(
-        API_ROUTES.ADMIN_AUTH.TOTP_SETUP,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      const setupRes = await adminApiClient.post(API_ROUTES.ADMIN_AUTH.TOTP_SETUP, {});
       setTotpSetup(setupRes.data.data);
     } catch (err) {
       const error = err as { response?: { data?: { detail?: string; message?: string } } };
@@ -107,14 +97,13 @@ export default function AdminLoginPage() {
 
     try {
       // Re-login with TOTP code
-      const response = await apiClient.post(API_ROUTES.ADMIN_AUTH.LOGIN, {
+      await adminApiClient.post(API_ROUTES.ADMIN_AUTH.LOGIN, {
         email,
         password,
         totpCode,
       });
 
-      const data = response.data.data;
-      handleLoginSuccess(data.accessToken);
+      handleLoginSuccess();
     } catch (err: unknown) {
       const error = err as { response?: { data?: { detail?: string; message?: string } } };
       setError(
@@ -133,18 +122,7 @@ export default function AdminLoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await apiClient.post(
-        API_ROUTES.ADMIN_AUTH.TOTP_VERIFY,
-        { code: totpCode },
-        {
-          headers: {
-            Authorization: `Bearer ${adminState?.accessToken}`,
-          },
-        },
-      );
-
-      const data = response.data.data;
-      setAdminState({ ...adminState, accessToken: data.accessToken, email: adminState?.email || "" });
+      await adminApiClient.post(API_ROUTES.ADMIN_AUTH.TOTP_VERIFY, { code: totpCode });
       setStep("totp-success");
     } catch (err: unknown) {
       const error = err as { response?: { data?: { detail?: string; message?: string } } };
@@ -158,10 +136,8 @@ export default function AdminLoginPage() {
     }
   };
 
-  const handleLoginSuccess = (token: string) => {
-    // Store admin token in sessionStorage (not zustand — separate from user auth)
+  const handleLoginSuccess = () => {
     if (typeof window !== "undefined") {
-      sessionStorage.setItem("admin_access_token", token);
       window.location.href = "/admin";
     }
   };
@@ -417,10 +393,8 @@ export default function AdminLoginPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (adminState?.accessToken) {
-                        setStep("totp-setup");
-                        fetchTotpSetup(adminState.accessToken);
-                      }
+                      setStep("totp-setup");
+                      fetchTotpSetup();
                     }}
                     className="flex w-full items-center gap-4 rounded-xl border border-teal-100 bg-white shadow-sm p-4 text-left transition hover:border-teal-500 hover:bg-slate-50 group"
                   >
@@ -689,7 +663,7 @@ export default function AdminLoginPage() {
                   Từ bây giờ, bạn sẽ cần nhập mã từ ứng dụng Authenticator mỗi khi đăng nhập vào hệ thống quản trị.
                 </p>
                 <button
-                  onClick={() => handleLoginSuccess(adminState?.accessToken || "")}
+                  onClick={() => handleLoginSuccess()}
                   className="w-full h-14 bg-gradient-to-br from-teal-500 to-teal-600 text-white font-bold rounded-xl shadow-md hover:shadow-lg hover:to-teal-700 active:scale-95 transition-all"
                 >
                   Vào trang quản trị

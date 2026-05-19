@@ -77,7 +77,14 @@ public class SecurityConfig {
                     .requestMatchers("/error").permitAll()
                     .requestMatchers(ApiRoutes.SWAGGER_UI_PATTERN, ApiRoutes.SWAGGER_HTML, ApiRoutes.API_DOCS_PATTERN).permitAll()
                     .requestMatchers(ApiRoutes.ADMIN_AUTH_LOGIN).permitAll()
-                    .requestMatchers(ApiRoutes.ADMIN_AUTH_TOTP_SETUP, ApiRoutes.ADMIN_AUTH_TOTP_VERIFY).authenticated()
+                    .requestMatchers(
+                            ApiRoutes.ADMIN_AUTH_TOTP_SETUP,
+                            ApiRoutes.ADMIN_AUTH_TOTP_VERIFY
+                    ).authenticated()
+                    .requestMatchers(
+                            ApiRoutes.ADMIN_AUTH_LOGOUT,
+                            ApiRoutes.ADMIN_AUTH_SESSION
+                    ).hasAuthority(UserRole.ROLE_ADMIN.name())
                     .requestMatchers(ApiRoutes.ADMIN_PATTERN).hasAuthority(UserRole.ROLE_ADMIN.name())
                     .anyRequest().authenticated()
             )
@@ -129,7 +136,11 @@ public class SecurityConfig {
     }
 
     private static boolean requiresCsrfProtection(HttpServletRequest request) {
-        if (!"POST".equalsIgnoreCase(request.getMethod())) {
+        String method = request.getMethod();
+        if (!("POST".equalsIgnoreCase(method)
+                || "PUT".equalsIgnoreCase(method)
+                || "PATCH".equalsIgnoreCase(method)
+                || "DELETE".equalsIgnoreCase(method))) {
             return false;
         }
 
@@ -138,9 +149,16 @@ public class SecurityConfig {
         if (contextPath != null && !contextPath.isBlank() && path.startsWith(contextPath)) {
             path = path.substring(contextPath.length());
         }
-        return ApiRoutes.AUTH_LOGIN.equals(path)
+        if (ApiRoutes.AUTH_LOGIN.equals(path)
                 || ApiRoutes.AUTH_LOGOUT.equals(path)
-                || (ApiRoutes.AUTH_REFRESH.equals(path) && hasRefreshTokenCookie(request));
+                || (ApiRoutes.AUTH_REFRESH.equals(path) && hasRefreshTokenCookie(request))) {
+            return true;
+        }
+
+        if (path.startsWith(ApiRoutes.ADMIN_BASE + "/") && !ApiRoutes.ADMIN_AUTH_LOGIN.equals(path)) {
+            return true;
+        }
+        return false;
     }
 
     private static boolean hasRefreshTokenCookie(HttpServletRequest request) {
