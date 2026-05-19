@@ -31,6 +31,11 @@ so that I know who gained or lost access to my health profile.
 
 ## Dev Notes
 
+### Dedup — Public Account Experience epic
+
+- Owner notification on share accept: **chỉ implement ở story này** — đã lược owner-notify khỏi epic PAE (12 stories).
+- Khi có `pae-12-notification-email-preferences`, email owner notify nên tôn trọng toggle `shareAccepted` (nếu đã merge).
+
 ### Implementation Guardrails
 
 - Reuse the unified audit/correlation approach from core improvements when available.

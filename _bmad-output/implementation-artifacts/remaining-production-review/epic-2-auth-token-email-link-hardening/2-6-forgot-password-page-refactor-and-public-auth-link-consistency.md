@@ -57,6 +57,12 @@ so that I can recover safely and reach privacy, terms, and help information with
 
 ## Dev Notes
 
+### Dedup — Public Account Experience epic
+
+- **Không** tạo story PAE riêng cho auth link map — story này là canonical owner.
+- **`pae-5-public-privacy-and-terms-pages`** nên hoàn thành trước (hoặc song song) để `/privacy` và `/terms` tồn tại khi wire footer links.
+- Public `/support` FAQ: implement trong story này (Task 1), không trùng `pae-*`.
+
 ### Implementation Guardrails
 
 - Keep public auth pages safe for unauthenticated users.

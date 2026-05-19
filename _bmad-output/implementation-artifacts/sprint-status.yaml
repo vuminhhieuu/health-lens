@@ -1,5 +1,5 @@
 # generated: 2026-04-01
-# last_updated: 2026-05-19T16:53:52+07:00
+# last_updated: 2026-05-19T21:00:00+07:00
 # project: health-lens
 # project_key: NOKEY
 # tracking_system: file-system
@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-05-19T16:53:52+07:00
+last_updated: 2026-05-19T21:00:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -207,7 +207,7 @@ development_status:
   core-4-3-production-deploy-topology-and-rollback-hardening: ready-for-dev
   core-4-4-backup-restore-and-operational-runbook: ready-for-dev
   core-5-1-security-config-fail-fast-hardening: done
-  core-5-2-ssrf-protection-for-ocr-and-remote-file-fetching: ready-for-dev
+  core-5-2-ssrf-protection-for-ocr-and-remote-file-fetching: done
   core-5-3-admin-session-storage-hardening: ready-for-dev
   core-5-4-right-to-delete-race-and-cleanup-correctness: ready-for-dev
   core-6-1-global-toast-notification-foundation: done
@@ -277,6 +277,29 @@ development_status:
   remaining-6-2-accessibility-and-shared-ui-components-cleanup: ready-for-dev
   remaining-6-3-frontend-bundle-and-image-rule-cleanup: ready-for-dev
   remaining-6-retrospective: optional
+
+# =====================================================
+# PUBLIC ACCOUNT EXPERIENCE (single epic — 12 stories)
+# Canonical location:
+# _bmad-output/implementation-artifacts/public-account-experience/
+# Planning source:
+# _bmad-output/planning-artifacts/public-account-experience-epics-and-stories.md
+# Excluded duplicates: remaining-2-6 (auth public links), remaining-3-3 (owner notify)
+# =====================================================
+  public-account-experience: in-progress
+  pae-1-settings-hub-and-navigation-fix: ready-for-dev
+  pae-2-marketing-route-group-and-root-routing: backlog
+  pae-3-public-landing-page-ssr: backlog
+  pae-4-seo-foundation-metadata-sitemap-robots: backlog
+  pae-5-public-privacy-and-terms-pages: backlog
+  pae-6-change-password-api-and-settings-ui: backlog
+  pae-7-settings-privacy-tab-consent-and-legal-links: backlog
+  pae-8-settings-about-tab-version-and-support: backlog
+  pae-9-profile-settings-stub-cleanup: backlog
+  pae-10-notification-inbox-aggregate-api: backlog
+  pae-11-notification-center-ui-and-bell-wiring: backlog
+  pae-12-notification-email-preferences: backlog
+  public-account-experience-retrospective: optional
 
 # =====================================================
 # SPRINT SUMMARY
