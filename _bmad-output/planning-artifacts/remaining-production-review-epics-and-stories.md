@@ -108,6 +108,21 @@ As a user managing profiles and history, I want profile/history screens to handl
 3. Profile CRUD forms do not reset before API success.
 4. Shared profile access state is rendered consistently.
 
+### Story 1.5: User Avatar Upload And Profile Photo Management
+
+**Priority:** P2
+
+As a HealthLens user, I want to upload and manage my own avatar, so that my account/profile identity is recognizable without relying on hardcoded or external avatar services.
+
+**Acceptance Criteria**
+
+1. User can upload a profile avatar from the profile settings page using an image-only control with clear loading, success, error, and keyboard-accessible states.
+2. Backend stores avatar metadata for the authenticated user and exposes `avatarUrl` or an equivalent signed/display URL through `GET /api/v1/users/me`.
+3. Uploaded avatar validation rejects unsupported content types, oversized files, empty files, and unsafe filenames before persisting metadata.
+4. The profile settings page and profile cards stop using the hardcoded `ui-avatars.com` URL; fallback uses local initials/icon rendering derived from the user/profile name.
+5. Replacing or removing an avatar cleans up the previous storage object where feasible and never blocks account/profile data updates.
+6. Tests cover upload success, validation errors, storage failure, avatar replacement/removal, user response mapping, and frontend fallback rendering.
+
 ---
 
 ## Epic 2: Auth Token And Email-Link Hardening
@@ -184,6 +199,22 @@ As a user with an active session, I want refresh token rotation to be race-safe,
 2. Reuse of an already-rotated token is detected and invalidates the affected session family according to policy.
 3. Token reuse events are audit logged without raw token.
 4. Tests cover normal rotation, concurrent rotation, stolen-token replay, and logout.
+
+### Story 2.6: Forgot Password Page Refactor And Public Auth Link Consistency
+
+**Priority:** P2
+
+As a user recovering access to my account, I want the forgot-password flow to be visually and behaviorally consistent with login and public support links, so that I can recover safely and reach privacy, terms, and help information without dead links.
+
+**Acceptance Criteria**
+
+1. Forgot-password page uses the same auth-page layout conventions as login/register: stable header, restrained card radius, no decorative background blobs, consistent button/input sizing, and no layout shift between form and success state.
+2. Forgot-password submission keeps enumeration-safe behavior while giving clear, accessible status text for success, network failure, generic server failure, and `429` rate limit.
+3. The forgot-password flow does not desynchronize user/auth state: unauthenticated users remain unauthenticated, existing logged-in state is not mutated, and any post-reset/login guidance returns to the correct public auth route.
+4. Login footer links `Quy định bảo mật`, `Điều khoản sử dụng`, and `Trợ giúp` point to real routes instead of `#`; forgot-password uses the same link map and labels.
+5. Public legal/help routes exist or links target existing routes, with safe behavior for unauthenticated users. Dashboard-only `/help` must not be linked directly from public auth pages if it redirects to login.
+6. Header help icons on login, register, forgot-password, and reset-password either navigate to the same public help route or are removed if no public support route exists.
+7. Tests cover link hrefs, forgot-password success/error/rate-limit states, accessible live regions, and absence of broken `#`/missing-route links on public auth pages.
 
 ---
 

@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-05-19T12:05:59+07:00
+last_updated: 2026-05-19T12:52:22+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -238,15 +238,17 @@ development_status:
   remaining-1-2-health-record-review-detail-state-and-preview-correctness: done
   remaining-1-3-health-records-hub-mapping-sorting-and-status-fixes: done
   remaining-1-4-profile-and-history-screen-type-safety-and-edge-cases: done
+  remaining-1-5-user-avatar-upload-and-profile-photo-management: ready-for-dev
   remaining-1-retrospective: optional
 
   # Epic 2: Auth Token And Email-Link Hardening
   remaining-2-auth-token-email-link-hardening: in-progress
   remaining-2-1-verify-email-token-hygiene-and-rate-limiting: done
-  remaining-2-2-verify-email-frontend-resilience-and-accessibility: ready-for-dev
+  remaining-2-2-verify-email-frontend-resilience-and-accessibility: done
   remaining-2-3-cancel-deletion-link-and-token-flow-hardening: ready-for-dev
   remaining-2-4-public-auth-endpoint-rate-limit-and-error-semantics: ready-for-dev
   remaining-2-5-refresh-token-rotation-race-hardening: ready-for-dev
+  remaining-2-6-forgot-password-page-refactor-and-public-auth-link-consistency: ready-for-dev
   remaining-2-retrospective: optional
 
   # Epic 3: Family Sharing Lifecycle Correctness
