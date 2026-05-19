@@ -7,6 +7,7 @@ import { ApiPaths, ALLOWED_FILE_TYPES, UPLOAD_MAX_SIZE_BYTES } from "@healthlens
 import { Upload, Loader2, AlertCircle } from "lucide-react";
 
 import { apiClient } from "@/lib/api/apiClient";
+import { getApiErrorPayload, getApiErrorStatus, messageCatalog, retryAfterMinutes } from "@/lib/i18n/messages";
 import { notify } from "@/lib/notify";
 
 type UploadStatus = "idle" | "uploading" | "done" | "error";
@@ -89,8 +90,12 @@ export function UploadButton({
       notify.success("Tải lên thành công, hệ thống đang xử lý kết quả.");
       // Redirect to review page
       router.push(`/health-records/review/${uploadInfo.recordId}`);
-    } catch {
-      const message = "Tải lên thất bại. Vui lòng thử lại.";
+    } catch (error: unknown) {
+      const status = getApiErrorStatus(error);
+      const payload = getApiErrorPayload(error);
+      const message = status === 429
+        ? messageCatalog.upload.ocrRateLimited(retryAfterMinutes(payload, 60))
+        : "Tải lên thất bại. Vui lòng thử lại.";
       setStatus("error");
       setError(message);
       notify.error(message);

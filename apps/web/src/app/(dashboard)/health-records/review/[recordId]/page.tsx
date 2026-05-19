@@ -42,6 +42,7 @@ import { HealthMetricCard } from "@/components/ui/HealthMetricCard";
 import { ErrorState, InlineFieldError, LoadingState } from "@/components/ui";
 import { OcrFailureScreen } from "@/components/features/upload/OcrFailureScreen";
 import { DeleteRecordModal } from "@/components/features/health-records/DeleteRecordModal";
+import { getApiErrorPayload, getApiErrorStatus, messageCatalog, retryAfterMinutes } from "@/lib/i18n/messages";
 import { recommendationDisclaimerText } from "@/lib/utils/medicalDisclaimer";
 import { toThreeLineExplanation } from "@/lib/utils/explanationFormatter";
 
@@ -755,7 +756,11 @@ export default function ReviewRecordPage() {
       router.replace(`/health-records/review/${uploadInfo.recordId}`);
     } catch (error) {
       logReviewActionError("retry-upload", error);
-      const message = "Tải tệp mới thất bại. Vui lòng thử lại.";
+      const status = getApiErrorStatus(error);
+      const payload = getApiErrorPayload(error);
+      const message = status === 429
+        ? messageCatalog.upload.ocrRateLimited(retryAfterMinutes(payload, 60))
+        : "Tải tệp mới thất bại. Vui lòng thử lại.";
       setRetryUploadError(message);
       notify.error(message);
     } finally {

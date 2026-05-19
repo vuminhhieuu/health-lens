@@ -3,7 +3,10 @@ package com.healthlens.api.controller;
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.response.AcceptInvitationResultResponse;
 import com.healthlens.api.dto.response.IncomingProfileInvitationResponse;
+import com.healthlens.api.security.ClientIpResolver;
+import com.healthlens.api.security.PublicEndpointRateLimiter;
 import com.healthlens.api.service.ProfileShareService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -23,16 +26,22 @@ import org.springframework.web.bind.annotation.RestController;
 public class InvitationController {
 
     private final ProfileShareService profileShareService;
+    private final PublicEndpointRateLimiter publicEndpointRateLimiter;
 
-    public InvitationController(ProfileShareService profileShareService) {
+    public InvitationController(
+            ProfileShareService profileShareService,
+            PublicEndpointRateLimiter publicEndpointRateLimiter) {
         this.profileShareService = profileShareService;
+        this.publicEndpointRateLimiter = publicEndpointRateLimiter;
     }
 
     @PostMapping("/accept")
     public ResponseEntity<Map<String, Object>> acceptInvitation(
             @RequestParam("token") String token,
-            Authentication authentication
+            Authentication authentication,
+            HttpServletRequest request
     ) {
+        publicEndpointRateLimiter.consumeProfileInvitationAccept(ClientIpResolver.resolve(request), token);
         UUID userId = resolveUserId(authentication);
         AcceptInvitationResultResponse result = profileShareService.acceptInvitation(token, userId);
         return ResponseEntity.ok(Map.of(
@@ -83,4 +92,5 @@ public class InvitationController {
             return null;
         }
     }
+
 }

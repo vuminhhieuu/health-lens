@@ -1,6 +1,6 @@
 package com.healthlens.api.security;
 
-import com.healthlens.api.exception.AccountLockedException;
+import com.healthlens.api.exception.RateLimitExceededException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,17 +39,17 @@ public class ForgotPasswordRateLimiter {
                     ? (long) Math.ceil(retryAfterSeconds / 60.0) + " phút"
                     : retryAfterSeconds + " giây";
                     
-                throw new AccountLockedException(
+                throw new RateLimitExceededException(
                         "Bạn đã gửi yêu cầu quá nhanh. Vui lòng thử lại sau " + timeMsg + ".",
                         retryAfterSeconds
                 );
             }
-        } catch (AccountLockedException e) {
+        } catch (RateLimitExceededException e) {
             throw e;
         } catch (Exception e) {
             log.error("Redis unavailable when checking forgot password rate limit. Fail-closed: {}. Email: {}", failClosed, email, e);
             if (failClosed) {
-                throw new AccountLockedException("Hệ thống tạm ngưng. Vui lòng thử lại sau.", WINDOW_DURATION.toSeconds());
+                throw new RateLimitExceededException("Hệ thống tạm ngưng. Vui lòng thử lại sau.", WINDOW_DURATION.toSeconds());
             }
         }
     }
@@ -64,7 +64,7 @@ public class ForgotPasswordRateLimiter {
         } catch (Exception e) {
             log.error("Redis unavailable when recording forgot password request. Email: {}", email, e);
             if (failClosed) {
-                throw new AccountLockedException("Hệ thống tạm ngưng. Vui lòng thử lại sau.", WINDOW_DURATION.toSeconds());
+                throw new RateLimitExceededException("Hệ thống tạm ngưng. Vui lòng thử lại sau.", WINDOW_DURATION.toSeconds());
             }
         }
     }

@@ -43,6 +43,10 @@ export default function RegisterPage() {
   const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const inviteToken = searchParams?.get("inviteToken") ?? null;
   const returnUrl = typeof window !== "undefined" ? safeInternalReturnUrl(searchParams?.get("returnUrl") ?? null) : null;
+  const inviteReturnUrl =
+    inviteToken && !returnUrl
+      ? `/health-record-invitations/accept?token=${encodeURIComponent(inviteToken)}`
+      : returnUrl;
   const [successMessage, setSuccessMessage] = useState("");
   const [submitError, setSubmitError] = useState("");
 
@@ -69,8 +73,8 @@ export default function RegisterPage() {
 
     try {
       if (typeof window !== "undefined") {
-        if (returnUrl) {
-          window.localStorage.setItem(POST_REGISTER_RETURN_URL_KEY, returnUrl);
+        if (inviteReturnUrl) {
+          window.localStorage.setItem(POST_REGISTER_RETURN_URL_KEY, inviteReturnUrl);
         } else {
           window.localStorage.removeItem(POST_REGISTER_RETURN_URL_KEY);
         }
@@ -84,7 +88,7 @@ export default function RegisterPage() {
       });
 
       const message =
-        returnUrl
+        inviteReturnUrl
           ? messageCatalog.auth.registerSuccessWithInvite
           : messageCatalog.auth.registerSuccess;
       setSuccessMessage(message);

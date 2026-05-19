@@ -2,10 +2,12 @@ package com.healthlens.api.controller;
 
 import com.healthlens.api.dto.response.UserResponse;
 import com.healthlens.api.exception.DeletionCancellationTokenException;
+import com.healthlens.api.security.PublicEndpointRateLimiter;
 import com.healthlens.api.service.DataDeletionService;
 import com.healthlens.api.service.UserService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 
@@ -23,7 +25,9 @@ class UserControllerTest {
 
     private final UserService userService = mock(UserService.class);
     private final DataDeletionService dataDeletionService = mock(DataDeletionService.class);
-    private final UserController controller = new UserController(userService, dataDeletionService);
+    private final PublicEndpointRateLimiter publicEndpointRateLimiter = mock(PublicEndpointRateLimiter.class);
+    private final UserController controller = new UserController(
+            userService, dataDeletionService, publicEndpointRateLimiter);
 
     @Test
     @DisplayName("PUT /users/me/avatar delegates authenticated multipart upload and wraps UserResponse")
@@ -69,8 +73,9 @@ class UserControllerTest {
                 .thenThrow(new DeletionCancellationTokenException(
                         "Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực."));
 
-        assertThatThrownBy(() -> controller.cancelDeletion(null))
+        assertThatThrownBy(() -> controller.cancelDeletion(null, new MockHttpServletRequest()))
                 .isInstanceOf(DeletionCancellationTokenException.class);
+        verify(publicEndpointRateLimiter).consumeCancelDeletion("127.0.0.1", null);
         verify(dataDeletionService).cancelDeletionRequest(null);
     }
 

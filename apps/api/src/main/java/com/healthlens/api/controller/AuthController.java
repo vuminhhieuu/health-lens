@@ -7,6 +7,8 @@ import com.healthlens.api.dto.request.LoginRequest;
 import com.healthlens.api.dto.request.RegisterRequest;
 import com.healthlens.api.dto.request.ResetPasswordRequest;
 import com.healthlens.api.dto.request.VerifyEmailRequest;
+import com.healthlens.api.security.ClientIpResolver;
+import com.healthlens.api.security.PublicEndpointRateLimiter;
 import com.healthlens.api.service.AuthService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,15 +38,23 @@ public class AuthController {
     private static final int REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60; // 7 days in seconds
 
     private final AuthService authService;
+    private final PublicEndpointRateLimiter publicEndpointRateLimiter;
     private final boolean cookieSecure;
 
-    public AuthController(AuthService authService, @Value("${app.cookie.secure:true}") boolean cookieSecure) {
+    public AuthController(
+            AuthService authService,
+            PublicEndpointRateLimiter publicEndpointRateLimiter,
+            @Value("${app.cookie.secure:true}") boolean cookieSecure) {
         this.authService = authService;
+        this.publicEndpointRateLimiter = publicEndpointRateLimiter;
         this.cookieSecure = cookieSecure;
     }
 
     @PostMapping("/register")
-    public ResponseEntity<Map<String, Object>> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<Map<String, Object>> register(
+            @Valid @RequestBody RegisterRequest request,
+            HttpServletRequest httpRequest) {
+        publicEndpointRateLimiter.consumeRegister(ClientIpResolver.resolve(httpRequest), request.email());
         UUID userId = authService.register(request);
 
         Map<String, Object> body = Map.of(
@@ -125,7 +135,7 @@ public class AuthController {
     public ResponseEntity<Map<String, Object>> verifyEmail(
             @Valid @RequestBody VerifyEmailRequest request,
             HttpServletRequest httpRequest) {
-        authService.verifyEmail(request.token(), clientIp(httpRequest));
+        authService.verifyEmail(request.token(), ClientIpResolver.resolve(httpRequest));
 
         Map<String, Object> body = Map.of(
                 "data", Map.of("message", "Email đã được xác thực thành công"),
@@ -136,10 +146,6 @@ public class AuthController {
         );
 
         return ResponseEntity.ok(body);
-    }
-
-    private String clientIp(HttpServletRequest request) {
-        return request.getRemoteAddr();
     }
 
     /**

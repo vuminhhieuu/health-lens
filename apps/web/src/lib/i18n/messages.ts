@@ -7,7 +7,9 @@ export const messageCatalog = {
     loginUnavailable: "Tài khoản chưa thể đăng nhập ở thời điểm hiện tại.",
     networkError: "Không thể kết nối đến máy chủ. Vui lòng thử lại.",
     pendingDeletion:
-      "Yêu cầu xóa tài khoản của bạn đã được ghi nhận. Theo Nghị định 13/2023/NĐ-CP, hệ thống đang trong quá trình xóa dữ liệu vĩnh viễn (tối đa 72 giờ). Trong thời gian này, bạn không thể đăng nhập.",
+      "Tài khoản đang chờ xóa. Trong thời gian hệ thống xử lý yêu cầu xóa dữ liệu, bạn không thể đăng nhập.",
+    rateLimited: (minutes: number) =>
+      `Bạn đã gửi yêu cầu quá nhanh. Vui lòng thử lại sau ${minutes} phút.`,
     registerSuccess:
       "Tài khoản đã tạo. Vui lòng kiểm tra email của bạn để xác thực.",
     registerSuccessWithInvite:
@@ -37,10 +39,16 @@ export const messageCatalog = {
     invitationEmailMismatch: "Email đăng nhập không khớp với lời mời.",
     invitationInvalid:
       "Liên kết mời không hợp lệ hoặc không còn dùng được.",
+    invitationRateLimited:
+      "Bạn đã thử xử lý lời mời quá nhiều lần. Vui lòng thử lại sau ít phút.",
     loginInvalidOrServerError:
       "Phiên đăng nhập không hợp lệ hoặc hệ thống đang lỗi. Vui lòng thử lại sau.",
     systemError: "Hệ thống đang gặp sự cố. Vui lòng thử lại sau.",
     networkError: "Không thể kết nối. Vui lòng kiểm tra mạng và thử lại.",
+  },
+  upload: {
+    ocrRateLimited: (minutes: number) =>
+      `Bạn đã gửi yêu cầu xử lý OCR quá nhanh. Vui lòng thử lại sau ${minutes} phút.`,
   },
 } as const;
 
@@ -125,6 +133,10 @@ export function authErrorMessage(error: unknown): string {
 export function invitationErrorMessage(error: unknown): string {
   const status = getApiErrorStatus(error);
 
+  if (status === 429) {
+    return messageCatalog.sharing.invitationRateLimited;
+  }
+
   if (status === 403) {
     return messageCatalog.sharing.invitationEmailMismatch;
   }
@@ -145,6 +157,10 @@ export function invitationErrorMessage(error: unknown): string {
 export function registerErrorMessage(error: unknown): string {
   const code = getApiErrorCode(error);
   const payload = getApiErrorPayload(error);
+
+  if (code === "RATE_LIMITED" || getApiErrorStatus(error) === 429) {
+    return messageCatalog.auth.rateLimited(retryAfterMinutes(payload, 3600));
+  }
 
   if (code === "EMAIL_ALREADY_EXISTS") {
     return messageCatalog.auth.registerEmailExists;

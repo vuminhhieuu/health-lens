@@ -31,6 +31,21 @@
 | POST | `/api/v1/auth/forgot-password` | Request reset email |
 | POST | `/api/v1/auth/reset-password` | Complete password reset |
 
+### Public Endpoint Rate Limits
+
+All limits return `429 Too Many Requests` with `errorCode: RATE_LIMITED`,
+`retryAfterSeconds`, and a `Retry-After` header.
+
+| Endpoint | Limit |
+| --- | --- |
+| `POST /api/v1/auth/register` | 5/hour per IP and 3/hour per email |
+| `POST /api/v1/auth/verify-email` | 10/hour per IP and 5/hour per email when token resolves |
+| `POST /api/v1/auth/forgot-password` | 3/hour per email |
+| `POST /api/v1/invitations/accept?token=...` | 20/hour per IP and 5/hour per invitation token |
+| `POST /api/v1/health-record-invitations/accept?token=...` | 20/hour per IP and 5/hour per invitation token |
+| `DELETE /api/v1/users/deletion-requests/cancel?token=...` | 20/hour per IP and 5/hour per cancellation token |
+| `POST /api/v1/health-records/{recordId}/confirm-upload` | 30/hour per user and 10/minute per user-record pair |
+
 ## Users And Consent
 
 | Method | Path | Purpose |
@@ -122,4 +137,3 @@
 ```
 
 It returns extracted text, average confidence, detected language, processing time in milliseconds, and detected block count.
-

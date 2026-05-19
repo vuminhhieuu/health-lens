@@ -1,16 +1,16 @@
 package com.healthlens.api.controller;
 
 import com.healthlens.api.config.SecurityConfig;
-import com.healthlens.api.exception.DeletionCancellationTokenException;
+import com.healthlens.api.dto.response.AcceptInvitationResultResponse;
 import com.healthlens.api.exception.GlobalExceptionHandler;
 import com.healthlens.api.exception.RateLimitExceededException;
 import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
 import com.healthlens.api.security.LoginRateLimiter;
 import com.healthlens.api.security.PublicEndpointRateLimiter;
-import com.healthlens.api.service.DataDeletionService;
-import com.healthlens.api.service.UserService;
+import com.healthlens.api.service.ProfileShareService;
 import com.healthlens.api.util.JwtUtil;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,30 +18,32 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = UserController.class)
+@WebMvcTest(controllers = InvitationController.class)
 @Import({GlobalExceptionHandler.class, SecurityConfig.class})
-class UserControllerWebMvcTest {
+class InvitationControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
-    private UserService userService;
+    private ProfileShareService profileShareService;
 
     @MockitoBean
-    private DataDeletionService dataDeletionService;
+    private PublicEndpointRateLimiter publicEndpointRateLimiter;
 
     @MockitoBean
     private JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -58,9 +60,6 @@ class UserControllerWebMvcTest {
     @MockitoBean
     private LoginRateLimiter loginRateLimiter;
 
-    @MockitoBean
-    private PublicEndpointRateLimiter publicEndpointRateLimiter;
-
     @BeforeEach
     void setUp() throws Exception {
         doAnswer(invocation -> {
@@ -71,30 +70,31 @@ class UserControllerWebMvcTest {
     }
 
     @Test
-    @DisplayName("DELETE /api/v1/users/deletion-requests/cancel without token uses cancellation token semantics")
-    void cancelDeletion_missingToken_returnsTokenError() throws Exception {
-        when(dataDeletionService.cancelDeletionRequest(null))
-                .thenThrow(new DeletionCancellationTokenException(
-                        "Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực."));
+    @DisplayName("POST profile invitation accept consumes public rate limit")
+    void acceptInvitation_consumesRateLimit() throws Exception {
+        UUID profileId = UUID.randomUUID();
+        when(profileShareService.acceptInvitation(eq("token-1"), eq(null)))
+                .thenReturn(new AcceptInvitationResultResponse("require-login", "/login", profileId));
 
-        mockMvc.perform(delete("/api/v1/users/deletion-requests/cancel"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.type")
-                        .value("https://healthlens.vn/errors/deletion-cancel-token-invalid"))
-                .andExpect(jsonPath("$.status").value(401))
-                .andExpect(jsonPath("$.errorCode").value("DELETION_CANCEL_TOKEN_INVALID"));
+        mockMvc.perform(post("/api/v1/invitations/accept")
+                        .queryParam("token", "token-1")
+                        .header("X-Forwarded-For", "198.51.100.99, 10.0.0.10")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.outcome").value("require-login"));
 
-        verify(dataDeletionService).cancelDeletionRequest(null);
+        verify(publicEndpointRateLimiter).consumeProfileInvitationAccept(eq("198.51.100.99"), eq("token-1"));
     }
 
     @Test
-    @DisplayName("DELETE /api/v1/users/deletion-requests/cancel -> 429 khi bi rate limit")
-    void cancelDeletion_rateLimited() throws Exception {
+    @DisplayName("POST profile invitation accept -> 429 khi bi rate limit")
+    void acceptInvitation_rateLimited() throws Exception {
         doThrow(new RateLimitExceededException("Bạn đã gửi yêu cầu quá nhanh.", 120))
-                .when(publicEndpointRateLimiter).consumeCancelDeletion(any(), org.mockito.Mockito.eq("limited"));
+                .when(publicEndpointRateLimiter).consumeProfileInvitationAccept(any(), eq("limited"));
 
-        mockMvc.perform(delete("/api/v1/users/deletion-requests/cancel")
-                        .queryParam("token", "limited"))
+        mockMvc.perform(post("/api/v1/invitations/accept")
+                        .queryParam("token", "limited")
+                        .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.type").value("https://healthlens.vn/errors/rate-limited"))
                 .andExpect(jsonPath("$.errorCode").value("RATE_LIMITED"))
