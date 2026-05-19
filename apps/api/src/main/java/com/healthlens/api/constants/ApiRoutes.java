@@ -87,6 +87,7 @@ public final class ApiRoutes {
     public static final String HEALTH_RECORD_METRIC_EXPLANATION = HEALTH_RECORDS_BASE
             + "/{recordId}/metrics/{metricName}/explanation";
     public static final String HEALTH_RECORD_RECOMMENDATIONS = HEALTH_RECORDS_BASE + "/{recordId}/recommendations";
+    public static final String HEALTH_RECORD_ORIGINAL_DOCUMENT = HEALTH_RECORDS_BASE + "/{recordId}/original-document";
     public static final String HEALTH_RECORD_INVITATIONS_BASE = API_V1 + "/health-record-invitations";
     public static final String HEALTH_RECORD_INVITATIONS_ACCEPT = API_V1 + "/health-record-invitations/accept";
     public static final String HEALTH_RECORD_INVITATIONS_INCOMING = API_V1 + "/health-record-invitations/incoming";

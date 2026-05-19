@@ -315,6 +315,8 @@ class AuthServiceTest {
 
         when(refreshTokenRepository.findByTokenHashAndRevokedAtIsNull(anyString()))
                 .thenReturn(Optional.of(storedToken));
+        when(refreshTokenRepository.rotateActiveToken(eq(storedToken.getId()), any(Instant.class)))
+                .thenReturn(1);
         when(userRepository.findById(storedToken.getUserId())).thenReturn(Optional.of(user));
         when(jwtUtil.generateAccessToken(user)).thenReturn("new-access-token");
         when(jwtUtil.generateRefreshToken()).thenReturn("new-refresh-token");
@@ -328,6 +330,7 @@ class AuthServiceTest {
         assertThat(result.response().consentGiven()).isTrue();
         assertThat(result.response().consentVersion()).isEqualTo("1.0");
         assertThat(result.rawRefreshToken()).isEqualTo("new-refresh-token");
+        verify(refreshTokenRepository).rotateActiveToken(eq(storedToken.getId()), any(Instant.class));
     }
 
     @Test
@@ -343,6 +346,8 @@ class AuthServiceTest {
 
         when(refreshTokenRepository.findByTokenHashAndRevokedAtIsNull(anyString()))
                 .thenReturn(Optional.of(storedToken));
+        when(refreshTokenRepository.rotateActiveToken(eq(storedToken.getId()), any(Instant.class)))
+                .thenReturn(1);
         when(userRepository.findById(storedToken.getUserId())).thenReturn(Optional.of(user));
         when(jwtUtil.generateAccessToken(user)).thenReturn("new-access-token");
         when(jwtUtil.generateRefreshToken()).thenReturn("new-refresh-token");
@@ -365,6 +370,8 @@ class AuthServiceTest {
 
         when(refreshTokenRepository.findByTokenHashAndRevokedAtIsNull(anyString()))
                 .thenReturn(Optional.of(storedToken));
+        when(refreshTokenRepository.rotateActiveToken(eq(storedToken.getId()), any(Instant.class)))
+                .thenReturn(1);
         when(userRepository.findById(storedToken.getUserId())).thenReturn(Optional.of(user));
         when(jwtUtil.generateAccessToken(user)).thenReturn("new-access-token");
         when(jwtUtil.generateRefreshToken()).thenReturn("new-refresh-token");
@@ -374,7 +381,61 @@ class AuthServiceTest {
 
         assertThat(result.response().accessToken()).isEqualTo("new-access-token");
         assertThat(result.rawRefreshToken()).isEqualTo("new-refresh-token");
-        assertThat(storedToken.getRevokedAt()).isNotNull();
+        verify(refreshTokenRepository).rotateActiveToken(eq(storedToken.getId()), any(Instant.class));
+    }
+
+    @Test
+    @DisplayName("refreshWithConsent replay token da rotate revoke session family va audit khong ghi raw token")
+    void refreshWithConsent_reusedRotatedTokenInvalidatesFamily() {
+        String rawRefreshToken = "stolen-refresh-token";
+        RefreshToken rotatedToken = createValidRefreshToken();
+        rotatedToken.setRevokedAt(Instant.now().minus(1, ChronoUnit.MINUTES));
+
+        when(refreshTokenRepository.findByTokenHashAndRevokedAtIsNull(anyString()))
+                .thenReturn(Optional.empty());
+        when(refreshTokenRepository.findByTokenHash(anyString()))
+                .thenReturn(Optional.of(rotatedToken));
+
+        assertThatThrownBy(() -> authService.refreshWithConsent(rawRefreshToken))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessage("Refresh token không hợp lệ");
+
+        verify(refreshTokenRepository).revokeAllBySessionFamilyId(eq(rotatedToken.getSessionFamilyId()), any(Instant.class));
+        verify(auditEventRecorder).recordEvent(
+                eq(rotatedToken.getUserId()),
+                eq(AuditActions.REFRESH_TOKEN_REUSE_FAILED),
+                eq(AuditResourceTypes.AUTH),
+                eq(rotatedToken.getUserId()),
+                argThat(details -> "reused_refresh_token".equals(details.get("reason"))
+                        && !details.containsValue(rawRefreshToken))
+        );
+        verify(jwtUtil, never()).generateAccessToken(any(User.class));
+    }
+
+    @Test
+    @DisplayName("refreshWithConsent concurrent loser khong mint token moi va khong revoke session family")
+    void refreshWithConsent_atomicRotationRaceLoserDoesNotInvalidateFamily() {
+        String rawRefreshToken = "old-refresh-token";
+        RefreshToken storedToken = createValidRefreshToken();
+
+        when(refreshTokenRepository.findByTokenHashAndRevokedAtIsNull(anyString()))
+                .thenReturn(Optional.of(storedToken));
+        when(refreshTokenRepository.rotateActiveToken(eq(storedToken.getId()), any(Instant.class)))
+                .thenReturn(0);
+
+        assertThatThrownBy(() -> authService.refreshWithConsent(rawRefreshToken))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessage("Refresh token không hợp lệ");
+
+        verify(refreshTokenRepository, never()).revokeAllBySessionFamilyId(any(UUID.class), any(Instant.class));
+        verify(auditEventRecorder, never()).recordEvent(
+                any(UUID.class),
+                eq(AuditActions.REFRESH_TOKEN_REUSE_FAILED),
+                eq(AuditResourceTypes.AUTH),
+                any(UUID.class),
+                any()
+        );
+        verify(jwtUtil, never()).generateAccessToken(any(User.class));
     }
 
     @Test
@@ -559,6 +620,7 @@ class AuthServiceTest {
         RefreshToken token = new RefreshToken();
         token.setId(UUID.randomUUID());
         token.setUserId(UUID.randomUUID());
+        token.setSessionFamilyId(UUID.randomUUID());
         token.setTokenHash("hashed-token-value");
         token.setExpiresAt(Instant.now().plus(7, ChronoUnit.DAYS));
         token.setCreatedAt(Instant.now());

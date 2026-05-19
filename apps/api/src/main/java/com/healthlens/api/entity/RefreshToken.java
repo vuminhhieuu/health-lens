@@ -23,6 +23,9 @@ public class RefreshToken {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    @Column(name = "session_family_id", nullable = false)
+    private UUID sessionFamilyId;
+
     @Column(name = "token_hash", nullable = false, unique = true, length = 255)
     private String tokenHash;
 
@@ -39,6 +42,9 @@ public class RefreshToken {
     public void prePersist() {
         if (id == null) {
             id = UUID.randomUUID();
+        }
+        if (sessionFamilyId == null) {
+            sessionFamilyId = UUID.randomUUID();
         }
         if (createdAt == null) {
             createdAt = Instant.now();

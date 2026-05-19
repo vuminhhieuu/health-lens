@@ -7,6 +7,7 @@ import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.request.UpdateMetricsRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.DownloadHealthRecordPdfResponse;
+import com.healthlens.api.dto.response.DownloadOriginalDocumentResponse;
 import com.healthlens.api.dto.response.HealthRecordDetailResponse;
 import com.healthlens.api.dto.response.HealthRecordHistoryItemResponse;
 import com.healthlens.api.dto.response.HealthRecordHistoryPageResponse;
@@ -390,6 +391,19 @@ public class HealthRecordService {
         ));
         writePdfDownloadAudit(userId, record, accessibleRecord.shareScope());
         return new DownloadHealthRecordPdfResponse(bytes, buildPdfFilename(profile, record));
+    }
+
+    @Transactional(readOnly = true)
+    public DownloadOriginalDocumentResponse downloadOriginalDocument(UUID userId, UUID recordId) {
+        AccessibleRecord accessibleRecord = loadAccessibleRecord(userId, recordId);
+        HealthRecord record = accessibleRecord.record();
+        String contentType = deriveMimeTypeFromFileKey(record.getFileKey());
+        byte[] bytes = storageService.downloadObjectBytes(record.getFileKey());
+        return new DownloadOriginalDocumentResponse(
+                bytes,
+                contentType,
+                "healthlens-ho-so-goc." + extensionFromFileKey(record.getFileKey())
+        );
     }
 
     @Transactional(readOnly = true)
@@ -1497,6 +1511,22 @@ public class HealthRecordService {
             return "image/jpeg";
         }
         return "application/octet-stream";
+    }
+
+    private String extensionFromFileKey(String fileKey) {
+        if (fileKey == null || fileKey.isBlank()) {
+            return "bin";
+        }
+        String filename = fileKey.substring(fileKey.lastIndexOf('/') + 1);
+        int extensionStart = filename.lastIndexOf('.');
+        if (extensionStart < 0 || extensionStart == filename.length() - 1) {
+            return "bin";
+        }
+        String extension = filename.substring(extensionStart + 1).toLowerCase(Locale.ROOT);
+        return switch (extension) {
+            case "pdf", "png", "jpg", "jpeg" -> extension;
+            default -> "bin";
+        };
     }
 
     private boolean containsLowConfidenceMetrics(List<MetricDto> metrics) {
