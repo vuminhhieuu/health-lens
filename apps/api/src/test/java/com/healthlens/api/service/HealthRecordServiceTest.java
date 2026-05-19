@@ -1165,7 +1165,7 @@ class HealthRecordServiceTest {
 
         assertThat(response.allNormal()).isTrue();
         assertThat(response.recommendations()).hasSize(1);
-        verify(llmService, never()).generateRecommendations(any(), any(), any(), any());
+        verify(llmService, never()).generateRecommendationsResult(any(), any(), any(), any());
     }
 
     @Test
@@ -1199,14 +1199,21 @@ class HealthRecordServiceTest {
 
         when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
-        when(llmService.generateRecommendations(any(), any(), any(), any()))
-                .thenReturn(List.of("Giam duong trong bua an", "Tap the duc deu dan"));
+        when(llmService.generateRecommendationsResult(any(), any(), any(), any()))
+                .thenReturn(new LlmService.RecommendationResult(
+                        List.of("Giam duong trong bua an", "Tap the duc deu dan"),
+                        "llm",
+                        "v8-medical-disclaimer-vi",
+                        "qwen-test"
+                ));
 
         RecommendationsResponse response = healthRecordService.getRecommendations(userId, recordId);
 
         assertThat(response.allNormal()).isFalse();
         assertThat(response.recommendations()).hasSize(2);
-        verify(llmService).generateRecommendations(any(), any(), eq("female"), any());
+        assertThat(response.promptVersion()).isEqualTo("v8-medical-disclaimer-vi");
+        assertThat(response.modelVersion()).isEqualTo("qwen-test");
+        verify(llmService).generateRecommendationsResult(any(), any(), eq("female"), any());
     }
 
     @Test
@@ -1240,13 +1247,18 @@ class HealthRecordServiceTest {
 
         when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
-        when(llmService.generateRecommendations(any(), any(), any(), any()))
-                .thenReturn(List.of("Goi y 1", "Goi y 2"));
+        when(llmService.generateRecommendationsResult(any(), any(), any(), any()))
+                .thenReturn(new LlmService.RecommendationResult(
+                        List.of("Goi y 1", "Goi y 2"),
+                        "llm",
+                        "v8-medical-disclaimer-vi",
+                        "qwen-test"
+                ));
 
         RecommendationsResponse response = healthRecordService.getRecommendations(userId, recordId);
 
         assertThat(response.allNormal()).isFalse();
-        verify(llmService).generateRecommendations(any(), any(), eq("female"), any());
+        verify(llmService).generateRecommendationsResult(any(), any(), eq("female"), any());
     }
 
     @Test
@@ -1280,13 +1292,18 @@ class HealthRecordServiceTest {
 
         when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
-        when(llmService.generateRecommendations(any(), any(), any(), any()))
-                .thenReturn(List.of("Goi y 1", "Goi y 2"));
+        when(llmService.generateRecommendationsResult(any(), any(), any(), any()))
+                .thenReturn(new LlmService.RecommendationResult(
+                        List.of("Goi y 1", "Goi y 2"),
+                        "llm",
+                        "v8-medical-disclaimer-vi",
+                        "qwen-test"
+                ));
 
         RecommendationsResponse response = healthRecordService.getRecommendations(userId, recordId);
 
         assertThat(response.allNormal()).isFalse();
-        verify(llmService).generateRecommendations(any(), any(), eq("female"), any());
+        verify(llmService).generateRecommendationsResult(any(), any(), eq("female"), any());
     }
 
     private HealthRecord newOwnedRecord(UUID userId, UUID recordId) {

@@ -2,6 +2,7 @@ package com.healthlens.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.dto.ReferenceRangeDto;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -10,11 +11,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,11 +54,13 @@ class LlmServiceTest {
     private ChatClient.CallResponseSpec callResponseSpec;
 
     private LlmService llmService;
+    private SimpleMeterRegistry meterRegistry;
 
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        llmService = new LlmService(aiChatClient, redisTemplate, objectMapper);
+        meterRegistry = new SimpleMeterRegistry();
+        llmService = new LlmService(aiChatClient, redisTemplate, objectMapper, meterRegistry);
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         ReflectionTestUtils.setField(llmService, "defaultFallbackExplanation",
                 "Kết quả cần được bác sĩ chuyên khoa giải thích thêm.");
@@ -63,6 +69,7 @@ class LlmServiceTest {
         ReflectionTestUtils.setField(llmService, "retryMultiplier", 1.0);
         ReflectionTestUtils.setField(llmService, "maxTotalDelayMs", 4500L);
         ReflectionTestUtils.setField(llmService, "retrievalVersion", "v1");
+        ReflectionTestUtils.setField(llmService, "aiModelVersion", "qwen-test");
     }
 
     // =========================================================
@@ -135,13 +142,15 @@ class LlmServiceTest {
     @Test
     @DisplayName("Cache hit: không gọi LLM API khi explanation đã có trong Redis")
     void generateExplanation_whenCacheHit_doesNotCallLlm() {
-        when(valueOperations.get(anyString())).thenReturn("llm||cached explanation");
+        when(valueOperations.get(anyString())).thenReturn("llm||v-test||qwen-test||cached explanation");
 
         LlmService.ExplanationResult result = llmService.generateExplanationResult(
                 "HbA1c", "6.2", "normal", referenceRange(), "vi");
 
         assertThat(result.explanation()).isEqualTo("cached explanation");
         assertThat(result.source()).isEqualTo("llm");
+        assertThat(result.promptVersion()).isEqualTo("v-test");
+        assertThat(result.modelVersion()).isEqualTo("qwen-test");
         verify(aiChatClient, never()).prompt();
     }
 
@@ -155,6 +164,21 @@ class LlmServiceTest {
 
         assertThat(result.explanation()).isEqualTo("legacy cached explanation");
         assertThat(result.source()).isEqualTo("fallback");
+        assertThat(result.modelVersion()).isEqualTo("unknown");
+        verify(aiChatClient, never()).prompt();
+    }
+
+    @Test
+    @DisplayName("Cache hit malformed 3-part value: không ném lỗi và fallback an toàn")
+    void generateExplanation_whenCacheHitMalformedThreePartValue_marksAsFallback() {
+        when(valueOperations.get(anyString())).thenReturn("llm||v3||cached explanation");
+
+        LlmService.ExplanationResult result = llmService.generateExplanationResult(
+                "HbA1c", "6.2", "normal", referenceRange(), "vi");
+
+        assertThat(result.explanation()).isEqualTo("llm||v3||cached explanation");
+        assertThat(result.source()).isEqualTo("fallback");
+        assertThat(result.modelVersion()).isEqualTo("unknown");
         verify(aiChatClient, never()).prompt();
     }
 
@@ -163,10 +187,14 @@ class LlmServiceTest {
     void generateExplanation_whenCacheMiss_storesWithSevenDaysTtl() {
         when(valueOperations.get(anyString())).thenReturn(null);
         mockAiChatSuccess("llm explanation");
+        ReflectionTestUtils.setField(llmService, "promptVersion", "v-test");
 
-        llmService.generateExplanation("Glucose", "5.6", "normal", referenceRange(), "vi");
+        LlmService.ExplanationResult result = llmService.generateExplanationResult(
+                "Glucose", "5.6", "normal", referenceRange(), "vi");
 
-        verify(valueOperations).set(anyString(), eq("llm||llm explanation"), eq(Duration.ofDays(7)));
+        assertThat(result.promptVersion()).isEqualTo("v-test");
+        assertThat(result.modelVersion()).isEqualTo("qwen-test");
+        verify(valueOperations).set(anyString(), eq("llm||v-test||qwen-test||llm explanation"), eq(Duration.ofDays(7)));
     }
 
     @Test
@@ -207,6 +235,24 @@ class LlmServiceTest {
     }
 
     @Test
+    @DisplayName("Cache key thay đổi khi metric explanation template path thay đổi")
+    void generateExplanation_cacheKeyChangesWhenPromptTemplateChanges() {
+        List<String> requestedKeys = new ArrayList<>();
+        when(valueOperations.get(anyString())).thenAnswer(invocation -> {
+            requestedKeys.add(invocation.getArgument(0));
+            return "legacy cached explanation";
+        });
+
+        ReflectionTestUtils.setField(llmService, "metricExplanationPromptTemplate", "ai/prompts/metric-explanation.v3.txt");
+        llmService.generateExplanation("Glucose", "8.9", "abnormal", referenceRange(), "vi");
+        ReflectionTestUtils.setField(llmService, "metricExplanationPromptTemplate", "ai/prompts/metric-explanation.v4.txt");
+        llmService.generateExplanation("Glucose", "8.9", "abnormal", referenceRange(), "vi");
+
+        assertThat(requestedKeys).hasSize(2);
+        assertThat(requestedKeys.get(0)).isNotEqualTo(requestedKeys.get(1));
+    }
+
+    @Test
     @DisplayName("Fallback sau 3 retries: source phải là fallback")
     void generateExplanation_afterMaxRetries_returnsFallbackSource() {
         ReflectionTestUtils.setField(llmService, "maxRetryAttempts", 3);
@@ -227,6 +273,7 @@ class LlmServiceTest {
 
         assertThat(prompt).contains("Explain this health metric result in simple Vietnamese");
         assertThat(prompt).contains("Do not use complex medical terms without explanation.");
+        assertThat(prompt).contains("Do not invent, infer, or change reference ranges.");
         assertThat(prompt).contains("Required output format (exactly 3 short lines in Vietnamese):");
         assertThat(prompt).contains("Chỉ số này liên quan đến:");
         assertThat(prompt).contains("Metric context:");
@@ -245,6 +292,40 @@ class LlmServiceTest {
                 .contains("not a diagnosis")
                 .contains("follow-up with a doctor")
                 .contains("Status: abnormal");
+    }
+
+    @Test
+    @DisplayName("Prompt template resource: giữ disclaimer và quy tắc không tự bịa reference range")
+    void promptTemplateResource_containsRequiredMedicalGuardrails() throws IOException {
+        ClassPathResource template = new ClassPathResource("ai/prompts/metric-explanation.v3.txt");
+
+        String content = template.getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(content)
+                .contains("Do not provide treatment plan or disease diagnosis.")
+                .contains("Do not invent, infer, or change reference ranges.")
+                .contains("this is not a diagnosis")
+                .contains("follow-up with a doctor");
+    }
+
+    @Test
+    @DisplayName("Prompt rendering failure: trả fallback an toàn và tăng failure metric")
+    void generateExplanation_whenPromptRenderingFails_returnsFallbackAndRecordsMetric() {
+        when(valueOperations.get(anyString())).thenReturn(null);
+        ReflectionTestUtils.setField(llmService, "metricExplanationPromptTemplate", "ai/prompts/missing-template.txt");
+
+        LlmService.ExplanationResult result = llmService.generateExplanationResult(
+                "Glucose", "8.9", "abnormal", referenceRange(), "vi");
+
+        assertThat(result.source()).isEqualTo("fallback");
+        assertThat(result.explanation())
+                .contains("Chỉ số này là gì:")
+                .contains("Đây không phải chẩn đoán");
+        assertThat(meterRegistry.counter(
+                "healthlens.ai.prompt.render.failures",
+                "prompt_type", "metric_explanation"
+        ).count()).isEqualTo(1.0);
+        verify(aiChatClient, never()).prompt();
     }
 
     @Test
@@ -343,6 +424,91 @@ class LlmServiceTest {
                 .contains("không thay thế tư vấn, chẩn đoán hoặc điều trị")
                 .contains("không được viết như kết luận chẩn đoán")
                 .contains("khuyến nghị người dùng trao đổi với bác sĩ");
+    }
+
+    @Test
+    @DisplayName("Recommendations metadata: trả prompt/model version cho audit")
+    void generateRecommendationsResult_returnsPromptAndModelVersion() {
+        when(valueOperations.get(anyString())).thenReturn(null);
+        mockAiChatSuccess("[\"Chế độ dinh dưỡng: Với Đường huyết, giảm đồ ngọt\", \"Chế độ sinh hoạt: Với Glucose, đi bộ nhẹ sau ăn\"]");
+        ReflectionTestUtils.setField(llmService, "recommendationsPromptVersion", "v9-test");
+
+        LlmService.RecommendationResult result = llmService.generateRecommendationsResult(
+                List.of(new LlmService.RecommendationMetricInput("Glucose", "8.1", "mmol/L", "abnormal")),
+                45,
+                "female"
+        );
+
+        assertThat(result.recommendations()).hasSize(2);
+        assertThat(result.source()).isEqualTo("llm");
+        assertThat(result.promptVersion()).isEqualTo("v9-test");
+        assertThat(result.modelVersion()).isEqualTo("qwen-test");
+    }
+
+    @Test
+    @DisplayName("Recommendations prompt rendering failure: trả fallback và tăng failure metric")
+    void generateRecommendations_whenPromptRenderingFails_returnsFallbackAndRecordsMetric() {
+        when(valueOperations.get(anyString())).thenReturn(null);
+        ReflectionTestUtils.setField(llmService, "recommendationsPromptTemplate", "ai/prompts/missing-recommendations-template.txt");
+
+        LlmService.RecommendationResult result = llmService.generateRecommendationsResult(
+                List.of(new LlmService.RecommendationMetricInput("Glucose", "8.1", "mmol/L", "abnormal")),
+                45,
+                "female"
+        );
+
+        assertThat(result.source()).isEqualTo("fallback");
+        assertThat(result.recommendations()).isNotEmpty();
+        assertThat(meterRegistry.counter(
+                "healthlens.ai.prompt.render.failures",
+                "prompt_type", "recommendations"
+        ).count()).isEqualTo(1.0);
+        verify(aiChatClient, never()).prompt();
+        verify(valueOperations, never()).set(anyString(), anyString(), any(Duration.class));
+    }
+
+    @Test
+    @DisplayName("Recommendations: cache key thay đổi khi model version thay đổi")
+    void generateRecommendations_cacheKeyChangesWhenModelVersionChanges() {
+        List<String> requestedKeys = new ArrayList<>();
+        when(valueOperations.get(anyString())).thenAnswer(invocation -> {
+            requestedKeys.add(invocation.getArgument(0));
+            return null;
+        });
+        mockAiChatSuccess("[\"Chế độ dinh dưỡng: Với Đường huyết, giảm đồ ngọt\", \"Chế độ sinh hoạt: Với Glucose, đi bộ nhẹ sau ăn\"]");
+
+        ReflectionTestUtils.setField(llmService, "aiModelVersion", "qwen-v1");
+        llmService.generateRecommendations(
+                List.of(new LlmService.RecommendationMetricInput("Glucose", "8.1", "mmol/L", "abnormal")),
+                45,
+                "female"
+        );
+        ReflectionTestUtils.setField(llmService, "aiModelVersion", "qwen-v2");
+        llmService.generateRecommendations(
+                List.of(new LlmService.RecommendationMetricInput("Glucose", "8.1", "mmol/L", "abnormal")),
+                45,
+                "female"
+        );
+
+        assertThat(requestedKeys).hasSize(2);
+        assertThat(requestedKeys.get(0)).isNotEqualTo(requestedKeys.get(1));
+    }
+
+    @Test
+    @DisplayName("Recommendations: output LLM low-quality thì source là fallback")
+    void generateRecommendationsResult_whenLlmOutputLowQuality_returnsFallbackSource() {
+        when(valueOperations.get(anyString())).thenReturn(null);
+        mockAiChatSuccess("[]");
+
+        LlmService.RecommendationResult result = llmService.generateRecommendationsResult(
+                List.of(new LlmService.RecommendationMetricInput("Glucose", "8.1", "mmol/L", "abnormal")),
+                45,
+                "female"
+        );
+
+        assertThat(result.source()).isEqualTo("fallback");
+        assertThat(result.recommendations()).isNotEmpty();
+        verify(valueOperations).set(anyString(), anyString(), eq(Duration.ofDays(7)));
     }
 
     @Test
