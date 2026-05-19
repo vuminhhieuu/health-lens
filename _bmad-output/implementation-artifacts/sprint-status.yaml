@@ -1,5 +1,5 @@
 # generated: 2026-04-01
-# last_updated: 2026-05-19T21:00:00+07:00
+# last_updated: 2026-05-19T18:56:16+07:00
 # project: health-lens
 # project_key: NOKEY
 # tracking_system: file-system
@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-05-19T21:00:00+07:00
+last_updated: 2026-05-19T19:50:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -208,7 +208,7 @@ development_status:
   core-4-4-backup-restore-and-operational-runbook: ready-for-dev
   core-5-1-security-config-fail-fast-hardening: done
   core-5-2-ssrf-protection-for-ocr-and-remote-file-fetching: done
-  core-5-3-admin-session-storage-hardening: ready-for-dev
+  core-5-3-admin-session-storage-hardening: done
   core-5-4-right-to-delete-race-and-cleanup-correctness: ready-for-dev
   core-6-1-global-toast-notification-foundation: done
   core-6-2-replace-browser-alerts-and-local-toasts: done

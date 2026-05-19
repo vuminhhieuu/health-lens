@@ -6,6 +6,8 @@ import Link from "next/link";
 import {
   ShieldCheck, Database, ClipboardList, BarChart3, LogOut,
 } from "lucide-react";
+import { adminApiClient } from "@/lib/api/adminApiClient";
+import { API_ROUTES } from "@/lib/api/routes";
 
 const ADMIN_SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -49,30 +51,26 @@ export default function AdminLayout({
   // Skip layout auth check for admin login page
   const isLoginPage = pathname === "/admin/login";
 
-  const getAdminToken = useCallback(() => {
-    if (typeof window === "undefined") return null;
-    return sessionStorage.getItem("admin_access_token");
-  }, []);
-
   const handleLogout = useCallback(() => {
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("admin_access_token");
+    void adminApiClient.post(API_ROUTES.ADMIN_AUTH.LOGOUT).finally(() => {
       router.replace("/admin/login");
-    }
+    });
   }, [router]);
 
   // Check admin session on mount
   useEffect(() => {
     if (isLoginPage) return;
 
-    const token = getAdminToken();
-    if (!token) {
+    adminApiClient.get(API_ROUTES.ADMIN_AUTH.SESSION).then((response) => {
+      if (response.data?.data?.totpVerified !== true) {
+        router.replace("/admin/login");
+        return;
+      }
+      setTimeout(() => setIsReady(true), 0);
+    }).catch(() => {
       router.replace("/admin/login");
-      return;
-    }
-
-    setTimeout(() => setIsReady(true), 0);
-  }, [isLoginPage, getAdminToken, router]);
+    });
+  }, [isLoginPage, router]);
 
   // Session timeout: auto-redirect after 15 minutes inactivity
   useEffect(() => {

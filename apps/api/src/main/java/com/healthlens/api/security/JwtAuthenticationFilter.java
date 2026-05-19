@@ -1,12 +1,14 @@
 package com.healthlens.api.security;
 
 import com.healthlens.api.constants.ApiRoutes;
+import com.healthlens.api.constants.SecurityConstants;
 import com.healthlens.api.entity.AccountStatus;
 import com.healthlens.api.util.JwtUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Cookie;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,7 +23,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.UrlPathHelper;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -55,14 +59,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
 
-        String authHeader = request.getHeader(AUTHORIZATION_HEADER);
-
-        if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
+        String token = resolveAccessToken(request);
+        if (token == null || token.isBlank()) {
             filterChain.doFilter(request, response);
             return;
         }
-
-        String token = authHeader.substring(BEARER_PREFIX.length());
 
         if (!jwtUtil.validateToken(token)) {
             filterChain.doFilter(request, response);
@@ -76,9 +77,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
+        var claims = jwtUtil.extractClaims(token);
+
         // Set SecurityContext with authenticated user
         String userId = jwtUtil.extractSubject(token);
-        String role = jwtUtil.extractClaims(token).get("role", String.class);
+        String role = claims.get("role", String.class);
+        String email = claims.get("email", String.class);
+        Boolean totpVerified = claims.get("totpVerified", Boolean.class);
 
         // AC #3: Block authenticated requests for accounts in PENDING_DELETION or
         // DELETED state.
@@ -113,7 +118,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // For admin routes (non-auth), require totpVerified=true
         String requestUri = request.getRequestURI();
         if (requestUri.startsWith(ApiRoutes.ADMIN_BASE + "/") && !requestUri.startsWith(ApiRoutes.ADMIN_AUTH_BASE + "/")) {
-            Boolean totpVerified = jwtUtil.extractClaims(token).get("totpVerified", Boolean.class);
             if (!Boolean.TRUE.equals(totpVerified)) {
                 response.sendError(HttpServletResponse.SC_FORBIDDEN, "Vui lòng xác thực TOTP trước khi truy cập khu vực quản trị");
                 return;
@@ -124,6 +128,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 userId,
                 null,
                 List.of(new SimpleGrantedAuthority(role)));
+        Map<String, Object> authenticationDetails = new HashMap<>();
+        authenticationDetails.put("totpVerified", Boolean.TRUE.equals(totpVerified));
+        if (email != null && !email.isBlank()) {
+            authenticationDetails.put("email", email);
+        }
+        authentication.setDetails(authenticationDetails);
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
@@ -161,5 +171,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     securityFailClosed, jti, e);
             return securityFailClosed;
         }
+    }
+
+    private String resolveAccessToken(HttpServletRequest request) {
+        String authHeader = request.getHeader(AUTHORIZATION_HEADER);
+        if (authHeader != null && authHeader.startsWith(BEARER_PREFIX)) {
+            return authHeader.substring(BEARER_PREFIX.length());
+        }
+
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return null;
+        }
+        for (Cookie cookie : cookies) {
+            if (SecurityConstants.ADMIN_ACCESS_TOKEN_COOKIE.equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
     }
 }

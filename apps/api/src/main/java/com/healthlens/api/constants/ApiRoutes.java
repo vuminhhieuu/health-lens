@@ -152,6 +152,8 @@ public final class ApiRoutes {
     public static final String ADMIN_REFERENCE_DATA_IMPORT_PREVIEW = ADMIN_REFERENCE_DATA_BASE + "/import/preview";
     public static final String ADMIN_REFERENCE_DATA_IMPORT_CONFIRM = ADMIN_REFERENCE_DATA_BASE + "/import/confirm";
     public static final String ADMIN_AUTH_LOGIN = ADMIN_AUTH_BASE + "/login";
+    public static final String ADMIN_AUTH_LOGOUT = ADMIN_AUTH_BASE + "/logout";
+    public static final String ADMIN_AUTH_SESSION = ADMIN_AUTH_BASE + "/session";
     public static final String ADMIN_AUTH_TOTP_SETUP = ADMIN_AUTH_BASE + "/totp/setup";
     public static final String ADMIN_AUTH_TOTP_VERIFY = ADMIN_AUTH_BASE + "/totp/verify";
 
