@@ -1,6 +1,8 @@
 package com.healthlens.api.service;
 
 import com.healthlens.api.dto.ReferenceRangeDto;
+import com.healthlens.api.entity.OnlineRagReviewStatus;
+import com.healthlens.api.service.rag.TrustedOnlineRagSourceAdapter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -11,14 +13,20 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.ai.document.Document;
 
 import java.math.BigDecimal;
+import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,6 +38,8 @@ class MetricExplanationRetrievalServiceTest {
     private ReferenceDataService referenceDataService;
     @Mock
     private RagCorpusGovernanceService governanceService;
+    @Mock
+    private TrustedOnlineRagSourceAdapter onlineRagSourceAdapter;
 
     private MetricExplanationRetrievalService retrievalService;
 
@@ -40,6 +50,7 @@ class MetricExplanationRetrievalServiceTest {
                 vectorStoreService,
                 referenceDataService,
                 governanceService,
+                onlineRagSourceAdapter,
                 new SimpleMeterRegistry(),
                 3
         );
@@ -145,6 +156,7 @@ class MetricExplanationRetrievalServiceTest {
                 vectorStoreService,
                 referenceDataService,
                 emptyGovernance,
+                onlineRagSourceAdapter,
                 new SimpleMeterRegistry(),
                 3
         );
@@ -244,6 +256,188 @@ class MetricExplanationRetrievalServiceTest {
 
         assertThat(result.knowledgeSnippet()).contains("A".repeat(1_200) + "...");
         assertThat(result.knowledgeSnippet()).doesNotContain("A".repeat(1_300));
+    }
+
+    @Test
+    @DisplayName("Retrieve online RAG: đính kèm citation metadata nhưng chỉ dùng content khi source đã được duyệt")
+    void retrieve_onlineRagCitation_includesMetadataAndOnlyApprovedContent() {
+        Document hit = Document.builder()
+                .id("metric-expl:ALT:v1")
+                .text("ALT curated chunk")
+                .metadata(Map.of(
+                        "metricKey", "ALT",
+                        "sourceUrl", "https://who.int/news/item/alt",
+                        "publisher", "WHO",
+                        "whatIsIt", "ALT là men gan.",
+                        "relatedTo", "chức năng gan.",
+                        "impactWhenOutOfRange", "ALT tăng có thể gợi ý tổn thương gan.",
+                        "score", 0.88
+                ))
+                .build();
+        UUID snapshotId = UUID.randomUUID();
+        TrustedOnlineRagSourceAdapter.OnlineRagRetrievalResult onlineResult =
+                new TrustedOnlineRagSourceAdapter.OnlineRagRetrievalResult(
+                        Optional.of("Approved online context"),
+                        new TrustedOnlineRagSourceAdapter.OnlineRagSourceMetadata(
+                                snapshotId,
+                                "https://who.int/news/item/alt",
+                                "WHO",
+                                Instant.parse("2026-05-19T08:00:00Z"),
+                                "a".repeat(64),
+                                OnlineRagReviewStatus.APPROVED,
+                                false,
+                                false
+                        ),
+                        true,
+                        false,
+                        false,
+                        true
+                );
+        when(vectorStoreService.semanticSearch(anyString(), eq(3),
+                eq("language == 'vi' && sourceVersion == 'v1'")))
+                .thenReturn(List.of(hit));
+        when(onlineRagSourceAdapter.retrieve(URI.create("https://who.int/news/item/alt"), "WHO"))
+                .thenReturn(onlineResult);
+
+        MetricExplanationRetrievalService.RetrievalResult result = retrievalService.retrieve(
+                "ALT", "abnormal", sampleRange(), "vi");
+
+        assertThat(result.knowledgeSnippet()).contains("Approved online context");
+        assertThat(result.onlineCitations()).hasSize(1);
+        assertThat(result.onlineCitations().get(0).sourceSnapshotId()).isEqualTo(snapshotId);
+        assertThat(result.onlineCitations().get(0).sourceUrl()).isEqualTo("https://who.int/news/item/alt");
+        assertThat(result.onlineCitations().get(0).reviewStatus()).isEqualTo(OnlineRagReviewStatus.APPROVED);
+        assertThat(result.onlineCitations().get(0).cacheHit()).isTrue();
+        verify(onlineRagSourceAdapter).retrieve(URI.create("https://who.int/news/item/alt"), "WHO");
+    }
+
+    @Test
+    @DisplayName("Retrieve online RAG: source review-required hiện trong audit metadata nhưng không vào prompt")
+    void retrieve_onlineRagCitation_reviewRequiredNotUsedAsApprovedEvidence() {
+        Document hit = Document.builder()
+                .id("metric-expl:ALT:v1")
+                .text("ALT curated chunk")
+                .metadata(Map.of(
+                        "metricKey", "ALT",
+                        "sourceUrl", "https://who.int/news/item/alt-review",
+                        "publisher", "WHO"
+                ))
+                .build();
+        TrustedOnlineRagSourceAdapter.OnlineRagRetrievalResult onlineResult =
+                new TrustedOnlineRagSourceAdapter.OnlineRagRetrievalResult(
+                        Optional.of("Unreviewed online context must not be used"),
+                        new TrustedOnlineRagSourceAdapter.OnlineRagSourceMetadata(
+                                UUID.randomUUID(),
+                                "https://who.int/news/item/alt-review",
+                                "WHO",
+                                Instant.parse("2026-05-19T08:00:00Z"),
+                                "b".repeat(64),
+                                OnlineRagReviewStatus.REVIEW_REQUIRED,
+                                true,
+                                false
+                        ),
+                        false,
+                        true,
+                        false,
+                        false
+                );
+        when(vectorStoreService.semanticSearch(anyString(), eq(3),
+                eq("language == 'vi' && sourceVersion == 'v1'")))
+                .thenReturn(List.of(hit));
+        when(onlineRagSourceAdapter.retrieve(URI.create("https://who.int/news/item/alt-review"), "WHO"))
+                .thenReturn(onlineResult);
+
+        MetricExplanationRetrievalService.RetrievalResult result = retrievalService.retrieve(
+                "ALT", "abnormal", sampleRange(), "vi");
+
+        assertThat(result.knowledgeSnippet()).doesNotContain("Unreviewed online context must not be used");
+        assertThat(result.onlineCitations()).hasSize(1);
+        assertThat(result.onlineCitations().get(0).reviewStatus()).isEqualTo(OnlineRagReviewStatus.REVIEW_REQUIRED);
+        assertThat(result.onlineCitations().get(0).usableForAi()).isFalse();
+    }
+
+    @Test
+    @DisplayName("Retrieve online RAG: lỗi fetch online không làm rơi Qdrant hit hợp lệ")
+    void retrieve_onlineRagCitation_fetchFailureKeepsCuratedHit() {
+        Document hit = Document.builder()
+                .id("metric-expl:ALT:v1")
+                .text("ALT curated chunk")
+                .metadata(Map.of(
+                        "metricKey", "ALT",
+                        "sourceUrl", "https://who.int/news/item/alt-timeout",
+                        "publisher", "WHO"
+                ))
+                .build();
+        when(vectorStoreService.semanticSearch(anyString(), eq(3),
+                eq("language == 'vi' && sourceVersion == 'v1'")))
+                .thenReturn(List.of(hit));
+        when(onlineRagSourceAdapter.retrieve(URI.create("https://who.int/news/item/alt-timeout"), "WHO"))
+                .thenThrow(new IllegalStateException("timeout"));
+
+        MetricExplanationRetrievalService.RetrievalResult result = retrievalService.retrieve(
+                "ALT", "abnormal", sampleRange(), "vi");
+
+        assertThat(result.source()).isEqualTo("qdrant");
+        assertThat(result.hit()).isTrue();
+        assertThat(result.knowledgeSnippet()).contains("ALT curated chunk");
+        assertThat(result.onlineCitations()).hasSize(1);
+        assertThat(result.onlineCitations().get(0).reviewRequired()).isTrue();
+        assertThat(result.onlineCitations().get(0).stale()).isFalse();
+        assertThat(result.onlineCitations().get(0).usableForAi()).isFalse();
+    }
+
+    @Test
+    @DisplayName("Retrieve online RAG: chỉ resolve online source của top document để tránh nhiều HTTP call serial")
+    void retrieve_onlineRagCitation_resolvesOnlyTopDocument() {
+        Document topHit = Document.builder()
+                .id("metric-expl:ALT:v1")
+                .text("ALT curated chunk")
+                .metadata(Map.of(
+                        "metricKey", "ALT",
+                        "sourceUrl", "https://who.int/news/item/alt-top",
+                        "publisher", "WHO"
+                ))
+                .build();
+        Document secondHit = Document.builder()
+                .id("metric-expl:ALT:v1-secondary")
+                .text("ALT secondary chunk")
+                .metadata(Map.of(
+                        "metricKey", "ALT",
+                        "sourceUrl", "https://who.int/news/item/alt-second",
+                        "publisher", "WHO"
+                ))
+                .build();
+        TrustedOnlineRagSourceAdapter.OnlineRagRetrievalResult onlineResult =
+                new TrustedOnlineRagSourceAdapter.OnlineRagRetrievalResult(
+                        Optional.empty(),
+                        new TrustedOnlineRagSourceAdapter.OnlineRagSourceMetadata(
+                                UUID.randomUUID(),
+                                "https://who.int/news/item/alt-top",
+                                "WHO",
+                                Instant.parse("2026-05-19T08:00:00Z"),
+                                "f".repeat(64),
+                                OnlineRagReviewStatus.REVIEW_REQUIRED,
+                                true,
+                                false
+                        ),
+                        false,
+                        true,
+                        false,
+                        false
+                );
+        when(vectorStoreService.semanticSearch(anyString(), eq(3),
+                eq("language == 'vi' && sourceVersion == 'v1'")))
+                .thenReturn(List.of(topHit, secondHit));
+        when(onlineRagSourceAdapter.retrieve(URI.create("https://who.int/news/item/alt-top"), "WHO"))
+                .thenReturn(onlineResult);
+
+        MetricExplanationRetrievalService.RetrievalResult result = retrievalService.retrieve(
+                "ALT", "abnormal", sampleRange(), "vi");
+
+        assertThat(result.onlineCitations()).hasSize(1);
+        assertThat(result.onlineCitations().get(0).sourceUrl()).isEqualTo("https://who.int/news/item/alt-top");
+        verify(onlineRagSourceAdapter).retrieve(URI.create("https://who.int/news/item/alt-top"), "WHO");
+        verify(onlineRagSourceAdapter, never()).retrieve(URI.create("https://who.int/news/item/alt-second"), "WHO");
     }
 
     private ReferenceRangeDto sampleRange() {

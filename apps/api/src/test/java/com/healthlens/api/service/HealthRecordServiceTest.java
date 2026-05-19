@@ -5,6 +5,8 @@ import com.healthlens.api.dto.MetricDto;
 import com.healthlens.api.dto.request.CreateUploadUrlRequest;
 import com.healthlens.api.dto.request.ConfirmRecordRequest;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
+import com.healthlens.api.entity.OnlineRagAnswerCitation;
+import com.healthlens.api.entity.OnlineRagReviewStatus;
 import com.healthlens.api.dto.response.RecommendationsResponse;
 import com.healthlens.api.dto.response.DownloadHealthRecordPdfResponse;
 import com.healthlens.api.dto.request.UpdateMetricsRequest;
@@ -21,6 +23,7 @@ import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.HealthRecordShareRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
+import com.healthlens.api.repository.OnlineRagAnswerCitationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,6 +31,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.StreamOperations;
@@ -36,6 +40,7 @@ import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.math.BigDecimal;
 import java.util.Arrays;
@@ -72,6 +77,7 @@ class HealthRecordServiceTest {
     @Mock private LlmService llmService;
     @Mock private ConsentService consentService;
     @Mock private HealthRecordPdfService healthRecordPdfService;
+    @Mock private OnlineRagAnswerCitationRepository onlineRagAnswerCitationRepository;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private StreamOperations<String, Object, Object> streamOperations;
@@ -91,6 +97,7 @@ class HealthRecordServiceTest {
                 llmService,
                 consentService,
                 healthRecordPdfService,
+                onlineRagAnswerCitationRepository,
                 healthRecordLegacyAuditWriter,
                 unifiedAuditCoordinator,
                 auditEventRecorder,
@@ -531,6 +538,230 @@ class HealthRecordServiceTest {
                 contextCaptor.capture()
         );
         assertThat(contextCaptor.getValue().profileContextSnippet()).contains("\"accessScope\":\"owner\"");
+    }
+
+    @Test
+    @DisplayName("getMetricExplanation trả citation metadata và lưu link answer-record-metric không chứa raw snapshot")
+    void getMetricExplanation_onlineRagCitationPersistsMetadataOnly() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID snapshotId = UUID.randomUUID();
+
+        MetricDto metric = MetricDto.builder()
+                .name("Glucose")
+                .value("5.6")
+                .status("normal")
+                .referenceRange(new ReferenceRangeDto(
+                        BigDecimal.valueOf(3.9),
+                        BigDecimal.valueOf(6.4),
+                        BigDecimal.valueOf(3.2),
+                        BigDecimal.valueOf(7.1),
+                        "mmol/L"
+                ))
+                .build();
+
+        Profile profile = buildProfile(userId, profileId);
+        HealthRecord record = newOwnedRecord(userId, recordId);
+        record.setProfileId(profileId);
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
+
+        MetricExplanationRetrievalService.OnlineCitationMetadata citation =
+                new MetricExplanationRetrievalService.OnlineCitationMetadata(
+                        snapshotId,
+                        "https://who.int/news/item/glucose",
+                        "WHO",
+                        Instant.parse("2026-05-19T08:00:00Z"),
+                        "c".repeat(64),
+                        OnlineRagReviewStatus.REVIEW_REQUIRED,
+                        true,
+                        false,
+                        false,
+                        true,
+                        false,
+                        false
+                );
+
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+        when(metricExplanationRetrievalService.retrieve(
+                nullable(String.class),
+                nullable(String.class),
+                any(ReferenceRangeDto.class),
+                nullable(String.class),
+                any(MetricExplanationRetrievalService.RetrievalContext.class)))
+                .thenReturn(new MetricExplanationRetrievalService.RetrievalResult(
+                        "Metric identity: ...",
+                        new MetricExplanationRetrievalService.RetrievalTrace("qdrant", true, 0.91, "none"),
+                        List.of(citation)
+                ));
+        when(llmService.generateExplanationResult(
+                nullable(String.class),
+                nullable(String.class),
+                nullable(String.class),
+                any(ReferenceRangeDto.class),
+                nullable(String.class),
+                nullable(String.class)))
+                .thenReturn(new LlmService.ExplanationResult("Giải thích đơn giản", "llm"));
+
+        MetricExplanationResponse response = healthRecordService.getMetricExplanation(userId, recordId, "Glucose");
+
+        assertThat(response.onlineRagCitations()).hasSize(1);
+        assertThat(response.onlineRagCitations().get(0).sourceSnapshotId()).isEqualTo(snapshotId);
+        assertThat(response.onlineRagCitations().get(0).sourceUrl()).isEqualTo("https://who.int/news/item/glucose");
+        assertThat(response.onlineRagCitations().get(0).reviewStatus()).isEqualTo("REVIEW_REQUIRED");
+        assertThat(response.onlineRagCitations().get(0).excluded()).isTrue();
+        assertThat(response.onlineRagCitations().get(0).cacheHit()).isFalse();
+
+        ArgumentCaptor<OnlineRagAnswerCitation> citationCaptor =
+                ArgumentCaptor.forClass(OnlineRagAnswerCitation.class);
+        verify(onlineRagAnswerCitationRepository).saveAndFlush(citationCaptor.capture());
+        OnlineRagAnswerCitation saved = citationCaptor.getValue();
+        assertThat(saved.getHealthRecordId()).isEqualTo(recordId);
+        assertThat(saved.getMetricName()).isEqualTo("Glucose");
+        assertThat(saved.getSourceSnapshotId()).isEqualTo(snapshotId);
+        assertThat(saved.getSnapshotHash()).isEqualTo("c".repeat(64));
+        assertThat(saved.getReviewStatus()).isEqualTo(OnlineRagReviewStatus.REVIEW_REQUIRED);
+    }
+
+    @Test
+    @DisplayName("getMetricExplanation không lưu trùng citation nếu answer/source đã tồn tại")
+    void getMetricExplanation_onlineRagCitationSkipsDuplicatePersistence() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+
+        MetricDto metric = MetricDto.builder()
+                .name("Glucose")
+                .value("5.6")
+                .status("normal")
+                .referenceRange(new ReferenceRangeDto(
+                        BigDecimal.valueOf(3.9),
+                        BigDecimal.valueOf(6.4),
+                        BigDecimal.valueOf(3.2),
+                        BigDecimal.valueOf(7.1),
+                        "mmol/L"
+                ))
+                .build();
+        HealthRecord record = newOwnedRecord(userId, recordId);
+        record.setProfileId(profileId);
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
+        MetricExplanationRetrievalService.OnlineCitationMetadata citation =
+                new MetricExplanationRetrievalService.OnlineCitationMetadata(
+                        UUID.randomUUID(),
+                        "https://who.int/news/item/glucose",
+                        "WHO",
+                        Instant.parse("2026-05-19T08:00:00Z"),
+                        "d".repeat(64),
+                        OnlineRagReviewStatus.APPROVED,
+                        false,
+                        true,
+                        true,
+                        false,
+                        false,
+                        false
+                );
+
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(buildProfile(userId, profileId)));
+        when(metricExplanationRetrievalService.retrieve(
+                nullable(String.class),
+                nullable(String.class),
+                any(ReferenceRangeDto.class),
+                nullable(String.class),
+                any(MetricExplanationRetrievalService.RetrievalContext.class)))
+                .thenReturn(new MetricExplanationRetrievalService.RetrievalResult(
+                        "Metric identity: ...",
+                        new MetricExplanationRetrievalService.RetrievalTrace("qdrant", true, 0.91, "none"),
+                        List.of(citation)
+                ));
+        when(llmService.generateExplanationResult(
+                nullable(String.class),
+                nullable(String.class),
+                nullable(String.class),
+                any(ReferenceRangeDto.class),
+                nullable(String.class),
+                nullable(String.class)))
+                .thenReturn(new LlmService.ExplanationResult("Giải thích đơn giản", "llm"));
+        when(onlineRagAnswerCitationRepository.existsByHealthRecordIdAndMetricNameAndAnswerHashAndSourceUrlAndSnapshotHash(
+                eq(recordId),
+                eq("Glucose"),
+                anyString(),
+                eq("https://who.int/news/item/glucose"),
+                eq("d".repeat(64))
+        )).thenReturn(true);
+
+        healthRecordService.getMetricExplanation(userId, recordId, "Glucose");
+
+        verify(onlineRagAnswerCitationRepository, never()).saveAndFlush(any(OnlineRagAnswerCitation.class));
+    }
+
+    @Test
+    @DisplayName("getMetricExplanation bỏ qua duplicate-key race khi lưu citation")
+    void getMetricExplanation_onlineRagCitationDuplicateRaceDoesNotFailExplanation() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+
+        MetricDto metric = MetricDto.builder()
+                .name("Glucose")
+                .value("5.6")
+                .status("normal")
+                .referenceRange(new ReferenceRangeDto(
+                        BigDecimal.valueOf(3.9),
+                        BigDecimal.valueOf(6.4),
+                        BigDecimal.valueOf(3.2),
+                        BigDecimal.valueOf(7.1),
+                        "mmol/L"
+                ))
+                .build();
+        HealthRecord record = newOwnedRecord(userId, recordId);
+        record.setProfileId(profileId);
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
+        MetricExplanationRetrievalService.OnlineCitationMetadata citation =
+                new MetricExplanationRetrievalService.OnlineCitationMetadata(
+                        UUID.randomUUID(),
+                        "https://who.int/news/item/glucose",
+                        "WHO",
+                        Instant.parse("2026-05-19T08:00:00Z"),
+                        "e".repeat(64),
+                        OnlineRagReviewStatus.APPROVED,
+                        false,
+                        true,
+                        true,
+                        false,
+                        false,
+                        false
+                );
+
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(buildProfile(userId, profileId)));
+        when(metricExplanationRetrievalService.retrieve(
+                nullable(String.class),
+                nullable(String.class),
+                any(ReferenceRangeDto.class),
+                nullable(String.class),
+                any(MetricExplanationRetrievalService.RetrievalContext.class)))
+                .thenReturn(new MetricExplanationRetrievalService.RetrievalResult(
+                        "Metric identity: ...",
+                        new MetricExplanationRetrievalService.RetrievalTrace("qdrant", true, 0.91, "none"),
+                        List.of(citation)
+                ));
+        when(llmService.generateExplanationResult(
+                nullable(String.class),
+                nullable(String.class),
+                nullable(String.class),
+                any(ReferenceRangeDto.class),
+                nullable(String.class),
+                nullable(String.class)))
+                .thenReturn(new LlmService.ExplanationResult("Giải thích đơn giản", "llm"));
+        when(onlineRagAnswerCitationRepository.saveAndFlush(any(OnlineRagAnswerCitation.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate"));
+
+        MetricExplanationResponse response = healthRecordService.getMetricExplanation(userId, recordId, "Glucose");
+
+        assertThat(response.explanation()).isEqualTo("Giải thích đơn giản");
+        assertThat(response.onlineRagCitations()).hasSize(1);
     }
 
     @Test

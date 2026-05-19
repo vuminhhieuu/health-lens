@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class TrustedOnlineRagSourceAdapter {
@@ -72,10 +73,18 @@ public class TrustedOnlineRagSourceAdapter {
 
         Optional<OnlineRagSourceSnapshot> cached = snapshotRepository.findFirstBySourceUrlOrderByRetrievedAtDesc(sourceUrlValue);
         if (cached.isPresent() && isFresh(cached.get())) {
-            return fromSnapshot(cached.get(), true);
+            return fromSnapshot(cached.get(), true, true);
         }
 
-        String content = Optional.ofNullable(httpClient.fetch(sourceUrl)).orElse("");
+        String content;
+        try {
+            content = Optional.ofNullable(httpClient.fetch(sourceUrl)).orElse("");
+        } catch (RuntimeException ex) {
+            if (cached.isPresent()) {
+                return fromSnapshot(cached.get(), true, false);
+            }
+            throw ex;
+        }
         OnlineRagSourceSnapshot snapshot = new OnlineRagSourceSnapshot();
         snapshot.setSourceUrl(sourceUrlValue);
         snapshot.setCanonicalHost(canonicalHost);
@@ -87,23 +96,29 @@ public class TrustedOnlineRagSourceAdapter {
         snapshot.setContentLength(content.length());
         snapshot.setContentSnapshot(content);
 
-        return fromSnapshot(snapshotRepository.save(snapshot), false);
+        return fromSnapshot(snapshotRepository.save(snapshot), false, true);
     }
 
-    private OnlineRagRetrievalResult fromSnapshot(OnlineRagSourceSnapshot snapshot, boolean cacheHit) {
-        boolean usable = snapshot.getReviewStatus() == OnlineRagReviewStatus.APPROVED && !snapshot.isExcluded();
+    private OnlineRagRetrievalResult fromSnapshot(OnlineRagSourceSnapshot snapshot, boolean cacheHit, boolean allowContent) {
+        boolean stale = isStale(snapshot);
+        boolean usable = allowContent
+                && !stale
+                && snapshot.getReviewStatus() == OnlineRagReviewStatus.APPROVED
+                && !snapshot.isExcluded();
         return new OnlineRagRetrievalResult(
                 usable ? Optional.of(snapshot.getContentSnapshot()) : Optional.empty(),
                 new OnlineRagSourceMetadata(
+                        snapshot.getId(),
                         snapshot.getSourceUrl(),
                         snapshot.getPublisher(),
                         snapshot.getRetrievedAt(),
                         snapshot.getSnapshotHash(),
                         snapshot.getReviewStatus(),
-                        snapshot.isExcluded()
+                        snapshot.isExcluded(),
+                        stale
                 ),
                 usable,
-                snapshot.getReviewStatus() == OnlineRagReviewStatus.REVIEW_REQUIRED,
+                stale || snapshot.getReviewStatus() == OnlineRagReviewStatus.REVIEW_REQUIRED,
                 false,
                 cacheHit
         );
@@ -124,6 +139,14 @@ public class TrustedOnlineRagSourceAdapter {
         return !retrievedAt.plus(cacheMaxAge).isBefore(Instant.now(clock));
     }
 
+    private boolean isStale(OnlineRagSourceSnapshot snapshot) {
+        Instant retrievedAt = snapshot.getRetrievedAt();
+        if (retrievedAt == null || cacheMaxAge.isZero() || cacheMaxAge.isNegative()) {
+            return false;
+        }
+        return retrievedAt.plus(cacheMaxAge).isBefore(Instant.now(clock));
+    }
+
     private String safePublisher(String publisher, String fallbackHost) {
         String value = publisher == null || publisher.isBlank() ? fallbackHost : publisher.trim();
         if (value.length() <= MAX_PUBLISHER_LENGTH) {
@@ -142,12 +165,14 @@ public class TrustedOnlineRagSourceAdapter {
     }
 
     public record OnlineRagSourceMetadata(
+            UUID sourceSnapshotId,
             String sourceUrl,
             String publisher,
             Instant retrievedAt,
             String snapshotHash,
             OnlineRagReviewStatus reviewStatus,
-            boolean excluded
+            boolean excluded,
+            boolean stale
     ) {
     }
 
@@ -163,12 +188,14 @@ public class TrustedOnlineRagSourceAdapter {
             return new OnlineRagRetrievalResult(
                     Optional.empty(),
                     new OnlineRagSourceMetadata(
+                            null,
                             sourceUrl == null ? "" : sourceUrl.toString(),
                             host,
                             null,
                             "",
                             OnlineRagReviewStatus.REJECTED,
-                            true
+                            true,
+                            false
                     ),
                     false,
                     false,

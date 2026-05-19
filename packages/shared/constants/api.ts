@@ -138,6 +138,8 @@ export const ApiPaths = {
   ADMIN: {
     AUDIT_LOGS: `/api/${API_VERSION}/admin/audit-logs`,
     AUDIT_LOGS_EXPORT: `/api/${API_VERSION}/admin/audit-logs/export`,
+    ONLINE_RAG_CITATIONS: `/api/${API_VERSION}/admin/online-rag-citations`,
+    ONLINE_RAG_CITATIONS_EXPORT: `/api/${API_VERSION}/admin/online-rag-citations/export`,
     REFERENCE_METRICS: `/api/${API_VERSION}/admin/reference-metrics`,
     REFERENCE_METRIC_DISPLAY_PATCH: (id: string) =>
       `/api/${API_VERSION}/admin/reference-metrics/${id}/display`,
