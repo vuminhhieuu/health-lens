@@ -77,6 +77,12 @@ app:
       ingestion:
         enabled: ${APP_AI_EXPLANATION_INGESTION_ENABLED:false}
         resource: ${APP_AI_EXPLANATION_INGESTION_RESOURCE:classpath:ai/metric-explanations.vi.json}
+    online-rag:
+      allowlisted-hosts: ${APP_AI_ONLINE_RAG_ALLOWLISTED_HOSTS:}
+      connect-timeout-ms: ${APP_AI_ONLINE_RAG_CONNECT_TIMEOUT_MS:3000}
+      read-timeout-ms: ${APP_AI_ONLINE_RAG_READ_TIMEOUT_MS:5000}
+      max-response-bytes: ${APP_AI_ONLINE_RAG_MAX_RESPONSE_BYTES:262144}
+      cache-max-age: ${APP_AI_ONLINE_RAG_CACHE_MAX_AGE:PT24H}
   ocr:
     providers:
       primary: ${OCR_PROVIDER_PRIMARY:easyocr}

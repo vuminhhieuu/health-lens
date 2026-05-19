@@ -15,3 +15,7 @@
 ## Deferred from: code review of 6-3-vietnamese-language-normalization-and-message-catalog.md (2026-05-17)
 
 - Cancel-deletion client treats every backend 409 as cancellation success at `apps/web/src/app/cancel-deletion/CancelDeletionClient.tsx:148`. Deferred because it appears pre-existing and outside the direct 6.3 diff, but it can mislead users into believing deletion cancellation succeeded when backend refused it.
+
+## Deferred from: code review of 3-5-trusted-online-rag-source-adapter-with-citation-and-cache.md (2026-05-19T14:40:36+07:00)
+
+- AC4 admin/audit inspection surface is ambiguous — Defer admin/audit inspection surface to a follow-up story because this story should finish adapter-level retrieval, citation metadata, persistence, and cache hardening first; answer-linked admin/audit API/UI needs separate scope. Story created: `_bmad-output/implementation-artifacts/epic-core-improvements/epic-3-llm-rag-governance/3-6-online-rag-citation-audit-inspection-surface.md` (`core-3-6-online-rag-citation-audit-inspection-surface`).
