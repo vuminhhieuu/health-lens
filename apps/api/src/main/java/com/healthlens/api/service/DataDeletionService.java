@@ -284,8 +284,9 @@ public class DataDeletionService {
 
         log.info("Starting data deletion: userId={} requestId={}", userId, deletionRequestId);
 
-        // 1. Object storage (PDFs / images) — best-effort, before DB rows so the keys remain available for tracing.
+        // 1. Object storage (PDFs / images / avatar) — best-effort, before DB rows so the keys remain available for tracing.
         int filesDeleted = storageService.deleteObjectsByPrefix("health-records/" + userId + "/");
+        int avatarFilesDeleted = storageService.deleteObjectsByPrefix("avatars/" + userId + "/");
 
         // 2-3. Health data tables (children of profile/user)
         int healthRecordsDeleted = healthRecordRepository.deleteAllByUserId(userId);
@@ -316,12 +317,17 @@ public class DataDeletionService {
         user.setFullName("[Deleted User]");
         user.setPasswordHash("[deleted]");
         user.setEmailVerified(false);
+        user.setAvatarStorageKey(null);
+        user.setAvatarContentType(null);
+        user.setAvatarSizeBytes(null);
+        user.setAvatarChecksumSha256(null);
+        user.setAvatarUpdatedAt(null);
         userRepository.save(user);
         accountStatusCache.put(userId, AccountStatus.DELETED);
 
         // AC #2 audit-trail line per architecture.md "Chiến Lược Audit Logging"
-        log.info("User data deleted per right-to-delete request: userId={} requestId={} files={} records={} profiles={} emailTokens={} resetTokens={} refreshTokens={} consentLogs={}",
-                userId, deletionRequestId, filesDeleted, healthRecordsDeleted, profilesDeleted,
+        log.info("User data deleted per right-to-delete request: userId={} requestId={} files={} avatarFiles={} records={} profiles={} emailTokens={} resetTokens={} refreshTokens={} consentLogs={}",
+                userId, deletionRequestId, filesDeleted, avatarFilesDeleted, healthRecordsDeleted, profilesDeleted,
                 emailVerificationDeleted, passwordResetDeleted, refreshTokensDeleted, consentLogsDeleted);
     }
 

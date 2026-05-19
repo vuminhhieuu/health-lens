@@ -41,10 +41,11 @@ export const API_ROUTES = {
   HEALTH: ApiPaths.HEALTH,
   HEALTH_RECORDS: ApiPaths.HEALTH_RECORDS,
   USERS: {
-    ME: "/api/v1/users/me",
-    DELETION_REQUEST: "/api/v1/users/me/deletion-request",
+    ME: ApiPaths.USERS.ME,
+    ME_AVATAR: ApiPaths.USERS.ME_AVATAR,
+    DELETION_REQUEST: ApiPaths.USERS.DELETION_REQUEST,
     /** Public cancel (no JWT): `DELETE` + query `token` from email — path is `/users/deletion-requests/...`, not `/users/me/...`. */
-    CANCEL_DELETION: "/api/v1/users/deletion-requests/cancel",
+    CANCEL_DELETION: ApiPaths.USERS.CANCEL_DELETION,
   },
   PROFILES: ApiPaths.PROFILES,
   ADMIN_AUTH: ApiPaths.ADMIN_AUTH,

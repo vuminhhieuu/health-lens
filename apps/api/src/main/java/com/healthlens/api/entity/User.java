@@ -43,6 +43,21 @@ public class User {
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified;
 
+    @Column(name = "avatar_storage_key", length = 512)
+    private String avatarStorageKey;
+
+    @Column(name = "avatar_content_type", length = 64)
+    private String avatarContentType;
+
+    @Column(name = "avatar_size_bytes")
+    private Long avatarSizeBytes;
+
+    @Column(name = "avatar_checksum_sha256", length = 64)
+    private String avatarChecksumSha256;
+
+    @Column(name = "avatar_updated_at")
+    private Instant avatarUpdatedAt;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserRole role;

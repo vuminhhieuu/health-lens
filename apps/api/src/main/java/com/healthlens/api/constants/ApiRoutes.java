@@ -48,6 +48,10 @@ public final class ApiRoutes {
     // User Paths (Frontend: ApiPaths.USERS)
     // =========================================
     public static final String USERS_BASE = API_V1 + "/users";
+    public static final String USERS_ME = USERS_BASE + "/me";
+    public static final String USERS_ME_AVATAR = USERS_ME + "/avatar";
+    public static final String USERS_ME_REL = "/me";
+    public static final String USERS_ME_AVATAR_REL = USERS_ME_REL + "/avatar";
 
     // =========================================
     // Profile Paths (Frontend: ApiPaths.PROFILES)

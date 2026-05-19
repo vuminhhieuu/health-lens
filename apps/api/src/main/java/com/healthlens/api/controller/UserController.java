@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.Map;
@@ -36,20 +37,36 @@ public class UserController {
         this.dataDeletionService = dataDeletionService;
     }
 
-    @GetMapping("/me")
+    @GetMapping(ApiRoutes.USERS_ME_REL)
     public ResponseEntity<Map<String, Object>> getCurrentUser(Authentication authentication) {
         UUID userId = extractUserId(authentication);
         UserResponse response = userService.getCurrentUser(userId);
         return ResponseEntity.ok(buildResponseBody(response));
     }
 
-    @PutMapping("/me")
+    @PutMapping(ApiRoutes.USERS_ME_REL)
     public ResponseEntity<Map<String, Object>> updateCurrentUser(
             Authentication authentication,
             @Valid @RequestBody UpdateUserRequest request) {
         
         UUID userId = extractUserId(authentication);
         UserResponse response = userService.updateCurrentUser(userId, request);
+        return ResponseEntity.ok(buildResponseBody(response));
+    }
+
+    @PutMapping(ApiRoutes.USERS_ME_AVATAR_REL)
+    public ResponseEntity<Map<String, Object>> uploadAvatar(
+            Authentication authentication,
+            @RequestParam("file") MultipartFile file) {
+        UUID userId = extractUserId(authentication);
+        UserResponse response = userService.uploadAvatar(userId, file);
+        return ResponseEntity.ok(buildResponseBody(response));
+    }
+
+    @DeleteMapping(ApiRoutes.USERS_ME_AVATAR_REL)
+    public ResponseEntity<Map<String, Object>> removeAvatar(Authentication authentication) {
+        UUID userId = extractUserId(authentication);
+        UserResponse response = userService.removeAvatar(userId);
         return ResponseEntity.ok(buildResponseBody(response));
     }
 

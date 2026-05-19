@@ -374,6 +374,7 @@ class DataDeletionServiceTest {
 
         // S3 files wiped under the user-scoped prefix
         verify(storageService).deleteObjectsByPrefix(startsWith("health-records/" + userId));
+        verify(storageService).deleteObjectsByPrefix(startsWith("avatars/" + userId));
 
         // DB tables wiped in dependency order
         verify(healthRecordRepository).deleteAllByUserId(userId);

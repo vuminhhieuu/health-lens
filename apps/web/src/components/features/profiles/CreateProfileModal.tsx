@@ -3,7 +3,7 @@
 import React, { useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { X, UserPlus, Calendar, Info, Loader2 } from "lucide-react";
+import { X, UserPlus, Info, Loader2 } from "lucide-react";
 import { CreateProfileInput, createProfileSchema } from "@healthlens/shared";
 
 interface CreateProfileModalProps {
@@ -100,13 +100,13 @@ export function CreateProfileModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-bold text-[#6d7a77] ml-1">Ngày sinh</label>
-                <div className="relative">
-                  <input 
+                <div>
+                  <input
+                    id="create-profile-birth-date"
                     type="date"
                     {...register("birthDate")}
-                    className="w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all pr-12"
+                    className="w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all"
                   />
-                  <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-[#6d7a77] pointer-events-none w-5 h-5" />
                 </div>
                 {errors.birthDate && (
                   <p className="text-xs font-bold text-[#ba1a1a] ml-1">{errors.birthDate.message}</p>

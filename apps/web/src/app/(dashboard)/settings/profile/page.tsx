@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
-  Pencil, Calendar, Cross, Key, Shield, Trash2, CheckCircle2
+  Pencil, Cross, Key, Shield, Trash2, CheckCircle2, User, X
 } from "lucide-react";
 
 import { apiClient } from "@/lib/api/apiClient";
@@ -22,17 +22,39 @@ type UserProfile = {
   birthDate: string;
   gender: string;
   emailVerified: boolean;
+  avatarUrl?: string | null;
 };
+
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+const ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+function getInitials(name?: string | null) {
+  const parts = (name ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return "";
+  }
+
+  return parts.slice(0, 2).map(part => part[0]?.toUpperCase()).join("");
+}
 
 export default function ProfileSettingsPage() {
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+  const [isAvatarRemovalPending, setIsAvatarRemovalPending] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
     control,
     reset,
-    formState: { errors, isValid, isSubmitting, isDirty },
+    formState: { errors, isValid, isDirty },
   } = useForm<UpdateUserProfileInput>({
     resolver: zodResolver(updateUserProfileSchema),
     mode: "onBlur",
@@ -58,29 +80,146 @@ export default function ProfileSettingsPage() {
     }
   }, [userProfile, reset]);
 
-  const updateMutation = useMutation({
+  useEffect(() => {
+    return () => {
+      if (avatarPreviewUrl) {
+        URL.revokeObjectURL(avatarPreviewUrl);
+      }
+    };
+  }, [avatarPreviewUrl]);
+
+  const saveMutation = useMutation({
     mutationFn: async (data: UpdateUserProfileInput) => {
       const payload = {
         ...data,
         birthDate: data.birthDate ? data.birthDate : null,
         gender: data.gender ? data.gender : null,
       };
-      const response = await apiClient.put(API_ROUTES.USERS.ME, payload);
-      return response.data;
+      const profileResponse = await apiClient.put(API_ROUTES.USERS.ME, payload);
+
+      if (pendingAvatarFile) {
+        const formData = new FormData();
+        formData.append("file", pendingAvatarFile);
+        const avatarResponse = await apiClient.put(API_ROUTES.USERS.ME_AVATAR, formData);
+        return avatarResponse.data;
+      }
+
+      if (isAvatarRemovalPending) {
+        const avatarResponse = await apiClient.delete(API_ROUTES.USERS.ME_AVATAR);
+        return avatarResponse.data;
+      }
+
+      return profileResponse.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["currentUser"] });
+    onSuccess: (payload) => {
+      setAvatarError(null);
+      setPendingAvatarFile(null);
+      setIsAvatarRemovalPending(false);
+      setAvatarPreviewUrl(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      if (payload?.data) {
+        queryClient.setQueryData(["currentUser"], payload.data);
+      }
       notify.success("Cập nhật thông tin thành công!");
     },
     onError: (error: unknown) => {
       console.error(error);
+      setAvatarError("Không thể lưu ảnh đại diện. Vui lòng thử lại.");
       notify.error("Đã xảy ra lỗi khi cập nhật.");
     },
   });
 
   const onSubmit = (data: UpdateUserProfileInput) => {
-    updateMutation.mutate(data);
+    saveMutation.mutate(data);
   };
+
+  const validateAvatarFile = (file: File) => {
+    if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
+      return "Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP.";
+    }
+    if (file.size === 0) {
+      return "Ảnh đại diện không được để trống.";
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      return "Ảnh đại diện tối đa 2MB.";
+    }
+    return null;
+  };
+
+  const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const validationError = validateAvatarFile(file);
+    if (validationError) {
+      setAvatarPreviewUrl(null);
+      setAvatarError(validationError);
+      notify.error(validationError);
+      event.target.value = "";
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setAvatarPreviewUrl(previous => {
+      if (previous) {
+        URL.revokeObjectURL(previous);
+      }
+      return previewUrl;
+    });
+    setAvatarError(null);
+    setPendingAvatarFile(file);
+    setIsAvatarRemovalPending(false);
+    event.target.value = "";
+  };
+
+  const handleAvatarRemove = () => {
+    if (pendingAvatarFile || avatarPreviewUrl) {
+      setPendingAvatarFile(null);
+      setAvatarPreviewUrl(previous => {
+        if (previous) {
+          URL.revokeObjectURL(previous);
+        }
+        return null;
+      });
+      setIsAvatarRemovalPending(false);
+      setAvatarError(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      return;
+    }
+
+    setIsAvatarRemovalPending(true);
+    setAvatarError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleCancel = () => {
+    reset();
+    setPendingAvatarFile(null);
+    setIsAvatarRemovalPending(false);
+    setAvatarError(null);
+    setAvatarPreviewUrl(previous => {
+      if (previous) {
+        URL.revokeObjectURL(previous);
+      }
+      return null;
+    });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const avatarSrc = isAvatarRemovalPending ? null : avatarPreviewUrl ?? userProfile?.avatarUrl ?? null;
+  const initials = getInitials(userProfile?.fullName);
+  const hasPendingAvatarChange = Boolean(pendingAvatarFile) || isAvatarRemovalPending;
+  const isSaving = saveMutation.isPending;
 
   if (isLoading) return <div className="p-8 text-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00685f] mx-auto"></div></div>;
   if (isError) return <div className="p-8 text-center text-[#ba1a1a]">Không thể tải thông tin hồ sơ.</div>;
@@ -102,20 +241,57 @@ export default function ProfileSettingsPage() {
             
             <div className="flex flex-col md:flex-row md:items-center gap-8 mb-10">
               <div className="relative group">
-                <div className="w-24 h-24 rounded-2xl overflow-hidden ring-4 ring-[#e9f6f3] shadow-md bg-[#d8e5e2]">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img alt="Avatar" className="w-full h-full object-cover" src="https://ui-avatars.com/api/?name=H+L&background=00685f&color=fff&size=256" />
+                <div className="w-24 h-24 rounded-2xl overflow-hidden ring-4 ring-[#e9f6f3] shadow-md bg-[#d8e5e2] flex items-center justify-center text-2xl font-black text-[#00685f]">
+                  {avatarSrc ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img alt="Ảnh đại diện" className="w-full h-full object-cover" src={avatarSrc} />
+                  ) : initials ? (
+                    <span aria-hidden="true">{initials}</span>
+                  ) : (
+                    <User className="h-10 w-10" aria-hidden="true" />
+                  )}
                 </div>
-                <button className="absolute -bottom-2 -right-2 bg-[#00685f] text-white p-2 rounded-lg shadow-lg active:scale-90 transition-transform">
+                <button
+                  type="button"
+                  aria-label="Chọn ảnh đại diện"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isSaving}
+                  className="absolute -bottom-2 -right-2 bg-[#00685f] text-white p-2 rounded-lg shadow-lg active:scale-90 transition-transform disabled:opacity-60"
+                >
                   <Pencil className="w-4 h-4" />
                 </button>
+                {avatarPreviewUrl || (userProfile?.avatarUrl && !isAvatarRemovalPending) ? (
+                  <button
+                    type="button"
+                    aria-label="Gỡ ảnh đại diện"
+                    onClick={handleAvatarRemove}
+                    disabled={isSaving}
+                    className="absolute -top-2 -right-2 bg-white text-[#ba1a1a] p-2 rounded-lg shadow-lg ring-1 ring-[#ba1a1a]/20 active:scale-90 transition-transform disabled:opacity-60"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                ) : null}
               </div>
               <div className="flex-grow">
                 <h3 className="text-xl font-bold text-[#121e1c] mb-1">Ảnh đại diện</h3>
                 <p className="text-sm text-[#6d7a77] mb-4">Cập nhật ảnh để bác sĩ dễ dàng nhận diện bạn hơn.</p>
-                <button className="px-5 py-2 border-2 border-[#6bd8cb] text-[#00685f] font-bold rounded-xl text-sm hover:bg-[#e9f6f3] transition-colors">
-                  Thay đổi ảnh
-                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={ALLOWED_AVATAR_TYPES.join(",")}
+                  onChange={handleAvatarChange}
+                  className="sr-only"
+                  aria-label="Tải ảnh đại diện"
+                />
+                {pendingAvatarFile ? (
+                  <p className="text-sm font-bold text-[#00685f]" role="status">Ảnh sẽ được cập nhật khi lưu.</p>
+                ) : null}
+                {isAvatarRemovalPending ? (
+                  <p className="text-sm font-bold text-[#00685f]" role="status">Ảnh sẽ được gỡ khi lưu.</p>
+                ) : null}
+                {avatarError ? (
+                  <p className="mt-3 text-sm font-medium text-[#ba1a1a]" role="alert">{avatarError}</p>
+                ) : null}
               </div>
             </div>
 
@@ -144,13 +320,13 @@ export default function ProfileSettingsPage() {
 
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-bold text-[#6d7a77]">Ngày sinh</label>
-                <div className="relative">
-                  <input 
-                    type="date" 
+                <div>
+                  <input
+                    id="profile-settings-birth-date"
+                    type="date"
                     {...register("birthDate")}
-                    className="h-12 w-full px-4 pr-10 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c]" 
+                    className="h-12 w-full px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c]"
                   />
-                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6d7a77] pointer-events-none w-5 h-5" />
                 </div>
                 {errors.birthDate && <p className="text-sm text-[#ba1a1a]">{errors.birthDate.message}</p>}
               </div>
@@ -201,17 +377,17 @@ export default function ProfileSettingsPage() {
               <div className="md:col-span-2 flex justify-end gap-4 mt-4 pt-6 border-t border-[#bcc9c6]/20">
                 <button 
                   type="button" 
-                  onClick={() => reset()}
+                  onClick={handleCancel}
                   className="px-8 py-3 rounded-xl font-bold text-[#3d4947] hover:bg-[#e9f6f3] transition-colors"
                 >
                   Hủy
                 </button>
                 <button 
                   type="submit" 
-                  disabled={isSubmitting || !isValid}
+                  disabled={isSaving || (!isValid && !hasPendingAvatarChange)}
                   className="px-8 py-3 bg-gradient-to-r from-[#00685f] to-[#008378] text-white rounded-xl font-bold shadow-lg shadow-[#00685f]/20 active:scale-95 transition-all disabled:opacity-60"
                 >
-                  {isSubmitting ? "Đang lưu..." : "Lưu thay đổi"}
+                  {isSaving ? "Đang lưu..." : "Lưu thay đổi"}
                 </button>
               </div>
             </form>
