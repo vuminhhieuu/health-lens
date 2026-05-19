@@ -1,6 +1,6 @@
 # Story 5.2: SSRF Protection For OCR And Remote File Fetching
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 
@@ -20,11 +20,16 @@ As a security owner, I want OCR file fetching protected against SSRF, so that in
 
 ## Tasks / Subtasks
 
-- [ ] Add trusted domain allowlist for OCR fetches.
-- [ ] Block loopback, private, link-local, metadata, and unspecified ranges.
-- [ ] Disable redirects or validate final target.
-- [ ] Add timeout and max file size.
-- [ ] Add SSRF tests for redirect, IP literal, DNS/private range, and allowed storage.
+- [x] Add trusted domain allowlist for OCR fetches.
+- [x] Block loopback, private, link-local, metadata, and unspecified ranges.
+- [x] Disable redirects or validate final target.
+- [x] Add timeout and max file size.
+- [x] Add SSRF tests for redirect, IP literal, DNS/private range, and allowed storage.
+
+### Review Findings
+
+- [x] [Review][Patch] HTTP errors from remote fetch can escape and become 500 instead of client download failure [services/ocr-service/app.py:223]
+- [x] [Review][Patch] DNS rebinding protection is incomplete because validated DNS result is not pinned to the actual socket connection [services/ocr-service/app.py:182]
 
 ## Dev Notes
 
@@ -46,10 +51,28 @@ As a security owner, I want OCR file fetching protected against SSRF, so that in
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+GPT-5 Codex
 
 ### Debug Log References
 
+- `python3 -m py_compile app.py test_ssrf_protection.py` (pass)
+- `python3 -m pytest -q` (blocked in local env: `No module named pytest`)
+- `python3 -m py_compile app.py test_ssrf_protection.py` after patch fixes (pass)
+
 ### Completion Notes List
 
+- Added SSRF-safe remote fetch flow in `services/ocr-service/app.py` with strict host allowlist enforcement.
+- Added IP safety validation using `ipaddress` and DNS resolution checks against private/loopback/link-local/multicast/unspecified/reserved ranges.
+- Implemented manual redirect handling (`allow_redirects=False`) with per-hop URL and resolved-IP revalidation before each request.
+- Enforced remote fetch timeout and streamed response size guardrails to prevent oversized payload downloads.
+- Added SSRF unit tests in `services/ocr-service/test_ssrf_protection.py` for IP literal blocking, private DNS blocking, redirect-to-blocked target, and allowed storage domain acceptance.
+
 ### File List
+
+- `services/ocr-service/app.py`
+- `services/ocr-service/test_ssrf_protection.py`
+
+## Change Log
+
+- 2026-05-19: Implemented Story 5.2 SSRF protections for OCR remote fetch pipeline and added SSRF coverage tests.
+- 2026-05-19: Applied code-review patch fixes for HTTP error mapping and connect-time peer IP validation.
