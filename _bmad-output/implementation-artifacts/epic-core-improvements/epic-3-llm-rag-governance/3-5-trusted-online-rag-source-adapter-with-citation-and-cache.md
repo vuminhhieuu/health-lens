@@ -1,6 +1,6 @@
 # Story 3.5: Trusted Online RAG Source Adapter With Citation And Cache
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 
@@ -20,11 +20,20 @@ As a product owner, I want online RAG limited to trusted and auditable sources, 
 
 ## Tasks / Subtasks
 
-- [ ] Add trusted source allowlist.
-- [ ] Add source metadata model.
-- [ ] Add retrieval cache/snapshot hash.
-- [ ] Add review status and exclusion rules.
-- [ ] Add tests for rejected, cached, approved, and unreviewed sources.
+- [x] Add trusted source allowlist.
+- [x] Add source metadata model.
+- [x] Add retrieval cache/snapshot hash.
+- [x] Add review status and exclusion rules.
+- [x] Add tests for rejected, cached, approved, and unreviewed sources.
+
+### Review Findings
+
+- [x] [Review][Defer] AC4 admin/audit inspection surface is ambiguous — deferred: Defer admin/audit inspection surface to a follow-up story because this story should finish adapter-level retrieval, citation metadata, persistence, and cache hardening first; answer-linked admin/audit API/UI needs separate scope.
+- [x] [Review][Patch] Revalidate redirects and require HTTPS before fetching trusted online sources [apps/api/src/main/java/com/healthlens/api/service/rag/TrustedOnlineRagSourcePolicy.java:26]
+- [x] [Review][Patch] Add HTTP timeouts and max response size before storing snapshots [apps/api/src/main/java/com/healthlens/api/service/rag/RestTemplateOnlineRagHttpClient.java:14]
+- [x] [Review][Patch] Validate source URL, host, and publisher lengths before network fetch and save [apps/api/src/main/java/com/healthlens/api/service/rag/TrustedOnlineRagSourceAdapter.java:52]
+- [x] [Review][Patch] Add cache freshness or explicit refresh policy for online snapshots [apps/api/src/main/java/com/healthlens/api/service/rag/TrustedOnlineRagSourceAdapter.java:52]
+
 
 ## Dev Notes
 
@@ -46,10 +55,43 @@ As a product owner, I want online RAG limited to trusted and auditable sources, 
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+GPT-5
 
 ### Debug Log References
 
+- `./gradlew --no-daemon test --tests com.healthlens.api.service.rag.TrustedOnlineRagSourceAdapterTest` - passed.
+- `./gradlew --no-daemon test --tests com.healthlens.api.HealthLensApplicationTests --tests com.healthlens.api.service.AuthServiceIntegrationTest --tests com.healthlens.api.service.rag.TrustedOnlineRagSourceAdapterTest` - passed after adding constructor `@Autowired`.
+- `./gradlew --no-daemon test` - passed, 430 tests.
+
 ### Completion Notes List
 
+- Added an online RAG source policy backed by `app.ai.online-rag.allowlisted-hosts`, defaulting to an empty allowlist so online retrieval is opt-in.
+- Added a trusted online RAG adapter that accepts explicit URLs only, rejects non-allowlisted hosts without HTTP access, snapshots allowlisted content, computes SHA-256 snapshot hashes, and returns content to AI only when the cached snapshot is approved and not excluded.
+- Added persisted online source metadata including source URL, canonical host, publisher, retrievedAt, snapshotHash, reviewStatus, exclusion flag, content length, and content snapshot for audit/citation inspection.
+- Added unit tests covering rejected, newly cached/review-required, approved cached, and unreviewed cached source behavior.
+
 ### File List
+
+- apps/api/src/main/java/com/healthlens/api/entity/OnlineRagReviewStatus.java
+- apps/api/src/main/java/com/healthlens/api/entity/OnlineRagSourceSnapshot.java
+- apps/api/src/main/java/com/healthlens/api/repository/OnlineRagSourceSnapshotRepository.java
+- apps/api/src/main/java/com/healthlens/api/service/rag/OnlineRagHttpClient.java
+- apps/api/src/main/java/com/healthlens/api/service/rag/RestTemplateOnlineRagHttpClient.java
+- apps/api/src/main/java/com/healthlens/api/service/rag/TrustedOnlineRagSourceAdapter.java
+- apps/api/src/main/java/com/healthlens/api/service/rag/TrustedOnlineRagSourcePolicy.java
+- apps/api/src/main/resources/application.yml
+- apps/api/src/main/resources/db/migration/V037__create_online_rag_source_snapshots.sql
+- apps/api/src/test/java/com/healthlens/api/service/rag/TrustedOnlineRagSourceAdapterTest.java
+
+### Change Log
+
+- 2026-05-19T14:03:27+07:00 - Implemented trusted online RAG source adapter with citation metadata, snapshot cache, review gating, and regression tests.
+
+### Review Findings
+
+- [x] [Review][Defer] AC4 admin/audit inspection surface is ambiguous — deferred: Defer admin/audit inspection surface to a follow-up story because this story should finish adapter-level retrieval, citation metadata, persistence, and cache hardening first; answer-linked admin/audit API/UI needs separate scope.
+- [x] [Review][Patch] Revalidate redirects and require HTTPS before fetching trusted online sources [apps/api/src/main/java/com/healthlens/api/service/rag/TrustedOnlineRagSourcePolicy.java:26]
+- [x] [Review][Patch] Add HTTP timeouts and max response size before storing snapshots [apps/api/src/main/java/com/healthlens/api/service/rag/RestTemplateOnlineRagHttpClient.java:14]
+- [x] [Review][Patch] Validate source URL, host, and publisher lengths before network fetch and save [apps/api/src/main/java/com/healthlens/api/service/rag/TrustedOnlineRagSourceAdapter.java:52]
+- [x] [Review][Patch] Add cache freshness or explicit refresh policy for online snapshots [apps/api/src/main/java/com/healthlens/api/service/rag/TrustedOnlineRagSourceAdapter.java:52]
+
