@@ -10,5 +10,6 @@ public record UserResponse(
                 LocalDate birthDate,
                 String gender,
                 boolean emailVerified,
-                Boolean consentGiven) {
+                Boolean consentGiven,
+                String avatarUrl) {
 }

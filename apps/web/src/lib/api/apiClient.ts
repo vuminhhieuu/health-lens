@@ -77,6 +77,11 @@ apiClient.interceptors.request.use(async (config) => {
   const headers = AxiosHeaders.from(config.headers);
   config.headers = headers;
 
+  if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+    headers.delete("Content-Type");
+    headers.delete("content-type");
+  }
+
   const isCancelDeletion =
     config.url?.includes("/deletion-requests/cancel");
 

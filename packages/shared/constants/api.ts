@@ -40,6 +40,14 @@ export const ApiPaths = {
   },
 
   /** User/Profile management endpoints */
+  USERS: {
+    ME: `/api/${API_VERSION}/users/me`,
+    ME_AVATAR: `/api/${API_VERSION}/users/me/avatar`,
+    DELETION_REQUEST: `/api/${API_VERSION}/users/me/deletion-request`,
+    CANCEL_DELETION: `/api/${API_VERSION}/users/deletion-requests/cancel`,
+  },
+
+  /** Profile management endpoints */
   PROFILES: {
     BASE: `/api/${API_VERSION}/profiles`,
     LIST: `/api/${API_VERSION}/profiles`,

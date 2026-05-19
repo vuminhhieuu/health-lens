@@ -3,7 +3,7 @@
 import React, { useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { X, FileEdit, Calendar, Info, Loader2 } from "lucide-react";
+import { X, FileEdit, Info, Loader2 } from "lucide-react";
 import { UpdateProfileInput, updateProfileSchema } from "@healthlens/shared";
 import type { ProfileGender } from "@healthlens/shared";
 
@@ -150,14 +150,14 @@ export function EditProfileModal({
                 <label className="text-sm font-bold text-[#6d7a77] ml-1">
                   Ngày sinh
                 </label>
-                <div className="relative">
+                <div>
                   <input
+                    id="edit-profile-birth-date"
                     type="date"
                     {...register("birthDate")}
                     readOnly={isReadOnly}
-                    className={`w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all pr-12 ${isReadOnly ? "cursor-default" : ""}`}
+                    className={`w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all ${isReadOnly ? "cursor-default" : ""}`}
                   />
-                  <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-[#6d7a77] pointer-events-none w-5 h-5" />
                 </div>
                 {errors.birthDate && (
                   <p className="text-xs font-bold text-[#ba1a1a] ml-1">

@@ -7,12 +7,23 @@ import { useAuthStore } from "@/stores/authStore";
 import { useAuthBootstrap } from "@/hooks/useAuthBootstrap";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import {
   Search, Bell, HelpCircle,
   Home, FileText, User, Users, Settings, LogOut, Shield
 } from "lucide-react";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+
+type CurrentUser = {
+  id?: string;
+  email?: string;
+  fullName?: string;
+  birthDate?: string | null;
+  gender?: string | null;
+  emailVerified?: boolean;
+  avatarUrl?: string | null;
+};
 
 export default function DashboardLayout({
   children,
@@ -28,6 +39,18 @@ export default function DashboardLayout({
   const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
+
+  const { data: currentUser } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: async () => {
+      const response = await apiClient.get(API_ROUTES.USERS.ME);
+      return response.data?.data as CurrentUser;
+    },
+    enabled: isAuthenticated,
+    staleTime: 12 * 60 * 1000,
+    refetchInterval: 12 * 60 * 1000,
+    refetchOnWindowFocus: true,
+  });
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -49,31 +72,19 @@ export default function DashboardLayout({
     }
   }, [isLoading, isAuthenticated, router]);
 
-  // Derive display name: prefer auth store fullName, fallback to /users/me API
+  // Derive display name from the shared current-user query used by profile settings.
   useEffect(() => {
-    if (!isAuthenticated) return;
-
-    // Fast path: use fullName already in auth store (from login/refresh)
-    if (user?.fullName) {
-      const parts = user.fullName.trim().split(/\s+/);
-      setDisplayName(parts.slice(-2).join(" "));
+    const fullName = currentUser?.fullName ?? user?.fullName;
+    if (!fullName) {
+      setDisplayName(null);
       return;
     }
+    const parts = fullName.trim().split(/\s+/);
+    setDisplayName(parts.slice(-2).join(" "));
+  }, [currentUser?.fullName, user?.fullName]);
 
-    // Slow path: fetch from API only when store lacks fullName
-    let cancelled = false;
-    apiClient.get(API_ROUTES.USERS.ME)
-      .then((res) => {
-        if (cancelled) return;
-        const fullName: string | undefined = res.data?.data?.fullName;
-        if (fullName) {
-          const parts = fullName.trim().split(/\s+/);
-          setDisplayName(parts.slice(-2).join(" "));
-        }
-      })
-      .catch(() => { /* ignore — will fall back to email */ });
-    return () => { cancelled = true; };
-  }, [isAuthenticated, user?.fullName]);
+  const avatarInitial = (displayName ?? user?.fullName ?? user?.email ?? "U").trim()[0]?.toUpperCase() ?? "U";
+  const avatarUrl = currentUser?.avatarUrl ?? null;
 
   if (isLoading) {
     return (
@@ -170,10 +181,15 @@ export default function DashboardLayout({
           <div className="relative" ref={avatarMenuRef}>
             <button
               onClick={() => setIsAvatarMenuOpen(!isAvatarMenuOpen)}
-              className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#89f5e7] bg-[#d8e5e2] focus:outline-none focus:ring-2 focus:ring-[#00685f]/50 transition-all block"
+              className="flex w-10 h-10 items-center justify-center rounded-full overflow-hidden border-2 border-[#89f5e7] bg-[#d8e5e2] text-sm font-black text-[#00685f] focus:outline-none focus:ring-2 focus:ring-[#00685f]/50 transition-all"
+              aria-label="Mở menu tài khoản"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img alt="Avatar" className="w-full h-full object-cover" src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.email?.[0] || 'U')}&background=00685f&color=fff&size=256`} />
+              {avatarUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img alt="Ảnh đại diện" className="w-full h-full object-cover" src={avatarUrl} />
+              ) : (
+                <span aria-hidden="true">{avatarInitial}</span>
+              )}
             </button>
 
             {isAvatarMenuOpen && (
@@ -217,8 +233,13 @@ export default function DashboardLayout({
           <div className="mb-8 px-2">
             <p className="text-xs font-bold uppercase tracking-widest text-[#6d7a77] mb-4">Tài khoản</p>
             <div className="flex items-center gap-3 mb-6 bg-white p-3 rounded-2xl shadow-sm border border-[#bcc9c6]/20">
-              <div className="w-12 h-12 rounded-xl bg-[#008378] flex items-center justify-center text-white">
-                <User className="w-6 h-6" />
+              <div className="w-12 h-12 rounded-xl bg-[#008378] flex items-center justify-center overflow-hidden text-white font-black">
+                {avatarUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={avatarUrl} alt="Ảnh đại diện" className="h-full w-full object-cover" />
+                ) : (
+                  <User className="h-6 w-6" aria-hidden="true" />
+                )}
               </div>
               <div>
                 <h4 className="font-bold text-[#005049] line-clamp-1">
