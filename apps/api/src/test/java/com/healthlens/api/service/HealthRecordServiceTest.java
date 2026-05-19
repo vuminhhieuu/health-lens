@@ -12,8 +12,10 @@ import com.healthlens.api.dto.response.ConfirmUploadResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.entity.HealthRecord;
+import com.healthlens.api.entity.HealthRecordShare;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.exception.ConsentRequiredException;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
 import com.healthlens.api.repository.HealthRecordShareRepository;
@@ -50,6 +52,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -67,6 +70,7 @@ class HealthRecordServiceTest {
     @Mock private ReferenceDataService referenceDataService;
     @Mock private MetricExplanationRetrievalService metricExplanationRetrievalService;
     @Mock private LlmService llmService;
+    @Mock private ConsentService consentService;
     @Mock private HealthRecordPdfService healthRecordPdfService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
@@ -85,6 +89,7 @@ class HealthRecordServiceTest {
                 referenceDataService,
                 metricExplanationRetrievalService,
                 llmService,
+                consentService,
                 healthRecordPdfService,
                 healthRecordLegacyAuditWriter,
                 unifiedAuditCoordinator,
@@ -93,6 +98,7 @@ class HealthRecordServiceTest {
                 new ObjectMapper(),
                 "ocr.events"
         );
+        lenient().when(consentService.hasConsent(any(UUID.class), anyString())).thenReturn(true);
     }
 
     @Test
@@ -488,11 +494,13 @@ class HealthRecordServiceTest {
         record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
         when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
         when(metricExplanationRetrievalService.retrieve(
                 nullable(String.class),
                 nullable(String.class),
                 any(ReferenceRangeDto.class),
-                nullable(String.class)))
+                nullable(String.class),
+                any(MetricExplanationRetrievalService.RetrievalContext.class)))
                 .thenReturn(new MetricExplanationRetrievalService.RetrievalResult(
                         "Metric identity: ...\nClinical relation: ...\nOut-of-range impact: ...",
                         "qdrant",
@@ -512,11 +520,132 @@ class HealthRecordServiceTest {
 
         assertThat(response.explanation()).isEqualTo("Giải thích đơn giản");
         assertThat(response.source()).isEqualTo("llm");
+        assertThat(response.retrievalTrace().source()).isEqualTo("qdrant");
+        ArgumentCaptor<MetricExplanationRetrievalService.RetrievalContext> contextCaptor =
+                ArgumentCaptor.forClass(MetricExplanationRetrievalService.RetrievalContext.class);
         verify(metricExplanationRetrievalService).retrieve(
                 eq("Glucose"),
                 eq("normal"),
                 any(ReferenceRangeDto.class),
-                eq("vi")
+                eq("vi"),
+                contextCaptor.capture()
+        );
+        assertThat(contextCaptor.getValue().profileContextSnippet()).contains("\"accessScope\":\"owner\"");
+    }
+
+    @Test
+    @DisplayName("getMetricExplanation record-level share không đưa profile context và không yêu cầu consent")
+    void getMetricExplanation_recordLevelShare_omitsProfileContextAndConsent() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        MetricDto metric = MetricDto.builder()
+                .name("Glucose")
+                .value("5.6")
+                .status("normal")
+                .referenceRange(new ReferenceRangeDto(
+                        BigDecimal.valueOf(3.9),
+                        BigDecimal.valueOf(6.4),
+                        BigDecimal.valueOf(3.2),
+                        BigDecimal.valueOf(7.1),
+                        "mmol/L"
+                ))
+                .build();
+        HealthRecord record = newOwnedRecord(ownerId, recordId);
+        record.setProfileId(profileId);
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
+        HealthRecordShare share = new HealthRecordShare();
+        share.setHealthRecordId(recordId);
+        share.setProfileId(profileId);
+        share.setOwnerId(ownerId);
+        share.setViewerId(viewerId);
+        share.setAccessLevel("view");
+
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, viewerId)).thenReturn(Optional.empty());
+        when(healthRecordRepository.findByIdAndDeletedAtIsNull(recordId)).thenReturn(Optional.of(record));
+        when(profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId)).thenReturn(false);
+        when(healthRecordShareRepository.existsByHealthRecordIdAndViewerIdAndRevokedAtIsNull(recordId, viewerId)).thenReturn(true);
+        when(healthRecordShareRepository.findByHealthRecordIdAndViewerIdAndRevokedAtIsNull(recordId, viewerId)).thenReturn(Optional.of(share));
+        when(metricExplanationRetrievalService.retrieve(
+                nullable(String.class),
+                nullable(String.class),
+                any(ReferenceRangeDto.class),
+                nullable(String.class),
+                any(MetricExplanationRetrievalService.RetrievalContext.class)))
+                .thenReturn(new MetricExplanationRetrievalService.RetrievalResult(
+                        "Metric identity: ...",
+                        "reference-data",
+                        false,
+                        0.0
+                ));
+        when(llmService.generateExplanationResult(
+                nullable(String.class),
+                nullable(String.class),
+                nullable(String.class),
+                any(ReferenceRangeDto.class),
+                nullable(String.class),
+                nullable(String.class)))
+                .thenReturn(new LlmService.ExplanationResult("Giải thích đơn giản", "llm"));
+
+        healthRecordService.getMetricExplanation(viewerId, recordId, "Glucose");
+
+        ArgumentCaptor<MetricExplanationRetrievalService.RetrievalContext> contextCaptor =
+                ArgumentCaptor.forClass(MetricExplanationRetrievalService.RetrievalContext.class);
+        verify(metricExplanationRetrievalService).retrieve(
+                eq("Glucose"),
+                eq("normal"),
+                any(ReferenceRangeDto.class),
+                eq("vi"),
+                contextCaptor.capture()
+        );
+        assertThat(contextCaptor.getValue().profileContextAllowed()).isFalse();
+        assertThat(contextCaptor.getValue().profileContextSnippet()).isNull();
+        verify(consentService, never()).hasConsent(eq(viewerId), anyString());
+        verify(profileRepository, never()).findById(profileId);
+    }
+
+    @Test
+    @DisplayName("getMetricExplanation chặn profile context khi user chưa consent")
+    void getMetricExplanation_withoutConsent_blocksBeforeRetrieval() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        MetricDto metric = MetricDto.builder()
+                .name("Glucose")
+                .value("5.6")
+                .status("normal")
+                .referenceRange(new ReferenceRangeDto(
+                        BigDecimal.valueOf(3.9),
+                        BigDecimal.valueOf(6.4),
+                        BigDecimal.valueOf(3.2),
+                        BigDecimal.valueOf(7.1),
+                        "mmol/L"
+                ))
+                .build();
+        HealthRecord record = newOwnedRecord(userId, recordId);
+        record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
+
+        when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId)).thenReturn(Optional.of(record));
+        when(consentService.hasConsent(eq(userId), anyString())).thenReturn(false);
+
+        assertThatThrownBy(() -> healthRecordService.getMetricExplanation(userId, recordId, "Glucose"))
+                .isInstanceOf(ConsentRequiredException.class)
+                .hasMessageContaining("đồng thuận");
+
+        verify(metricExplanationRetrievalService, never()).retrieve(
+                anyString(),
+                anyString(),
+                any(),
+                anyString(),
+                any(MetricExplanationRetrievalService.RetrievalContext.class)
+        );
+        verify(llmService, never()).generateExplanationResult(
+                anyString(),
+                anyString(),
+                anyString(),
+                any(),
+                anyString(),
+                nullable(String.class)
         );
     }
 

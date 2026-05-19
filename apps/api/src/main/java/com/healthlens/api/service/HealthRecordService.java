@@ -12,6 +12,7 @@ import com.healthlens.api.dto.response.HealthRecordHistoryItemResponse;
 import com.healthlens.api.dto.response.HealthRecordHistoryPageResponse;
 import com.healthlens.api.dto.response.MetricExplanationResponse;
 import com.healthlens.api.dto.response.RecommendationsResponse;
+import com.healthlens.api.dto.response.RetrievalTraceResponse;
 import com.healthlens.api.dto.response.SharedHealthRecordResponse;
 import com.healthlens.api.dto.response.HealthRecordStatusResponse;
 import com.healthlens.api.dto.response.PaginationResponse;
@@ -27,10 +28,12 @@ import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.audit.HealthRecordLegacyAuditWriter;
 import com.healthlens.api.audit.UnifiedAuditCoordinator;
 import com.healthlens.api.audit.UnifiedAuditSnapshot;
+import com.healthlens.api.constants.ConsentConstants;
 import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.HealthRecordShare;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.exception.ConsentRequiredException;
 import com.healthlens.api.exception.ProfileAccessRevokedException;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
@@ -77,6 +80,7 @@ public class HealthRecordService {
     private static final Duration UPLOAD_RESERVATION_TTL = Duration.ofMinutes(20);
     private static final String STATUS_PROCESSING = "processing";
     private static final int HISTORY_PAGE_SIZE = 20;
+    private static final int PROFILE_CONTEXT_VALUE_LIMIT = 120;
     private static final String RECOMMENDATIONS_DISCLAIMER = LlmService.MEDICAL_RECOMMENDATIONS_DISCLAIMER;
 
     private final StorageService storageService;
@@ -87,6 +91,7 @@ public class HealthRecordService {
     private final ReferenceDataService referenceDataService;
     private final MetricExplanationRetrievalService metricExplanationRetrievalService;
     private final LlmService llmService;
+    private final ConsentService consentService;
     private final HealthRecordPdfService healthRecordPdfService;
     private final HealthRecordLegacyAuditWriter healthRecordLegacyAuditWriter;
     private final UnifiedAuditCoordinator unifiedAuditCoordinator;
@@ -104,6 +109,7 @@ public class HealthRecordService {
             ReferenceDataService referenceDataService,
             MetricExplanationRetrievalService metricExplanationRetrievalService,
             LlmService llmService,
+            ConsentService consentService,
             HealthRecordPdfService healthRecordPdfService,
             HealthRecordLegacyAuditWriter healthRecordLegacyAuditWriter,
             UnifiedAuditCoordinator unifiedAuditCoordinator,
@@ -120,6 +126,7 @@ public class HealthRecordService {
         this.referenceDataService = referenceDataService;
         this.metricExplanationRetrievalService = metricExplanationRetrievalService;
         this.llmService = llmService;
+        this.consentService = consentService;
         this.healthRecordPdfService = healthRecordPdfService;
         this.healthRecordLegacyAuditWriter = healthRecordLegacyAuditWriter;
         this.unifiedAuditCoordinator = unifiedAuditCoordinator;
@@ -431,7 +438,10 @@ public class HealthRecordService {
 
     @Transactional(readOnly = true)
     public MetricExplanationResponse getMetricExplanation(UUID userId, UUID recordId, String metricName) {
-        HealthRecord record = loadAccessibleRecord(userId, recordId).record();
+        AccessibleRecord accessibleRecord = loadAccessibleRecord(userId, recordId);
+        HealthRecord record = accessibleRecord.record();
+        MetricExplanationRetrievalService.RetrievalContext retrievalContext =
+                buildRetrievalContext(userId, record, accessibleRecord);
 
         MetricDto metric = parseMetrics(record.getMetrics()).stream()
                 .filter(item -> item.getName() != null && item.getName().equalsIgnoreCase(metricName))
@@ -442,7 +452,8 @@ public class HealthRecordService {
                 metric.getName(),
                 metric.getStatus(),
                 metric.getReferenceRange(),
-                "vi"
+                "vi",
+                retrievalContext
         );
 
         LlmService.ExplanationResult result = llmService.generateExplanationResult(
@@ -458,8 +469,74 @@ public class HealthRecordService {
                 result.explanation(),
                 result.source(),
                 result.promptVersion(),
-                result.modelVersion()
+                result.modelVersion(),
+                toRetrievalTraceResponse(retrievalResult.trace())
         );
+    }
+
+    private void assertConsentForProfileContext(UUID userId) {
+        if (!consentService.hasConsent(userId, ConsentConstants.ACTIVE_VERSION)) {
+            throw new ConsentRequiredException("Bạn cần xác nhận đồng thuận trước khi tạo giải thích AI cho dữ liệu sức khỏe");
+        }
+    }
+
+    private MetricExplanationRetrievalService.RetrievalContext buildRetrievalContext(
+            UUID userId,
+            HealthRecord record,
+            AccessibleRecord accessibleRecord
+    ) {
+        if (record.getProfileId() == null || "record".equals(accessibleRecord.shareScope())) {
+            return MetricExplanationRetrievalService.RetrievalContext.none();
+        }
+        assertConsentForProfileContext(userId);
+        return profileRepository.findById(record.getProfileId())
+                .map(profile -> new MetricExplanationRetrievalService.RetrievalContext(
+                        true,
+                        buildProfileContextSnippet(profile, record, accessibleRecord)
+                ))
+                .orElseGet(MetricExplanationRetrievalService.RetrievalContext::none);
+    }
+
+    private String buildProfileContextSnippet(Profile profile, HealthRecord record, AccessibleRecord accessibleRecord) {
+        Map<String, Object> context = new LinkedHashMap<>();
+        if (profile.getDisplayName() != null && !profile.getDisplayName().isBlank()) {
+            context.put("profileName", sanitizePromptContextValue(profile.getDisplayName(), PROFILE_CONTEXT_VALUE_LIMIT));
+        }
+        if (profile.getGender() != null && !profile.getGender().isBlank()) {
+            context.put("gender", sanitizePromptContextValue(profile.getGender(), 40));
+        }
+        Integer age = resolveAge(profile, record.getExamDate());
+        if (age != null) {
+            context.put("age", age);
+        }
+        if (record.getExamDate() != null) {
+            context.put("examDate", record.getExamDate().toString());
+        }
+        context.put("accessScope", accessibleRecord.shareScope());
+        try {
+            return objectMapper.writeValueAsString(context);
+        } catch (JsonProcessingException ex) {
+            log.warn("Failed to serialize metric explanation profile context: {}", ex.getMessage());
+            return "{}";
+        }
+    }
+
+    private String sanitizePromptContextValue(String value, int maxChars) {
+        String sanitized = value == null ? "" : value
+                .replaceAll("\\p{Cntrl}", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        if (sanitized.length() <= maxChars) {
+            return sanitized;
+        }
+        return sanitized.substring(0, maxChars);
+    }
+
+    private RetrievalTraceResponse toRetrievalTraceResponse(MetricExplanationRetrievalService.RetrievalTrace trace) {
+        if (trace == null) {
+            return null;
+        }
+        return new RetrievalTraceResponse(trace.source(), trace.hit(), trace.topScore(), trace.fallbackPath());
     }
 
     @Transactional(readOnly = true)
