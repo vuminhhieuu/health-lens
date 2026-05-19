@@ -27,17 +27,20 @@ public class MetricExplanationRetrievalService {
 
     private final VectorStoreService vectorStoreService;
     private final ReferenceDataService referenceDataService;
+    private final RagCorpusGovernanceService governanceService;
     private final MeterRegistry meterRegistry;
     private final int topK;
 
     public MetricExplanationRetrievalService(
             VectorStoreService vectorStoreService,
             ReferenceDataService referenceDataService,
+            RagCorpusGovernanceService governanceService,
             MeterRegistry meterRegistry,
             @Value("${app.ai.explanation.retrieval.top-k:3}") int topK
     ) {
         this.vectorStoreService = vectorStoreService;
         this.referenceDataService = referenceDataService;
+        this.governanceService = governanceService;
         this.meterRegistry = meterRegistry;
         this.topK = topK;
     }
@@ -48,21 +51,24 @@ public class MetricExplanationRetrievalService {
         long startNanos = System.nanoTime();
 
         try {
-            String query = buildQuery(safeMetric, status, referenceRange);
-            String filter = "language == '" + normalizedLang + "'";
-            List<Document> documents = vectorStoreService.semanticSearch(query, topK, filter);
-            List<Document> metricMatchedDocuments = documents.stream()
-                    .filter(document -> matchesMetricOrAlias(document, safeMetric))
-                    .collect(Collectors.toList());
-            if (!metricMatchedDocuments.isEmpty()) {
-                String snippet = composeSnippet(metricMatchedDocuments);
-                double topScore = resolveTopScore(metricMatchedDocuments.get(0));
-                recordMetrics(SOURCE_QDRANT, true, topScore, startNanos);
-                log.info(
-                        "metric_explanation_retrieval source={} hit={} metric={} topScore={} latencyMs={}",
-                        SOURCE_QDRANT, true, safeMetric, topScore, elapsedMs(startNanos)
-                );
-                return new RetrievalResult(snippet, SOURCE_QDRANT, true, topScore);
+            Optional<String> activeVersion = governanceService.activeApprovedVersion();
+            if (activeVersion.isPresent()) {
+                String query = buildQuery(safeMetric, status, referenceRange);
+                String filter = buildGovernedFilter(normalizedLang, activeVersion.get());
+                List<Document> documents = vectorStoreService.semanticSearch(query, topK, filter);
+                List<Document> metricMatchedDocuments = documents.stream()
+                        .filter(document -> matchesMetricOrAlias(document, safeMetric))
+                        .collect(Collectors.toList());
+                if (!metricMatchedDocuments.isEmpty()) {
+                    String snippet = composeSnippet(metricMatchedDocuments);
+                    double topScore = resolveTopScore(metricMatchedDocuments.get(0));
+                    recordMetrics(SOURCE_QDRANT, true, topScore, startNanos);
+                    log.info(
+                            "metric_explanation_retrieval source={} hit={} metric={} topScore={} latencyMs={}",
+                            SOURCE_QDRANT, true, safeMetric, topScore, elapsedMs(startNanos)
+                    );
+                    return new RetrievalResult(snippet, SOURCE_QDRANT, true, topScore);
+                }
             }
         } catch (Exception ex) {
             log.warn("metric_explanation_retrieval source={} hit=false metric={} error={}",
@@ -90,6 +96,11 @@ public class MetricExplanationRetrievalService {
             rangeText = referenceRange.min().toPlainString() + " - " + referenceRange.max().toPlainString();
         }
         return "metric: " + metricName + ", status: " + statusText + ", reference range: " + rangeText;
+    }
+
+    private String buildGovernedFilter(String language, String activeVersion) {
+        return "language == '" + escapeFilterStringLiteral(language) + "'"
+                + " && sourceVersion == '" + escapeFilterStringLiteral(activeVersion) + "'";
     }
 
     private String composeSnippet(List<Document> documents) {
@@ -183,6 +194,12 @@ public class MetricExplanationRetrievalService {
         return token.toString()
                 .replaceAll("[^A-Za-z0-9%]", "")
                 .toUpperCase(Locale.ROOT);
+    }
+
+    private String escapeFilterStringLiteral(String value) {
+        return value
+                .replace("\\", "\\\\")
+                .replace("'", "\\'");
     }
 
     private void recordMetrics(String source, boolean hit, double topScore, long startNanos) {
