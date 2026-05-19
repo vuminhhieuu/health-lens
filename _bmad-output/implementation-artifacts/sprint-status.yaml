@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-05-19T12:52:22+07:00
+last_updated: 2026-05-19T13:32:27+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -199,7 +199,7 @@ development_status:
   core-3-1-externalized-versioned-llm-prompt-templates: done
   core-3-2-structured-llm-output-schema-and-validation: done
   core-3-3-rag-corpus-governance-and-admin-review-workflow: done
-  core-3-4-hybrid-curated-plus-internal-live-rag: ready-for-dev
+  core-3-4-hybrid-curated-plus-internal-live-rag: done
   core-3-5-trusted-online-rag-source-adapter-with-citation-and-cache: ready-for-dev
   core-4-1-unified-correlation-id-and-audit-spine: ready-for-dev
   core-4-2-observability-metrics-and-alerting-baseline: ready-for-dev

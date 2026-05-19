@@ -69,7 +69,10 @@ class MetricExplanationRetrievalServiceTest {
 
         assertThat(result.source()).isEqualTo("qdrant");
         assertThat(result.hit()).isTrue();
-        assertThat(result.knowledgeSnippet()).contains("Metric identity: ALT là men gan.");
+        assertThat(result.knowledgeSnippet())
+                .contains("Curated approved corpus chunk:")
+                .contains("Metric identity: ALT là men gan.");
+        assertThat(result.trace().fallbackPath()).isEqualTo("none");
     }
 
     @Test
@@ -87,6 +90,7 @@ class MetricExplanationRetrievalServiceTest {
         assertThat(result.source()).isEqualTo("reference-data");
         assertThat(result.hit()).isFalse();
         assertThat(result.knowledgeSnippet()).contains("reference snippet");
+        assertThat(result.trace().fallbackPath()).isEqualTo("qdrant_miss_to_reference_data");
     }
 
     @Test
@@ -129,6 +133,7 @@ class MetricExplanationRetrievalServiceTest {
 
         assertThat(result.source()).isEqualTo("reference-data");
         assertThat(result.knowledgeSnippet()).contains("fallback from reference");
+        assertThat(result.trace().fallbackPath()).isEqualTo("qdrant_error_to_reference_data");
     }
 
     @Test
@@ -151,6 +156,7 @@ class MetricExplanationRetrievalServiceTest {
 
         assertThat(result.source()).isEqualTo("reference-data");
         assertThat(result.hit()).isFalse();
+        assertThat(result.trace().fallbackPath()).isEqualTo("no_active_corpus_to_reference_data");
     }
 
     @Test
@@ -178,6 +184,66 @@ class MetricExplanationRetrievalServiceTest {
 
         assertThat(result.source()).isEqualTo("qdrant");
         assertThat(result.hit()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Retrieve context: chỉ đưa profile context khi caller đã kiểm tra access/consent")
+    void retrieve_withCheckedProfileContext_includesContextInSnippet() {
+        Document hit = Document.builder()
+                .id("metric-expl:ALT:v1")
+                .text("ALT approved chunk")
+                .metadata(Map.of(
+                        "metricKey", "ALT",
+                        "aliases", List.of("GPT"),
+                        "whatIsIt", "ALT là men gan.",
+                        "relatedTo", "chức năng gan.",
+                        "impactWhenOutOfRange", "ALT tăng có thể gợi ý tổn thương gan.",
+                        "score", 0.88
+                ))
+                .build();
+        when(vectorStoreService.semanticSearch(anyString(), eq(3),
+                eq("language == 'vi' && sourceVersion == 'v1'")))
+                .thenReturn(List.of(hit));
+
+        MetricExplanationRetrievalService.RetrievalResult result = retrievalService.retrieve(
+                "ALT",
+                "abnormal",
+                sampleRange(),
+                "vi",
+                new MetricExplanationRetrievalService.RetrievalContext(
+                        true,
+                        "{\"age\":42,\"gender\":\"male\",\"accessScope\":\"owner\"}"
+                )
+        );
+
+        assertThat(result.knowledgeSnippet())
+                .contains("ALT approved chunk")
+                .contains("Profile context (access and consent checked): {\"age\":42,\"gender\":\"male\",\"accessScope\":\"owner\"}");
+    }
+
+    @Test
+    @DisplayName("Retrieve context: giới hạn kích thước curated chunk trước khi đưa vào prompt")
+    void retrieve_largeCuratedChunk_truncatesSnippet() {
+        String longChunk = "A".repeat(1_500);
+        Document hit = Document.builder()
+                .id("metric-expl:ALT:v1")
+                .text(longChunk)
+                .metadata(Map.of(
+                        "metricKey", "ALT",
+                        "whatIsIt", "ALT là men gan.",
+                        "relatedTo", "chức năng gan.",
+                        "impactWhenOutOfRange", "ALT tăng có thể gợi ý tổn thương gan."
+                ))
+                .build();
+        when(vectorStoreService.semanticSearch(anyString(), eq(3),
+                eq("language == 'vi' && sourceVersion == 'v1'")))
+                .thenReturn(List.of(hit));
+
+        MetricExplanationRetrievalService.RetrievalResult result = retrievalService.retrieve(
+                "ALT", "abnormal", sampleRange(), "vi");
+
+        assertThat(result.knowledgeSnippet()).contains("A".repeat(1_200) + "...");
+        assertThat(result.knowledgeSnippet()).doesNotContain("A".repeat(1_300));
     }
 
     private ReferenceRangeDto sampleRange() {

@@ -1,6 +1,6 @@
 # Story 3.4: Hybrid Curated + Internal Live RAG
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 
@@ -20,11 +20,21 @@ As a user receiving explanations, I want AI explanations grounded in curated cor
 
 ## Tasks / Subtasks
 
-- [ ] Compose retrieval from curated corpus and reference-data DB.
-- [ ] Add approved corpus filter.
-- [ ] Add optional profile/history context with access/consent checks.
-- [ ] Add retrieval trace metadata.
-- [ ] Add tests for hit, miss, and consent-blocked context.
+- [x] Compose retrieval from curated corpus and reference-data DB.
+- [x] Add approved corpus filter.
+- [x] Add optional profile/history context with access/consent checks.
+- [x] Add retrieval trace metadata.
+- [x] Add tests for hit, miss, and consent-blocked context.
+
+### Review Findings
+
+- [x] [Review][Patch] Approved corpus filter cannot match currently ingested Qdrant metadata [apps/api/src/main/java/com/healthlens/api/service/MetricExplanationRetrievalService.java:125]
+- [x] [Review][Patch] Record-level share can include profile context without profile-level access [apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java:488]
+- [x] [Review][Patch] Raw profile fields are inserted into LLM context without escaping or bounds [apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java:498]
+- [x] [Review][Patch] Structured reference range is appended as unescaped pseudo-JSON prompt text [apps/api/src/main/java/com/healthlens/api/service/MetricExplanationRetrievalService.java:149]
+- [x] [Review][Patch] Curated document text is included in prompt without a size bound [apps/api/src/main/java/com/healthlens/api/service/MetricExplanationRetrievalService.java:133]
+- [x] [Review][Patch] No-active-corpus path is traced as a Qdrant miss [apps/api/src/main/java/com/healthlens/api/service/MetricExplanationRetrievalService.java:67]
+- [x] [Review][Patch] API response DTO exposes service-layer nested retrieval trace type [apps/api/src/main/java/com/healthlens/api/dto/response/MetricExplanationResponse.java:5]
 
 ## Dev Notes
 
@@ -46,10 +56,36 @@ As a user receiving explanations, I want AI explanations grounded in curated cor
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+GPT-5 Codex
 
 ### Debug Log References
 
+- 2026-05-19: `./gradlew test --tests com.healthlens.api.service.MetricExplanationRetrievalServiceTest --tests com.healthlens.api.service.HealthRecordServiceTest --tests com.healthlens.api.service.LlmServiceTest` passed.
+- 2026-05-19: `./gradlew test` passed. Test shutdown emitted existing `EmailConsumer` Redis stream warnings, but Gradle completed successfully.
+- 2026-05-19: Review patch pass: `./gradlew test --tests com.healthlens.api.service.MetricExplanationRetrievalServiceTest --tests com.healthlens.api.service.HealthRecordServiceTest --tests com.healthlens.api.service.LlmServiceTest` passed.
+- 2026-05-19: Review patch pass: `./gradlew test` passed.
+
 ### Completion Notes List
 
+- Retrieval now composes approved Qdrant corpus chunks with structured reference range data and falls back only to internal reference data or generic internal snippet.
+- Added approved corpus filtering via active approved source version and language.
+- Metric explanation flow checks record/profile access first, then active consent before adding profile context to retrieval/prompt construction.
+- Retrieval traces now expose source, hit/miss, score, and fallback path through response metadata and logs/metrics.
+- Added tests for Qdrant hit, vector miss fallback, Qdrant error fallback, checked profile context, and consent-blocked explanation.
+- Review patches remove service-type DTO coupling, omit profile context for record-level shares, sanitize profile context as bounded JSON, avoid pseudo-JSON range text in snippets, bound curated chunk size, and distinguish no-active-corpus fallback traces.
+
 ### File List
+
+- `apps/api/src/main/java/com/healthlens/api/service/MetricExplanationRetrievalService.java`
+- `apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/response/MetricExplanationResponse.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/response/RetrievalTraceResponse.java`
+- `apps/api/src/main/resources/ai/prompts/metric-explanation.v3.txt`
+- `apps/api/src/test/java/com/healthlens/api/service/MetricExplanationRetrievalServiceTest.java`
+- `apps/api/src/test/java/com/healthlens/api/service/HealthRecordServiceTest.java`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+
+### Change Log
+
+- 2026-05-19: Implemented hybrid curated plus internal live RAG with approved corpus filtering, consent-aware profile context, retrieval trace metadata, and regression coverage.
+- 2026-05-19: Resolved code review patch findings and moved story to done.

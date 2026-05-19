@@ -24,6 +24,12 @@ public class MetricExplanationRetrievalService {
     private static final String SOURCE_REFERENCE_DATA = "reference-data";
     private static final String SOURCE_GENERIC = "generic";
     private static final String UNKNOWN = "unknown";
+    private static final String FALLBACK_NONE = "none";
+    private static final String FALLBACK_NO_ACTIVE_CORPUS = "no_active_corpus_to_reference_data";
+    private static final String FALLBACK_REFERENCE_DATA = "qdrant_miss_to_reference_data";
+    private static final String FALLBACK_QDRANT_ERROR_TO_REFERENCE_DATA = "qdrant_error_to_reference_data";
+    private static final String FALLBACK_GENERIC = "reference_data_miss_to_generic";
+    private static final int MAX_CURATED_CHUNK_CHARS = 1_200;
 
     private final VectorStoreService vectorStoreService;
     private final ReferenceDataService referenceDataService;
@@ -46,13 +52,26 @@ public class MetricExplanationRetrievalService {
     }
 
     public RetrievalResult retrieve(String metricName, String status, ReferenceRangeDto referenceRange, String language) {
+        return retrieve(metricName, status, referenceRange, language, RetrievalContext.none());
+    }
+
+    public RetrievalResult retrieve(
+            String metricName,
+            String status,
+            ReferenceRangeDto referenceRange,
+            String language,
+            RetrievalContext retrievalContext
+    ) {
         String safeMetric = metricName == null || metricName.isBlank() ? "metric" : metricName.trim();
         String normalizedLang = language == null || language.isBlank() ? "vi" : language.trim().toLowerCase(Locale.ROOT);
+        RetrievalContext safeContext = retrievalContext == null ? RetrievalContext.none() : retrievalContext;
         long startNanos = System.nanoTime();
+        String fallbackPath = FALLBACK_NO_ACTIVE_CORPUS;
 
         try {
             Optional<String> activeVersion = governanceService.activeApprovedVersion();
             if (activeVersion.isPresent()) {
+                fallbackPath = FALLBACK_REFERENCE_DATA;
                 String query = buildQuery(safeMetric, status, referenceRange);
                 String filter = buildGovernedFilter(normalizedLang, activeVersion.get());
                 List<Document> documents = vectorStoreService.semanticSearch(query, topK, filter);
@@ -60,33 +79,41 @@ public class MetricExplanationRetrievalService {
                         .filter(document -> matchesMetricOrAlias(document, safeMetric))
                         .collect(Collectors.toList());
                 if (!metricMatchedDocuments.isEmpty()) {
-                    String snippet = composeSnippet(metricMatchedDocuments);
+                    String snippet = composeSnippet(metricMatchedDocuments, referenceRange, safeContext);
                     double topScore = resolveTopScore(metricMatchedDocuments.get(0));
-                    recordMetrics(SOURCE_QDRANT, true, topScore, startNanos);
+                    RetrievalTrace trace = new RetrievalTrace(SOURCE_QDRANT, true, topScore, FALLBACK_NONE);
+                    recordMetrics(trace, startNanos);
                     log.info(
-                            "metric_explanation_retrieval source={} hit={} metric={} topScore={} latencyMs={}",
-                            SOURCE_QDRANT, true, safeMetric, topScore, elapsedMs(startNanos)
+                            "metric_explanation_retrieval source={} hit={} metric={} topScore={} fallbackPath={} latencyMs={}",
+                            SOURCE_QDRANT, true, safeMetric, topScore, FALLBACK_NONE, elapsedMs(startNanos)
                     );
-                    return new RetrievalResult(snippet, SOURCE_QDRANT, true, topScore);
+                    return new RetrievalResult(snippet, trace);
                 }
             }
         } catch (Exception ex) {
+            fallbackPath = FALLBACK_QDRANT_ERROR_TO_REFERENCE_DATA;
             log.warn("metric_explanation_retrieval source={} hit=false metric={} error={}",
                     SOURCE_QDRANT, safeMetric, ex.getMessage());
         }
 
-        String fallbackSnippet = referenceDataService.buildMetricKnowledgeSnippet(safeMetric, status, referenceRange);
-        if (fallbackSnippet != null && !fallbackSnippet.isBlank()) {
-            recordMetrics(SOURCE_REFERENCE_DATA, false, 0.0d, startNanos);
-            log.info("metric_explanation_retrieval source={} hit=false metric={} topScore=0 latencyMs={}",
-                    SOURCE_REFERENCE_DATA, safeMetric, elapsedMs(startNanos));
-            return new RetrievalResult(fallbackSnippet, SOURCE_REFERENCE_DATA, false, 0.0d);
+        String referenceDataSnippet = referenceDataService.buildMetricKnowledgeSnippet(safeMetric, status, referenceRange);
+        if (referenceDataSnippet != null && !referenceDataSnippet.isBlank()) {
+            String fallbackSnippet = withStructuredContext(referenceDataSnippet, referenceRange, safeContext);
+            RetrievalTrace trace = new RetrievalTrace(SOURCE_REFERENCE_DATA, false, 0.0d, fallbackPath);
+            recordMetrics(trace, startNanos);
+            log.info("metric_explanation_retrieval source={} hit=false metric={} topScore=0 fallbackPath={} latencyMs={}",
+                    SOURCE_REFERENCE_DATA, safeMetric, fallbackPath, elapsedMs(startNanos));
+            return new RetrievalResult(fallbackSnippet, trace);
         }
 
-        recordMetrics(SOURCE_GENERIC, false, 0.0d, startNanos);
-        log.info("metric_explanation_retrieval source={} hit=false metric={} topScore=0 latencyMs={}",
-                SOURCE_GENERIC, safeMetric, elapsedMs(startNanos));
-        return new RetrievalResult(buildGenericSnippet(safeMetric, status), SOURCE_GENERIC, false, 0.0d);
+        RetrievalTrace trace = new RetrievalTrace(SOURCE_GENERIC, false, 0.0d, FALLBACK_GENERIC);
+        recordMetrics(trace, startNanos);
+        log.info("metric_explanation_retrieval source={} hit=false metric={} topScore=0 fallbackPath={} latencyMs={}",
+                SOURCE_GENERIC, safeMetric, FALLBACK_GENERIC, elapsedMs(startNanos));
+        return new RetrievalResult(
+                withStructuredContext(buildGenericSnippet(safeMetric, status), referenceRange, safeContext),
+                trace
+        );
     }
 
     private String buildQuery(String metricName, String status, ReferenceRangeDto referenceRange) {
@@ -103,16 +130,43 @@ public class MetricExplanationRetrievalService {
                 + " && sourceVersion == '" + escapeFilterStringLiteral(activeVersion) + "'";
     }
 
-    private String composeSnippet(List<Document> documents) {
+    private String composeSnippet(List<Document> documents, ReferenceRangeDto referenceRange, RetrievalContext retrievalContext) {
         Document first = documents.get(0);
+        String curatedChunk = first.getText() == null || first.getText().isBlank()
+                ? "N/A"
+                : truncate(first.getText().trim(), MAX_CURATED_CHUNK_CHARS);
         String metricIdentity = metadata(first, "whatIsIt", "Đây là chỉ số xét nghiệm máu.");
         String relatedTo = metadata(first, "relatedTo", "chuyển hóa, miễn dịch hoặc chức năng cơ quan.");
         String impact = metadata(first, "impactWhenOutOfRange", "Khi lệch ngưỡng, nguy cơ bất thường sức khỏe có thể tăng.");
-        return """
+        String snippet = """
+                Curated approved corpus chunk:
+                %s
                 Metric identity: %s
                 Clinical relation: %s
                 Out-of-range impact: %s
-                """.formatted(metricIdentity, relatedTo, impact);
+                """.formatted(curatedChunk, metricIdentity, relatedTo, impact);
+        return withStructuredContext(snippet, referenceRange, retrievalContext);
+    }
+
+    private String withStructuredContext(
+            String snippet,
+            ReferenceRangeDto referenceRange,
+            RetrievalContext retrievalContext
+    ) {
+        String safeSnippet = snippet == null ? "" : snippet.trim();
+        String profileContext = retrievalContext != null && retrievalContext.profileContextAllowed()
+                && retrievalContext.profileContextSnippet() != null
+                && !retrievalContext.profileContextSnippet().isBlank()
+                ? "\nProfile context (access and consent checked): " + retrievalContext.profileContextSnippet().trim()
+                : "";
+        return safeSnippet + profileContext;
+    }
+
+    private String truncate(String value, int maxChars) {
+        if (value.length() <= maxChars) {
+            return value;
+        }
+        return value.substring(0, maxChars) + "...";
     }
 
     private String metadata(Document document, String key, String fallback) {
@@ -202,16 +256,18 @@ public class MetricExplanationRetrievalService {
                 .replace("'", "\\'");
     }
 
-    private void recordMetrics(String source, boolean hit, double topScore, long startNanos) {
+    private void recordMetrics(RetrievalTrace trace, long startNanos) {
         meterRegistry.counter("metric.explanation.retrieval.count",
-                "source", source,
-                "hit", Boolean.toString(hit)).increment();
+                "source", trace.source(),
+                "hit", Boolean.toString(trace.hit()),
+                "fallback_path", trace.fallbackPath()).increment();
         DistributionSummary.builder("metric.explanation.retrieval.top_score")
-                .tag("source", source)
+                .tag("source", trace.source())
                 .register(meterRegistry)
-                .record(topScore);
+                .record(trace.topScore());
         Timer.builder("metric.explanation.retrieval.latency")
-                .tag("source", source)
+                .tag("source", trace.source())
+                .tag("fallback_path", trace.fallbackPath())
                 .register(meterRegistry)
                 .record(System.nanoTime() - startNanos, java.util.concurrent.TimeUnit.NANOSECONDS);
     }
@@ -229,6 +285,41 @@ public class MetricExplanationRetrievalService {
                 """.formatted(metricName, safeStatus);
     }
 
-    public record RetrievalResult(String knowledgeSnippet, String source, boolean hit, double topScore) {
+    public record RetrievalContext(boolean profileContextAllowed, String profileContextSnippet) {
+        public static RetrievalContext none() {
+            return new RetrievalContext(false, null);
+        }
+    }
+
+    public record RetrievalTrace(String source, boolean hit, double topScore, String fallbackPath) {
+    }
+
+    public record RetrievalResult(
+            String knowledgeSnippet,
+            String source,
+            boolean hit,
+            double topScore,
+            RetrievalTrace trace
+    ) {
+        public RetrievalResult(String knowledgeSnippet, RetrievalTrace trace) {
+            this(
+                    knowledgeSnippet,
+                    requireTrace(trace).source(),
+                    requireTrace(trace).hit(),
+                    requireTrace(trace).topScore(),
+                    requireTrace(trace)
+            );
+        }
+
+        public RetrievalResult(String knowledgeSnippet, String source, boolean hit, double topScore) {
+            this(knowledgeSnippet, source, hit, topScore, new RetrievalTrace(source, hit, topScore, FALLBACK_NONE));
+        }
+
+        private static RetrievalTrace requireTrace(RetrievalTrace trace) {
+            if (trace == null) {
+                throw new IllegalArgumentException("retrieval trace is required");
+            }
+            return trace;
+        }
     }
 }

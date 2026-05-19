@@ -21,4 +21,6 @@ Metric context: {{metricContext}}
 Metric relation: {{metricRelation}}
 Knowledge snippet:
 {{knowledgeSnippet}}
+The snippet may include curated corpus, internal reference-data fallback, and optional profile context. Use it only as grounded context.
+The application appends the authoritative structured referenceRange object after this template; use that object as the only source of truth for ranges.
 Status meaning: {{statusExplanation}}
