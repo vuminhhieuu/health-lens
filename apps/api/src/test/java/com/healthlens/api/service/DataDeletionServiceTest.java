@@ -457,6 +457,17 @@ class DataDeletionServiceTest {
 
         verify(accountStatusCache).put(userId, AccountStatus.DELETED);
         verify(emailService, times(1)).sendDeletionCompletionEmail(any(User.class));
+        ArgumentCaptor<Map<String, ?>> auditCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(auditEventRecorder).recordEvent(
+                eq(userId),
+                eq(com.healthlens.api.audit.AuditActions.COMPLETE_ACCOUNT_DELETION),
+                eq(com.healthlens.api.audit.AuditResourceTypes.USER),
+                eq(userId),
+                auditCaptor.capture()
+        );
+        assertThat(auditCaptor.getValue().get("requestId")).isEqualTo(requestId.toString());
+        assertThat(auditCaptor.getValue().get("retentionClass")).isEqualTo("RIGHT_TO_DELETE_EVIDENCE");
+        assertThat(auditCaptor.getValue()).doesNotContainKey("email");
     }
 
     @Test

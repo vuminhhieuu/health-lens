@@ -1,5 +1,8 @@
 package com.healthlens.api.service;
 
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditEventRecorder;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.entity.OnlineRagReviewStatus;
 import com.healthlens.api.service.rag.TrustedOnlineRagSourceAdapter;
@@ -23,6 +26,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -40,6 +45,8 @@ class MetricExplanationRetrievalServiceTest {
     private RagCorpusGovernanceService governanceService;
     @Mock
     private TrustedOnlineRagSourceAdapter onlineRagSourceAdapter;
+    @Mock
+    private AuditEventRecorder auditEventRecorder;
 
     private MetricExplanationRetrievalService retrievalService;
 
@@ -102,6 +109,34 @@ class MetricExplanationRetrievalServiceTest {
         assertThat(result.hit()).isFalse();
         assertThat(result.knowledgeSnippet()).contains("reference snippet");
         assertThat(result.trace().fallbackPath()).isEqualTo("qdrant_miss_to_reference_data");
+    }
+
+    @Test
+    @DisplayName("Retrieve audit: gắn actor khi caller truyền userId")
+    void retrieve_withActor_recordsAttributedAudit() {
+        UUID actorId = UUID.randomUUID();
+        retrievalService.setAuditEventRecorder(auditEventRecorder);
+        when(vectorStoreService.semanticSearch(anyString(), eq(3),
+                eq("language == 'vi' && sourceVersion == 'v1'")))
+                .thenReturn(List.of());
+        when(referenceDataService.buildMetricKnowledgeSnippet(eq("ALT"), eq("abnormal"), eq(sampleRange())))
+                .thenReturn("Metric identity: reference snippet");
+
+        retrievalService.retrieve("ALT", "abnormal", sampleRange(), "vi", MetricExplanationRetrievalService.RetrievalContext.none(), actorId);
+
+        verify(auditEventRecorder).recordEvent(
+                eq(actorId),
+                eq(AuditActions.RAG_RETRIEVAL),
+                eq(AuditResourceTypes.RAG_RETRIEVAL),
+                isNull(),
+                any(Map.class)
+        );
+        verify(auditEventRecorder, never()).recordAnonymous(
+                eq(AuditActions.RAG_RETRIEVAL),
+                eq(AuditResourceTypes.RAG_RETRIEVAL),
+                isNull(),
+                any(Map.class)
+        );
     }
 
     @Test

@@ -46,6 +46,22 @@ public class AuditLog {
     @Column(name = "new_value_json", columnDefinition = "jsonb")
     private String newValueJson;
 
+    @Column(nullable = false, length = 30)
+    private String outcome;
+
+    @Column(name = "correlation_id", length = 120)
+    private String correlationId;
+
+    @Column(name = "request_id", length = 120)
+    private String requestId;
+
+    @Column(name = "trace_id", length = 120)
+    private String traceId;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "metadata_json", columnDefinition = "jsonb")
+    private String metadataJson;
+
     @Column(name = "ip_address", length = 45)
     private String ipAddress;
 

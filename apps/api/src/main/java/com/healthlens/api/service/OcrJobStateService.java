@@ -3,6 +3,9 @@ package com.healthlens.api.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditEventRecorder;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.entity.OcrDeadLetter;
 import com.healthlens.api.entity.OcrJobExecution;
 import com.healthlens.api.entity.OcrJobState;
@@ -10,6 +13,7 @@ import com.healthlens.api.repository.OcrDeadLetterRepository;
 import com.healthlens.api.repository.OcrJobExecutionRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -51,6 +55,7 @@ public class OcrJobStateService {
     private final String ocrStreamName;
     private final int maxAttempts;
     private final Duration initialBackoff;
+    private AuditEventRecorder auditEventRecorder;
 
     public OcrJobStateService(
             OcrJobExecutionRepository jobRepository,
@@ -117,6 +122,11 @@ public class OcrJobStateService {
         jobRepository.save(job);
         log.info("[OcrJobState] OCR job succeeded. recordId={} jobId={} attempt={} correlationId={}",
                 job.getRecordId(), job.getJobId(), job.getAttemptCount(), job.getCorrelationId());
+        recordOcrAudit(AuditActions.OCR_JOB_SUCCEEDED, job, Map.of(
+                "state", job.getState().name(),
+                "attempt", job.getAttemptCount(),
+                "hasLowConfidenceMetrics", hasLowConfidenceMetrics
+        ));
     }
 
     @Transactional
@@ -131,6 +141,11 @@ public class OcrJobStateService {
             persistDeadLetter(job, sanitizedReason);
             log.error("[OcrJobState] OCR job moved to DLQ. recordId={} jobId={} attempts={} reason={} correlationId={}",
                     job.getRecordId(), job.getJobId(), job.getAttemptCount(), sanitizedReason, job.getCorrelationId());
+            recordOcrAudit(AuditActions.OCR_JOB_DEAD_LETTERED, job, Map.of(
+                    "state", job.getState().name(),
+                    "attempt", job.getAttemptCount(),
+                    "reason", sanitizedReason
+            ));
             return new RetryDecision(true, job.getAttemptCount(), null);
         }
 
@@ -140,6 +155,12 @@ public class OcrJobStateService {
         jobRepository.save(job);
         log.warn("[OcrJobState] OCR job scheduled for retry. recordId={} jobId={} attempt={} nextRetryAt={} reason={} correlationId={}",
                 job.getRecordId(), job.getJobId(), job.getAttemptCount(), nextRetryAt, sanitizedReason, job.getCorrelationId());
+        recordOcrAudit(AuditActions.OCR_JOB_FAILED_RETRYABLE, job, Map.of(
+                "state", job.getState().name(),
+                "attempt", job.getAttemptCount(),
+                "reason", sanitizedReason,
+                "nextRetryAt", nextRetryAt.toString()
+        ));
         return new RetryDecision(false, job.getAttemptCount(), nextRetryAt);
     }
 
@@ -153,6 +174,11 @@ public class OcrJobStateService {
         jobRepository.save(job);
         log.warn("[OcrJobState] OCR job terminally failed. recordId={} jobId={} attempt={} reason={} correlationId={}",
                 job.getRecordId(), job.getJobId(), job.getAttemptCount(), sanitizedReason, job.getCorrelationId());
+        recordOcrAudit(AuditActions.OCR_JOB_FAILED_TERMINAL, job, Map.of(
+                "state", job.getState().name(),
+                "attempt", job.getAttemptCount(),
+                "reason", sanitizedReason
+        ));
     }
 
     @Transactional
@@ -172,6 +198,24 @@ public class OcrJobStateService {
         deadLetter.setAttempts(Math.max(0, attempts));
         deadLetter.setCorrelationId(truncate(sanitizedPayload.get("correlationId"), 120));
         deadLetterRepository.save(deadLetter);
+        if (auditEventRecorder != null) {
+            auditEventRecorder.recordAnonymous(
+                    AuditActions.OCR_JOB_DEAD_LETTERED,
+                    AuditResourceTypes.OCR_JOB,
+                    deadLetter.getRecordId(),
+                    Map.of(
+                            "jobId", String.valueOf(deadLetter.getJobId()),
+                            "attempt", deadLetter.getAttempts(),
+                            "reason", deadLetter.getFailureCategory(),
+                            "correlationId", String.valueOf(deadLetter.getCorrelationId())
+                    )
+            );
+        }
+    }
+
+    @Autowired(required = false)
+    void setAuditEventRecorder(AuditEventRecorder auditEventRecorder) {
+        this.auditEventRecorder = auditEventRecorder;
     }
 
     @Scheduled(fixedDelayString = "${app.ocr.retry.dispatch-delay-ms:10000}")
@@ -240,6 +284,39 @@ public class OcrJobStateService {
         deadLetter.setAttempts(job.getAttemptCount());
         deadLetter.setCorrelationId(job.getCorrelationId());
         deadLetterRepository.save(deadLetter);
+    }
+
+    private void recordOcrAudit(String action, OcrJobExecution job, Map<String, ?> details) {
+        if (auditEventRecorder == null) {
+            return;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("jobId", job.getJobId());
+        payload.put("recordId", job.getRecordId() == null ? null : job.getRecordId().toString());
+        payload.put("fileKey", job.getFileKey());
+        payload.put("correlationId", job.getCorrelationId());
+        payload.putAll(details);
+        UUID actorId = resolveActorId(job.getFileKey());
+        if (actorId != null) {
+            auditEventRecorder.recordEvent(actorId, action, AuditResourceTypes.OCR_JOB, job.getRecordId(), payload);
+            return;
+        }
+        auditEventRecorder.recordAnonymous(action, AuditResourceTypes.OCR_JOB, job.getRecordId(), payload);
+    }
+
+    private UUID resolveActorId(String fileKey) {
+        if (fileKey == null || fileKey.isBlank()) {
+            return null;
+        }
+        String[] parts = fileKey.split("/");
+        if (parts.length < 2 || !"health-records".equals(parts[0])) {
+            return null;
+        }
+        try {
+            return UUID.fromString(parts[1]);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     private Map<String, String> payloadMap(OcrJobExecution job) throws JsonProcessingException {

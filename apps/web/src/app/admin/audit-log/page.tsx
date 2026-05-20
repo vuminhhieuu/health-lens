@@ -16,6 +16,9 @@ const RESOURCE_TYPE_PROFILE = "PROFILE";
 const RESOURCE_TYPE_AUTH = "AUTH";
 const RESOURCE_TYPE_USER = "USER";
 const RESOURCE_TYPE_CONSENT = "CONSENT";
+const RESOURCE_TYPE_OCR_JOB = "OCR_JOB";
+const RESOURCE_TYPE_LLM_CALL = "LLM_CALL";
+const RESOURCE_TYPE_RAG_RETRIEVAL = "RAG_RETRIEVAL";
 
 type AuditLogOutcome = "SUCCESS" | "FAILURE";
 
@@ -30,6 +33,10 @@ type AuditLogEntry = {
   outcome?: AuditLogOutcome;
   oldValueJson: string | null;
   newValueJson: string | null;
+  metadataJson: string | null;
+  correlationId: string | null;
+  requestId: string | null;
+  traceId: string | null;
   ipAddress: string | null;
   createdAt: string;
 };
@@ -90,11 +97,12 @@ type ReferenceMetricOption = {
   unit: string;
 };
 
-type ListQuery = {
+export type ListQuery = {
   resourceType: string;
   resourceId: string;
   actorEmail: string;
   action: string;
+  correlationId: string;
   from: string;
   to: string;
   page: number;
@@ -147,8 +155,16 @@ const ACTION_LABEL_VI: Record<string, string> = {
   UPDATE_USER: "Cập nhật tài khoản",
   REQUEST_ACCOUNT_DELETION: "Yêu cầu xóa tài khoản",
   CANCEL_ACCOUNT_DELETION: "Hủy yêu cầu xóa tài khoản",
+  COMPLETE_ACCOUNT_DELETION: "Hoàn tất xóa tài khoản",
   RECORD_CONSENT: "Đồng ý điều khoản",
   REVOKE_CONSENT: "Thu hồi đồng ý",
+  OCR_JOB_SUCCEEDED: "OCR hoàn tất",
+  OCR_JOB_FAILED_RETRYABLE: "OCR lỗi có thể thử lại",
+  OCR_JOB_FAILED_TERMINAL: "OCR lỗi kết thúc",
+  OCR_JOB_DEAD_LETTERED: "OCR vào DLQ",
+  LLM_CALL_SUCCEEDED: "LLM thành công",
+  LLM_CALL_FAILED: "LLM thất bại",
+  RAG_RETRIEVAL: "Truy xuất RAG",
 };
 
 const ACTION_FILTER_GROUPS: { label: string; actions: string[] }[] = [
@@ -174,6 +190,7 @@ const ACTION_FILTER_GROUPS: { label: string; actions: string[] }[] = [
       "UPDATE_USER",
       "REQUEST_ACCOUNT_DELETION",
       "CANCEL_ACCOUNT_DELETION",
+      "COMPLETE_ACCOUNT_DELETION",
       "RECORD_CONSENT",
       "REVOKE_CONSENT",
       "CREATE_PROFILE",
@@ -219,6 +236,18 @@ const ACTION_FILTER_GROUPS: { label: string; actions: string[] }[] = [
       "CONFIRM_REFERENCE_IMPORT",
     ],
   },
+  {
+    label: "AI/OCR/RAG",
+    actions: [
+      "OCR_JOB_SUCCEEDED",
+      "OCR_JOB_FAILED_RETRYABLE",
+      "OCR_JOB_FAILED_TERMINAL",
+      "OCR_JOB_DEAD_LETTERED",
+      "LLM_CALL_SUCCEEDED",
+      "LLM_CALL_FAILED",
+      "RAG_RETRIEVAL",
+    ],
+  },
 ];
 
 const REFERENCE_ACTION_GROUP = ACTION_FILTER_GROUPS.find(
@@ -248,6 +277,7 @@ function auditFiltersFromSearchParams(
     resourceId,
     actorEmail: searchParams.get("actorEmail")?.trim() ?? "",
     action: searchParams.get("action")?.trim() ?? "",
+    correlationId: searchParams.get("correlationId")?.trim() ?? "",
     from: searchParams.get("from") ?? "",
     to: searchParams.get("to") ?? "",
   };
@@ -270,6 +300,9 @@ function appendAuditFilterParams(
   if (filters.action.trim()) {
     params.set("action", filters.action.trim());
   }
+  if (filters.correlationId.trim()) {
+    params.set("correlationId", filters.correlationId.trim());
+  }
   if (filters.from) {
     params.set("from", filters.from);
   }
@@ -278,7 +311,7 @@ function appendAuditFilterParams(
   }
 }
 
-function buildAuditLogUrl(scope: AuditViewScope, filters: Omit<ListQuery, "page" | "limit">): string {
+export function buildAuditLogUrl(scope: AuditViewScope, filters: Omit<ListQuery, "page" | "limit">): string {
   const params = new URLSearchParams();
   if (scope === "all") {
     params.set("view", "all");
@@ -295,7 +328,34 @@ const RESOURCE_TYPE_LABEL_VI: Record<string, string> = {
   [RESOURCE_TYPE_AUTH]: "Xác thực",
   [RESOURCE_TYPE_USER]: "Tài khoản",
   [RESOURCE_TYPE_CONSENT]: "Đồng ý điều khoản",
+  [RESOURCE_TYPE_OCR_JOB]: "OCR job",
+  [RESOURCE_TYPE_LLM_CALL]: "LLM call",
+  [RESOURCE_TYPE_RAG_RETRIEVAL]: "RAG retrieval",
 };
+
+export function traceIdentifiersForDisplay(entry: {
+  correlationId?: string | null;
+  requestId?: string | null;
+  traceId?: string | null;
+}): Array<[string, string]> {
+  return [
+    ["Correlation ID", entry.correlationId],
+    ["Request ID", entry.requestId],
+    ["Trace ID", entry.traceId],
+  ].filter((item): item is [string, string] => typeof item[1] === "string" && item[1].trim().length > 0);
+}
+
+export function buildTraceOnlyFilters(correlationId: string): Omit<ListQuery, "page" | "limit"> {
+  return {
+    resourceType: "",
+    resourceId: "",
+    actorEmail: "",
+    action: "",
+    correlationId: correlationId.trim(),
+    from: "",
+    to: "",
+  };
+}
 
 function formatJsonBlock(raw: string | null | undefined): string {
   if (raw == null || raw === "") {
@@ -312,90 +372,14 @@ function actionLabelVi(action: string): string {
   return ACTION_LABEL_VI[action] ?? action;
 }
 
-/** Nhãn ngắn cho cột Hành động (loại thao tác), theo prototype Stitch. */
-const ACTION_CATEGORY_VI: Record<string, string> = {
-  LOGIN: "Đăng nhập",
-  LOGIN_FAILED: "Đăng nhập",
-  ADMIN_LOGIN: "Đăng nhập",
-  LOGOUT: "Đăng xuất",
-  REGISTER: "Đăng ký",
-  VERIFY_EMAIL: "Xác thực",
-  REFRESH_TOKEN: "Đăng nhập",
-  FORGOT_PASSWORD: "Đăng nhập",
-  RESET_PASSWORD: "Đăng nhập",
-  ADMIN_TOTP_SETUP: "MFA",
-  ADMIN_TOTP_VERIFY: "MFA",
-  CREATE_HEALTH_RECORD: "Tạo mới",
-  CONFIRM_HEALTH_RECORD: "Tạo mới",
-  CREATE_REFERENCE_METRIC: "Tạo mới",
-  CREATE_PROFILE: "Tạo mới",
-  CONFIRM_REFERENCE_IMPORT: "Tạo mới",
-  PUBLISH_CHANGE_SET: "Tạo mới",
-  DELETE_HEALTH_RECORD: "Xóa",
-  DEACTIVATE_REFERENCE_METRIC: "Xóa",
-  REVOKE_PROFILE_SHARE: "Xóa",
-  REVOKE_HEALTH_RECORD_SHARE: "Xóa",
-  CANCEL_PROFILE_INVITATION: "Xóa",
-  CANCEL_ACCOUNT_DELETION: "Xóa",
-  REQUEST_ACCOUNT_DELETION: "Xóa",
-  REJECT_CHANGE_SET: "Xóa",
-  REJECT_PROFILE_INVITATION: "Xóa",
-  DOWNLOAD_HEALTH_RECORD_PDF: "Xuất dữ liệu",
-  APPROVE_CHANGE_SET: "Phê duyệt",
-  SUBMIT_REFERENCE_CHANGE_SET: "Phê duyệt",
-  INVITE_PROFILE_SHARE: "Chia sẻ",
-  INVITE_HEALTH_RECORD_SHARE: "Chia sẻ",
-  ACCEPT_PROFILE_INVITATION: "Chia sẻ",
-  ACCEPT_HEALTH_RECORD_SHARE: "Chia sẻ",
-  RESEND_PROFILE_INVITATION: "Chia sẻ",
-  RECORD_CONSENT: "Cập nhật",
-  REVOKE_CONSENT: "Cập nhật",
-  UPDATE_USER: "Cập nhật",
-  UPDATE_PROFILE: "Cập nhật",
-  UPDATE_HEALTH_RECORD_METRICS: "Cập nhật",
-  UPDATE_REFERENCE_METRIC: "Cập nhật",
-  UPDATE_REFERENCE_METRIC_DISPLAY: "Cập nhật",
-  REACTIVATE_REFERENCE_METRIC: "Cập nhật",
-};
-
-function actionCategoryVi(action: string): string {
-  if (ACTION_CATEGORY_VI[action]) {
-    return ACTION_CATEGORY_VI[action];
-  }
-  if (
-    action.includes("DELETE") ||
-    action.includes("REVOKE") ||
-    action.includes("DEACTIVATE") ||
-    action.includes("CANCEL")
-  ) {
-    return "Xóa";
-  }
-  if (action.includes("CREATE") || action.includes("CONFIRM") || action.includes("PUBLISH")) {
-    return "Tạo mới";
-  }
-  if (action.includes("DOWNLOAD") || action.includes("EXPORT")) {
-    return "Xuất dữ liệu";
-  }
-  if (action.includes("APPROVE") || action.includes("SUBMIT") || action.includes("REJECT")) {
-    return "Phê duyệt";
-  }
-  if (action.includes("INVITE") || action.includes("SHARE") || action.includes("ACCEPT")) {
-    return "Chia sẻ";
-  }
-  if (action.includes("LOGIN") || action.includes("LOGOUT") || action.includes("REGISTER")) {
-    return "Đăng nhập";
-  }
-  if (action.includes("TOTP")) {
-    return "MFA";
-  }
-  return "Cập nhật";
-}
-
-function resolveOutcome(entry: Pick<AuditLogEntry, "outcome" | "action">): AuditLogOutcome {
+export function resolveOutcome(entry: Pick<AuditLogEntry, "outcome" | "action">): AuditLogOutcome {
   if (entry.outcome === "FAILURE" || entry.outcome === "SUCCESS") {
     return entry.outcome;
   }
-  return entry.action === "LOGIN_FAILED" || entry.action.endsWith("_FAILED")
+  return entry.action === "LOGIN_FAILED" ||
+    entry.action.endsWith("_FAILED") ||
+    entry.action.includes("_FAILED_") ||
+    entry.action.endsWith("_DEAD_LETTERED")
     ? "FAILURE"
     : "SUCCESS";
 }
@@ -501,7 +485,7 @@ function rowDetailText(row: AuditLogEntry): string {
   return base.length > 160 ? `${base.slice(0, 157)}…` : base;
 }
 
-function buildListParams(q: ListQuery): Record<string, string | number> {
+export function buildListParams(q: ListQuery): Record<string, string | number> {
   const params: Record<string, string | number> = {
     page: q.page,
     limit: q.limit,
@@ -517,6 +501,9 @@ function buildListParams(q: ListQuery): Record<string, string | number> {
   }
   if (q.action.trim()) {
     params.action = q.action.trim();
+  }
+  if (q.correlationId.trim()) {
+    params.correlationId = q.correlationId.trim();
   }
   if (q.from) {
     params.from = q.from;
@@ -613,12 +600,16 @@ function jsonPanelLabel(
 function AuditDetailModal({
   entry,
   onClose,
+  onTraceFilter,
 }: {
   entry: AuditLogEntry;
   onClose: () => void;
+  onTraceFilter: (correlationId: string) => void;
 }) {
   const at = new Date(entry.createdAt);
   const email = entry.actorEmail?.trim() || "";
+  const traceIdentifiers = traceIdentifiersForDisplay(entry);
+  const traceCorrelationId = entry.correlationId?.trim() ?? "";
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -694,7 +685,38 @@ function AuditDetailModal({
           </div>
         </div>
 
-        <div className="grid flex-1 gap-4 overflow-hidden p-6 md:grid-cols-2">
+        <div className="border-b border-[#e9f6f3] bg-white px-6 py-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="grid flex-1 gap-3 text-xs sm:grid-cols-3">
+              {traceIdentifiers.length === 0 ? (
+                <div>
+                  <span className="font-bold uppercase tracking-wider text-[#0d9488]">Trace</span>
+                  <p className="mt-0.5 text-[#3d4947]">Không có mã trace cho bản ghi này.</p>
+                </div>
+              ) : (
+                traceIdentifiers.map(([label, value]) => (
+                  <div key={label} className="min-w-0">
+                    <span className="font-bold uppercase tracking-wider text-[#0d9488]">{label}</span>
+                    <p className="mt-0.5 truncate font-mono text-[11px] text-[#121e1c]" title={value}>
+                      {value}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+            {traceCorrelationId ? (
+              <button
+                type="button"
+                onClick={() => onTraceFilter(traceCorrelationId)}
+                className="inline-flex shrink-0 items-center justify-center rounded-lg bg-teal-700 px-3 py-2 text-xs font-bold text-white transition hover:bg-teal-800"
+              >
+                Xem cùng trace
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="grid flex-1 gap-4 overflow-hidden p-6 lg:grid-cols-3">
           <div className="flex min-h-0 flex-col rounded-2xl border border-[#d8e5e2] bg-[#f8fafc]">
             <p className="border-b border-[#d8e5e2] bg-white px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-[#3d4947]">
               {jsonPanelLabel(entry.oldValueJson, entry.newValueJson, "before")}
@@ -709,6 +731,14 @@ function AuditDetailModal({
             </p>
             <pre className="hl-custom-scrollbar max-h-[50vh] flex-1 overflow-auto p-4 text-xs leading-relaxed text-[#121e1c]">
               {formatJsonBlock(entry.newValueJson)}
+            </pre>
+          </div>
+          <div className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white">
+            <p className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+              Metadata an toàn
+            </p>
+            <pre className="hl-custom-scrollbar max-h-[50vh] flex-1 overflow-auto p-4 text-xs leading-relaxed text-[#121e1c]">
+              {formatJsonBlock(entry.metadataJson)}
             </pre>
           </div>
         </div>
@@ -1085,6 +1115,7 @@ export default function AuditLogPage() {
       resourceId: "",
       actorEmail: "",
       action: "",
+      correlationId: "",
       from: "",
       to: "",
     };
@@ -1122,6 +1153,28 @@ export default function AuditLogPage() {
       router.replace(buildAuditLogUrl(scope, next), { scroll: false });
     },
     [draft, router],
+  );
+
+  const applyTraceFilter = useCallback(
+    (correlationId: string) => {
+      const trimmedCorrelationId = correlationId.trim();
+      if (!trimmedCorrelationId) {
+        return;
+      }
+      const next = buildTraceOnlyFilters(trimmedCorrelationId);
+      setDetailEntry(null);
+      setViewScope("all");
+      setDateRangeError(null);
+      setExportMessage(null);
+      setDraft(next);
+      setApplied((prev) => ({
+        ...prev,
+        ...next,
+        page: 0,
+      }));
+      router.replace(buildAuditLogUrl("all", next), { scroll: false });
+    },
+    [router],
   );
 
   const totalPages = useMemo(() => {
@@ -1223,6 +1276,9 @@ export default function AuditLogPage() {
     }
     if (applied.action) {
       chips.push(`Hành động: ${actionLabelVi(applied.action)}`);
+    }
+    if (applied.correlationId.trim()) {
+      chips.push(`Trace: ${applied.correlationId.trim()}`);
     }
     return chips;
   }, [applied, metrics]);
@@ -1406,6 +1462,15 @@ export default function AuditLogPage() {
                   <option value={RESOURCE_TYPE_CONSENT}>
                     {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_CONSENT]}
                   </option>
+                  <option value={RESOURCE_TYPE_OCR_JOB}>
+                    {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_OCR_JOB]}
+                  </option>
+                  <option value={RESOURCE_TYPE_LLM_CALL}>
+                    {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_LLM_CALL]}
+                  </option>
+                  <option value={RESOURCE_TYPE_RAG_RETRIEVAL}>
+                    {RESOURCE_TYPE_LABEL_VI[RESOURCE_TYPE_RAG_RETRIEVAL]}
+                  </option>
                 </select>
                 <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[#00685f]">
                   ▾
@@ -1415,7 +1480,7 @@ export default function AuditLogPage() {
           ) : null}
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
           <div>
             <label className="mb-2 block text-xs font-bold uppercase text-[#0d9488]">
               Người thực hiện
@@ -1426,6 +1491,23 @@ export default function AuditLogPage() {
               placeholder="Email admin hoặc người dùng…"
               value={draft.actorEmail}
               onChange={(e) => setDraft((d) => ({ ...d, actorEmail: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  applyFilters();
+                }
+              }}
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-xs font-bold uppercase text-[#0d9488]">
+              Correlation ID
+            </label>
+            <input
+              type="text"
+              className="w-full rounded-xl border border-[#deebe8] bg-[#f8fafc] px-3 py-2.5 font-mono text-sm outline-none transition focus:border-[#00685f] focus:ring-2 focus:ring-[#00685f]/15"
+              placeholder="Dán X-Correlation-Id…"
+              value={draft.correlationId}
+              onChange={(e) => setDraft((d) => ({ ...d, correlationId: e.target.value }))}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   applyFilters();
@@ -1504,6 +1586,11 @@ export default function AuditLogPage() {
                 ? "Đang tải…"
                 : `${total.toLocaleString("vi-VN")} bản ghi`}
             </span>
+            {applied.correlationId.trim() ? (
+              <span className="rounded-full bg-teal-100 px-3 py-1 font-mono text-[11px] font-semibold text-teal-800">
+                Trace chronological · {applied.correlationId.trim()}
+              </span>
+            ) : null}
           </div>
           <button
             type="button"
@@ -1715,7 +1802,11 @@ export default function AuditLogPage() {
       <OnlineRagCitationPanel />
 
       {detailEntry ? (
-        <AuditDetailModal entry={detailEntry} onClose={() => setDetailEntry(null)} />
+        <AuditDetailModal
+          entry={detailEntry}
+          onClose={() => setDetailEntry(null)}
+          onTraceFilter={applyTraceFilter}
+        />
       ) : null}
     </div>
   );

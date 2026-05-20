@@ -3,6 +3,9 @@ package com.healthlens.api.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditEventRecorder;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Metrics;
@@ -24,6 +27,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -87,6 +91,7 @@ public class LlmService {
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
     private final PromptTemplateRenderer promptTemplateRenderer;
+    private AuditEventRecorder auditEventRecorder;
 
     @Value("${app.ai.fallback.explanation:Kết quả cần được bác sĩ chuyên khoa giải thích thêm.}")
     private String defaultFallbackExplanation;
@@ -203,6 +208,11 @@ public class LlmService {
         this.promptTemplateRenderer = new PromptTemplateRenderer();
     }
 
+    @Autowired(required = false)
+    void setAuditEventRecorder(AuditEventRecorder auditEventRecorder) {
+        this.auditEventRecorder = auditEventRecorder;
+    }
+
     public String generateExplanation(
             String metricName,
             String value,
@@ -231,6 +241,18 @@ public class LlmService {
             String lang,
             String knowledgeSnippet
     ) {
+        return generateExplanationResult(metricName, value, status, referenceRange, lang, knowledgeSnippet, null);
+    }
+
+    public ExplanationResult generateExplanationResult(
+            String metricName,
+            String value,
+            String status,
+            ReferenceRangeDto referenceRange,
+            String lang,
+            String knowledgeSnippet,
+            UUID actorId
+    ) {
         String normalizedLang = (lang == null || lang.isBlank()) ? "vi" : lang.trim().toLowerCase();
         String normalizedStatus = (status == null || status.isBlank()) ? "unknown" : status;
         String cacheKey = buildCacheKey(metricName, value, normalizedStatus, referenceRange, normalizedLang, knowledgeSnippet);
@@ -253,7 +275,7 @@ public class LlmService {
             );
         }
 
-        ExplanationResult result = callWithRetry(prompt, metricName, normalizedStatus, referenceRange);
+        ExplanationResult result = callWithRetry(prompt, metricName, normalizedStatus, referenceRange, actorId);
         safeCacheExplanation(cacheKey, result);
         return result;
     }
@@ -287,6 +309,16 @@ public class LlmService {
             Integer profileAge,
             String gender,
             String examContext
+    ) {
+        return generateRecommendationsResult(metrics, profileAge, gender, examContext, null);
+    }
+
+    public RecommendationResult generateRecommendationsResult(
+            List<RecommendationMetricInput> metrics,
+            Integer profileAge,
+            String gender,
+            String examContext,
+            UUID actorId
     ) {
         if (metrics == null || metrics.isEmpty()) {
             return new RecommendationResult(List.of(), "fallback", effectiveRecommendationsPromptVersion(), effectiveModelVersion());
@@ -356,6 +388,7 @@ public class LlmService {
                     estimateTokenUsage(prompt, ""),
                     startedNanos
             );
+            recordLlmAudit(actorId, AuditActions.LLM_CALL_FAILED, "recommendations", "recommendations", "fallback", 0);
             return new RecommendationResult(
                     fallbackRecommendations,
                     "fallback",
@@ -381,6 +414,14 @@ public class LlmService {
                 estimateTokenUsage(prompt, llmOutput),
                 startedNanos
         );
+        recordLlmAudit(
+                actorId,
+                usedFallback ? AuditActions.LLM_CALL_FAILED : AuditActions.LLM_CALL_SUCCEEDED,
+                "recommendations",
+                "recommendations",
+                usedFallback ? "fallback" : "valid",
+                0
+        );
         return new RecommendationResult(
                 recommendations,
                 usedFallback ? "fallback" : "llm",
@@ -393,7 +434,8 @@ public class LlmService {
             String prompt,
             String metricName,
             String status,
-            ReferenceRangeDto referenceRange
+            ReferenceRangeDto referenceRange,
+            UUID actorId
     ) {
         long startTime = System.currentTimeMillis();
         long startedNanos = System.nanoTime();
@@ -415,6 +457,7 @@ public class LlmService {
                             attempt, maxRetryAttempts, metricName);
                 }
                 recordAiGenerationMetrics("metric_explanation", "llm", "valid", retryCount, lastTokenEstimate, startedNanos);
+                recordLlmAudit(actorId, AuditActions.LLM_CALL_SUCCEEDED, "metric_explanation", metricName, "valid", retryCount);
                 return new ExplanationResult(result, "llm", effectivePromptVersion(), effectiveModelVersion());
 
             } catch (SchemaValidationException e) {
@@ -445,12 +488,32 @@ public class LlmService {
         log.warn("All {} attempts failed for metric '{}'. Using fallback.",
                 maxRetryAttempts, metricName);
         recordAiGenerationMetrics("metric_explanation", "fallback", "invalid", retryCount, lastTokenEstimate, startedNanos);
+        recordLlmAudit(actorId, AuditActions.LLM_CALL_FAILED, "metric_explanation", metricName, "fallback", retryCount);
         return new ExplanationResult(
                 getFallbackExplanation(metricName, status),
                 "fallback",
                 effectivePromptVersion(),
                 effectiveModelVersion()
         );
+    }
+
+    private void recordLlmAudit(UUID actorId, String action, String purpose, String metricName, String outcome, int retryCount) {
+        if (auditEventRecorder == null) {
+            return;
+        }
+        Map<String, ?> details = Map.of(
+                "purpose", purpose,
+                "metricName", safeMetric(metricName),
+                "outcome", outcome,
+                "retryCount", retryCount,
+                "promptVersion", effectivePromptVersion(),
+                "modelVersion", effectiveModelVersion()
+        );
+        if (actorId != null) {
+            auditEventRecorder.recordEvent(actorId, action, AuditResourceTypes.LLM_CALL, null, details);
+            return;
+        }
+        auditEventRecorder.recordAnonymous(action, AuditResourceTypes.LLM_CALL, null, details);
     }
 
     String buildMedicalPrompt(

@@ -1,6 +1,7 @@
 package com.healthlens.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.healthlens.api.correlation.CorrelationContext;
 import com.healthlens.api.dto.OcrResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -88,7 +89,7 @@ public class OcrJobConsumer {
 
         for (MapRecord<String, Object, Object> record : records) {
             try {
-                if (handleRecord(record)) {
+                if (handleRecordWithCorrelation(record)) {
                     streamOps.acknowledge(ocrStream, consumerGroup, record.getId());
                 }
             } catch (Exception ex) {
@@ -123,8 +124,18 @@ public class OcrJobConsumer {
         return records;
     }
 
-    private boolean handleRecord(MapRecord<String, Object, Object> record) {
+    private boolean handleRecordWithCorrelation(MapRecord<String, Object, Object> record) {
         Map<String, Object> payload = normalizePayload(record.getValue());
+        String correlationId = valueAsString(payload.get("correlationId"));
+        CorrelationContext.ensureForJob(correlationId.isBlank() ? record.getId().getValue() : correlationId);
+        try {
+            return handlePayload(record, payload);
+        } finally {
+            CorrelationContext.clear();
+        }
+    }
+
+    private boolean handlePayload(MapRecord<String, Object, Object> record, Map<String, Object> payload) {
         String recordIdRaw = valueAsString(payload.get("recordId"));
         if (recordIdRaw.isBlank()) {
             // Ignore bootstrap stream records without OCR payload.

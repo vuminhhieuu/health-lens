@@ -15,7 +15,10 @@ public final class AuditOutcome {
         if (action == null || action.isBlank()) {
             return SUCCESS;
         }
-        if (AuditActions.LOGIN_FAILED.equals(action) || action.endsWith("_FAILED")) {
+        if (AuditActions.LOGIN_FAILED.equals(action)
+                || action.endsWith("_FAILED")
+                || action.contains("_FAILED_")
+                || action.endsWith("_DEAD_LETTERED")) {
             return FAILURE;
         }
         return SUCCESS;

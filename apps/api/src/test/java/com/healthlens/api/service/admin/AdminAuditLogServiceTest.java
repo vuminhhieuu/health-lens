@@ -109,6 +109,66 @@ class AdminAuditLogServiceTest {
     }
 
     @Test
+    @DisplayName("query theo correlationId dùng thứ tự thời gian tăng dần để xem trace end-to-end")
+    void query_withCorrelationIdUsesChronologicalTraceSort() {
+        AuditLog row = new AuditLog();
+        row.setId(UUID.randomUUID());
+        row.setAction(AuditActions.OCR_JOB_SUCCEEDED);
+        row.setResourceType(AuditResourceTypes.OCR_JOB);
+        row.setCorrelationId("corr-123");
+        row.setRequestId("req-123");
+        row.setTraceId("trace-123");
+        row.setOutcome(AuditOutcome.SUCCESS);
+        row.setMetadataJson("{\"jobId\":\"job-1\"}");
+        row.setCreatedAt(Instant.parse("2026-05-20T01:00:00Z"));
+
+        when(auditLogRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(row)));
+
+        AuditLogPageDto page = adminAuditLogService.query(
+                null,
+                null,
+                null,
+                null,
+                "corr-123",
+                null,
+                null,
+                0,
+                20
+        );
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(auditLogRepository).findAll(any(Specification.class), pageableCaptor.capture());
+        assertThat(pageableCaptor.getValue().getSort())
+                .isEqualTo(Sort.by(Sort.Direction.ASC, "createdAt").and(Sort.by(Sort.Direction.ASC, "id")));
+        assertThat(page.content().getFirst().correlationId()).isEqualTo("corr-123");
+        assertThat(page.content().getFirst().requestId()).isEqualTo("req-123");
+        assertThat(page.content().getFirst().traceId()).isEqualTo("trace-123");
+        assertThat(page.content().getFirst().metadataJson()).isEqualTo("{\"jobId\":\"job-1\"}");
+    }
+
+    @Test
+    @DisplayName("query dùng outcome persisted và metadata fallback cho event-style audit")
+    void query_usesPersistedOutcomeAndMetadataPayloadFallback() {
+        AuditLog row = new AuditLog();
+        row.setId(UUID.randomUUID());
+        row.setAction(AuditActions.LOGIN);
+        row.setResourceType(AuditResourceTypes.AUTH);
+        row.setOutcome(AuditOutcome.FAILURE);
+        row.setMetadataJson("{\"email\":\"unknown@example.com\",\"reason\":\"bad_credentials\"}");
+        row.setCreatedAt(Instant.parse("2026-05-10T10:00:00Z"));
+
+        when(auditLogRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(row)));
+
+        AuditLogPageDto page = adminAuditLogService.query(null, null, null, null, null, null, 0, 50);
+
+        assertThat(page.content().getFirst().outcome()).isEqualTo(AuditOutcome.FAILURE);
+        assertThat(page.content().getFirst().actorEmail()).isEqualTo("unknown@example.com");
+        assertThat(page.content().getFirst().entityLabel()).isEqualTo("Phiên đăng nhập");
+    }
+
+    @Test
     @DisplayName("REFERENCE_DATA — dùng label từ JSON audit, không query metric")
     void query_referenceMetricLabelFromJson() {
         UUID metricId = UUID.randomUUID();
@@ -234,6 +294,7 @@ class AdminAuditLogServiceTest {
                 null,
                 null,
                 null,
+                null,
                 writer,
                 100
         );
@@ -267,7 +328,7 @@ class AdminAuditLogServiceTest {
                 });
 
         StringWriter writer = new StringWriter();
-        adminAuditLogService.writeCsv(null, null, null, null, null, null, writer, 10_000);
+        adminAuditLogService.writeCsv(null, null, null, null, null, null, null, writer, 10_000);
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
         verify(auditLogRepository, times(2)).findAll(any(Specification.class), pageableCaptor.capture());

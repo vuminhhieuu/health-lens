@@ -2,6 +2,7 @@ package com.healthlens.api.audit;
 
 import com.healthlens.api.entity.AuditLog;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.correlation.CorrelationContext;
 import com.healthlens.api.repository.AuditLogRepository;
 import jakarta.persistence.EntityManager;
 import java.util.UUID;
@@ -35,6 +36,18 @@ public class UnifiedAuditLogWriter {
             String oldValueJson,
             String newValueJson
     ) {
+        record(actorId, action, resourceType, resourceId, oldValueJson, newValueJson, null);
+    }
+
+    public void record(
+            UUID actorId,
+            String action,
+            String resourceType,
+            UUID resourceId,
+            String oldValueJson,
+            String newValueJson,
+            String metadataJson
+    ) {
         UUID resolvedActorId = actorId != null ? actorId : resolveCurrentActorId();
         if (resolvedActorId == null) {
             log.warn(
@@ -52,6 +65,7 @@ public class UnifiedAuditLogWriter {
         auditLog.setResourceId(resourceId);
         auditLog.setOldValueJson(oldValueJson);
         auditLog.setNewValueJson(newValueJson);
+        applyCanonicalFields(auditLog, action, metadataJson);
 
         ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         if (attrs != null) {
@@ -73,12 +87,25 @@ public class UnifiedAuditLogWriter {
             String oldValueJson,
             String newValueJson
     ) {
+        recordWithoutActor(action, resourceType, resourceId, oldValueJson, newValueJson, null);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordWithoutActor(
+            String action,
+            String resourceType,
+            UUID resourceId,
+            String oldValueJson,
+            String newValueJson,
+            String metadataJson
+    ) {
         AuditLog auditLog = new AuditLog();
         auditLog.setAction(action);
         auditLog.setResourceType(resourceType);
         auditLog.setResourceId(resourceId);
         auditLog.setOldValueJson(oldValueJson);
         auditLog.setNewValueJson(newValueJson);
+        applyCanonicalFields(auditLog, action, metadataJson);
 
         ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         if (attrs != null) {
@@ -87,6 +114,14 @@ public class UnifiedAuditLogWriter {
         }
 
         auditLogRepository.save(auditLog);
+    }
+
+    private void applyCanonicalFields(AuditLog auditLog, String action, String metadataJson) {
+        auditLog.setOutcome(AuditOutcome.fromAction(action));
+        auditLog.setMetadataJson(metadataJson);
+        auditLog.setCorrelationId(CorrelationContext.getCorrelationId());
+        auditLog.setRequestId(CorrelationContext.getRequestId());
+        auditLog.setTraceId(CorrelationContext.getTraceId());
     }
 
     private UUID resolveCurrentActorId() {
