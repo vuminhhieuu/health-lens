@@ -52,6 +52,8 @@ public class AdminAuditLogService {
     private static final int EXPORT_PAGE_SIZE = 500;
     private static final Sort EXPORT_CSV_SORT = Sort.by(Sort.Direction.DESC, "createdAt")
             .and(Sort.by(Sort.Direction.DESC, "id"));
+    private static final Sort TRACE_SORT = Sort.by(Sort.Direction.ASC, "createdAt")
+            .and(Sort.by(Sort.Direction.ASC, "id"));
 
     private final AuditLogRepository auditLogRepository;
     private final ReferenceMetricRepository referenceMetricRepository;
@@ -69,13 +71,28 @@ public class AdminAuditLogService {
             int page,
             int limit
     ) {
+        return query(resourceType, resourceId, actorEmail, action, null, from, to, page, limit);
+    }
+
+    @Transactional(readOnly = true)
+    public AuditLogPageDto query(
+            String resourceType,
+            UUID resourceId,
+            String actorEmail,
+            String action,
+            String correlationId,
+            Instant from,
+            Instant to,
+            int page,
+            int limit
+    ) {
         int safeLimit = Math.min(Math.max(limit, 1), 200);
         int safePage = Math.max(page, 0);
-        Specification<AuditLog> spec = buildSpec(resourceType, resourceId, actorEmail, action, from, to);
+        Specification<AuditLog> spec = buildSpec(resourceType, resourceId, actorEmail, action, correlationId, from, to);
 
         Page<AuditLog> result = auditLogRepository.findAll(
                 withActorFetched(spec),
-                PageRequest.of(safePage, safeLimit, Sort.by(Sort.Direction.DESC, "createdAt"))
+                PageRequest.of(safePage, safeLimit, sortForQuery(correlationId))
         );
 
         List<AuditLog> rows = result.getContent();
@@ -101,7 +118,23 @@ public class AdminAuditLogService {
             Writer writer,
             int maxRows
     ) throws IOException {
-        Specification<AuditLog> spec = buildSpec(resourceType, resourceId, actorEmail, action, from, to);
+        writeCsv(resourceType, resourceId, actorEmail, action, null, from, to, writer, maxRows);
+    }
+
+    /** Export all rows matching filters (bounded by maxRows). */
+    @Transactional(readOnly = true)
+    public void writeCsv(
+            String resourceType,
+            UUID resourceId,
+            String actorEmail,
+            String action,
+            String correlationId,
+            Instant from,
+            Instant to,
+            Writer writer,
+            int maxRows
+    ) throws IOException {
+        Specification<AuditLog> spec = buildSpec(resourceType, resourceId, actorEmail, action, correlationId, from, to);
 
         CSVFormat format = CSVFormat.DEFAULT.builder()
                 .setHeader(
@@ -115,6 +148,10 @@ public class AdminAuditLogService {
                         "outcome",
                         "oldValueJson",
                         "newValueJson",
+                        "metadataJson",
+                        "correlationId",
+                        "requestId",
+                        "traceId",
                         "ipAddress",
                         "createdAt"
                 )
@@ -157,6 +194,10 @@ public class AdminAuditLogService {
                             dto.outcome(),
                             dto.oldValueJson() != null ? dto.oldValueJson() : "",
                             dto.newValueJson() != null ? dto.newValueJson() : "",
+                            dto.metadataJson() != null ? dto.metadataJson() : "",
+                            dto.correlationId() != null ? dto.correlationId() : "",
+                            dto.requestId() != null ? dto.requestId() : "",
+                            dto.traceId() != null ? dto.traceId() : "",
                             dto.ipAddress() != null ? dto.ipAddress() : "",
                             dto.createdAt().toString()
                     );
@@ -196,9 +237,13 @@ public class AdminAuditLogService {
                 log.getResourceId(),
                 label,
                 detail,
-                AuditOutcome.fromAction(log.getAction()),
+                StringUtils.hasText(log.getOutcome()) ? log.getOutcome() : AuditOutcome.fromAction(log.getAction()),
                 log.getOldValueJson(),
                 log.getNewValueJson(),
+                log.getMetadataJson(),
+                log.getCorrelationId(),
+                log.getRequestId(),
+                log.getTraceId(),
                 log.getIpAddress(),
                 log.getCreatedAt()
         );
@@ -209,7 +254,7 @@ public class AdminAuditLogService {
         if (actor != null && actor.getEmail() != null && !actor.getEmail().isBlank()) {
             return actor.getEmail();
         }
-        return extractJsonString(log.getNewValueJson(), "email")
+        return extractJsonString(payloadJson(log), "email")
                 .or(() -> extractJsonString(log.getOldValueJson(), "email"))
                 .orElse("");
     }
@@ -227,6 +272,10 @@ public class AdminAuditLogService {
             // fall through
         }
         return Optional.empty();
+    }
+
+    private static String payloadJson(AuditLog log) {
+        return StringUtils.hasText(log.getNewValueJson()) ? log.getNewValueJson() : log.getMetadataJson();
     }
 
     private Optional<String> extractJsonField(String json, String field) {
@@ -275,7 +324,7 @@ public class AdminAuditLogService {
             return buildUserEntityLabel(log);
         }
         if (AuditResourceTypes.CONSENT.equals(log.getResourceType())) {
-            return extractJsonString(log.getNewValueJson(), "version")
+            return extractJsonString(payloadJson(log), "version")
                     .map(version -> "Đồng ý điều khoản v" + version)
                     .orElse("Đồng ý điều khoản");
         }
@@ -308,7 +357,7 @@ public class AdminAuditLogService {
             return "Phiên đăng nhập thất bại";
         }
         if (AuditActions.ADMIN_LOGIN.equals(action)
-                && extractJsonString(log.getNewValueJson(), "via").filter("totp_setup"::equals).isPresent()) {
+                && extractJsonString(payloadJson(log), "via").filter("totp_setup"::equals).isPresent()) {
             return "Đăng nhập admin (sau thiết lập TOTP)";
         }
 
@@ -330,7 +379,7 @@ public class AdminAuditLogService {
     private String buildUserEntityLabel(AuditLog log) {
         String action = log.getAction();
         if (AuditActions.REQUEST_ACCOUNT_DELETION.equals(action)) {
-            return extractJsonField(log.getNewValueJson(), "scheduledDeletionAt")
+            return extractJsonField(payloadJson(log), "scheduledDeletionAt")
                     .map(at -> "Yêu cầu xóa tài khoản · lịch " + at)
                     .orElse("Yêu cầu xóa tài khoản");
         }
@@ -338,7 +387,7 @@ public class AdminAuditLogService {
             return "Hủy yêu cầu xóa tài khoản";
         }
         if (AuditActions.UPDATE_USER.equals(action)) {
-            return extractJsonString(log.getNewValueJson(), "fullName")
+            return extractJsonString(payloadJson(log), "fullName")
                     .filter(name -> !name.isBlank())
                     .map(name -> "Cập nhật hồ sơ · " + name)
                     .orElse("Cập nhật thông tin tài khoản");
@@ -347,7 +396,7 @@ public class AdminAuditLogService {
     }
 
     private Optional<String> authLoginFailedReasonLabel(AuditLog log) {
-        return extractJsonString(log.getNewValueJson(), "reason").map(this::mapAuthFailureReason);
+        return extractJsonString(payloadJson(log), "reason").map(this::mapAuthFailureReason);
     }
 
     private String mapAuthFailureReason(String reason) {
@@ -379,7 +428,7 @@ public class AdminAuditLogService {
     }
 
     private Optional<String> subjectEmailFromJson(AuditLog log) {
-        return extractJsonString(log.getNewValueJson(), "email")
+        return extractJsonString(payloadJson(log), "email")
                 .or(() -> extractJsonString(log.getOldValueJson(), "email"));
     }
 
@@ -425,7 +474,7 @@ public class AdminAuditLogService {
         }
         if (AuditActions.LOGIN.equals(action) || AuditActions.ADMIN_LOGIN.equals(action)) {
             if (AuditActions.ADMIN_LOGIN.equals(action)
-                    && extractJsonString(log.getNewValueJson(), "via").filter("totp_setup"::equals).isPresent()) {
+                    && extractJsonString(payloadJson(log), "via").filter("totp_setup"::equals).isPresent()) {
                 return appendIpSuffix("Đăng nhập admin sau khi hoàn tất thiết lập TOTP qua " + browser, ip);
             }
             String scope = AuditActions.ADMIN_LOGIN.equals(action) ? "cổng quản trị" : "hệ thống";
@@ -464,7 +513,7 @@ public class AdminAuditLogService {
     private String buildUserDetailSummary(AuditLog log, String entityLabel) {
         String action = log.getAction();
         if (AuditActions.REQUEST_ACCOUNT_DELETION.equals(action)) {
-            return extractJsonField(log.getNewValueJson(), "scheduledDeletionAt")
+            return extractJsonField(payloadJson(log), "scheduledDeletionAt")
                     .map(at -> "Yêu cầu xóa tài khoản, lịch thực hiện " + at)
                     .orElse("Yêu cầu xóa tài khoản theo quy trình ND13");
         }
@@ -472,7 +521,7 @@ public class AdminAuditLogService {
             return "Hủy yêu cầu xóa tài khoản trong thời gian ân hạn";
         }
         if (AuditActions.UPDATE_USER.equals(action)) {
-            return extractJsonString(log.getNewValueJson(), "fullName")
+            return extractJsonString(payloadJson(log), "fullName")
                     .filter(name -> !name.isBlank())
                     .map(name -> "Cập nhật thông tin tài khoản: " + name)
                     .orElse("Cập nhật thông tin hồ sơ người dùng");
@@ -625,8 +674,8 @@ public class AdminAuditLogService {
     }
 
     private Optional<String> profileLabelFromJson(AuditLog log) {
-        Optional<String> displayName = extractJsonString(log.getNewValueJson(), "displayName");
-        Optional<String> inviteeEmail = extractJsonString(log.getNewValueJson(), "inviteeEmail");
+        Optional<String> displayName = extractJsonString(payloadJson(log), "displayName");
+        Optional<String> inviteeEmail = extractJsonString(payloadJson(log), "inviteeEmail");
         if (displayName.isPresent() && inviteeEmail.isPresent()) {
             return Optional.of("Hồ sơ · " + displayName.get() + " · mời " + inviteeEmail.get());
         }
@@ -640,15 +689,15 @@ public class AdminAuditLogService {
     }
 
     private Optional<String> healthRecordLabelFromJson(AuditLog log) {
-        Optional<String> invitee = extractJsonString(log.getNewValueJson(), "inviteeEmail");
+        Optional<String> invitee = extractJsonString(payloadJson(log), "inviteeEmail");
         if (invitee.isPresent()) {
             return Optional.of("Hồ sơ sức khỏe · mời " + invitee.get());
         }
-        Optional<String> metricCount = extractJsonField(log.getNewValueJson(), "metricCount");
+        Optional<String> metricCount = extractJsonField(payloadJson(log), "metricCount");
         if (metricCount.isPresent()) {
             return Optional.of("Hồ sơ sức khỏe · " + metricCount.get() + " chỉ số");
         }
-        Optional<String> shareScope = extractJsonString(log.getNewValueJson(), "shareScope");
+        Optional<String> shareScope = extractJsonString(payloadJson(log), "shareScope");
         if (shareScope.isPresent()) {
             return Optional.of("Hồ sơ sức khỏe · tải PDF (" + shareScope.get() + ")");
         }
@@ -656,7 +705,7 @@ public class AdminAuditLogService {
     }
 
     private Optional<String> referenceMetricLabelFromJson(AuditLog log) {
-        return referenceMetricLabelFromJson(log.getNewValueJson())
+        return referenceMetricLabelFromJson(payloadJson(log))
                 .or(() -> referenceMetricLabelFromJson(log.getOldValueJson()));
     }
 
@@ -682,6 +731,7 @@ public class AdminAuditLogService {
             UUID resourceId,
             String actorEmail,
             String action,
+            String correlationId,
             Instant from,
             Instant to
     ) {
@@ -696,6 +746,9 @@ public class AdminAuditLogService {
         if (StringUtils.hasText(action)) {
             parts.add((root, q, cb) -> cb.equal(root.get("action"), action.trim()));
         }
+        if (StringUtils.hasText(correlationId)) {
+            parts.add((root, q, cb) -> cb.equal(root.get("correlationId"), correlationId.trim()));
+        }
         if (from != null) {
             parts.add((root, q, cb) -> cb.greaterThanOrEqualTo(root.get("createdAt"), from));
         }
@@ -708,6 +761,10 @@ public class AdminAuditLogService {
         }
 
         return parts.stream().reduce(Specification::and).orElse((root, q, cb) -> cb.conjunction());
+    }
+
+    private static Sort sortForQuery(String correlationId) {
+        return StringUtils.hasText(correlationId) ? TRACE_SORT : Sort.by(Sort.Direction.DESC, "createdAt");
     }
 
     /**
@@ -726,7 +783,11 @@ public class AdminAuditLogService {
                 cb.lower(jsonPathExpressions.extractPathText(root, cb, "oldValueJson", "email")),
                 normalizedEmail
         );
-        return cb.or(actorMatch, newJsonMatch, oldJsonMatch);
+        Predicate metadataJsonMatch = cb.equal(
+                cb.lower(jsonPathExpressions.extractPathText(root, cb, "metadataJson", "email")),
+                normalizedEmail
+        );
+        return cb.or(actorMatch, newJsonMatch, oldJsonMatch, metadataJsonMatch);
     }
 
     /**

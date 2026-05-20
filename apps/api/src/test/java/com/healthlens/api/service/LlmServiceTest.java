@@ -1,6 +1,9 @@
 package com.healthlens.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditEventRecorder;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +25,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -46,6 +51,8 @@ class LlmServiceTest {
     private ObjectMapper objectMapper;
     @Mock
     private ValueOperations<String, String> valueOperations;
+    @Mock
+    private AuditEventRecorder auditEventRecorder;
 
     @Mock
     private ChatClient.ChatClientRequestSpec requestSpec;
@@ -61,6 +68,7 @@ class LlmServiceTest {
         objectMapper = new ObjectMapper();
         meterRegistry = new SimpleMeterRegistry();
         llmService = new LlmService(aiChatClient, redisTemplate, objectMapper, meterRegistry);
+        llmService.setAuditEventRecorder(auditEventRecorder);
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         ReflectionTestUtils.setField(llmService, "defaultFallbackExplanation",
                 "Kết quả cần được bác sĩ chuyên khoa giải thích thêm.");
@@ -196,6 +204,38 @@ class LlmServiceTest {
                 anyString(),
                 eq("llm||v-test||qwen-test||" + validExplanation() + "\n" + LlmService.MEDICAL_RECOMMENDATIONS_DISCLAIMER),
                 eq(Duration.ofDays(7))
+        );
+    }
+
+    @Test
+    @DisplayName("Audit: LLM explanation gắn actor khi caller truyền userId")
+    void generateExplanation_withActor_recordsAttributedAudit() {
+        UUID actorId = UUID.randomUUID();
+        when(valueOperations.get(anyString())).thenReturn(null);
+        mockAiChatSuccess(explanationJson(validExplanation(), referenceRange()));
+
+        llmService.generateExplanationResult(
+                "Glucose",
+                "5.6",
+                "normal",
+                referenceRange(),
+                "vi",
+                "knowledge",
+                actorId
+        );
+
+        verify(auditEventRecorder).recordEvent(
+                eq(actorId),
+                eq(AuditActions.LLM_CALL_SUCCEEDED),
+                eq(AuditResourceTypes.LLM_CALL),
+                isNull(),
+                any(Map.class)
+        );
+        verify(auditEventRecorder, never()).recordAnonymous(
+                eq(AuditActions.LLM_CALL_SUCCEEDED),
+                eq(AuditResourceTypes.LLM_CALL),
+                isNull(),
+                any(Map.class)
         );
     }
 

@@ -1,5 +1,8 @@
 package com.healthlens.api.service;
 
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditEventRecorder;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.entity.OnlineRagReviewStatus;
 import com.healthlens.api.service.rag.TrustedOnlineRagSourceAdapter;
@@ -8,6 +11,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -44,6 +48,7 @@ public class MetricExplanationRetrievalService {
     private final TrustedOnlineRagSourceAdapter onlineRagSourceAdapter;
     private final MeterRegistry meterRegistry;
     private final int topK;
+    private AuditEventRecorder auditEventRecorder;
 
     public MetricExplanationRetrievalService(
             VectorStoreService vectorStoreService,
@@ -61,6 +66,11 @@ public class MetricExplanationRetrievalService {
         this.topK = topK;
     }
 
+    @Autowired(required = false)
+    void setAuditEventRecorder(AuditEventRecorder auditEventRecorder) {
+        this.auditEventRecorder = auditEventRecorder;
+    }
+
     public RetrievalResult retrieve(String metricName, String status, ReferenceRangeDto referenceRange, String language) {
         return retrieve(metricName, status, referenceRange, language, RetrievalContext.none());
     }
@@ -71,6 +81,17 @@ public class MetricExplanationRetrievalService {
             ReferenceRangeDto referenceRange,
             String language,
             RetrievalContext retrievalContext
+    ) {
+        return retrieve(metricName, status, referenceRange, language, retrievalContext, null);
+    }
+
+    public RetrievalResult retrieve(
+            String metricName,
+            String status,
+            ReferenceRangeDto referenceRange,
+            String language,
+            RetrievalContext retrievalContext,
+            UUID actorId
     ) {
         String safeMetric = metricName == null || metricName.isBlank() ? "metric" : metricName.trim();
         String normalizedLang = language == null || language.isBlank() ? "vi" : language.trim().toLowerCase(Locale.ROOT);
@@ -99,6 +120,7 @@ public class MetricExplanationRetrievalService {
                     double topScore = resolveTopScore(metricMatchedDocuments.get(0));
                     RetrievalTrace trace = new RetrievalTrace(SOURCE_QDRANT, true, topScore, FALLBACK_NONE);
                     recordMetrics(trace, startNanos);
+                    recordRetrievalAudit(actorId, safeMetric, trace, normalizedLang, onlineCitationBundle.citations().size());
                     log.info(
                             "metric_explanation_retrieval source={} hit={} metric={} topScore={} fallbackPath={} latencyMs={}",
                             SOURCE_QDRANT, true, safeMetric, topScore, FALLBACK_NONE, elapsedMs(startNanos)
@@ -117,6 +139,7 @@ public class MetricExplanationRetrievalService {
             String fallbackSnippet = withStructuredContext(referenceDataSnippet, referenceRange, safeContext);
             RetrievalTrace trace = new RetrievalTrace(SOURCE_REFERENCE_DATA, false, 0.0d, fallbackPath);
             recordMetrics(trace, startNanos);
+            recordRetrievalAudit(actorId, safeMetric, trace, normalizedLang, 0);
             log.info("metric_explanation_retrieval source={} hit=false metric={} topScore=0 fallbackPath={} latencyMs={}",
                     SOURCE_REFERENCE_DATA, safeMetric, fallbackPath, elapsedMs(startNanos));
             return new RetrievalResult(fallbackSnippet, trace);
@@ -124,12 +147,33 @@ public class MetricExplanationRetrievalService {
 
         RetrievalTrace trace = new RetrievalTrace(SOURCE_GENERIC, false, 0.0d, FALLBACK_GENERIC);
         recordMetrics(trace, startNanos);
+        recordRetrievalAudit(actorId, safeMetric, trace, normalizedLang, 0);
         log.info("metric_explanation_retrieval source={} hit=false metric={} topScore=0 fallbackPath={} latencyMs={}",
                 SOURCE_GENERIC, safeMetric, FALLBACK_GENERIC, elapsedMs(startNanos));
         return new RetrievalResult(
                 withStructuredContext(buildGenericSnippet(safeMetric, status), referenceRange, safeContext),
                 trace
         );
+    }
+
+    private void recordRetrievalAudit(UUID actorId, String metricName, RetrievalTrace trace, String language, int citationCount) {
+        if (auditEventRecorder == null) {
+            return;
+        }
+        Map<String, ?> details = Map.of(
+                "metricName", metricName,
+                "source", trace.source(),
+                "hit", trace.hit(),
+                "topScore", trace.topScore(),
+                "fallbackPath", trace.fallbackPath(),
+                "language", language,
+                "citationCount", citationCount
+        );
+        if (actorId != null) {
+            auditEventRecorder.recordEvent(actorId, AuditActions.RAG_RETRIEVAL, AuditResourceTypes.RAG_RETRIEVAL, null, details);
+            return;
+        }
+        auditEventRecorder.recordAnonymous(AuditActions.RAG_RETRIEVAL, AuditResourceTypes.RAG_RETRIEVAL, null, details);
     }
 
     private String buildQuery(String metricName, String status, ReferenceRangeDto referenceRange) {

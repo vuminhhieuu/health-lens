@@ -49,10 +49,19 @@ public final class AuditActions {
     public static final String UPDATE_USER = "UPDATE_USER";
     public static final String REQUEST_ACCOUNT_DELETION = "REQUEST_ACCOUNT_DELETION";
     public static final String CANCEL_ACCOUNT_DELETION = "CANCEL_ACCOUNT_DELETION";
+    public static final String COMPLETE_ACCOUNT_DELETION = "COMPLETE_ACCOUNT_DELETION";
 
     public static final String RECORD_CONSENT = "RECORD_CONSENT";
     public static final String REVOKE_CONSENT = "REVOKE_CONSENT";
 
     public static final String CREATE_PROFILE = "CREATE_PROFILE";
     public static final String UPDATE_PROFILE = "UPDATE_PROFILE";
+
+    public static final String OCR_JOB_SUCCEEDED = "OCR_JOB_SUCCEEDED";
+    public static final String OCR_JOB_FAILED_RETRYABLE = "OCR_JOB_FAILED_RETRYABLE";
+    public static final String OCR_JOB_FAILED_TERMINAL = "OCR_JOB_FAILED_TERMINAL";
+    public static final String OCR_JOB_DEAD_LETTERED = "OCR_JOB_DEAD_LETTERED";
+    public static final String LLM_CALL_SUCCEEDED = "LLM_CALL_SUCCEEDED";
+    public static final String LLM_CALL_FAILED = "LLM_CALL_FAILED";
+    public static final String RAG_RETRIEVAL = "RAG_RETRIEVAL";
 }

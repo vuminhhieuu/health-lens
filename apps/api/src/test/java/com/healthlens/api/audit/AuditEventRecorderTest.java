@@ -40,6 +40,7 @@ class AuditEventRecorderTest {
                 eq(AuditResourceTypes.AUTH),
                 isNull(),
                 isNull(),
+                isNull(),
                 eq("{\"email\":\"user@example.com\"}")
         );
     }
@@ -61,7 +62,40 @@ class AuditEventRecorderTest {
                 eq(AuditResourceTypes.AUTH),
                 eq(userId),
                 isNull(),
+                isNull(),
                 eq("{\"email\":\"user@example.com\"}")
+        );
+    }
+
+    @Test
+    void recordEvent_redactsSensitiveDetailsBeforeSerializing() {
+        UUID userId = UUID.randomUUID();
+        recorder.recordEvent(
+                userId,
+                AuditActions.CREATE_HEALTH_RECORD,
+                AuditResourceTypes.HEALTH_RECORD,
+                UUID.randomUUID(),
+                Map.of(
+                        "fileKey", "users/%s/report.pdf".formatted(userId),
+                        "rawOcrText", "secret OCR body",
+                        "authorization", "Bearer secret",
+                        "downloadUrl", "https://storage.local/report.pdf?token=secret&email=user@example.com&expires=123"
+                )
+        );
+
+        verify(unifiedAuditLogWriter).record(
+                eq(userId),
+                eq(AuditActions.CREATE_HEALTH_RECORD),
+                eq(AuditResourceTypes.HEALTH_RECORD),
+                org.mockito.ArgumentMatchers.any(UUID.class),
+                isNull(),
+                isNull(),
+                org.mockito.ArgumentMatchers.argThat(json -> json.contains("fileKey")
+                        && json.contains("expires=123")
+                        && !json.contains("rawOcrText")
+                        && !json.contains("Bearer secret")
+                        && !json.contains("token=secret")
+                        && !json.contains("email=user@example.com"))
         );
     }
 }

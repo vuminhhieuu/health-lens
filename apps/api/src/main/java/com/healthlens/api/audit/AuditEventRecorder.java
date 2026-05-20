@@ -33,7 +33,8 @@ public class AuditEventRecorder {
                 resourceType,
                 resourceId,
                 toJson(action, oldValue),
-                toJson(action, newValue)
+                toJson(action, newValue),
+                null
         );
     }
 
@@ -44,7 +45,15 @@ public class AuditEventRecorder {
             UUID resourceId,
             Map<String, ?> details
     ) {
-        record(actorId, action, resourceType, resourceId, null, details);
+        unifiedAuditLogWriter.record(
+                actorId,
+                action,
+                resourceType,
+                resourceId,
+                null,
+                null,
+                toJson(action, details)
+        );
     }
 
     /** For pre-auth or failed-auth events where no authenticated actor exists yet. */
@@ -59,6 +68,7 @@ public class AuditEventRecorder {
                 resourceType,
                 resourceId,
                 null,
+                null,
                 toJson(action, details)
         );
     }
@@ -68,7 +78,7 @@ public class AuditEventRecorder {
             return null;
         }
         try {
-            return objectMapper.writeValueAsString(value);
+            return objectMapper.writeValueAsString(AuditRedactor.redact(value));
         } catch (JsonProcessingException e) {
             log.warn("Failed to serialize audit payload for action={}", action, e);
             return null;

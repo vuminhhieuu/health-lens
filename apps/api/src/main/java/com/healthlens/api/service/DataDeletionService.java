@@ -402,6 +402,35 @@ public class DataDeletionService {
                 profileInviteeEmailDeleted, healthRecordInviteeEmailDeleted, followUpRemindersDeleted,
                 ocrDeadLettersDeleted, ocrJobsDeleted, healthRecordsDeleted, profilesDeleted,
                 emailVerificationDeleted, passwordResetDeleted, refreshTokensDeleted, consentLogsDeleted);
+        auditEventRecorder.recordEvent(
+                userId,
+                AuditActions.COMPLETE_ACCOUNT_DELETION,
+                AuditResourceTypes.USER,
+                userId,
+                Map.ofEntries(
+                        Map.entry("requestId", deletionRequestId.toString()),
+                        Map.entry("retentionClass", "RIGHT_TO_DELETE_EVIDENCE"),
+                        Map.entry("policy", "purge-health-data-anonymize-user-preserve-deletion-request-and-audit"),
+                        Map.entry("exactFiles", exactFilesDeleted),
+                        Map.entry("prefixFiles", filesDeleted),
+                        Map.entry("avatarFiles", avatarFilesDeleted),
+                        Map.entry("recordShares", healthRecordSharesDeleted),
+                        Map.entry("recordInvites", healthRecordInvitesDeleted),
+                        Map.entry("profileShares", profileSharesDeleted),
+                        Map.entry("profileInvites", profileInvitesDeleted),
+                        Map.entry("profileInviteeEmails", profileInviteeEmailDeleted),
+                        Map.entry("recordInviteeEmails", healthRecordInviteeEmailDeleted),
+                        Map.entry("reminders", followUpRemindersDeleted),
+                        Map.entry("ocrDeadLetters", ocrDeadLettersDeleted),
+                        Map.entry("ocrJobs", ocrJobsDeleted),
+                        Map.entry("records", healthRecordsDeleted),
+                        Map.entry("profiles", profilesDeleted),
+                        Map.entry("emailTokens", emailVerificationDeleted),
+                        Map.entry("resetTokens", passwordResetDeleted),
+                        Map.entry("refreshTokens", refreshTokensDeleted),
+                        Map.entry("consentLogs", consentLogsDeleted)
+                )
+        );
     }
 
     private String generateCancellationToken() {

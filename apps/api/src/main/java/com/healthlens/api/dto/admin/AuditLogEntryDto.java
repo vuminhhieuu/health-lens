@@ -14,6 +14,10 @@ public record AuditLogEntryDto(
         String outcome,
         String oldValueJson,
         String newValueJson,
+        String metadataJson,
+        String correlationId,
+        String requestId,
+        String traceId,
         String ipAddress,
         Instant createdAt
 ) {}

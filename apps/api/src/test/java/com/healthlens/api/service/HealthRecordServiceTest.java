@@ -531,7 +531,8 @@ class HealthRecordServiceTest {
                                 nullable(String.class),
                                 any(ReferenceRangeDto.class),
                                 nullable(String.class),
-                                any(MetricExplanationRetrievalService.RetrievalContext.class)))
+                                any(MetricExplanationRetrievalService.RetrievalContext.class),
+                                nullable(UUID.class)))
                                 .thenReturn(new MetricExplanationRetrievalService.RetrievalResult(
                                                 "Metric identity: ...\nClinical relation: ...\nOut-of-range impact: ...",
                                                 "qdrant",
@@ -543,7 +544,8 @@ class HealthRecordServiceTest {
                                 nullable(String.class),
                                 any(ReferenceRangeDto.class),
                                 nullable(String.class),
-                                nullable(String.class)))
+                                nullable(String.class),
+                                nullable(UUID.class)))
                                 .thenReturn(new LlmService.ExplanationResult("Giải thích đơn giản", "llm"));
 
                 MetricExplanationResponse response = healthRecordService.getMetricExplanation(userId, recordId,
@@ -559,7 +561,8 @@ class HealthRecordServiceTest {
                                 eq("normal"),
                                 any(ReferenceRangeDto.class),
                                 eq("vi"),
-                                contextCaptor.capture());
+                                contextCaptor.capture(),
+                                eq(userId));
                 assertThat(contextCaptor.getValue().profileContextSnippet()).contains("\"accessScope\":\"owner\"");
         }
 
@@ -610,7 +613,8 @@ class HealthRecordServiceTest {
                                 nullable(String.class),
                                 any(ReferenceRangeDto.class),
                                 nullable(String.class),
-                                any(MetricExplanationRetrievalService.RetrievalContext.class)))
+                                any(MetricExplanationRetrievalService.RetrievalContext.class),
+                                nullable(UUID.class)))
                                 .thenReturn(new MetricExplanationRetrievalService.RetrievalResult(
                                                 "Metric identity: ...",
                                                 new MetricExplanationRetrievalService.RetrievalTrace("qdrant", true,
@@ -622,7 +626,8 @@ class HealthRecordServiceTest {
                                 nullable(String.class),
                                 any(ReferenceRangeDto.class),
                                 nullable(String.class),
-                                nullable(String.class)))
+                                nullable(String.class),
+                                nullable(UUID.class)))
                                 .thenReturn(new LlmService.ExplanationResult("Giải thích đơn giản", "llm"));
 
                 MetricExplanationResponse response = healthRecordService.getMetricExplanation(userId, recordId,
@@ -690,7 +695,8 @@ class HealthRecordServiceTest {
                                 nullable(String.class),
                                 any(ReferenceRangeDto.class),
                                 nullable(String.class),
-                                any(MetricExplanationRetrievalService.RetrievalContext.class)))
+                                any(MetricExplanationRetrievalService.RetrievalContext.class),
+                                nullable(UUID.class)))
                                 .thenReturn(new MetricExplanationRetrievalService.RetrievalResult(
                                                 "Metric identity: ...",
                                                 new MetricExplanationRetrievalService.RetrievalTrace("qdrant", true,
@@ -702,7 +708,8 @@ class HealthRecordServiceTest {
                                 nullable(String.class),
                                 any(ReferenceRangeDto.class),
                                 nullable(String.class),
-                                nullable(String.class)))
+                                nullable(String.class),
+                                nullable(UUID.class)))
                                 .thenReturn(new LlmService.ExplanationResult("Giải thích đơn giản", "llm"));
                 when(onlineRagAnswerCitationRepository
                                 .existsByHealthRecordIdAndMetricNameAndAnswerHashAndSourceUrlAndSnapshotHash(
@@ -761,7 +768,8 @@ class HealthRecordServiceTest {
                                 nullable(String.class),
                                 any(ReferenceRangeDto.class),
                                 nullable(String.class),
-                                any(MetricExplanationRetrievalService.RetrievalContext.class)))
+                                any(MetricExplanationRetrievalService.RetrievalContext.class),
+                                nullable(UUID.class)))
                                 .thenReturn(new MetricExplanationRetrievalService.RetrievalResult(
                                                 "Metric identity: ...",
                                                 new MetricExplanationRetrievalService.RetrievalTrace("qdrant", true,
@@ -773,7 +781,8 @@ class HealthRecordServiceTest {
                                 nullable(String.class),
                                 any(ReferenceRangeDto.class),
                                 nullable(String.class),
-                                nullable(String.class)))
+                                nullable(String.class),
+                                nullable(UUID.class)))
                                 .thenReturn(new LlmService.ExplanationResult("Giải thích đơn giản", "llm"));
                 when(onlineRagAnswerCitationRepository.saveAndFlush(any(OnlineRagAnswerCitation.class)))
                                 .thenThrow(new DataIntegrityViolationException("duplicate"));
@@ -827,7 +836,8 @@ class HealthRecordServiceTest {
                                 nullable(String.class),
                                 any(ReferenceRangeDto.class),
                                 nullable(String.class),
-                                any(MetricExplanationRetrievalService.RetrievalContext.class)))
+                                any(MetricExplanationRetrievalService.RetrievalContext.class),
+                                nullable(UUID.class)))
                                 .thenReturn(new MetricExplanationRetrievalService.RetrievalResult(
                                                 "Metric identity: ...",
                                                 "reference-data",
@@ -839,7 +849,8 @@ class HealthRecordServiceTest {
                                 nullable(String.class),
                                 any(ReferenceRangeDto.class),
                                 nullable(String.class),
-                                nullable(String.class)))
+                                nullable(String.class),
+                                nullable(UUID.class)))
                                 .thenReturn(new LlmService.ExplanationResult("Giải thích đơn giản", "llm"));
 
                 healthRecordService.getMetricExplanation(viewerId, recordId, "Glucose");
@@ -851,7 +862,8 @@ class HealthRecordServiceTest {
                                 eq("normal"),
                                 any(ReferenceRangeDto.class),
                                 eq("vi"),
-                                contextCaptor.capture());
+                                contextCaptor.capture(),
+                                eq(viewerId));
                 assertThat(contextCaptor.getValue().profileContextAllowed()).isFalse();
                 assertThat(contextCaptor.getValue().profileContextSnippet()).isNull();
                 verify(consentService, never()).hasConsent(eq(viewerId), anyString());
@@ -1611,7 +1623,7 @@ class HealthRecordServiceTest {
                 when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId))
                                 .thenReturn(Optional.of(record));
                 when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
-                when(llmService.generateRecommendationsResult(any(), any(), any(), any()))
+                when(llmService.generateRecommendationsResult(any(), any(), any(), any(), nullable(UUID.class)))
                                 .thenReturn(new LlmService.RecommendationResult(
                                                 List.of("Giam duong trong bua an", "Tap the duc deu dan"),
                                                 "llm",
@@ -1624,7 +1636,7 @@ class HealthRecordServiceTest {
                 assertThat(response.recommendations()).hasSize(2);
                 assertThat(response.promptVersion()).isEqualTo("v8-medical-disclaimer-vi");
                 assertThat(response.modelVersion()).isEqualTo("qwen-test");
-                verify(llmService).generateRecommendationsResult(any(), any(), eq("female"), any());
+                verify(llmService).generateRecommendationsResult(any(), any(), eq("female"), any(), eq(userId));
         }
 
         @Test
@@ -1658,7 +1670,7 @@ class HealthRecordServiceTest {
                 when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId))
                                 .thenReturn(Optional.of(record));
                 when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
-                when(llmService.generateRecommendationsResult(any(), any(), any(), any()))
+                when(llmService.generateRecommendationsResult(any(), any(), any(), any(), nullable(UUID.class)))
                                 .thenReturn(new LlmService.RecommendationResult(
                                                 List.of("Goi y 1", "Goi y 2"),
                                                 "llm",
@@ -1668,7 +1680,7 @@ class HealthRecordServiceTest {
                 RecommendationsResponse response = healthRecordService.getRecommendations(userId, recordId);
 
                 assertThat(response.allNormal()).isFalse();
-                verify(llmService).generateRecommendationsResult(any(), any(), eq("female"), any());
+                verify(llmService).generateRecommendationsResult(any(), any(), eq("female"), any(), eq(userId));
         }
 
         @Test
@@ -1702,7 +1714,7 @@ class HealthRecordServiceTest {
                 when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId))
                                 .thenReturn(Optional.of(record));
                 when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
-                when(llmService.generateRecommendationsResult(any(), any(), any(), any()))
+                when(llmService.generateRecommendationsResult(any(), any(), any(), any(), nullable(UUID.class)))
                                 .thenReturn(new LlmService.RecommendationResult(
                                                 List.of("Goi y 1", "Goi y 2"),
                                                 "llm",
@@ -1712,7 +1724,7 @@ class HealthRecordServiceTest {
                 RecommendationsResponse response = healthRecordService.getRecommendations(userId, recordId);
 
                 assertThat(response.allNormal()).isFalse();
-                verify(llmService).generateRecommendationsResult(any(), any(), eq("female"), any());
+                verify(llmService).generateRecommendationsResult(any(), any(), eq("female"), any(), eq(userId));
         }
 
         private HealthRecord newOwnedRecord(UUID userId, UUID recordId) {

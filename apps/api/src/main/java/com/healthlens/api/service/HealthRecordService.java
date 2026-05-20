@@ -482,7 +482,8 @@ public class HealthRecordService {
                 metric.getStatus(),
                 metric.getReferenceRange(),
                 "vi",
-                retrievalContext
+                retrievalContext,
+                userId
         );
 
         LlmService.ExplanationResult result = llmService.generateExplanationResult(
@@ -491,7 +492,8 @@ public class HealthRecordService {
                 metric.getStatus(),
                 metric.getReferenceRange(),
                 "vi",
-                retrievalResult.knowledgeSnippet()
+                retrievalResult.knowledgeSnippet(),
+                userId
         );
 
         List<OnlineRagCitationResponse> onlineCitations = toOnlineCitationResponses(retrievalResult.onlineCitations());
@@ -726,7 +728,8 @@ public class HealthRecordService {
                 llmInputs,
                 age,
                 profile.getGender(),
-                recommendationExamContext(record));
+                recommendationExamContext(record),
+                userId);
         return new RecommendationsResponse(
                 recommendationResult.recommendations(),
                 RECOMMENDATIONS_DISCLAIMER,

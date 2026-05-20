@@ -20,4 +20,13 @@ public final class AuditResourceTypes {
 
     /** Privacy / terms consent */
     public static final String CONSENT = "CONSENT";
+
+    /** OCR background jobs */
+    public static final String OCR_JOB = "OCR_JOB";
+
+    /** AI chat provider calls */
+    public static final String LLM_CALL = "LLM_CALL";
+
+    /** Retrieval-augmented generation lookups */
+    public static final String RAG_RETRIEVAL = "RAG_RETRIEVAL";
 }
