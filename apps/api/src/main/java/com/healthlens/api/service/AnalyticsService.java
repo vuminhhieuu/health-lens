@@ -270,13 +270,16 @@ public class AnalyticsService {
         validateActivityRange(from, toExclusive);
         String normalizedGranularity = normalizeGranularity(granularity);
 
+        Instant wauFrom = UserActivityService.wauQueryFrom(from);
+        Instant wauToExclusive = UserActivityService.wauQueryToExclusive(toExclusive);
+
         List<ActivityWauBucketProjection> wauRows =
-                userActivityEventRepository.findWauBuckets(from, toExclusive);
+                userActivityEventRepository.findWauBuckets(wauFrom, wauToExclusive);
         List<ActivityUploadBucketProjection> uploadRows =
                 userActivityEventRepository.findUploadBuckets(from, toExclusive, normalizedGranularity);
 
         List<ActivityAnalyticsResponse.WauBucket> wauBuckets = fillWauBuckets(
-                mapWauBuckets(wauRows), from, toExclusive);
+                mapWauBuckets(wauRows), wauFrom, wauToExclusive);
         List<ActivityAnalyticsResponse.UploadBucket> uploadBuckets = fillUploadBuckets(
                 mapUploadBuckets(uploadRows), from, toExclusive, normalizedGranularity);
 
@@ -289,10 +292,12 @@ public class AnalyticsService {
         if (comparePrevious) {
             Duration range = Duration.between(from, toExclusive);
             Instant previousFrom = from.minus(range);
+            Instant previousWauFrom = UserActivityService.wauQueryFrom(previousFrom);
+            Instant previousWauToExclusive = UserActivityService.wauQueryToExclusive(from);
             List<ActivityAnalyticsResponse.WauBucket> previousWauFilled = fillWauBuckets(
-                    mapWauBuckets(userActivityEventRepository.findWauBuckets(previousFrom, from)),
-                    previousFrom,
-                    from);
+                    mapWauBuckets(userActivityEventRepository.findWauBuckets(previousWauFrom, previousWauToExclusive)),
+                    previousWauFrom,
+                    previousWauToExclusive);
             List<ActivityAnalyticsResponse.UploadBucket> previousUploadFilled = fillUploadBuckets(
                     mapUploadBuckets(
                             userActivityEventRepository.findUploadBuckets(
@@ -300,8 +305,8 @@ public class AnalyticsService {
                     previousFrom,
                     from,
                     normalizedGranularity);
-            wauBucketsPrevious = alignPreviousWauBuckets(wauBuckets, previousWauFilled, range);
-            uploadBucketsPrevious = alignPreviousUploadBuckets(uploadBuckets, previousUploadFilled, range);
+            wauBucketsPrevious = alignPreviousWauBuckets(wauBuckets, previousWauFilled);
+            uploadBucketsPrevious = alignPreviousUploadBuckets(uploadBuckets, previousUploadFilled);
             uploadsPreviousRange = userActivityEventRepository.countUploads(previousFrom, from);
         }
 
@@ -371,17 +376,14 @@ public class AnalyticsService {
 
     static List<ActivityAnalyticsResponse.WauBucket> fillWauBuckets(
             List<ActivityAnalyticsResponse.WauBucket> buckets,
-            Instant from,
-            Instant toExclusive) {
+            Instant wauFrom,
+            Instant wauToExclusive) {
         Map<LocalDate, Long> byStart = new HashMap<>();
         for (ActivityAnalyticsResponse.WauBucket bucket : buckets) {
             byStart.put(LocalDate.parse(bucket.periodStart()), bucket.wau());
         }
-        LocalDate rangeEnd = toExclusive.atZone(ZoneOffset.UTC).toLocalDate();
-        LocalDate cursor = UserActivityService.startOfUtcWeek(
-                        from.atZone(ZoneOffset.UTC).toLocalDate())
-                .atZone(ZoneOffset.UTC)
-                .toLocalDate();
+        LocalDate rangeEnd = wauToExclusive.atZone(ZoneOffset.UTC).toLocalDate();
+        LocalDate cursor = wauFrom.atZone(ZoneOffset.UTC).toLocalDate();
         List<ActivityAnalyticsResponse.WauBucket> filled = new ArrayList<>();
         while (cursor.isBefore(rangeEnd)) {
             filled.add(new ActivityAnalyticsResponse.WauBucket(
@@ -420,40 +422,51 @@ public class AnalyticsService {
     }
 
     /**
-     * Maps previous-period buckets onto current {@code periodStart} keys so chart overlays align by calendar offset.
+     * Maps previous-period WAU buckets onto current {@code periodStart} keys for chart overlay.
+     * Both series are consecutive UTC week buckets from {@link #fillWauBuckets}; alignment is by
+     * bucket index, skipping leading weeks when the previous WAU window is wider (common when
+     * {@code range.toDays()} is not a multiple of 7). Do not use {@code range.toDays()} as a key
+     * shift — that misses Monday-based {@code periodStart} keys.
      */
     static List<ActivityAnalyticsResponse.WauBucket> alignPreviousWauBuckets(
             List<ActivityAnalyticsResponse.WauBucket> current,
-            List<ActivityAnalyticsResponse.WauBucket> previousRaw,
-            Duration range) {
-        Map<LocalDate, Long> previousByStart = new HashMap<>();
-        for (ActivityAnalyticsResponse.WauBucket bucket : previousRaw) {
-            previousByStart.put(LocalDate.parse(bucket.periodStart()), bucket.wau());
+            List<ActivityAnalyticsResponse.WauBucket> previousRaw) {
+        if (current.isEmpty()) {
+            return List.of();
         }
-        long shiftDays = range.toDays();
+        int previousOffset = Math.max(0, previousRaw.size() - current.size());
         List<ActivityAnalyticsResponse.WauBucket> aligned = new ArrayList<>();
-        for (ActivityAnalyticsResponse.WauBucket bucket : current) {
-            LocalDate previousKey = LocalDate.parse(bucket.periodStart()).minusDays(shiftDays);
-            aligned.add(new ActivityAnalyticsResponse.WauBucket(
-                    bucket.periodStart(),
-                    previousByStart.getOrDefault(previousKey, 0L)));
+        for (int i = 0; i < current.size(); i++) {
+            ActivityAnalyticsResponse.WauBucket bucket = current.get(i);
+            int previousIndex = previousOffset + i;
+            long wau = previousIndex < previousRaw.size()
+                    ? previousRaw.get(previousIndex).wau()
+                    : 0L;
+            aligned.add(new ActivityAnalyticsResponse.WauBucket(bucket.periodStart(), wau));
         }
         return aligned;
     }
 
+    /**
+     * Maps previous-period upload buckets onto current {@code periodStart} keys for chart overlay.
+     * Works for day and week granularity: both series are consecutive buckets from
+     * {@link #fillUploadBuckets}. Alignment is by index (with a leading offset when the
+     * previous series is longer), not {@code range.toDays()}, which breaks weekly Monday keys.
+     */
     static List<ActivityAnalyticsResponse.UploadBucket> alignPreviousUploadBuckets(
             List<ActivityAnalyticsResponse.UploadBucket> current,
-            List<ActivityAnalyticsResponse.UploadBucket> previousRaw,
-            Duration range) {
-        Map<LocalDate, ActivityAnalyticsResponse.UploadBucket> previousByStart = new HashMap<>();
-        for (ActivityAnalyticsResponse.UploadBucket bucket : previousRaw) {
-            previousByStart.put(LocalDate.parse(bucket.periodStart()), bucket);
+            List<ActivityAnalyticsResponse.UploadBucket> previousRaw) {
+        if (current.isEmpty()) {
+            return List.of();
         }
-        long shiftDays = range.toDays();
+        int previousOffset = Math.max(0, previousRaw.size() - current.size());
         List<ActivityAnalyticsResponse.UploadBucket> aligned = new ArrayList<>();
-        for (ActivityAnalyticsResponse.UploadBucket bucket : current) {
-            LocalDate previousKey = LocalDate.parse(bucket.periodStart()).minusDays(shiftDays);
-            ActivityAnalyticsResponse.UploadBucket previous = previousByStart.get(previousKey);
+        for (int i = 0; i < current.size(); i++) {
+            ActivityAnalyticsResponse.UploadBucket bucket = current.get(i);
+            int previousIndex = previousOffset + i;
+            ActivityAnalyticsResponse.UploadBucket previous = previousIndex < previousRaw.size()
+                    ? previousRaw.get(previousIndex)
+                    : null;
             aligned.add(new ActivityAnalyticsResponse.UploadBucket(
                     bucket.periodStart(),
                     previous != null ? previous.count() : 0L,

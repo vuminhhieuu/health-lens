@@ -1,5 +1,5 @@
 CREATE TABLE user_activity_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES users(id),
     event_type VARCHAR(50) NOT NULL,
     is_retry BOOLEAN NOT NULL DEFAULT FALSE,

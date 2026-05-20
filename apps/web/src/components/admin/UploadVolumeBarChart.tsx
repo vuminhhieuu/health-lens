@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { format, parseISO } from "date-fns";
+import { formatActivityBucketLabel, formatActivityBucketTooltip } from "@/lib/admin/utcPeriodLabels";
 import {
   Bar,
   BarChart,
@@ -32,26 +32,6 @@ type UploadVolumeBarChartProps = {
   comparePrevious: boolean;
 };
 
-function formatLabel(periodStart: string, granularity: "day" | "week") {
-  try {
-    const parsed = parseISO(periodStart);
-    return granularity === "week" ? `T${format(parsed, "w")}` : format(parsed, "dd/MM");
-  } catch {
-    return periodStart;
-  }
-}
-
-function formatTooltipDate(periodStart: string, granularity: "day" | "week") {
-  try {
-    const parsed = parseISO(periodStart);
-    return granularity === "week"
-      ? `Tuần bắt đầu ${format(parsed, "dd/MM/yyyy")}`
-      : format(parsed, "dd/MM/yyyy");
-  } catch {
-    return periodStart;
-  }
-}
-
 function VolumeTooltip({
   active,
   payload,
@@ -69,7 +49,9 @@ function VolumeTooltip({
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-md text-sm">
-      <p className="font-semibold text-slate-900 mb-1">{formatTooltipDate(row.periodStart, granularity)}</p>
+      <p className="font-semibold text-slate-900 mb-1">
+        {formatActivityBucketTooltip(row.periodStart, granularity)}
+      </p>
       <p className="text-teal-700">
         Upload: <span className="font-semibold">{row.count}</span>
       </p>
@@ -99,7 +81,7 @@ export function UploadVolumeBarChart({
       const previous = comparePrevious ? previousByPeriod.get(bucket.periodStart) : undefined;
       return {
         ...bucket,
-        label: formatLabel(bucket.periodStart, granularity),
+        label: formatActivityBucketLabel(bucket.periodStart, granularity),
         previousCount: previous?.count,
         previousRetryCount: previous?.retryCount,
       };

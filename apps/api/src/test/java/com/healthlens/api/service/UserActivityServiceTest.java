@@ -1,6 +1,5 @@
 package com.healthlens.api.service;
 
-import com.healthlens.api.activity.UserActivityEventType;
 import com.healthlens.api.repository.UserActivityEventRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,16 +26,12 @@ class UserActivityServiceTest {
     @DisplayName("recordAuthIfAbsent uses atomic idempotent insert")
     void recordAuthIfAbsent_usesAtomicInsert() {
         UUID userId = UUID.randomUUID();
-        when(userActivityEventRepository.insertAuthEventIfAbsent(
-                eq(userId),
-                eq(UserActivityEventType.AUTHENTICATED_API_CALL)))
+        when(userActivityEventRepository.insertAuthEventIfAbsent(any(UUID.class), eq(userId)))
                 .thenReturn(1);
 
         userActivityService.recordAuthIfAbsent(userId);
 
-        verify(userActivityEventRepository).insertAuthEventIfAbsent(
-                eq(userId),
-                eq(UserActivityEventType.AUTHENTICATED_API_CALL));
+        verify(userActivityEventRepository).insertAuthEventIfAbsent(any(UUID.class), eq(userId));
     }
 
     @Test

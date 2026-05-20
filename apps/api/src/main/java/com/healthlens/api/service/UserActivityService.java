@@ -34,9 +34,7 @@ public class UserActivityService {
             return;
         }
         try {
-            userActivityEventRepository.insertAuthEventIfAbsent(
-                    userId,
-                    UserActivityEventType.AUTHENTICATED_API_CALL);
+            userActivityEventRepository.insertAuthEventIfAbsent(UUID.randomUUID(), userId);
         } catch (Exception e) {
             log.warn("Failed to record authenticated API activity for userId={}", userId, e);
         }
@@ -67,5 +65,19 @@ public class UserActivityService {
 
     static Instant startOfNextUtcWeek(LocalDate reference) {
         return reference.with(java.time.DayOfWeek.MONDAY).plusWeeks(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+    }
+
+    /**
+     * Expands {@code [from, toExclusive)} to full UTC ISO weeks (Monday 00:00 boundaries) so WAU
+     * buckets match {@code DATE_TRUNC('week', ...)} and are not partial-week counts mislabeled as
+     * a week start.
+     */
+    static Instant wauQueryFrom(Instant from) {
+        return startOfUtcWeek(from.atZone(ZoneOffset.UTC).toLocalDate());
+    }
+
+    static Instant wauQueryToExclusive(Instant toExclusive) {
+        LocalDate lastIncluded = toExclusive.minusNanos(1).atZone(ZoneOffset.UTC).toLocalDate();
+        return startOfNextUtcWeek(lastIncluded);
     }
 }

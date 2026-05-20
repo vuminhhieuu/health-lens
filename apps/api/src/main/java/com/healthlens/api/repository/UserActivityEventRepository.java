@@ -71,16 +71,16 @@ public interface UserActivityEventRepository extends JpaRepository<UserActivityE
             @Param("toExclusive") Instant toExclusive);
 
     /**
-     * Single round-trip, atomic idempotent insert for daily AUTH marker.
-     * Uses ON CONFLICT DO NOTHING so duplicate daily events never fail the caller transaction.
+     * Single round-trip, atomic idempotent insert for daily {@code AUTHENTICATED_API_CALL} marker.
+     * {@code event_type} is fixed in SQL so callers cannot bypass {@code idx_activity_auth_daily}.
      */
     @Modifying
     @Query(value = """
         INSERT INTO user_activity_events (id, user_id, event_type, is_retry, created_at)
-        VALUES (gen_random_uuid(), :userId, :eventType, false, CURRENT_TIMESTAMP)
+        VALUES (:id, :userId, 'AUTHENTICATED_API_CALL', false, CURRENT_TIMESTAMP)
         ON CONFLICT DO NOTHING
         """, nativeQuery = true)
     int insertAuthEventIfAbsent(
-            @Param("userId") UUID userId,
-            @Param("eventType") String eventType);
+            @Param("id") UUID id,
+            @Param("userId") UUID userId);
 }

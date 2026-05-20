@@ -43,6 +43,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -206,10 +207,15 @@ class AnalyticsServiceTest {
         ActivityWauBucketProjection wauWeek = wauBucket(LocalDate.of(2026, 3, 2), 12);
         ActivityUploadBucketProjection uploadDay = uploadBucket(LocalDate.of(2026, 3, 2), 5, 1);
 
-        when(userActivityEventRepository.findWauBuckets(from, toExclusive)).thenReturn(List.of(wauWeek));
+        Instant wauFrom = UserActivityService.wauQueryFrom(from);
+        Instant wauToExclusive = UserActivityService.wauQueryToExclusive(toExclusive);
+        Instant previousWauFrom = UserActivityService.wauQueryFrom(previousFrom);
+        Instant previousWauToExclusive = UserActivityService.wauQueryToExclusive(from);
+
+        when(userActivityEventRepository.findWauBuckets(wauFrom, wauToExclusive)).thenReturn(List.of(wauWeek));
         when(userActivityEventRepository.findUploadBuckets(from, toExclusive, "day"))
                 .thenReturn(List.of(uploadDay));
-        when(userActivityEventRepository.findWauBuckets(previousFrom, from)).thenReturn(List.of());
+        when(userActivityEventRepository.findWauBuckets(previousWauFrom, previousWauToExclusive)).thenReturn(List.of());
         when(userActivityEventRepository.findUploadBuckets(previousFrom, from, "day")).thenReturn(List.of());
         when(userActivityEventRepository.countDistinctActiveUsers(any(), any())).thenReturn(10L, 8L);
         when(userActivityEventRepository.countUploads(any(), any())).thenAnswer(invocation -> {
@@ -244,20 +250,108 @@ class AnalyticsServiceTest {
     }
 
     @Test
-    @DisplayName("alignPreviousWauBuckets map theo periodStart lech dung so ngay khoang")
-    void alignPreviousWauBuckets_mapsByShiftedPeriodStart() {
-        Duration range = Duration.ofDays(7);
+    @DisplayName("alignPreviousWauBuckets shift theo anchor Monday UTC, khong dung range.toDays")
+    void alignPreviousWauBuckets_mapsByWeekAnchorShift() {
         List<ActivityAnalyticsResponse.WauBucket> current = List.of(
                 new ActivityAnalyticsResponse.WauBucket("2026-03-10", 20));
         List<ActivityAnalyticsResponse.WauBucket> previousRaw = List.of(
                 new ActivityAnalyticsResponse.WauBucket("2026-03-03", 15));
 
         List<ActivityAnalyticsResponse.WauBucket> aligned =
-                AnalyticsService.alignPreviousWauBuckets(current, previousRaw, range);
+                AnalyticsService.alignPreviousWauBuckets(current, previousRaw);
 
         assertThat(aligned).hasSize(1);
         assertThat(aligned.get(0).periodStart()).isEqualTo("2026-03-10");
         assertThat(aligned.get(0).wau()).isEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("alignPreviousWauBuckets khong tra zero khi range lech tuan nhung anchor dung")
+    void alignPreviousWauBuckets_nonWeekAlignedRangeStillMapsPrevious() {
+        List<ActivityAnalyticsResponse.WauBucket> current = List.of(
+                new ActivityAnalyticsResponse.WauBucket("2026-03-02", 10),
+                new ActivityAnalyticsResponse.WauBucket("2026-03-09", 20));
+        List<ActivityAnalyticsResponse.WauBucket> previousRaw = List.of(
+                new ActivityAnalyticsResponse.WauBucket("2026-02-17", 5),
+                new ActivityAnalyticsResponse.WauBucket("2026-02-24", 8),
+                new ActivityAnalyticsResponse.WauBucket("2026-03-03", 15));
+
+        List<ActivityAnalyticsResponse.WauBucket> aligned =
+                AnalyticsService.alignPreviousWauBuckets(current, previousRaw);
+
+        assertThat(aligned).hasSize(2);
+        assertThat(aligned.get(0).wau()).isEqualTo(8);
+        assertThat(aligned.get(1).wau()).isEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("alignPreviousUploadBuckets weekly: index offset, khong dung range.toDays")
+    void alignPreviousUploadBuckets_weekGranularity_mapsByIndexOffset() {
+        List<ActivityAnalyticsResponse.UploadBucket> current = List.of(
+                new ActivityAnalyticsResponse.UploadBucket("2026-03-02", 10, 1),
+                new ActivityAnalyticsResponse.UploadBucket("2026-03-09", 20, 2));
+        List<ActivityAnalyticsResponse.UploadBucket> previousRaw = List.of(
+                new ActivityAnalyticsResponse.UploadBucket("2026-02-17", 1, 0),
+                new ActivityAnalyticsResponse.UploadBucket("2026-02-24", 8, 1),
+                new ActivityAnalyticsResponse.UploadBucket("2026-03-03", 15, 3));
+
+        List<ActivityAnalyticsResponse.UploadBucket> aligned =
+                AnalyticsService.alignPreviousUploadBuckets(current, previousRaw);
+
+        assertThat(aligned).hasSize(2);
+        assertThat(aligned.get(0).count()).isEqualTo(8);
+        assertThat(aligned.get(0).retryCount()).isEqualTo(1);
+        assertThat(aligned.get(1).count()).isEqualTo(15);
+        assertThat(aligned.get(1).retryCount()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("alignPreviousUploadBuckets daily: cung do dai thi map theo index")
+    void alignPreviousUploadBuckets_dayGranularity_mapsByIndex() {
+        List<ActivityAnalyticsResponse.UploadBucket> current = List.of(
+                new ActivityAnalyticsResponse.UploadBucket("2026-03-05", 4, 0),
+                new ActivityAnalyticsResponse.UploadBucket("2026-03-06", 5, 1));
+        List<ActivityAnalyticsResponse.UploadBucket> previousRaw = List.of(
+                new ActivityAnalyticsResponse.UploadBucket("2026-02-26", 2, 0),
+                new ActivityAnalyticsResponse.UploadBucket("2026-02-27", 3, 1));
+
+        List<ActivityAnalyticsResponse.UploadBucket> aligned =
+                AnalyticsService.alignPreviousUploadBuckets(current, previousRaw);
+
+        assertThat(aligned).hasSize(2);
+        assertThat(aligned.get(0).count()).isEqualTo(2);
+        assertThat(aligned.get(1).count()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("wauQueryFrom/ToExclusive mo rong ve tuan UTC day du")
+    void wauQueryRange_expandsToFullUtcWeeks() {
+        Instant from = Instant.parse("2026-03-05T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-03-16T00:00:00Z");
+
+        assertThat(UserActivityService.wauQueryFrom(from))
+                .isEqualTo(Instant.parse("2026-03-02T00:00:00Z"));
+        assertThat(UserActivityService.wauQueryToExclusive(toExclusive))
+                .isEqualTo(Instant.parse("2026-03-16T00:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("getActivity goi findWauBuckets voi cua so tuan UTC da chuan hoa")
+    void getActivity_queriesWauWithNormalizedWeekWindow() {
+        Instant from = Instant.parse("2026-03-05T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-03-16T00:00:00Z");
+        Instant wauFrom = Instant.parse("2026-03-02T00:00:00Z");
+        Instant wauToExclusive = Instant.parse("2026-03-16T00:00:00Z");
+
+        when(userActivityEventRepository.findWauBuckets(wauFrom, wauToExclusive)).thenReturn(List.of());
+        when(userActivityEventRepository.findUploadBuckets(from, toExclusive, "day")).thenReturn(List.of());
+        when(userActivityEventRepository.countDistinctActiveUsers(any(), any())).thenReturn(0L);
+        when(userActivityEventRepository.countUploads(from, toExclusive)).thenReturn(0L);
+
+        analyticsService.getActivity(from, toExclusive, "day", false);
+
+        verify(userActivityEventRepository).findWauBuckets(wauFrom, wauToExclusive);
+        verify(userActivityEventRepository).findUploadBuckets(from, toExclusive, "day");
     }
 
     @Test
@@ -268,8 +362,10 @@ class AnalyticsServiceTest {
         List<ActivityAnalyticsResponse.WauBucket> sparse = List.of(
                 new ActivityAnalyticsResponse.WauBucket("2026-03-02", 5));
 
+        Instant wauFrom = UserActivityService.wauQueryFrom(from);
+        Instant wauToExclusive = UserActivityService.wauQueryToExclusive(toExclusive);
         List<ActivityAnalyticsResponse.WauBucket> filled =
-                AnalyticsService.fillWauBuckets(sparse, from, toExclusive);
+                AnalyticsService.fillWauBuckets(sparse, wauFrom, wauToExclusive);
 
         assertThat(filled).hasSize(2);
         assertThat(filled.get(0).periodStart()).isEqualTo("2026-03-02");

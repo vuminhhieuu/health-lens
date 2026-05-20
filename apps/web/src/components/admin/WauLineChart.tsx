@@ -1,7 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { format, parseISO } from "date-fns";
+import {
+  formatUtcIsoWeekAxisLabel,
+  formatUtcWeekBucketTooltip,
+} from "@/lib/admin/utcPeriodLabels";
 import {
   CartesianGrid,
   Legend,
@@ -31,28 +34,12 @@ type WauLineChartProps = {
   comparePrevious: boolean;
 };
 
-function formatWeekLabel(periodStart: string) {
-  try {
-    return `T${format(parseISO(periodStart), "w")}`;
-  } catch {
-    return periodStart;
-  }
-}
-
-function formatWeekTooltip(periodStart: string) {
-  try {
-    return `Tuần bắt đầu ${format(parseISO(periodStart), "dd/MM/yyyy")}`;
-  } catch {
-    return periodStart;
-  }
-}
-
 function buildRows(current: WauBucket[], previous: WauBucket[]): ChartRow[] {
   const previousByPeriod = new Map(previous.map((bucket) => [bucket.periodStart, bucket.wau]));
   return current.map((bucket) => ({
     periodStart: bucket.periodStart,
     wau: bucket.wau,
-    label: formatWeekLabel(bucket.periodStart),
+    label: formatUtcIsoWeekAxisLabel(bucket.periodStart),
     previousWau: previousByPeriod.get(bucket.periodStart),
   }));
 }
@@ -70,7 +57,7 @@ function WauTooltip({
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-md text-sm">
-      <p className="font-semibold text-slate-900 mb-1">{formatWeekTooltip(row.periodStart)}</p>
+      <p className="font-semibold text-slate-900 mb-1">{formatUtcWeekBucketTooltip(row.periodStart)}</p>
       <p className="text-teal-700">
         WAU: <span className="font-semibold">{row.wau}</span> người
       </p>

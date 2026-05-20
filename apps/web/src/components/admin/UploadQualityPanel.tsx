@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
+import { formatActivityBucketTooltip } from "@/lib/admin/utcPeriodLabels";
 import { AlertCircle, Calendar, Info, Loader2, X } from "lucide-react";
 
 import {
@@ -70,14 +71,7 @@ function formatDisplayDate(isoDate: string) {
 }
 
 function formatBucketModalTitle(date: string, granularity: "day" | "week") {
-  try {
-    const parsed = parseISO(date);
-    return granularity === "week"
-      ? `Tuần bắt đầu ${format(parsed, "dd/MM/yyyy")}`
-      : format(parsed, "dd/MM/yyyy");
-  } catch {
-    return date;
-  }
+  return formatActivityBucketTooltip(date, granularity);
 }
 
 function bucketToPieData(bucket: UploadQualityBucket): PieSlice[] {

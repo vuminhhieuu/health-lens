@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { format, parseISO } from "date-fns";
+import { formatActivityBucketLabel, formatActivityBucketTooltip } from "@/lib/admin/utcPeriodLabels";
 import {
   Bar,
   CartesianGrid,
@@ -36,26 +36,6 @@ type UploadQualityChartProps = {
   onBucketSelect?: (bucket: UploadQualityBucket) => void;
 };
 
-function formatBucketLabel(date: string, granularity: "day" | "week") {
-  try {
-    const parsed = parseISO(date);
-    return granularity === "week" ? `T${format(parsed, "w")}` : format(parsed, "dd/MM");
-  } catch {
-    return date;
-  }
-}
-
-function formatBucketTooltipDate(date: string, granularity: "day" | "week") {
-  try {
-    const parsed = parseISO(date);
-    return granularity === "week"
-      ? `Tuần bắt đầu ${format(parsed, "dd/MM/yyyy")}`
-      : format(parsed, "dd/MM/yyyy");
-  } catch {
-    return date;
-  }
-}
-
 type ChartTooltipProps = {
   active?: boolean;
   payload?: unknown;
@@ -79,7 +59,9 @@ function ChartTooltip({ active, payload, granularity, successRateTarget }: Chart
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-md text-sm min-w-[200px]">
-      <p className="font-semibold text-slate-900 mb-2">{formatBucketTooltipDate(row.date, granularity)}</p>
+      <p className="font-semibold text-slate-900 mb-2">
+        {formatActivityBucketTooltip(row.date, granularity)}
+      </p>
       <p className="text-emerald-700">
         Thành công: <span className="font-semibold">{row.success}</span>
       </p>
@@ -139,7 +121,7 @@ export function UploadQualityChart({
         const successRatePercent = total === 0 ? 0 : bucket.successRate * 100;
         return {
           ...bucket,
-          label: formatBucketLabel(bucket.date, granularity),
+          label: formatActivityBucketLabel(bucket.date, granularity),
           total,
           successRatePercent,
           belowTarget: total > 0 && bucket.successRate < successRateTarget,
