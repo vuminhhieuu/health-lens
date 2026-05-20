@@ -68,9 +68,9 @@ public class UserActivityService {
     }
 
     /**
-     * Expands {@code [from, toExclusive)} to full UTC ISO weeks (Monday 00:00 boundaries) so WAU
-     * buckets match {@code DATE_TRUNC('week', ...)} and are not partial-week counts mislabeled as
-     * a week start.
+     * Expands {@code [from, toExclusive)} to full UTC ISO weeks (Monday 00:00 boundaries) so weekly
+     * analytics buckets (WAU and upload volume with {@code granularity=week}) match
+     * {@code DATE_TRUNC('week', ...)} and are not partial-week counts mislabeled as a week start.
      */
     static Instant wauQueryFrom(Instant from) {
         return startOfUtcWeek(from.atZone(ZoneOffset.UTC).toLocalDate());

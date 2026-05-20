@@ -272,16 +272,19 @@ public class AnalyticsService {
 
         Instant wauFrom = UserActivityService.wauQueryFrom(from);
         Instant wauToExclusive = UserActivityService.wauQueryToExclusive(toExclusive);
+        Instant uploadFrom = uploadQueryFrom(from, normalizedGranularity);
+        Instant uploadToExclusive = uploadQueryToExclusive(toExclusive, normalizedGranularity);
 
         List<ActivityWauBucketProjection> wauRows =
                 userActivityEventRepository.findWauBuckets(wauFrom, wauToExclusive);
         List<ActivityUploadBucketProjection> uploadRows =
-                userActivityEventRepository.findUploadBuckets(from, toExclusive, normalizedGranularity);
+                userActivityEventRepository.findUploadBuckets(
+                        uploadFrom, uploadToExclusive, normalizedGranularity);
 
         List<ActivityAnalyticsResponse.WauBucket> wauBuckets = fillWauBuckets(
                 mapWauBuckets(wauRows), wauFrom, wauToExclusive);
         List<ActivityAnalyticsResponse.UploadBucket> uploadBuckets = fillUploadBuckets(
-                mapUploadBuckets(uploadRows), from, toExclusive, normalizedGranularity);
+                mapUploadBuckets(uploadRows), uploadFrom, uploadToExclusive, normalizedGranularity);
 
         long uploadsInRange = userActivityEventRepository.countUploads(from, toExclusive);
 
@@ -298,12 +301,14 @@ public class AnalyticsService {
                     mapWauBuckets(userActivityEventRepository.findWauBuckets(previousWauFrom, previousWauToExclusive)),
                     previousWauFrom,
                     previousWauToExclusive);
+            Instant previousUploadFrom = uploadQueryFrom(previousFrom, normalizedGranularity);
+            Instant previousUploadToExclusive = uploadQueryToExclusive(from, normalizedGranularity);
             List<ActivityAnalyticsResponse.UploadBucket> previousUploadFilled = fillUploadBuckets(
                     mapUploadBuckets(
                             userActivityEventRepository.findUploadBuckets(
-                                    previousFrom, from, normalizedGranularity)),
-                    previousFrom,
-                    from,
+                                    previousUploadFrom, previousUploadToExclusive, normalizedGranularity)),
+                    previousUploadFrom,
+                    previousUploadToExclusive,
                     normalizedGranularity);
             wauBucketsPrevious = alignPreviousWauBuckets(wauBuckets, previousWauFilled);
             uploadBucketsPrevious = alignPreviousUploadBuckets(uploadBuckets, previousUploadFilled);
@@ -394,21 +399,27 @@ public class AnalyticsService {
         return filled;
     }
 
+    static Instant uploadQueryFrom(Instant from, String granularity) {
+        return "week".equals(granularity) ? UserActivityService.wauQueryFrom(from) : from;
+    }
+
+    static Instant uploadQueryToExclusive(Instant toExclusive, String granularity) {
+        return "week".equals(granularity)
+                ? UserActivityService.wauQueryToExclusive(toExclusive)
+                : toExclusive;
+    }
+
     static List<ActivityAnalyticsResponse.UploadBucket> fillUploadBuckets(
             List<ActivityAnalyticsResponse.UploadBucket> buckets,
-            Instant from,
-            Instant toExclusive,
+            Instant queryFrom,
+            Instant queryToExclusive,
             String granularity) {
         Map<LocalDate, ActivityAnalyticsResponse.UploadBucket> byStart = new HashMap<>();
         for (ActivityAnalyticsResponse.UploadBucket bucket : buckets) {
             byStart.put(LocalDate.parse(bucket.periodStart()), bucket);
         }
-        LocalDate rangeEnd = toExclusive.atZone(ZoneOffset.UTC).toLocalDate();
-        LocalDate cursor = "week".equals(granularity)
-                ? UserActivityService.startOfUtcWeek(from.atZone(ZoneOffset.UTC).toLocalDate())
-                        .atZone(ZoneOffset.UTC)
-                        .toLocalDate()
-                : from.atZone(ZoneOffset.UTC).toLocalDate();
+        LocalDate rangeEnd = queryToExclusive.atZone(ZoneOffset.UTC).toLocalDate();
+        LocalDate cursor = queryFrom.atZone(ZoneOffset.UTC).toLocalDate();
         List<ActivityAnalyticsResponse.UploadBucket> filled = new ArrayList<>();
         while (cursor.isBefore(rangeEnd)) {
             ActivityAnalyticsResponse.UploadBucket existing = byStart.get(cursor);

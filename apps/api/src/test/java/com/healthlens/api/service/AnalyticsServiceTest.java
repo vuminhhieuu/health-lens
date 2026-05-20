@@ -336,6 +336,26 @@ class AnalyticsServiceTest {
     }
 
     @Test
+    @DisplayName("getActivity goi findUploadBuckets voi cua so tuan UTC khi granularity=week")
+    void getActivity_queriesUploadWithNormalizedWeekWindow() {
+        Instant from = Instant.parse("2026-03-05T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-03-16T00:00:00Z");
+        Instant uploadFrom = Instant.parse("2026-03-02T00:00:00Z");
+        Instant uploadToExclusive = Instant.parse("2026-03-16T00:00:00Z");
+
+        when(userActivityEventRepository.findWauBuckets(any(), any())).thenReturn(List.of());
+        when(userActivityEventRepository.findUploadBuckets(uploadFrom, uploadToExclusive, "week"))
+                .thenReturn(List.of());
+        when(userActivityEventRepository.countDistinctActiveUsers(any(), any())).thenReturn(0L);
+        when(userActivityEventRepository.countUploads(from, toExclusive)).thenReturn(0L);
+
+        analyticsService.getActivity(from, toExclusive, "week", false);
+
+        verify(userActivityEventRepository).findUploadBuckets(uploadFrom, uploadToExclusive, "week");
+        verify(userActivityEventRepository).countUploads(from, toExclusive);
+    }
+
+    @Test
     @DisplayName("getActivity goi findWauBuckets voi cua so tuan UTC da chuan hoa")
     void getActivity_queriesWauWithNormalizedWeekWindow() {
         Instant from = Instant.parse("2026-03-05T00:00:00Z");
@@ -372,6 +392,40 @@ class AnalyticsServiceTest {
         assertThat(filled.get(0).wau()).isEqualTo(5);
         assertThat(filled.get(1).periodStart()).isEqualTo("2026-03-09");
         assertThat(filled.get(1).wau()).isZero();
+    }
+
+    @Test
+    @DisplayName("uploadQueryFrom/ToExclusive mo rong ve tuan UTC khi granularity=week")
+    void uploadQueryRange_expandsToFullUtcWeeksForWeekGranularity() {
+        Instant from = Instant.parse("2026-03-05T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-03-16T00:00:00Z");
+
+        assertThat(AnalyticsService.uploadQueryFrom(from, "week"))
+                .isEqualTo(UserActivityService.wauQueryFrom(from));
+        assertThat(AnalyticsService.uploadQueryToExclusive(toExclusive, "week"))
+                .isEqualTo(UserActivityService.wauQueryToExclusive(toExclusive));
+        assertThat(AnalyticsService.uploadQueryFrom(from, "day")).isEqualTo(from);
+        assertThat(AnalyticsService.uploadQueryToExclusive(toExclusive, "day")).isEqualTo(toExclusive);
+    }
+
+    @Test
+    @DisplayName("fillUploadBuckets lap day trong cho moi tuan UTC khi granularity=week")
+    void fillUploadBuckets_fillsMissingWeeksWithZero() {
+        Instant from = Instant.parse("2026-03-05T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-03-16T00:00:00Z");
+        List<ActivityAnalyticsResponse.UploadBucket> sparse = List.of(
+                new ActivityAnalyticsResponse.UploadBucket("2026-03-02", 4, 1));
+
+        Instant uploadFrom = AnalyticsService.uploadQueryFrom(from, "week");
+        Instant uploadToExclusive = AnalyticsService.uploadQueryToExclusive(toExclusive, "week");
+        List<ActivityAnalyticsResponse.UploadBucket> filled =
+                AnalyticsService.fillUploadBuckets(sparse, uploadFrom, uploadToExclusive, "week");
+
+        assertThat(filled).hasSize(2);
+        assertThat(filled.get(0).periodStart()).isEqualTo("2026-03-02");
+        assertThat(filled.get(0).count()).isEqualTo(4);
+        assertThat(filled.get(1).periodStart()).isEqualTo("2026-03-09");
+        assertThat(filled.get(1).count()).isZero();
     }
 
     @Test
