@@ -298,7 +298,7 @@ development_status:
   public-account-experience: in-progress
   pae-1-settings-hub-and-navigation-fix: done
   pae-2-marketing-route-group-and-root-routing: done
-  pae-3-public-landing-page-ssr: backlog
+  pae-3-public-landing-page-ssr: done
   pae-4-seo-foundation-metadata-sitemap-robots: backlog
   pae-5-public-privacy-and-terms-pages: backlog
   pae-6-change-password-api-and-settings-ui: backlog

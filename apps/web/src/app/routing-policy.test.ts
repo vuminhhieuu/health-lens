@@ -27,6 +27,10 @@ describe("public account routing policy", () => {
     expect(marketingLayout).toContain("MarketingHeader");
     expect(marketingLayout).toContain("MarketingFooter");
     expect(marketingHome).toContain("Một nơi an toàn để lưu trữ");
+    expect(marketingHome).toContain("Cách HealthLens hoạt động");
+    expect(marketingHome).toContain("LandingGuestCtas");
+    expect(marketingHome).toContain("LandingDashboardPreview");
+    expect(marketingHome).not.toContain("LandingGuestClosingBand");
   });
 
   it("keeps app metadata Vietnamese and removes Create Next App defaults", () => {
@@ -47,6 +51,7 @@ describe("public account routing policy", () => {
     expect(consentModal).toContain('"/privacy"');
     expect(consentModal).toContain('"/terms"');
     expect(consentModal).toContain('"/help"');
+    expect(consentModal).toContain('"/support"');
     expect(consentModal).toContain('"/faq"');
     expect(consentModal).toContain('"/questions"');
   });
