@@ -56,7 +56,7 @@ class DataDeletionServiceTest {
     @Mock private DataDeletionRequestRepository deletionRequestRepository;
     @Mock private UserRepository userRepository;
     @Mock private PasswordEncoder passwordEncoder;
-    @Mock private EmailService emailService;
+    @Mock private EmailEventPublisher emailEventPublisher;
     @Mock private HealthRecordRepository healthRecordRepository;
     @Mock private ProfileRepository profileRepository;
     @Mock private ProfileShareRepository profileShareRepository;
@@ -85,7 +85,7 @@ class DataDeletionServiceTest {
                 deletionRequestRepository,
                 userRepository,
                 passwordEncoder,
-                emailService,
+                emailEventPublisher,
                 healthRecordRepository,
                 profileRepository,
                 profileShareRepository,
@@ -162,7 +162,7 @@ class DataDeletionServiceTest {
         verify(accountStatusCache).put(userId, AccountStatus.PENDING_DELETION);
 
         // AC #4: confirmation email
-        verify(emailService).sendDeletionConfirmationEmail(any(User.class), any(DataDeletionRequest.class), anyString());
+        verify(emailEventPublisher).publishDeletionConfirmation(any(User.class), any(DataDeletionRequest.class), anyString());
 
         ArgumentCaptor<Map<String, ?>> auditCaptor = ArgumentCaptor.forClass(Map.class);
         verify(auditEventRecorder).recordEvent(eq(userId), anyString(), anyString(), eq(userId), auditCaptor.capture());
@@ -184,7 +184,7 @@ class DataDeletionServiceTest {
                 .hasMessage("Mật khẩu không đúng");
 
         verify(deletionRequestRepository, never()).saveAndFlush(any());
-        verify(emailService, never()).sendDeletionConfirmationEmail(any(), any(), any());
+        verify(emailEventPublisher, never()).publishDeletionConfirmation(any(), any(), any());
     }
 
     @Test
@@ -238,7 +238,7 @@ class DataDeletionServiceTest {
 
         verify(refreshTokenRepository, never()).revokeAllByUserId(any(), any());
         verify(userRepository, never()).save(any());
-        verify(emailService, never()).sendDeletionConfirmationEmail(any(), any(), any());
+        verify(emailEventPublisher, never()).publishDeletionConfirmation(any(), any(), any());
     }
 
     // ========== CANCEL DELETION REQUEST TESTS ==========
@@ -277,7 +277,7 @@ class DataDeletionServiceTest {
         assertThat(userCaptor.getValue().getAccountStatus()).isEqualTo(AccountStatus.ACTIVE);
         verify(accountStatusCache).put(userId, AccountStatus.ACTIVE);
 
-        verify(emailService).sendCancellationConfirmationEmail(any(User.class));
+        verify(emailEventPublisher).publishDeletionCancellation(any(User.class));
         ArgumentCaptor<Map<String, ?>> auditCaptor = ArgumentCaptor.forClass(Map.class);
         verify(auditEventRecorder).recordEvent(eq(userId), anyString(), anyString(), eq(userId), auditCaptor.capture());
         assertThat(auditCaptor.getValue()).containsKey("requestId");
@@ -297,7 +297,7 @@ class DataDeletionServiceTest {
                 .hasMessage("Liên kết hủy yêu cầu không hợp lệ hoặc đã hết hiệu lực.");
 
         verify(userRepository, never()).save(any());
-        verify(emailService, never()).sendCancellationConfirmationEmail(any());
+        verify(emailEventPublisher, never()).publishDeletionCancellation(any());
     }
 
     @Test
@@ -339,7 +339,7 @@ class DataDeletionServiceTest {
         verify(userRepository, never()).save(any());
         verify(userRepository, never()).findById(any());
         verify(deletionRequestRepository, never()).save(any());
-        verify(emailService, never()).sendCancellationConfirmationEmail(any());
+        verify(emailEventPublisher, never()).publishDeletionCancellation(any());
     }
 
     @Test
@@ -456,7 +456,7 @@ class DataDeletionServiceTest {
         assertThat(saved.isEmailVerified()).isFalse();
 
         verify(accountStatusCache).put(userId, AccountStatus.DELETED);
-        verify(emailService, times(1)).sendDeletionCompletionEmail(any(User.class));
+        verify(emailEventPublisher, times(1)).publishDeletionCompletion(any(User.class));
         ArgumentCaptor<Map<String, ?>> auditCaptor = ArgumentCaptor.forClass(Map.class);
         verify(auditEventRecorder).recordEvent(
                 eq(userId),
@@ -496,7 +496,7 @@ class DataDeletionServiceTest {
         verify(profileRepository, never()).deleteAllByUserId(any());
         verify(deletionRequestRepository, never()).save(any());
         verify(userRepository, never()).save(any());
-        verify(emailService, never()).sendDeletionCompletionEmail(any());
+        verify(emailEventPublisher, never()).publishDeletionCompletion(any());
     }
 
     @Test

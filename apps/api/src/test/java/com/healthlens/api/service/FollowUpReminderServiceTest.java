@@ -44,7 +44,7 @@ class FollowUpReminderServiceTest {
     private ProfileRepository profileRepository;
 
     @Mock
-    private EmailService emailService;
+    private EmailEventPublisher emailEventPublisher;
 
     private FollowUpReminderService service;
     private UUID userId;
@@ -53,7 +53,7 @@ class FollowUpReminderServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new FollowUpReminderService(reminderRepository, profileRepository, emailService);
+        service = new FollowUpReminderService(reminderRepository, profileRepository, emailEventPublisher);
         userId = UUID.randomUUID();
         profileId = UUID.randomUUID();
         User user = new User();
@@ -115,10 +115,6 @@ class FollowUpReminderServiceTest {
                 any(Instant.class),
                 any(Instant.class),
                 any(AccountStatus.class))).thenReturn(1);
-        when(reminderRepository.findWithProfileAndUserById(any(UUID.class)))
-                .thenAnswer(invocation -> Optional.of(savedReminder.get()));
-        when(emailService.sendFollowUpReminderEmail(any(FollowUpReminder.class))).thenReturn(true);
-
         LocalDate today = LocalDate.now(VN_ZONE);
 
         FollowUpReminderResponse response = service.create(
@@ -128,8 +124,8 @@ class FollowUpReminderServiceTest {
         );
 
         assertThat(response.profileId()).isEqualTo(profileId);
-        verify(emailService).sendFollowUpReminderEmail(any(FollowUpReminder.class));
-        verify(reminderRepository).markEmailSent(any(UUID.class), any(Instant.class));
+        verify(emailEventPublisher).publishFollowUpReminder(any(UUID.class));
+        verify(reminderRepository, never()).markEmailSent(any(UUID.class), any(Instant.class));
     }
 
     @Test
@@ -213,16 +209,12 @@ class FollowUpReminderServiceTest {
                 any(Instant.class),
                 any(Instant.class),
                 any(AccountStatus.class))).thenReturn(1);
-        when(reminderRepository.findWithProfileAndUserById(first.getId())).thenReturn(Optional.of(first));
-        when(reminderRepository.findWithProfileAndUserById(second.getId())).thenReturn(Optional.of(second));
-        when(emailService.sendFollowUpReminderEmail(first)).thenReturn(true);
-        when(emailService.sendFollowUpReminderEmail(second)).thenReturn(false);
+        int dispatchedCount = service.sendDueReminderEmails(LocalDate.of(2026, 6, 20));
 
-        int sentCount = service.sendDueReminderEmails(LocalDate.of(2026, 6, 20));
-
-        assertThat(sentCount).isEqualTo(1);
-        verify(reminderRepository).markEmailSent(eq(first.getId()), any(Instant.class));
-        verify(reminderRepository, never()).markEmailSent(eq(second.getId()), any(Instant.class));
+        assertThat(dispatchedCount).isEqualTo(2);
+        verify(emailEventPublisher).publishFollowUpReminder(first.getId());
+        verify(emailEventPublisher).publishFollowUpReminder(second.getId());
+        verify(reminderRepository, never()).markEmailSent(any(UUID.class), any(Instant.class));
     }
 
     private FollowUpReminder existingReminder(UUID reminderId) {

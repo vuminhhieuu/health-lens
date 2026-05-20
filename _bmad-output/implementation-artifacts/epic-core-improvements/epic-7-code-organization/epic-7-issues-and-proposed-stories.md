@@ -39,6 +39,10 @@ Implication:
 
 The codebase does not yet have one explicit rule for when asynchronous work must be event-driven. This must be confirmed before broader backend refactors, or package boundaries may be rearranged twice.
 
+Decision:
+
+Story `7.9` accepted the hybrid async model documented in `docs/event-driven-architecture.md`: Redis Streams are the standard for durable cross-boundary async events, DB-claimed jobs remain valid where the database row owns scheduling/claim state, and direct synchronous calls remain valid for command invariants and command audit writes.
+
 ### C. Backend Source Organization Needs Clearer Bounded Contexts
 
 Observed state:
@@ -129,6 +133,10 @@ Reason:
 
 This is the missing architecture decision that should happen before broader backend reorganization.
 
+Outcome:
+
+Accepted in `docs/event-driven-architecture.md`. Later stories should cite this decision instead of assuming either "all side effects are stream events" or "direct service calls are acceptable everywhere".
+
 ### 7.10 Unify Email Event Delivery
 
 Reason:
@@ -171,7 +179,7 @@ Project documentation has drifted from the current source tree and migration his
 
 ## Planning Guidance
 
-- Do not start `7-1` as a larger architecture refactor until `7-9` confirms event and package boundary rules.
+- Do not start `7-1` as a larger architecture refactor beyond the package-boundary scope; `7-9` has confirmed event and package boundary rules in `docs/event-driven-architecture.md`.
 - Do not fold `7-7` into `7-1`; that would turn a package move into behavior-sensitive service surgery.
 - Do not mix UI consistency work into `7-2`, `7-5`, or `7-6`; those stories are about source organization, not visual redesign.
 - Do not update `sprint-status.yaml` until this expanded backlog is reviewed and approved.

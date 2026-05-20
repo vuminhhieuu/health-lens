@@ -47,7 +47,7 @@ public class HealthRecordShareService {
     private final ProfileShareRepository profileShareRepository;
     private final ProfileShareAuditLogRepository auditLogRepository;
     private final UserRepository userRepository;
-    private final EmailService emailService;
+    private final EmailEventPublisher emailEventPublisher;
     private final AuditEventRecorder auditEventRecorder;
 
     @Value("${app.frontend.base-url:http://localhost:3000}")
@@ -61,7 +61,7 @@ public class HealthRecordShareService {
             ProfileShareRepository profileShareRepository,
             ProfileShareAuditLogRepository auditLogRepository,
             UserRepository userRepository,
-            EmailService emailService,
+            EmailEventPublisher emailEventPublisher,
             AuditEventRecorder auditEventRecorder
     ) {
         this.healthRecordRepository = healthRecordRepository;
@@ -71,7 +71,7 @@ public class HealthRecordShareService {
         this.profileShareRepository = profileShareRepository;
         this.auditLogRepository = auditLogRepository;
         this.userRepository = userRepository;
-        this.emailService = emailService;
+        this.emailEventPublisher = emailEventPublisher;
         this.auditEventRecorder = auditEventRecorder;
     }
 
@@ -131,7 +131,7 @@ public class HealthRecordShareService {
         );
 
         if (!"accepted".equals(invitation.getStatus())) {
-            emailService.sendHealthRecordInvitationEmail(inviter, normalizedEmail, buildInvitationLink(invitation.getToken()));
+            emailEventPublisher.publishHealthRecordInvitation(inviter, normalizedEmail, buildInvitationLink(invitation.getToken()));
         }
 
         return mapInvitation(invitation, invitee != null ? invitee.getId() : null);

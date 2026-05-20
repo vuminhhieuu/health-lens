@@ -52,7 +52,7 @@ public class EmailService {
         log.info("[EmailService] Attempting to send verification email to: {}", user.getEmail());
         if (mailSender == null) {
             log.error("[EmailService] JavaMailSender is not configured! Cannot send verification email to {}", user.getEmail());
-            return;
+            throw new IllegalStateException("JavaMailSender is not configured");
         }
 
         String verificationLink = verificationBaseUrl + "?token=" + token;
@@ -78,7 +78,7 @@ public class EmailService {
         log.info("[EmailService] Attempting to send password reset email to: {}", user.getEmail());
         if (mailSender == null) {
             log.error("[EmailService] JavaMailSender is not configured! Cannot send password reset email to {}", user.getEmail());
-            return;
+            throw new IllegalStateException("JavaMailSender is not configured");
         }
 
         String resetLink = resetPasswordBaseUrl + "?token=" + token;
@@ -115,7 +115,7 @@ public class EmailService {
         log.info("[EmailService] Attempting to send deletion confirmation email to: {}", user.getEmail());
         if (mailSender == null) {
             log.error("[EmailService] JavaMailSender is not configured! Cannot send deletion confirmation email to {}", user.getEmail());
-            return;
+            throw new IllegalStateException("JavaMailSender is not configured");
         }
 
         String displayName = user.getFullName() == null || user.getFullName().isBlank()
@@ -146,7 +146,7 @@ public class EmailService {
         log.info("[EmailService] Attempting to send cancellation confirmation email to: {}", user.getEmail());
         if (mailSender == null) {
             log.error("[EmailService] JavaMailSender is not configured! Cannot send cancellation confirmation email to {}", user.getEmail());
-            return;
+            throw new IllegalStateException("JavaMailSender is not configured");
         }
 
         String htmlContent = """
@@ -181,7 +181,7 @@ public class EmailService {
         log.info("[EmailService] Attempting to send deletion completion email to: {}", user.getEmail());
         if (mailSender == null) {
             log.error("[EmailService] JavaMailSender is not configured! Cannot send deletion completion email to {}", user.getEmail());
-            return;
+            throw new IllegalStateException("JavaMailSender is not configured");
         }
 
         String htmlContent = """
@@ -216,7 +216,7 @@ public class EmailService {
     public void sendProfileInvitationEmail(User inviter, String inviteeEmail, String invitationLink) {
         if (mailSender == null) {
             log.error("[EmailService] JavaMailSender is not configured! Cannot send profile invitation to {}", inviteeEmail);
-            return;
+            throw new IllegalStateException("JavaMailSender is not configured");
         }
 
         String htmlContent = renderProfileInvitationTemplate(inviter.getFullName(), invitationLink);
@@ -238,7 +238,7 @@ public class EmailService {
     public void sendHealthRecordInvitationEmail(User inviter, String inviteeEmail, String invitationLink) {
         if (mailSender == null) {
             log.error("[EmailService] JavaMailSender is not configured! Cannot send health record invitation to {}", inviteeEmail);
-            return;
+            throw new IllegalStateException("JavaMailSender is not configured");
         }
 
         String inviterName = inviter.getFullName() == null || inviter.getFullName().isBlank()

@@ -1,10 +1,10 @@
 # Story 7.9: Confirm And Document Event-Driven Architecture
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 
-**Area:** Architecture confirmation, async task standards, event-driven boundaries  
+**Area:** Architecture confirmation, async task standards, event-driven boundaries
 **Priority:** P1
 
 ## Story
@@ -21,13 +21,13 @@ As a technical lead, I want the event-driven architecture rules explicitly confi
 
 ## Tasks / Subtasks
 
-- [ ] Confirm whether Redis Streams are the standard event bus for all durable async tasks or only selected flows.
-- [ ] Confirm which email categories must move to event-driven delivery.
-- [ ] Confirm whether after-commit stream publishing is sufficient or whether an outbox pattern is required later.
-- [ ] Confirm explicit delivery semantics for OCR, email, reminders, audit, and notifications.
-- [ ] Document the agreed package and ownership boundaries for OCR, email, and event publishing.
-- [ ] Update Epic 7 guidance so later stories align with the decision.
-- [ ] Produce a short decision table with rationale and non-goals.
+- [x] Confirm whether Redis Streams are the standard event bus for all durable async tasks or only selected flows.
+- [x] Confirm which email categories must move to event-driven delivery.
+- [x] Confirm whether after-commit stream publishing is sufficient or whether an outbox pattern is required later.
+- [x] Confirm explicit delivery semantics for OCR, email, reminders, audit, and notifications.
+- [x] Document the agreed package and ownership boundaries for OCR, email, and event publishing.
+- [x] Update Epic 7 guidance so later stories align with the decision.
+- [x] Produce a short decision table with rationale and non-goals.
 
 ## Dev Notes
 
@@ -61,10 +61,47 @@ As a technical lead, I want the event-driven architecture rules explicitly confi
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+GPT-5
 
 ### Debug Log References
 
+- Reviewed existing Epic 7 architecture evidence and current async code paths for OCR, email, reminders, and audit.
+- Validation run: `rg -n "Event-Driven Architecture|event-driven-architecture|Async And Event Delivery|hybrid async model|core-7-9-confirm" docs _bmad-output/implementation-artifacts/epic-core-improvements/epic-7-code-organization _bmad-output/implementation-artifacts/sprint-status.yaml`.
+- Validation run: `git diff --check`.
+
 ### Completion Notes List
 
+- Accepted a hybrid async model: Redis Streams for durable cross-boundary events, DB-claimed jobs for scheduled row-owned work, and synchronous direct calls for command invariants and command audit writes.
+- Documented email categories that should move to event delivery in Story 7.10: verification, password reset, deletion, profile invitation, health-record invitation, and reminder email dispatch behind the reminder claim model.
+- Confirmed after-commit Redis publishing is sufficient for current OCR and email flows; transactional outbox is deferred until reliability requirements justify it.
+- Added package ownership guidance for `events.*`, `events.email.*`, `events.ocr.*`, `ocr.*`, `ai.*`, email/template ownership, and health-record domain boundaries.
+- Updated Epic 7 guidance and canonical docs so later refactor stories can cite the decision.
+
 ### File List
+
+- docs/event-driven-architecture.md
+- docs/architecture.md
+- docs/index.md
+- _bmad-output/implementation-artifacts/epic-core-improvements/epic-7-code-organization/epic-7-issues-and-proposed-stories.md
+- _bmad-output/implementation-artifacts/epic-core-improvements/epic-7-code-organization/7-9-confirm-and-document-event-driven-architecture.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+
+### Change Log
+
+- 2026-05-20: Added accepted event-driven architecture decision, updated canonical architecture/index docs, aligned Epic 7 guidance, and moved story to review.
+
+## Senior Developer Review (AI)
+
+**Review Date:** 2026-05-20
+**Review Outcome:** Approve
+**Review Scope:** Documentation/architecture decision review for Story 7.9.
+
+### Findings
+
+Clean review. No decision-needed, patch, or defer findings remained after checking acceptance-criteria coverage, downstream Story 7.10/7.11 guardrails, package ownership clarity, and documentation references.
+
+### Review Notes
+
+- Confirmed `docs/event-driven-architecture.md` covers Redis Streams scope, email categories, outbox stance, delivery semantics, package ownership boundaries, non-goals, and downstream guardrails.
+- Confirmed canonical docs reference the decision from `docs/index.md` and `docs/architecture.md`.
+- Confirmed Epic 7 guidance points later stories at the accepted decision.

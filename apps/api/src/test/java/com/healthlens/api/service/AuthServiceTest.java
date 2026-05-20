@@ -58,7 +58,7 @@ class AuthServiceTest {
     @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
     @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private PasswordEncoder passwordEncoder;
-    @Mock private EmailService emailService;
+    @Mock private EmailEventPublisher emailEventPublisher;
     @Mock private JwtUtil jwtUtil;
     @Mock private LoginRateLimiter rateLimiter;
     @Mock private ForgotPasswordRateLimiter forgotPasswordRateLimiter;
@@ -75,9 +75,9 @@ class AuthServiceTest {
     void setUp() {
         authService = new AuthService(
                 userRepository, tokenRepository, passwordResetTokenRepository,
-                refreshTokenRepository, passwordEncoder, emailService,
+                refreshTokenRepository, passwordEncoder, emailEventPublisher,
                 jwtUtil, rateLimiter, forgotPasswordRateLimiter, verifyEmailRateLimiter,
-                redisTemplate, consentService, auditEventRecorder, "email.events"
+                redisTemplate, consentService, auditEventRecorder
         );
     }
 
@@ -94,12 +94,9 @@ class AuthServiceTest {
         when(userRepository.existsByEmailIgnoreCase("user@example.com")).thenReturn(false);
         when(passwordEncoder.encode("StrongPass1")).thenReturn("hashed");
         when(userRepository.saveAndFlush(any(User.class))).thenReturn(user);
-        when(redisTemplate.opsForStream()).thenReturn(streamOperations);
-
         authService.register(request);
 
-        verify(streamOperations).add(eq("email.events"), any(java.util.Map.class));
-        verify(emailService, org.mockito.Mockito.never()).sendVerificationEmail(any(), anyString());
+        verify(emailEventPublisher).publishVerification(eq(user), anyString());
     }
 
     @Test
@@ -497,7 +494,7 @@ class AuthServiceTest {
         authService.forgotPassword(request);
 
         verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
-        verify(emailService).sendPasswordResetEmail(eq(user), anyString());
+        verify(emailEventPublisher).publishPasswordReset(eq(user), anyString());
         verify(forgotPasswordRateLimiter).recordRequest("user@example.com");
     }
 
@@ -511,7 +508,7 @@ class AuthServiceTest {
         authService.forgotPassword(request);
 
         verify(forgotPasswordRateLimiter).recordRequest("nonexistent@example.com");
-        verify(emailService, org.mockito.Mockito.never()).sendPasswordResetEmail(any(), anyString());
+        verify(emailEventPublisher, org.mockito.Mockito.never()).publishPasswordReset(any(), anyString());
     }
 
     @Test
@@ -527,26 +524,23 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("forgotPassword ghi telemetry khi email provider loi nhung van tra thanh cong")
-    void forgotPassword_emailProviderFailureAudited() {
+    @DisplayName("forgotPassword publish password reset event and records request")
+    void forgotPassword_publishesPasswordResetEvent() {
         User user = createVerifiedUser();
         ForgotPasswordRequest request = new ForgotPasswordRequest("user@example.com");
 
         when(userRepository.findByEmailIgnoreCase("user@example.com")).thenReturn(Optional.of(user));
-        doThrow(new IllegalStateException("smtp down"))
-                .when(emailService).sendPasswordResetEmail(eq(user), anyString());
 
         authService.forgotPassword(request);
 
         verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
+        verify(emailEventPublisher).publishPasswordReset(eq(user), anyString());
         verify(auditEventRecorder).recordEvent(
                 eq(user.getId()),
-                eq(AuditActions.EMAIL_PROVIDER_FAILURE),
+                eq(AuditActions.FORGOT_PASSWORD),
                 eq(AuditResourceTypes.AUTH),
                 eq(user.getId()),
-                argThat(details -> "forgot_password".equals(details.get("flow"))
-                        && "IllegalStateException".equals(details.get("failureClass"))
-                        && !details.containsValue("smtp down"))
+                argThat(details -> "user@example.com".equals(details.get("email")))
         );
         verify(forgotPasswordRateLimiter).recordRequest("user@example.com");
     }
