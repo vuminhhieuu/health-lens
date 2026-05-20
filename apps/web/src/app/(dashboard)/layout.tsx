@@ -112,6 +112,12 @@ export default function DashboardLayout({
     if (item.href === "/health-records") {
       return pathname === item.href || pathname?.startsWith(`${item.href}/`) || isProfileHistoryRoute;
     }
+    if (item.href === "/settings/profile") {
+      return pathname === item.href;
+    }
+    if (item.href === "/settings") {
+      return pathname === item.href || (pathname?.startsWith(`${item.href}/`) && pathname !== "/settings/profile");
+    }
     if (item.href === "/profiles") {
       if (isProfileHistoryRoute) return false;
       return pathname === item.href || pathname?.startsWith(`${item.href}/`);
@@ -128,6 +134,11 @@ export default function DashboardLayout({
       useAuthStore.getState().clearAuth();
       router.push("/login");
     }
+  };
+
+  const getMobileNavClassName = (href: string) => {
+    const isActive = isNavItemActive({ href, exact: true });
+    return `flex flex-col items-center gap-1 ${isActive ? "text-[#00685f]" : "text-[#6d7a77]"}`;
   };
 
   return (
@@ -300,19 +311,19 @@ export default function DashboardLayout({
 
       {/* Mobile Navigation Shell */}
       <nav className="md:hidden fixed bottom-0 w-full bg-white/95 backdrop-blur-lg px-6 py-4 flex justify-between items-center shadow-[0_-8px_32px_rgba(18,30,28,0.06)] z-50 border-t border-[#bcc9c6]/20 print:hidden">
-        <Link href="/home" className="flex flex-col items-center gap-1 text-[#6d7a77]">
+        <Link href="/home" className={getMobileNavClassName("/home")}>
           <Home className="w-5 h-5" />
           <span className="text-[10px] font-bold">Trang chủ</span>
         </Link>
-        <Link href="/health-records" className="flex flex-col items-center gap-1 text-[#6d7a77]">
+        <Link href="/health-records" className={getMobileNavClassName("/health-records")}>
           <FileText className="w-5 h-5" />
           <span className="text-[10px] font-bold">Sức khỏe</span>
         </Link>
-        <Link href="/settings/profile" className="flex flex-col items-center gap-1 text-[#00685f]">
-          <User className="w-5 h-5 fill-current" />
+        <Link href="/settings/profile" className={getMobileNavClassName("/settings/profile")}>
+          <User className={`w-5 h-5 ${isNavItemActive({ href: "/settings/profile", exact: true }) ? "fill-current" : ""}`} />
           <span className="text-[10px] font-bold">Hồ sơ</span>
         </Link>
-        <Link href="/settings" className="flex flex-col items-center gap-1 text-[#6d7a77]">
+        <Link href="/settings" className={getMobileNavClassName("/settings")}>
           <Settings className="w-5 h-5" />
           <span className="text-[10px] font-bold">Cài đặt</span>
         </Link>
