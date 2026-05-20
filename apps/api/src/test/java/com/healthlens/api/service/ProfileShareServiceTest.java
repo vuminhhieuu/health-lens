@@ -50,7 +50,7 @@ class ProfileShareServiceTest {
     @Mock
     private UserRepository userRepository;
     @Mock
-    private EmailService emailService;
+    private EmailEventPublisher emailEventPublisher;
     @Mock
     private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
 
@@ -64,7 +64,7 @@ class ProfileShareServiceTest {
                 profileShareAuditLogRepository,
                 profileShareRepository,
                 userRepository,
-                emailService,
+                emailEventPublisher,
                 auditEventRecorder
         );
         ReflectionTestUtils.setField(profileShareService, "frontendBaseUrl", "http://localhost:3000");
@@ -90,7 +90,7 @@ class ProfileShareServiceTest {
 
         assertThat(response.email()).isEqualTo("viewer@healthlens.vn");
         assertThat(response.status()).isEqualTo("pending");
-        verify(emailService).sendProfileInvitationEmail(any(User.class), any(String.class), any(String.class));
+        verify(emailEventPublisher).publishProfileInvitation(any(User.class), any(String.class), any(String.class));
     }
 
     @Test

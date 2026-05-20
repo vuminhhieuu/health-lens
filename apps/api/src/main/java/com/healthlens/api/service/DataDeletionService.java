@@ -78,7 +78,7 @@ public class DataDeletionService {
     private final DataDeletionRequestRepository deletionRequestRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final EmailService emailService;
+    private final EmailEventPublisher emailEventPublisher;
     private final HealthRecordRepository healthRecordRepository;
     private final ProfileRepository profileRepository;
     private final ProfileShareRepository profileShareRepository;
@@ -102,7 +102,7 @@ public class DataDeletionService {
             DataDeletionRequestRepository deletionRequestRepository,
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
-            EmailService emailService,
+            EmailEventPublisher emailEventPublisher,
             HealthRecordRepository healthRecordRepository,
             ProfileRepository profileRepository,
             ProfileShareRepository profileShareRepository,
@@ -124,7 +124,7 @@ public class DataDeletionService {
         this.deletionRequestRepository = deletionRequestRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        this.emailService = emailService;
+        this.emailEventPublisher = emailEventPublisher;
         this.healthRecordRepository = healthRecordRepository;
         this.profileRepository = profileRepository;
         this.profileShareRepository = profileShareRepository;
@@ -192,7 +192,7 @@ public class DataDeletionService {
         String cancellationLink = webCancellationUrl
                 + "?token=" + encodeQueryParam(cancellationToken);
         try {
-            emailService.sendDeletionConfirmationEmail(user, deletionRequest, cancellationLink);
+            emailEventPublisher.publishDeletionConfirmation(user, deletionRequest, cancellationLink);
         } catch (Exception e) {
             // Email is best-effort: the request itself is already persisted and visible to the user
             log.error("Gửi email xác nhận yêu cầu xóa tài khoản thất bại cho userId={}", userId, e);
@@ -265,7 +265,7 @@ public class DataDeletionService {
         );
 
         try {
-            emailService.sendCancellationConfirmationEmail(user);
+            emailEventPublisher.publishDeletionCancellation(user);
         } catch (Exception e) {
             log.error("Failed to send cancellation confirmation email to userId={}", deletionRequest.getUserId(), e);
         }
@@ -375,7 +375,7 @@ public class DataDeletionService {
 
         // 9. Best-effort completion email BEFORE the user row is anonymised.
         try {
-            emailService.sendDeletionCompletionEmail(user);
+            emailEventPublisher.publishDeletionCompletion(user);
         } catch (Exception e) {
             log.error("Failed to send deletion completion email to userId={}", userId, e);
         }

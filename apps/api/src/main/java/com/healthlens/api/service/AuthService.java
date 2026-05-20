@@ -6,7 +6,6 @@ import com.healthlens.api.dto.response.LoginResponse;
 import com.healthlens.api.dto.response.RefreshResponse;
 import com.healthlens.api.dto.request.ForgotPasswordRequest;
 import com.healthlens.api.dto.request.ResetPasswordRequest;
-import com.healthlens.api.dto.event.EmailEvent;
 import com.healthlens.api.entity.EmailVerificationToken;
 import com.healthlens.api.entity.PasswordResetToken;
 import com.healthlens.api.entity.RefreshToken;
@@ -30,15 +29,12 @@ import com.healthlens.api.security.LoginRateLimiter;
 import com.healthlens.api.security.VerifyEmailRateLimiter;
 import com.healthlens.api.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -61,7 +57,7 @@ public class AuthService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
-    private final EmailService emailService;
+    private final EmailEventPublisher emailEventPublisher;
     private final JwtUtil jwtUtil;
     private final LoginRateLimiter rateLimiter;
     private final ForgotPasswordRateLimiter forgotPasswordRateLimiter;
@@ -69,7 +65,6 @@ public class AuthService {
     private final StringRedisTemplate redisTemplate;
     private final ConsentService consentService;
     private final AuditEventRecorder auditEventRecorder;
-    private final String emailEventStream;
 
     public AuthService(
             UserRepository userRepository,
@@ -77,22 +72,21 @@ public class AuthService {
             PasswordResetTokenRepository passwordResetTokenRepository,
             RefreshTokenRepository refreshTokenRepository,
             PasswordEncoder passwordEncoder,
-            EmailService emailService,
+            EmailEventPublisher emailEventPublisher,
             JwtUtil jwtUtil,
             LoginRateLimiter rateLimiter,
             ForgotPasswordRateLimiter forgotPasswordRateLimiter,
             VerifyEmailRateLimiter verifyEmailRateLimiter,
             StringRedisTemplate redisTemplate,
             ConsentService consentService,
-            AuditEventRecorder auditEventRecorder,
-            @Value("${app.stream.email-events:email.events}") String emailEventStream
+            AuditEventRecorder auditEventRecorder
     ) {
         this.userRepository = userRepository;
         this.tokenRepository = tokenRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
-        this.emailService = emailService;
+        this.emailEventPublisher = emailEventPublisher;
         this.jwtUtil = jwtUtil;
         this.rateLimiter = rateLimiter;
         this.forgotPasswordRateLimiter = forgotPasswordRateLimiter;
@@ -100,7 +94,6 @@ public class AuthService {
         this.redisTemplate = redisTemplate;
         this.consentService = consentService;
         this.auditEventRecorder = auditEventRecorder;
-        this.emailEventStream = emailEventStream;
     }
 
     @Transactional
@@ -136,7 +129,7 @@ public class AuthService {
         token.setExpiresAt(Instant.now().plus(24, ChronoUnit.HOURS));
         tokenRepository.save(token);
 
-        publishVerificationEmailEvent(savedUser, tokenValue);
+        emailEventPublisher.publishVerification(savedUser, tokenValue);
 
         auditEventRecorder.recordEvent(
                 savedUser.getId(),
@@ -483,29 +476,14 @@ public class AuthService {
                 token.setExpiresAt(Instant.now().plus(1, ChronoUnit.HOURS));
                 passwordResetTokenRepository.save(token);
 
-                try {
-                    emailService.sendPasswordResetEmail(user, tokenValue);
-                    auditEventRecorder.recordEvent(
-                            user.getId(),
-                            AuditActions.FORGOT_PASSWORD,
-                            AuditResourceTypes.AUTH,
-                            user.getId(),
-                            Map.of("email", normalizedEmail)
-                    );
-                } catch (Exception emailException) {
-                    log.error("[AuthService] Password reset email provider failed for userId={}: {}",
-                            user.getId(), emailException.getMessage(), emailException);
-                    auditEventRecorder.recordEvent(
-                            user.getId(),
-                            AuditActions.EMAIL_PROVIDER_FAILURE,
-                            AuditResourceTypes.AUTH,
-                            user.getId(),
-                            Map.of(
-                                    "flow", "forgot_password",
-                                    "failureClass", emailException.getClass().getSimpleName()
-                            )
-                    );
-                }
+                emailEventPublisher.publishPasswordReset(user, tokenValue);
+                auditEventRecorder.recordEvent(
+                        user.getId(),
+                        AuditActions.FORGOT_PASSWORD,
+                        AuditResourceTypes.AUTH,
+                        user.getId(),
+                        Map.of("email", normalizedEmail)
+                );
             } else {
                 log.info("[AuthService] User NOT found for email: {}. Skipping email for security reasons.", normalizedEmail);
             }
@@ -556,36 +534,6 @@ public class AuthService {
         if (password == null || password.length() < 8 || !password.matches(".*[A-Z].*")
                 || !password.matches(".*\\d.*")) {
             throw new WeakPasswordException("Mật khẩu phải có ít nhất 8 ký tự, gồm 1 chữ hoa và 1 chữ số");
-        }
-    }
-
-    private void publishVerificationEmailEvent(User user, String token) {
-        EmailEvent emailEvent = new EmailEvent(
-                "verification",
-                user.getId(),
-                user.getEmail(),
-                Map.of("token", token));
-
-        // Publish after transaction commit so consumer never reads uncommitted user/token data.
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    publishEmailEvent(emailEvent);
-                }
-            });
-            return;
-        }
-
-        publishEmailEvent(emailEvent);
-    }
-
-    private void publishEmailEvent(EmailEvent emailEvent) {
-        try {
-            redisTemplate.opsForStream().add(emailEventStream, emailEvent.toStreamMap());
-        } catch (Exception ex) {
-            // Registration should stay fast and resilient even when Redis is unavailable.
-            log.warn("[AuthService] Cannot publish verification email event for user {}", emailEvent.userId(), ex);
         }
     }
 

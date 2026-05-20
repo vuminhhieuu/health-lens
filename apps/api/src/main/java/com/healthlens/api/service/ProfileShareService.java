@@ -42,7 +42,7 @@ public class ProfileShareService {
     private final ProfileShareAuditLogRepository profileShareAuditLogRepository;
     private final ProfileShareRepository profileShareRepository;
     private final UserRepository userRepository;
-    private final EmailService emailService;
+    private final EmailEventPublisher emailEventPublisher;
     private final AuditEventRecorder auditEventRecorder;
 
     @Value("${app.frontend.base-url:http://localhost:3000}")
@@ -62,7 +62,7 @@ public class ProfileShareService {
             ProfileShareAuditLogRepository profileShareAuditLogRepository,
             ProfileShareRepository profileShareRepository,
             UserRepository userRepository,
-            EmailService emailService,
+            EmailEventPublisher emailEventPublisher,
             AuditEventRecorder auditEventRecorder
     ) {
         this.profileRepository = profileRepository;
@@ -70,7 +70,7 @@ public class ProfileShareService {
         this.profileShareAuditLogRepository = profileShareAuditLogRepository;
         this.profileShareRepository = profileShareRepository;
         this.userRepository = userRepository;
-        this.emailService = emailService;
+        this.emailEventPublisher = emailEventPublisher;
         this.auditEventRecorder = auditEventRecorder;
     }
 
@@ -186,7 +186,7 @@ public class ProfileShareService {
 
         if (!"accepted".equals(inv.getStatus())) {
             String link = buildInvitationLink(inv.getToken());
-            emailService.sendProfileInvitationEmail(inviter, normalizedEmail, link);
+            emailEventPublisher.publishProfileInvitation(inviter, normalizedEmail, link);
         }
 
         writeUnifiedProfileAudit(
@@ -257,7 +257,7 @@ public class ProfileShareService {
         profileInvitationRepository.save(inv);
 
         String link = buildInvitationLink(inv.getToken());
-        emailService.sendProfileInvitationEmail(inviter, inv.getInviteeEmail(), link);
+        emailEventPublisher.publishProfileInvitation(inviter, inv.getInviteeEmail(), link);
 
         writeUnifiedProfileAudit(
                 ownerId,

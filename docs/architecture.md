@@ -1,6 +1,6 @@
 # HealthLens Architecture
 
-**Last updated:** 2026-05-16
+**Last updated:** 2026-05-20
 
 ## Executive Summary
 
@@ -52,11 +52,18 @@ flowchart LR
 - `packages/shared/constants/api.ts` is the frontend single source of truth for route paths.
 - Backend keeps a mirrored route registry in `ApiRoutes.java`; these two files must stay synchronized.
 
+
+## Async And Event Delivery
+
+HealthLens uses a hybrid async model. Redis Streams are the standard for durable cross-boundary work such as OCR processing and user-facing email events, but they are not a universal bus for every side effect. Synchronous service calls remain appropriate for command validation, domain state transitions, and command audit writes. DB-claimed jobs remain appropriate when a table row owns scheduling and claim state, such as follow-up reminders.
+
+The canonical decision record is [event-driven-architecture.md](./event-driven-architecture.md). Backend refactors that touch `events.*`, `ocr.*`, `ai.*`, email delivery, reminders, audit, notifications, or analytics should follow that document.
+
 ## Data Architecture
 
 - PostgreSQL is the primary relational store.
 - Flyway migrations `V001` through `V027` define users, auth tokens, consent logs, deletion requests, profiles, health records, reference data, invitations, sharing, admin TOTP, approval workflows, and audit logs.
-- Redis is used for cache and stream-style event settings for email/OCR consumers.
+- Redis is used for cache, OCR stream delivery, and email stream delivery.
 - Qdrant is configured as a vector store for explanation retrieval.
 - MinIO is used locally for S3-compatible object storage; staging/production use managed S3-compatible storage.
 

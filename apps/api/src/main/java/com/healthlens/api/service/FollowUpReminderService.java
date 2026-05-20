@@ -45,7 +45,7 @@ public class FollowUpReminderService {
 
     private final FollowUpReminderRepository reminderRepository;
     private final ProfileRepository profileRepository;
-    private final EmailService emailService;
+    private final EmailEventPublisher emailEventPublisher;
 
     @Autowired
     @Lazy
@@ -54,11 +54,11 @@ public class FollowUpReminderService {
     public FollowUpReminderService(
             FollowUpReminderRepository reminderRepository,
             ProfileRepository profileRepository,
-            EmailService emailService
+            EmailEventPublisher emailEventPublisher
     ) {
         this.reminderRepository = reminderRepository;
         this.profileRepository = profileRepository;
-        this.emailService = emailService;
+        this.emailEventPublisher = emailEventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -124,7 +124,7 @@ public class FollowUpReminderService {
 
             processedCount += dueReminderIds.size();
             for (UUID reminderId : dueReminderIds) {
-                if (transactionalSelf().sendClaimedReminderEmail(reminderId, today)) {
+                if (transactionalSelf().publishClaimedReminderEmail(reminderId, today)) {
                     sentCount++;
                 }
             }
@@ -151,11 +151,8 @@ public class FollowUpReminderService {
         );
     }
 
-    public boolean sendClaimedReminderEmail(UUID reminderId) {
-        return sendClaimedReminderEmail(reminderId, LocalDate.now(VN_ZONE));
-    }
 
-    public boolean sendClaimedReminderEmail(UUID reminderId, LocalDate today) {
+    public boolean publishClaimedReminderEmail(UUID reminderId, LocalDate today) {
         if (today == null) {
             throw new IllegalArgumentException("Ngày nhắc là bắt buộc");
         }
@@ -167,31 +164,8 @@ public class FollowUpReminderService {
             return false;
         }
 
-        FollowUpReminder reminder = transactionalSelf().findReminderForEmail(reminderId)
-                .orElse(null);
-        if (reminder == null || reminder.getProfile() == null || reminder.getProfile().getUser() == null
-                || reminder.getProfile().getUser().getAccountStatus() != AccountStatus.ACTIVE) {
-            transactionalSelf().releaseEmailClaim(reminderId);
-            return false;
-        }
-
-        try {
-            boolean sent = emailService.sendFollowUpReminderEmail(reminder);
-            if (sent) {
-                transactionalSelf().markEmailSent(reminderId, Instant.now());
-                return true;
-            }
-            log.warn("Follow-up reminder email was not sent; reminderId={} will be retried after claim timeout", reminderId);
-        } catch (Exception ex) {
-            log.error(
-                    "Failed to send follow-up reminder email reminderId={} profileId={}",
-                    reminder.getId(),
-                    reminder.getProfile() != null ? reminder.getProfile().getId() : null,
-                    ex
-            );
-        }
-
-        return false;
+        emailEventPublisher.publishFollowUpReminder(reminderId);
+        return true;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -234,7 +208,7 @@ public class FollowUpReminderService {
             return;
         }
 
-        Runnable sendEmail = () -> transactionalSelf().sendClaimedReminderEmail(reminder.getId());
+        Runnable sendEmail = () -> transactionalSelf().publishClaimedReminderEmail(reminder.getId(), LocalDate.now(VN_ZONE));
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override

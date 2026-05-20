@@ -19,3 +19,7 @@
 ## Deferred from: code review of 3-5-trusted-online-rag-source-adapter-with-citation-and-cache.md (2026-05-19T14:40:36+07:00)
 
 - AC4 admin/audit inspection surface is ambiguous — Defer admin/audit inspection surface to a follow-up story because this story should finish adapter-level retrieval, citation metadata, persistence, and cache hardening first; answer-linked admin/audit API/UI needs separate scope. Story created: `_bmad-output/implementation-artifacts/epic-core-improvements/epic-3-llm-rag-governance/3-6-online-rag-citation-audit-inspection-surface.md` (`core-3-6-online-rag-citation-audit-inspection-surface`).
+
+## Deferred from: code review of 7-10-unify-email-event-delivery.md (2026-05-20T15:20:00+07:00)
+
+- Sprint status includes unrelated `core-7-9-confirm-and-document-event-driven-architecture` status movement at `_bmad-output/implementation-artifacts/sprint-status.yaml:226`. Deferred because it appears to belong to the prior Story 7.9 workflow rather than the Story 7.10 email delivery implementation.
