@@ -1,6 +1,7 @@
 package com.healthlens.api.controller;
 
 import com.healthlens.api.constants.ApiRoutes;
+import com.healthlens.api.dto.response.ActivityAnalyticsResponse;
 import com.healthlens.api.dto.response.UploadHistoryPageResponse;
 import com.healthlens.api.dto.response.UploadQualityResponse;
 import com.healthlens.api.dto.response.UserAnalyticsResponse;
@@ -85,6 +86,24 @@ public class AdminAnalyticsController {
 
         UploadHistoryPageResponse response = analyticsService.getUploadHistory(
                 fromInstant, toExclusive, status, failureReason, page, limit);
+        return ResponseEntity.ok(Map.of("data", response));
+    }
+
+    @GetMapping(ApiRoutes.ADMIN_ANALYTICS_ACTIVITY_REL)
+    public ResponseEntity<Map<String, Object>> getActivity(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "day") String granularity,
+            @RequestParam(defaultValue = "true") boolean comparePrevious) {
+        Instant fromInstant = from != null
+                ? from.atStartOfDay().toInstant(ZoneOffset.UTC)
+                : AnalyticsService.defaultActivityFrom();
+        Instant toExclusive = to != null
+                ? to.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC)
+                : AnalyticsService.defaultToExclusive();
+
+        ActivityAnalyticsResponse response = analyticsService.getActivity(
+                fromInstant, toExclusive, granularity, comparePrevious);
         return ResponseEntity.ok(Map.of("data", response));
     }
 }

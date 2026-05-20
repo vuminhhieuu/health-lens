@@ -101,6 +101,7 @@ class HealthRecordServiceTest {
         private ValueOperations<String, String> valueOperations;
         @Mock
         private StreamOperations<String, Object, Object> streamOperations;
+    @Mock private UserActivityService userActivityService;
 
         private HealthRecordService healthRecordService;
 
@@ -121,6 +122,7 @@ class HealthRecordServiceTest {
                                 healthRecordLegacyAuditWriter,
                                 unifiedAuditCoordinator,
                                 auditEventRecorder,
+                                userActivityService,
                                 publicEndpointRateLimiter,
                                 redisTemplate,
                                 new ObjectMapper(),
@@ -256,7 +258,8 @@ class HealthRecordServiceTest {
                 assertThat(payload.get("mimeType")).isEqualTo("image/jpeg");
                 assertThat(payload.get("correlationId")).isEqualTo(payload.get("jobId"));
                 verify(publicEndpointRateLimiter).consumeOcrTrigger(userId.toString(), recordId.toString());
-        }
+            verify(userActivityService).recordUploadConfirmed(userId, false);
+    }
 
         @Test
         @DisplayName("confirmUpload fail khi reservation khong ton tai")

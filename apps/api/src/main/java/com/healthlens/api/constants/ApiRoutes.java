@@ -50,6 +50,7 @@ public final class ApiRoutes {
     public static final String USERS_BASE = API_V1 + "/users";
     public static final String USERS_ME = USERS_BASE + "/me";
     public static final String USERS_ME_AVATAR = USERS_ME + "/avatar";
+    public static final String USERS_ME_CONSENT = USERS_ME + "/consent";
     public static final String USERS_ME_REL = "/me";
     public static final String USERS_ME_AVATAR_REL = USERS_ME_REL + "/avatar";
 
@@ -144,12 +145,15 @@ public final class ApiRoutes {
     public static final String ADMIN_ANALYTICS_UPLOAD_QUALITY_REL = "/upload-quality";
     public static final String ADMIN_ANALYTICS_UPLOAD_HISTORY_REL = "/upload-history";
     public static final String ADMIN_ANALYTICS_USERS_REL = "/users";
+    public static final String ADMIN_ANALYTICS_ACTIVITY_REL = "/activity";
     public static final String ADMIN_ANALYTICS_UPLOAD_QUALITY =
             ADMIN_ANALYTICS_BASE + ADMIN_ANALYTICS_UPLOAD_QUALITY_REL;
     public static final String ADMIN_ANALYTICS_UPLOAD_HISTORY =
             ADMIN_ANALYTICS_BASE + ADMIN_ANALYTICS_UPLOAD_HISTORY_REL;
     public static final String ADMIN_ANALYTICS_USERS =
             ADMIN_ANALYTICS_BASE + ADMIN_ANALYTICS_USERS_REL;
+    public static final String ADMIN_ANALYTICS_ACTIVITY =
+            ADMIN_ANALYTICS_BASE + ADMIN_ANALYTICS_ACTIVITY_REL;
     public static final String ADMIN_REFERENCE_DATA_IMPORT_PREVIEW = ADMIN_REFERENCE_DATA_BASE + "/import/preview";
     public static final String ADMIN_REFERENCE_DATA_IMPORT_CONFIRM = ADMIN_REFERENCE_DATA_BASE + "/import/confirm";
     public static final String ADMIN_AUTH_LOGIN = ADMIN_AUTH_BASE + "/login";

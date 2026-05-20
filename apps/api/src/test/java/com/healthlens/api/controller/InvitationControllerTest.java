@@ -8,6 +8,8 @@ import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
 import com.healthlens.api.security.LoginRateLimiter;
 import com.healthlens.api.security.PublicEndpointRateLimiter;
+import com.healthlens.api.security.UserActivityRecordingFilter;
+import com.healthlens.api.support.SecurityFilterTestSupport;
 import com.healthlens.api.service.ProfileShareService;
 import com.healthlens.api.util.JwtUtil;
 import java.util.UUID;
@@ -24,7 +26,6 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -49,6 +50,9 @@ class InvitationControllerTest {
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @MockitoBean
+    private UserActivityRecordingFilter userActivityRecordingFilter;
+
+    @MockitoBean
     private JwtUtil jwtUtil;
 
     @MockitoBean
@@ -62,11 +66,7 @@ class InvitationControllerTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        doAnswer(invocation -> {
-            jakarta.servlet.FilterChain chain = invocation.getArgument(2);
-            chain.doFilter(invocation.getArgument(0), invocation.getArgument(1));
-            return null;
-        }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
+        SecurityFilterTestSupport.stubPassthroughFilters(jwtAuthenticationFilter, userActivityRecordingFilter);
     }
 
     @Test

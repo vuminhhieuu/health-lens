@@ -3,6 +3,7 @@ package com.healthlens.api.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.healthlens.api.dto.response.ActivityAnalyticsResponse;
 import com.healthlens.api.dto.response.UploadHistoryItemResponse;
 import com.healthlens.api.dto.response.UploadHistoryPageResponse;
 import com.healthlens.api.dto.response.UploadQualityResponse;
@@ -11,6 +12,9 @@ import com.healthlens.api.entity.UserRole;
 import com.healthlens.api.repository.AnalyticsRepository;
 import com.healthlens.api.repository.UserRepository;
 import com.healthlens.api.repository.projection.MonthlyUserGrowthProjection;
+import com.healthlens.api.repository.UserActivityEventRepository;
+import com.healthlens.api.repository.projection.ActivityUploadBucketProjection;
+import com.healthlens.api.repository.projection.ActivityWauBucketProjection;
 import com.healthlens.api.repository.projection.UploadFailureBreakdownProjection;
 import com.healthlens.api.repository.projection.UploadHistoryProjection;
 import com.healthlens.api.repository.projection.UploadQualityBucketProjection;
@@ -42,6 +46,7 @@ public class AnalyticsService {
 
     private static final Logger log = LoggerFactory.getLogger(AnalyticsService.class);
     public static final int MAX_USER_ANALYTICS_MONTHS = 24;
+    public static final int MAX_ACTIVITY_DAYS = 90;
 
     private static final Duration USER_ANALYTICS_CACHE_TTL = Duration.ofHours(1);
     private static final String USER_ANALYTICS_TOTAL_CACHE_KEY = "analytics:users:total:v1";
@@ -57,13 +62,17 @@ public class AnalyticsService {
     private final UserRepository userRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final UserActivityEventRepository userActivityEventRepository;
 
     public AnalyticsService(
+            
             AnalyticsRepository analyticsRepository,
+            UserActivityEventRepository userActivityEventRepository,
             UserRepository userRepository,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper) {
         this.analyticsRepository = analyticsRepository;
+        this.userActivityEventRepository = userActivityEventRepository;
         this.userRepository = userRepository;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
@@ -92,6 +101,24 @@ public class AnalyticsService {
         if (monthCount > MAX_USER_ANALYTICS_MONTHS) {
             throw new IllegalArgumentException(
                     "Khoảng thời gian tối đa là " + MAX_USER_ANALYTICS_MONTHS + " tháng");
+        }
+    }
+
+    public static void validateActivityRange(Instant from, Instant toExclusive) {
+        if (!from.isBefore(toExclusive)) {
+            throw new IllegalArgumentException("Thời điểm bắt đầu phải nhỏ hơn thời điểm kết thúc");
+        }
+        LocalDate fromDate = from.atZone(ZoneOffset.UTC).toLocalDate();
+        LocalDate toInclusive = toExclusive.atZone(ZoneOffset.UTC).toLocalDate().minusDays(1);
+        LocalDate todayUtc = LocalDate.now(ZoneOffset.UTC);
+        if (fromDate.isAfter(todayUtc) || toInclusive.isAfter(todayUtc)) {
+            throw new IllegalArgumentException(
+                    "Không được chọn khoảng thời gian trong tương lai (UTC)");
+        }
+        long dayCount = ChronoUnit.DAYS.between(fromDate, toExclusive.atZone(ZoneOffset.UTC).toLocalDate());
+        if (dayCount > MAX_ACTIVITY_DAYS) {
+            throw new IllegalArgumentException(
+                    "Khoảng thời gian tối đa là " + MAX_ACTIVITY_DAYS + " ngày");
         }
     }
 
@@ -234,6 +261,238 @@ public class AnalyticsService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public ActivityAnalyticsResponse getActivity(
+            Instant from,
+            Instant toExclusive,
+            String granularity,
+            boolean comparePrevious) {
+        validateActivityRange(from, toExclusive);
+        String normalizedGranularity = normalizeGranularity(granularity);
+
+        Instant wauFrom = UserActivityService.wauQueryFrom(from);
+        Instant wauToExclusive = UserActivityService.wauQueryToExclusive(toExclusive);
+        Instant uploadFrom = uploadQueryFrom(from, normalizedGranularity);
+        Instant uploadToExclusive = uploadQueryToExclusive(toExclusive, normalizedGranularity);
+
+        List<ActivityWauBucketProjection> wauRows =
+                userActivityEventRepository.findWauBuckets(wauFrom, wauToExclusive);
+        List<ActivityUploadBucketProjection> uploadRows =
+                userActivityEventRepository.findUploadBuckets(
+                        uploadFrom, uploadToExclusive, normalizedGranularity);
+
+        List<ActivityAnalyticsResponse.WauBucket> wauBuckets = fillWauBuckets(
+                mapWauBuckets(wauRows), wauFrom, wauToExclusive);
+        List<ActivityAnalyticsResponse.UploadBucket> uploadBuckets = fillUploadBuckets(
+                mapUploadBuckets(uploadRows), uploadFrom, uploadToExclusive, normalizedGranularity);
+
+        long uploadsInRange = userActivityEventRepository.countUploads(from, toExclusive);
+
+        List<ActivityAnalyticsResponse.WauBucket> wauBucketsPrevious = List.of();
+        List<ActivityAnalyticsResponse.UploadBucket> uploadBucketsPrevious = List.of();
+        long uploadsPreviousRange = 0;
+
+        if (comparePrevious) {
+            Duration range = Duration.between(from, toExclusive);
+            Instant previousFrom = from.minus(range);
+            Instant previousWauFrom = UserActivityService.wauQueryFrom(previousFrom);
+            Instant previousWauToExclusive = UserActivityService.wauQueryToExclusive(from);
+            List<ActivityAnalyticsResponse.WauBucket> previousWauFilled = fillWauBuckets(
+                    mapWauBuckets(userActivityEventRepository.findWauBuckets(previousWauFrom, previousWauToExclusive)),
+                    previousWauFrom,
+                    previousWauToExclusive);
+            Instant previousUploadFrom = uploadQueryFrom(previousFrom, normalizedGranularity);
+            Instant previousUploadToExclusive = uploadQueryToExclusive(from, normalizedGranularity);
+            List<ActivityAnalyticsResponse.UploadBucket> previousUploadFilled = fillUploadBuckets(
+                    mapUploadBuckets(
+                            userActivityEventRepository.findUploadBuckets(
+                                    previousUploadFrom, previousUploadToExclusive, normalizedGranularity)),
+                    previousUploadFrom,
+                    previousUploadToExclusive,
+                    normalizedGranularity);
+            wauBucketsPrevious = alignPreviousWauBuckets(wauBuckets, previousWauFilled);
+            uploadBucketsPrevious = alignPreviousUploadBuckets(uploadBuckets, previousUploadFilled);
+            uploadsPreviousRange = userActivityEventRepository.countUploads(previousFrom, from);
+        }
+
+        LocalDate todayUtc = LocalDate.now(ZoneOffset.UTC);
+        Instant currentWeekStart = UserActivityService.startOfUtcWeek(todayUtc);
+        Instant currentWeekEnd = UserActivityService.startOfNextUtcWeek(todayUtc);
+        Instant previousWeekStart = currentWeekStart.minus(Duration.ofDays(7));
+        Instant previousWeekEnd = currentWeekStart;
+
+        long wauCurrentWeek = userActivityEventRepository.countDistinctActiveUsers(
+                currentWeekStart, currentWeekEnd);
+        long wauPreviousWeek = userActivityEventRepository.countDistinctActiveUsers(
+                previousWeekStart, previousWeekEnd);
+        long uploadsCurrentWeek = userActivityEventRepository.countUploads(
+                currentWeekStart, currentWeekEnd);
+        long uploadsPreviousWeek = userActivityEventRepository.countUploads(
+                previousWeekStart, previousWeekEnd);
+
+        ActivityAnalyticsResponse.ActivitySummary summary = new ActivityAnalyticsResponse.ActivitySummary(
+                wauCurrentWeek,
+                wauPreviousWeek,
+                percentChange(wauCurrentWeek, wauPreviousWeek),
+                uploadsInRange,
+                uploadsPreviousRange,
+                percentChange(uploadsInRange, uploadsPreviousRange),
+                uploadsCurrentWeek,
+                uploadsPreviousWeek,
+                percentChange(uploadsCurrentWeek, uploadsPreviousWeek)
+        );
+
+        return new ActivityAnalyticsResponse(
+                summary,
+                wauBuckets,
+                wauBucketsPrevious,
+                uploadBuckets,
+                uploadBucketsPrevious
+        );
+    }
+
+    private static List<ActivityAnalyticsResponse.WauBucket> mapWauBuckets(List<ActivityWauBucketProjection> rows) {
+        List<ActivityAnalyticsResponse.WauBucket> buckets = new ArrayList<>();
+        for (ActivityWauBucketProjection row : rows) {
+            buckets.add(new ActivityAnalyticsResponse.WauBucket(
+                    formatPeriodStart(row.getPeriodStart()),
+                    row.getWau()
+            ));
+        }
+        return buckets;
+    }
+
+    private static List<ActivityAnalyticsResponse.UploadBucket> mapUploadBuckets(
+            List<ActivityUploadBucketProjection> rows) {
+        List<ActivityAnalyticsResponse.UploadBucket> buckets = new ArrayList<>();
+        for (ActivityUploadBucketProjection row : rows) {
+            buckets.add(new ActivityAnalyticsResponse.UploadBucket(
+                    formatPeriodStart(row.getPeriodStart()),
+                    row.getUploadCount(),
+                    row.getRetryCount()
+            ));
+        }
+        return buckets;
+    }
+
+    private static String formatPeriodStart(LocalDate date) {
+        return date.format(DateTimeFormatter.ISO_LOCAL_DATE);
+    }
+
+    static List<ActivityAnalyticsResponse.WauBucket> fillWauBuckets(
+            List<ActivityAnalyticsResponse.WauBucket> buckets,
+            Instant wauFrom,
+            Instant wauToExclusive) {
+        Map<LocalDate, Long> byStart = new HashMap<>();
+        for (ActivityAnalyticsResponse.WauBucket bucket : buckets) {
+            byStart.put(LocalDate.parse(bucket.periodStart()), bucket.wau());
+        }
+        LocalDate rangeEnd = wauToExclusive.atZone(ZoneOffset.UTC).toLocalDate();
+        LocalDate cursor = wauFrom.atZone(ZoneOffset.UTC).toLocalDate();
+        List<ActivityAnalyticsResponse.WauBucket> filled = new ArrayList<>();
+        while (cursor.isBefore(rangeEnd)) {
+            filled.add(new ActivityAnalyticsResponse.WauBucket(
+                    formatPeriodStart(cursor),
+                    byStart.getOrDefault(cursor, 0L)));
+            cursor = cursor.plusWeeks(1);
+        }
+        return filled;
+    }
+
+    static Instant uploadQueryFrom(Instant from, String granularity) {
+        return "week".equals(granularity) ? UserActivityService.wauQueryFrom(from) : from;
+    }
+
+    static Instant uploadQueryToExclusive(Instant toExclusive, String granularity) {
+        return "week".equals(granularity)
+                ? UserActivityService.wauQueryToExclusive(toExclusive)
+                : toExclusive;
+    }
+
+    static List<ActivityAnalyticsResponse.UploadBucket> fillUploadBuckets(
+            List<ActivityAnalyticsResponse.UploadBucket> buckets,
+            Instant queryFrom,
+            Instant queryToExclusive,
+            String granularity) {
+        Map<LocalDate, ActivityAnalyticsResponse.UploadBucket> byStart = new HashMap<>();
+        for (ActivityAnalyticsResponse.UploadBucket bucket : buckets) {
+            byStart.put(LocalDate.parse(bucket.periodStart()), bucket);
+        }
+        LocalDate rangeEnd = queryToExclusive.atZone(ZoneOffset.UTC).toLocalDate();
+        LocalDate cursor = queryFrom.atZone(ZoneOffset.UTC).toLocalDate();
+        List<ActivityAnalyticsResponse.UploadBucket> filled = new ArrayList<>();
+        while (cursor.isBefore(rangeEnd)) {
+            ActivityAnalyticsResponse.UploadBucket existing = byStart.get(cursor);
+            filled.add(new ActivityAnalyticsResponse.UploadBucket(
+                    formatPeriodStart(cursor),
+                    existing != null ? existing.count() : 0L,
+                    existing != null ? existing.retryCount() : 0L));
+            cursor = "week".equals(granularity) ? cursor.plusWeeks(1) : cursor.plusDays(1);
+        }
+        return filled;
+    }
+
+    /**
+     * Maps previous-period WAU buckets onto current {@code periodStart} keys for chart overlay.
+     * Both series are consecutive UTC week buckets from {@link #fillWauBuckets}; alignment is by
+     * bucket index, skipping leading weeks when the previous WAU window is wider (common when
+     * {@code range.toDays()} is not a multiple of 7). Do not use {@code range.toDays()} as a key
+     * shift — that misses Monday-based {@code periodStart} keys.
+     */
+    static List<ActivityAnalyticsResponse.WauBucket> alignPreviousWauBuckets(
+            List<ActivityAnalyticsResponse.WauBucket> current,
+            List<ActivityAnalyticsResponse.WauBucket> previousRaw) {
+        if (current.isEmpty()) {
+            return List.of();
+        }
+        int previousOffset = Math.max(0, previousRaw.size() - current.size());
+        List<ActivityAnalyticsResponse.WauBucket> aligned = new ArrayList<>();
+        for (int i = 0; i < current.size(); i++) {
+            ActivityAnalyticsResponse.WauBucket bucket = current.get(i);
+            int previousIndex = previousOffset + i;
+            long wau = previousIndex < previousRaw.size()
+                    ? previousRaw.get(previousIndex).wau()
+                    : 0L;
+            aligned.add(new ActivityAnalyticsResponse.WauBucket(bucket.periodStart(), wau));
+        }
+        return aligned;
+    }
+
+    /**
+     * Maps previous-period upload buckets onto current {@code periodStart} keys for chart overlay.
+     * Works for day and week granularity: both series are consecutive buckets from
+     * {@link #fillUploadBuckets}. Alignment is by index (with a leading offset when the
+     * previous series is longer), not {@code range.toDays()}, which breaks weekly Monday keys.
+     */
+    static List<ActivityAnalyticsResponse.UploadBucket> alignPreviousUploadBuckets(
+            List<ActivityAnalyticsResponse.UploadBucket> current,
+            List<ActivityAnalyticsResponse.UploadBucket> previousRaw) {
+        if (current.isEmpty()) {
+            return List.of();
+        }
+        int previousOffset = Math.max(0, previousRaw.size() - current.size());
+        List<ActivityAnalyticsResponse.UploadBucket> aligned = new ArrayList<>();
+        for (int i = 0; i < current.size(); i++) {
+            ActivityAnalyticsResponse.UploadBucket bucket = current.get(i);
+            int previousIndex = previousOffset + i;
+            ActivityAnalyticsResponse.UploadBucket previous = previousIndex < previousRaw.size()
+                    ? previousRaw.get(previousIndex)
+                    : null;
+            aligned.add(new ActivityAnalyticsResponse.UploadBucket(
+                    bucket.periodStart(),
+                    previous != null ? previous.count() : 0L,
+                    previous != null ? previous.retryCount() : 0L));
+        }
+        return aligned;
+    }
+
+    static Double percentChange(long current, long previous) {
+        if (previous == 0) {
+            return current == 0 ? 0.0 : null;
+        }
+        return Math.round(((double) (current - previous) / previous) * 1000.0) / 10.0;
+    }
+
     static String normalizeGranularity(String granularity) {
         if (granularity == null || granularity.isBlank()) {
             return "day";
@@ -279,6 +538,10 @@ public class AnalyticsService {
 
     public static Instant defaultFrom() {
         return LocalDate.now(ZoneOffset.UTC).minusDays(29).atStartOfDay().toInstant(ZoneOffset.UTC);
+    }
+
+    public static Instant defaultActivityFrom() {
+        return LocalDate.now(ZoneOffset.UTC).minusDays(6).atStartOfDay().toInstant(ZoneOffset.UTC);
     }
 
     public static Instant defaultToExclusive() {

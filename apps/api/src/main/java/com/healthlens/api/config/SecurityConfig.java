@@ -5,6 +5,7 @@ import com.healthlens.api.constants.SecurityConstants;
 import com.healthlens.api.entity.UserRole;
 import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
+import com.healthlens.api.security.UserActivityRecordingFilter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
@@ -46,11 +47,15 @@ public class SecurityConfig {
     private List<String> allowedOrigins;
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final UserActivityRecordingFilter userActivityRecordingFilter;
     private final CustomUserDetailsService userDetailsService;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
-                          CustomUserDetailsService userDetailsService) {
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            UserActivityRecordingFilter userActivityRecordingFilter,
+            CustomUserDetailsService userDetailsService) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.userActivityRecordingFilter = userActivityRecordingFilter;
         this.userDetailsService = userDetailsService;
     }
 
@@ -94,7 +99,8 @@ public class SecurityConfig {
                     response.sendError(HttpStatus.UNAUTHORIZED.value(), HttpStatus.UNAUTHORIZED.getReasonPhrase())
             ))
             .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class)
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(userActivityRecordingFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }

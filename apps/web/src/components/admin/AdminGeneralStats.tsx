@@ -10,8 +10,6 @@ import { API_ROUTES } from "@/lib/api/routes";
 const DEFAULT_FROM = format(subDays(new Date(), 29), "yyyy-MM-dd");
 const DEFAULT_TO = format(new Date(), "yyyy-MM-dd");
 
-const STUB_CARDS = [{ label: "Tải lên tuần này", story: "8.2" }] as const;
-
 function formatRate(rate: number) {
   return `${Math.round(rate * 1000) / 10}%`;
 }
@@ -38,18 +36,7 @@ export function AdminGeneralStats() {
       <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">
         Thống kê chung
       </h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {STUB_CARDS.map((card) => (
-          <div
-            key={card.story}
-            className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm min-h-[140px] flex flex-col"
-          >
-            <p className="text-sm font-medium text-slate-600">{card.label}</p>
-            <div className="mt-3 h-1 w-10 rounded-full bg-slate-200" aria-hidden />
-            <p className="mt-auto pt-8 text-xs text-slate-400">Story {card.story} — sắp có</p>
-          </div>
-        ))}
-
+      <div className="grid grid-cols-1 gap-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-sm text-slate-500">Chất lượng tải ảnh</p>
