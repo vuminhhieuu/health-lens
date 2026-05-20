@@ -83,7 +83,8 @@ export function MarketingHeader() {
         avatarUrl={avatarUrl}
         brandHref="/"
         onLogout={logout}
-        className="sticky top-0 z-50 w-full border-b border-[#bcc9c6]/20 bg-[#e9f6f3]/80 px-6 py-3 shadow-sm backdrop-blur-md print:hidden"
+        className="sticky top-0 z-50 w-full border-b border-[#bcc9c6]/20 bg-[#e9f6f3]/80 py-3 shadow-sm backdrop-blur-md print:hidden"
+        innerClassName={`${marketingShell} flex items-center justify-between`}
       />
     );
   }

@@ -10,7 +10,6 @@ const legalLinks = [
 ] as const;
 
 const supportLinks = [
-  { href: "/support", label: "Hỗ trợ" },
   { href: "/help", label: "Trợ giúp" },
   { href: "/questions", label: "Thắc mắc" },
 ] as const;

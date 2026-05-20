@@ -51,6 +51,7 @@ describe("public landing page (pae-3)", () => {
     expect(supportPage).toContain("export const metadata");
     expect(footer).toContain('href: "/privacy"');
     expect(footer).toContain('href: "/terms"');
-    expect(footer).toContain('href: "/support"');
+    expect(footer).toContain('href: "/help"');
+    expect(footer).not.toContain('href: "/support"');
   });
 });

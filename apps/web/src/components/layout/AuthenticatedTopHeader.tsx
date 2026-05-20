@@ -17,6 +17,7 @@ type AuthenticatedTopHeaderProps = {
   brandHref?: string;
   onLogout: () => void | Promise<void>;
   className?: string;
+  innerClassName?: string;
 };
 
 export function AuthenticatedTopHeader({
@@ -26,6 +27,7 @@ export function AuthenticatedTopHeader({
   brandHref = "/",
   onLogout,
   className = "fixed top-0 z-50 w-full border-b border-[#bcc9c6]/20 bg-[#e9f6f3]/80 px-6 py-3 shadow-sm backdrop-blur-md print:hidden",
+  innerClassName = "flex items-center justify-between",
 }: AuthenticatedTopHeaderProps) {
   const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
@@ -43,7 +45,7 @@ export function AuthenticatedTopHeader({
 
   return (
     <header className={className}>
-      <div className="flex items-center justify-between">
+      <div className={innerClassName}>
         <div className="flex items-center gap-8">
           <Link href={brandHref} className="text-2xl font-bold tracking-tight text-[#005049]">
             HealthLens
