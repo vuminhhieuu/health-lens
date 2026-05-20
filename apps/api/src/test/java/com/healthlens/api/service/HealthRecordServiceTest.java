@@ -17,6 +17,8 @@ import com.healthlens.api.entity.HealthRecord;
 import com.healthlens.api.entity.HealthRecordShare;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.events.ocr.OcrJobEvent;
+import com.healthlens.api.events.ocr.OcrJobEventPublisher;
 import com.healthlens.api.exception.ConsentRequiredException;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordRepository;
@@ -35,7 +37,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.access.AccessDeniedException;
@@ -100,8 +101,9 @@ class HealthRecordServiceTest {
         @Mock
         private ValueOperations<String, String> valueOperations;
         @Mock
-        private StreamOperations<String, Object, Object> streamOperations;
-    @Mock private UserActivityService userActivityService;
+        private UserActivityService userActivityService;
+        @Mock 
+        private OcrJobEventPublisher ocrJobEventPublisher;
 
         private HealthRecordService healthRecordService;
 
@@ -126,7 +128,7 @@ class HealthRecordServiceTest {
                                 publicEndpointRateLimiter,
                                 redisTemplate,
                                 new ObjectMapper(),
-                                "ocr.events");
+                                ocrJobEventPublisher);
                 lenient().when(consentService.hasConsent(any(UUID.class), anyString())).thenReturn(true);
         }
 
@@ -240,7 +242,6 @@ class HealthRecordServiceTest {
 
                 when(redisTemplate.opsForValue()).thenReturn(valueOperations);
                 when(valueOperations.get("health-record-upload:" + recordId)).thenReturn(reservationJson);
-                when(redisTemplate.opsForStream()).thenReturn(streamOperations);
                 when(healthRecordRepository.save(any(HealthRecord.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -248,10 +249,10 @@ class HealthRecordServiceTest {
 
                 assertThat(response.recordId()).isEqualTo(recordId);
                 assertThat(response.status()).isEqualTo("processing");
-                ArgumentCaptor<Map<String, String>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
-                verify(streamOperations).add(eq("ocr.events"), payloadCaptor.capture());
+                ArgumentCaptor<OcrJobEvent> eventCaptor = ArgumentCaptor.forClass(OcrJobEvent.class);
+                verify(ocrJobEventPublisher).publishAfterCommit(eventCaptor.capture());
                 verify(redisTemplate).delete("health-record-upload:" + recordId);
-                Map<String, String> payload = payloadCaptor.getValue();
+                Map<String, String> payload = eventCaptor.getValue().toStreamMap();
                 assertThat(payload).containsKeys("jobId", "recordId", "fileKey", "profileId", "mimeType",
                                 "correlationId");
                 assertThat(payload.get("recordId")).isEqualTo(recordId.toString());

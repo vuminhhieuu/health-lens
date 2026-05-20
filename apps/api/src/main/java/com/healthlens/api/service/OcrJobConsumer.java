@@ -3,13 +3,10 @@ package com.healthlens.api.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.correlation.CorrelationContext;
 import com.healthlens.api.dto.OcrResult;
+import com.healthlens.api.events.RedisStreamConsumerSupport;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
-import org.springframework.data.redis.connection.stream.ReadOffset;
-import org.springframework.data.redis.connection.stream.StreamOffset;
-import org.springframework.data.redis.connection.stream.StreamReadOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -17,7 +14,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -36,6 +32,7 @@ public class OcrJobConsumer {
     private final HealthRecordService healthRecordService;
     private final OcrJobStateService ocrJobStateService;
     private final ObjectMapper objectMapper;
+    private final RedisStreamConsumerSupport streamConsumerSupport;
     private final String ocrStream;
     private final String consumerGroup;
     private final String consumerName;
@@ -55,6 +52,7 @@ public class OcrJobConsumer {
             HealthRecordService healthRecordService,
             OcrJobStateService ocrJobStateService,
             ObjectMapper objectMapper,
+            RedisStreamConsumerSupport streamConsumerSupport,
             @Value("${app.stream.ocr-events:ocr.events}") String ocrStream,
             @Value("${app.stream.ocr-consumer-group:ocr-consumers}") String consumerGroup,
             @Value("${app.stream.ocr-consumer-name:api-ocr-consumer}") String consumerName) {
@@ -64,6 +62,7 @@ public class OcrJobConsumer {
         this.healthRecordService = healthRecordService;
         this.ocrJobStateService = ocrJobStateService;
         this.objectMapper = objectMapper;
+        this.streamConsumerSupport = streamConsumerSupport;
         this.ocrStream = ocrStream;
         this.consumerGroup = consumerGroup;
         this.consumerName = consumerName;
@@ -102,26 +101,13 @@ public class OcrJobConsumer {
 
     private List<MapRecord<String, Object, Object>> readPendingThenNew(
             StreamOperations<String, Object, Object> streamOps) {
-        List<MapRecord<String, Object, Object>> records = new ArrayList<>();
-        List<MapRecord<String, Object, Object>> pendingRecords = streamOps.read(
-                Consumer.from(consumerGroup, consumerName),
-                StreamReadOptions.empty().count(10),
-                StreamOffset.create(ocrStream, ReadOffset.from("0")));
-        if (pendingRecords != null && !pendingRecords.isEmpty()) {
-            records.addAll(pendingRecords);
-            return records;
-        }
-
-        List<MapRecord<String, Object, Object>> newRecords = streamOps.read(
-                Consumer.from(consumerGroup, consumerName),
-                StreamReadOptions.empty()
-                        .count(10)
-                        .block(Duration.ofMillis(500)),
-                StreamOffset.create(ocrStream, ReadOffset.lastConsumed()));
-        if (newRecords != null) {
-            records.addAll(newRecords);
-        }
-        return records;
+        return streamConsumerSupport.readPendingThenNew(
+                streamOps,
+                ocrStream,
+                consumerGroup,
+                consumerName,
+                10,
+                Duration.ofMillis(500));
     }
 
     private boolean handleRecordWithCorrelation(MapRecord<String, Object, Object> record) {
@@ -344,32 +330,7 @@ public class OcrJobConsumer {
     }
 
     private void ensureConsumerGroup() {
-        try {
-            if (Boolean.FALSE.equals(redisTemplate.hasKey(ocrStream))) {
-                redisTemplate.opsForStream().add(ocrStream, Map.of("_init", "1"));
-            }
-            redisTemplate.opsForStream().createGroup(ocrStream, ReadOffset.latest(), consumerGroup);
-            log.info("[OcrJobConsumer] Created consumer group={} for stream={}", consumerGroup, ocrStream);
-        } catch (Exception ex) {
-            if (containsAnyMessage(ex, "BUSYGROUP")) {
-                log.info("[OcrJobConsumer] Consumer group already exists. group={} stream={}", consumerGroup,
-                        ocrStream);
-                return;
-            }
-            log.warn("[OcrJobConsumer] ensureConsumerGroup failed for stream={}", ocrStream, ex);
-        }
-    }
-
-    private boolean containsAnyMessage(Throwable throwable, String keyword) {
-        Throwable current = throwable;
-        while (current != null) {
-            String message = current.getMessage();
-            if (message != null && message.contains(keyword)) {
-                return true;
-            }
-            current = current.getCause();
-        }
-        return false;
+        streamConsumerSupport.ensureConsumerGroup(ocrStream, consumerGroup, "OcrJobConsumer");
     }
 
     private Map<String, Object> normalizePayload(Map<Object, Object> rawPayload) {

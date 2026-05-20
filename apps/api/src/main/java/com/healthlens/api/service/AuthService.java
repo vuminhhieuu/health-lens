@@ -12,6 +12,7 @@ import com.healthlens.api.entity.RefreshToken;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.entity.UserRole;
 import com.healthlens.api.entity.AccountStatus;
+import com.healthlens.api.events.email.EmailEventPublisher;
 import com.healthlens.api.exception.EmailAlreadyExistsException;
 import com.healthlens.api.exception.WeakPasswordException;
 import com.healthlens.api.exception.RateLimitExceededException;

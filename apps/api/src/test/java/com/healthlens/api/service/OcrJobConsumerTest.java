@@ -3,17 +3,15 @@ package com.healthlens.api.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.entity.OcrJobState;
 import com.healthlens.api.dto.OcrResult;
+import com.healthlens.api.events.RedisStreamConsumerSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.RecordId;
-import org.springframework.data.redis.connection.stream.StreamOffset;
-import org.springframework.data.redis.connection.stream.StreamReadOptions;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -56,6 +54,8 @@ class OcrJobConsumerTest {
         @Mock
         private ValueOperations<String, String> valueOperations;
         @Mock
+        private RedisStreamConsumerSupport streamConsumerSupport;
+        @Mock
         @SuppressWarnings("unchecked")
         private MapRecord<String, Object, Object> mapRecord;
 
@@ -63,8 +63,7 @@ class OcrJobConsumerTest {
 
         @BeforeEach
         void setUp() {
-                when(redisTemplate.opsForStream()).thenReturn(streamOperations);
-                when(redisTemplate.hasKey("ocr.events")).thenReturn(true);
+                lenient().when(redisTemplate.opsForStream()).thenReturn(streamOperations);
                 lenient().when(mapRecord.getId()).thenReturn(RecordId.of("1-0"));
                 lenient().when(ocrJobStateService.startAttempt(any())).thenReturn(
                                 new OcrJobStateService.AttemptDecision(false, 1, OcrJobState.PROCESSING));
@@ -77,6 +76,7 @@ class OcrJobConsumerTest {
                                 healthRecordService,
                                 ocrJobStateService,
                                 new ObjectMapper(),
+                                streamConsumerSupport,
                                 "ocr.events",
                                 "ocr-consumers",
                                 "test-consumer");
@@ -351,7 +351,9 @@ class OcrJobConsumerTest {
         @DisplayName("DB failure after provider success is persisted retryable before ack")
         void consume_dbFailureAfterProviderSuccess_schedulesRetryAndAcks() {
                 UUID recordId = UUID.randomUUID();
-                when(streamOperations.read(any(Consumer.class), any(StreamReadOptions.class), any(StreamOffset.class)))
+                when(streamConsumerSupport.readPendingThenNew(
+                                eq(streamOperations), eq("ocr.events"), eq("ocr-consumers"), eq("test-consumer"),
+                                eq(10), any(Duration.class)))
                                 .thenReturn(List.of(mapRecord));
                 when(mapRecord.getValue()).thenReturn(
                                 Map.of("recordId", recordId.toString(), "fileKey", "k", "mimeType", "image/jpeg"));
@@ -398,7 +400,9 @@ class OcrJobConsumerTest {
         @DisplayName("unexpected repeated consumer failure moves stream entry to DLQ and acks")
         void consume_repeatedUnexpectedFailure_deadLettersAndAcks() {
                 UUID recordId = UUID.randomUUID();
-                when(streamOperations.read(any(Consumer.class), any(StreamReadOptions.class), any(StreamOffset.class)))
+                when(streamConsumerSupport.readPendingThenNew(
+                                eq(streamOperations), eq("ocr.events"), eq("ocr-consumers"), eq("test-consumer"),
+                                eq(10), any(Duration.class)))
                                 .thenReturn(List.of(mapRecord));
                 when(mapRecord.getValue()).thenReturn(
                                 Map.of("recordId", recordId.toString(), "fileKey", "k", "mimeType", "image/jpeg"));

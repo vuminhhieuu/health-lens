@@ -9,12 +9,12 @@ import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.entity.OcrDeadLetter;
 import com.healthlens.api.entity.OcrJobExecution;
 import com.healthlens.api.entity.OcrJobState;
+import com.healthlens.api.events.ocr.OcrJobEvent;
+import com.healthlens.api.events.ocr.OcrJobEventPublisher;
 import com.healthlens.api.repository.OcrDeadLetterRepository;
 import com.healthlens.api.repository.OcrJobExecutionRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,11 +48,10 @@ public class OcrJobStateService {
 
     private final OcrJobExecutionRepository jobRepository;
     private final OcrDeadLetterRepository deadLetterRepository;
-    private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final HealthRecordService healthRecordService;
     private final Clock clock;
-    private final String ocrStreamName;
+    private final OcrJobEventPublisher ocrJobEventPublisher;
     private final int maxAttempts;
     private final Duration initialBackoff;
     private AuditEventRecorder auditEventRecorder;
@@ -60,21 +59,19 @@ public class OcrJobStateService {
     public OcrJobStateService(
             OcrJobExecutionRepository jobRepository,
             OcrDeadLetterRepository deadLetterRepository,
-            StringRedisTemplate redisTemplate,
+            OcrJobEventPublisher ocrJobEventPublisher,
             ObjectMapper objectMapper,
             HealthRecordService healthRecordService,
             Clock clock,
-            @Value("${app.stream.ocr-events:ocr.events}") String ocrStreamName,
-            @Value("${app.ocr.retry.max-attempts:3}") int maxAttempts,
-            @Value("${app.ocr.retry.initial-backoff-ms:30000}") long initialBackoffMs
+            @org.springframework.beans.factory.annotation.Value("${app.ocr.retry.max-attempts:3}") int maxAttempts,
+            @org.springframework.beans.factory.annotation.Value("${app.ocr.retry.initial-backoff-ms:30000}") long initialBackoffMs
     ) {
         this.jobRepository = jobRepository;
         this.deadLetterRepository = deadLetterRepository;
-        this.redisTemplate = redisTemplate;
+        this.ocrJobEventPublisher = ocrJobEventPublisher;
         this.objectMapper = objectMapper;
         this.healthRecordService = healthRecordService;
         this.clock = clock;
-        this.ocrStreamName = ocrStreamName;
         this.maxAttempts = Math.max(1, maxAttempts);
         this.initialBackoff = Duration.ofMillis(Math.max(1L, initialBackoffMs));
     }
@@ -244,9 +241,8 @@ public class OcrJobStateService {
                 return;
             }
 
-            Map<String, String> payload = payloadMap(job);
-            payload.put("attempt", Integer.toString(job.getAttemptCount() + 1));
-            redisTemplate.opsForStream().add(ocrStreamName, payload);
+            OcrJobEvent event = retryEvent(job);
+            ocrJobEventPublisher.publish(event);
             job.setState(OcrJobState.QUEUED);
             job.setNextRetryAt(null);
             jobRepository.save(job);
@@ -319,15 +315,18 @@ public class OcrJobStateService {
         }
     }
 
-    private Map<String, String> payloadMap(OcrJobExecution job) throws JsonProcessingException {
+    private OcrJobEvent retryEvent(OcrJobExecution job) throws JsonProcessingException {
         Map<String, String> payload = objectMapper.readValue(job.getPayload(), new TypeReference<>() {});
-        payload.put("jobId", job.getJobId());
-        payload.put("recordId", job.getRecordId().toString());
-        payload.put("fileKey", job.getFileKey());
-        if (job.getCorrelationId() != null && !job.getCorrelationId().isBlank()) {
-            payload.put("correlationId", job.getCorrelationId());
-        }
-        return payload;
+        return new OcrJobEvent(
+                job.getJobId(),
+                job.getCorrelationId(),
+                job.getRecordId(),
+                job.getFileKey(),
+                payload.getOrDefault("fileVersion", OcrJobEvent.DEFAULT_FILE_VERSION),
+                payload.get("mimeType"),
+                parseUuidOrNull(payload.get("profileId")),
+                job.getAttemptCount() + 1
+        );
     }
 
     private Map<String, String> sanitizedPayload(Map<String, Object> payload) {

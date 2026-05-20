@@ -1,4 +1,4 @@
-package com.healthlens.api.dto.event;
+package com.healthlens.api.events.email;
 
 import java.util.Map;
 import java.util.Objects;

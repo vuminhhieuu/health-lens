@@ -7,6 +7,8 @@ import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.entity.OcrDeadLetter;
 import com.healthlens.api.entity.OcrJobExecution;
 import com.healthlens.api.entity.OcrJobState;
+import com.healthlens.api.events.ocr.OcrJobEvent;
+import com.healthlens.api.events.ocr.OcrJobEventPublisher;
 import com.healthlens.api.repository.OcrDeadLetterRepository;
 import com.healthlens.api.repository.OcrJobExecutionRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,8 +18,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.StreamOperations;
-import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -41,9 +41,8 @@ class OcrJobStateServiceTest {
 
     @Mock private OcrJobExecutionRepository jobRepository;
     @Mock private OcrDeadLetterRepository deadLetterRepository;
-    @Mock private StringRedisTemplate redisTemplate;
+    @Mock private OcrJobEventPublisher ocrJobEventPublisher;
     @Mock private HealthRecordService healthRecordService;
-    @Mock private StreamOperations<String, Object, Object> streamOperations;
     @Mock private AuditEventRecorder auditEventRecorder;
 
     private OcrJobStateService service;
@@ -54,11 +53,10 @@ class OcrJobStateServiceTest {
         service = new OcrJobStateService(
                 jobRepository,
                 deadLetterRepository,
-                redisTemplate,
+                ocrJobEventPublisher,
                 new ObjectMapper(),
                 healthRecordService,
                 Clock.fixed(now, ZoneOffset.UTC),
-                "ocr.events",
                 2,
                 1000L
         );
@@ -199,11 +197,10 @@ class OcrJobStateServiceTest {
         )).thenReturn(List.of(existing));
         when(jobRepository.claimDueRetry(eq(existing.getId()), eq(OcrJobState.FAILED_RETRYABLE), eq(now), any(Instant.class)))
                 .thenReturn(1);
-        when(redisTemplate.opsForStream()).thenReturn(streamOperations);
 
         service.enqueueDueRetries();
 
-        verify(streamOperations).add(eq("ocr.events"), any(Map.class));
+        verify(ocrJobEventPublisher).publish(any(OcrJobEvent.class));
         assertThat(existing.getState()).isEqualTo(OcrJobState.QUEUED);
         assertThat(existing.getNextRetryAt()).isNull();
     }
@@ -223,7 +220,7 @@ class OcrJobStateServiceTest {
 
         service.enqueueDueRetries();
 
-        verify(redisTemplate, never()).opsForStream();
+        verify(ocrJobEventPublisher, never()).publish(any(OcrJobEvent.class));
     }
 
     private OcrJobStateService.OcrJobMetadata metadata(String idempotencyKey) {

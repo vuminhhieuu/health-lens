@@ -1,11 +1,13 @@
 package com.healthlens.api.service;
 
-import com.healthlens.api.dto.event.EmailEvent;
 import com.healthlens.api.entity.AccountStatus;
 import com.healthlens.api.entity.DataDeletionRequest;
 import com.healthlens.api.entity.FollowUpReminder;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.events.ApplicationStreamPublisher;
+import com.healthlens.api.events.RedisStreamConsumerSupport;
+import com.healthlens.api.events.email.EmailEvent;
 import com.healthlens.api.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,14 +15,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.RecordId;
-import org.springframework.data.redis.connection.stream.StreamOffset;
-import org.springframework.data.redis.connection.stream.StreamReadOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.StreamOperations;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -52,6 +52,12 @@ class EmailConsumerTest {
     @Mock
     private FollowUpReminderService followUpReminderService;
 
+    @Mock
+    private RedisStreamConsumerSupport streamConsumerSupport;
+
+    @Mock
+    private ApplicationStreamPublisher streamPublisher;
+
     private EmailConsumer consumer;
 
     @BeforeEach
@@ -61,6 +67,8 @@ class EmailConsumerTest {
                 emailService,
                 userRepository,
                 followUpReminderService,
+                streamConsumerSupport,
+                streamPublisher,
                 "email.events",
                 "email.events.dlq",
                 "email-consumers",
@@ -169,11 +177,9 @@ class EmailConsumerTest {
                 "token", "verify-token"
         ));
         when(record.getId()).thenReturn(RecordId.of("1-0"));
-        when(streamOps.read(
-                any(Consumer.class),
-                any(StreamReadOptions.class),
-                any(StreamOffset.class)
-        )).thenReturn(List.of(record), List.of());
+        when(streamConsumerSupport.readPendingThenNew(
+                eq(streamOps), eq("email.events"), eq("email-consumers"), eq("test-email-consumer"), eq(10), any(Duration.class)
+        )).thenReturn(List.of(record));
 
         consumer.consumeEmailEvents();
 
@@ -197,11 +203,9 @@ class EmailConsumerTest {
                 "token", "verify-token"
         ));
         when(record.getId()).thenReturn(RecordId.of("1-0"));
-        when(streamOps.read(
-                any(Consumer.class),
-                any(StreamReadOptions.class),
-                any(StreamOffset.class)
-        )).thenReturn(List.of(record), List.of());
+        when(streamConsumerSupport.readPendingThenNew(
+                eq(streamOps), eq("email.events"), eq("email-consumers"), eq("test-email-consumer"), eq(10), any(Duration.class)
+        )).thenReturn(List.of(record));
         org.mockito.Mockito.doThrow(new IllegalStateException("smtp down"))
                 .when(emailService).sendVerificationEmail(user, "verify-token");
 
@@ -221,15 +225,13 @@ class EmailConsumerTest {
                 "token", "verify-token"
         ));
         when(record.getId()).thenReturn(RecordId.of("1-0"));
-        when(streamOps.read(
-                any(Consumer.class),
-                any(StreamReadOptions.class),
-                any(StreamOffset.class)
-        )).thenReturn(List.of(record), List.of());
+        when(streamConsumerSupport.readPendingThenNew(
+                eq(streamOps), eq("email.events"), eq("email-consumers"), eq("test-email-consumer"), eq(10), any(Duration.class)
+        )).thenReturn(List.of(record));
 
         consumer.consumeEmailEvents();
 
-        verify(streamOps).add(eq("email.events.dlq"), org.mockito.ArgumentMatchers.argThat(payload ->
+        verify(streamPublisher).publish(eq("email.events.dlq"), org.mockito.ArgumentMatchers.argThat(payload ->
                 "invalid_userId".equals(payload.get("failureReason"))
                         && "1-0".equals(payload.get("sourceRecordId"))));
         verify(streamOps).acknowledge("email.events", "email-consumers", RecordId.of("1-0"));
@@ -325,15 +327,13 @@ class EmailConsumerTest {
         payload.put("invitationLink", "https://healthlens.vn/invite?token=xyz");
         MapRecord<String, Object, Object> record = record(payload);
         when(record.getId()).thenReturn(RecordId.of("2-0"));
-        when(streamOps.read(
-                any(Consumer.class),
-                any(StreamReadOptions.class),
-                any(StreamOffset.class)
-        )).thenReturn(List.of(record), List.of());
+        when(streamConsumerSupport.readPendingThenNew(
+                eq(streamOps), eq("email.events"), eq("email-consumers"), eq("test-email-consumer"), eq(10), any(Duration.class)
+        )).thenReturn(List.of(record));
 
         consumer.consumeEmailEvents();
 
-        verify(streamOps).add(eq("email.events.dlq"), org.mockito.ArgumentMatchers.<Map<String, String>>argThat(dlq -> {
+        verify(streamPublisher).publish(eq("email.events.dlq"), org.mockito.ArgumentMatchers.<Map<String, String>>argThat(dlq -> {
             // Sensitive fields must be redacted
             boolean noToken = !dlq.containsKey("token");
             boolean noCancelLink = !dlq.containsKey("cancellationLink");

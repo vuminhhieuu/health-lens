@@ -6,6 +6,7 @@ import com.healthlens.api.entity.AccountStatus;
 import com.healthlens.api.entity.FollowUpReminder;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.events.email.EmailEventPublisher;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.FollowUpReminderRepository;
 import com.healthlens.api.repository.ProfileRepository;
