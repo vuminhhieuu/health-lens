@@ -1,6 +1,7 @@
 "use client";
 
 import { ShieldCheck, LogIn, KeyRound, QrCode, Copy, Check } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 
@@ -147,12 +148,12 @@ export default function AdminLoginPage() {
       {/* Header */}
       <header className="fixed top-0 z-50 w-full border-b border-slate-200 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full items-center justify-between px-6">
-          <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3">
             <ShieldCheck className="h-6 w-6 text-teal-600" />
             <span className="text-lg font-bold tracking-tight text-slate-900">
               HealthLens <span className="text-teal-600">Admin</span>
             </span>
-          </div>
+          </Link>
         </div>
       </header>
 

@@ -452,8 +452,8 @@ export default function DashboardHomePage() {
             />
             <ActionTile
               icon={<ShieldPlus className="h-6 w-6" />}
-              label="Trợ giúp"
-              href="/help"
+              label="Hướng dẫn"
+              href="/guide"
             />
           </div>
 

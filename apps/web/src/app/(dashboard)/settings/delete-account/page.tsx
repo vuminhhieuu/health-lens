@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ComponentProps } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Callout } from "@radix-ui/themes";
 import {
@@ -238,10 +239,10 @@ export default function DeleteAccountPage() {
           >
             <div className="mx-auto flex w-full max-w-3xl flex-col justify-center py-8 sm:min-h-0 sm:py-0">
               <div className="rounded-xl border border-[#bcc9c6]/15 bg-white p-8 text-center shadow-[0_8px_32px_rgba(18,30,28,0.12)] md:p-10">
-                <div className="mx-auto mb-4 flex items-center justify-center gap-2">
+                <Link href="/" className="mx-auto mb-4 flex items-center justify-center gap-2">
                   <Shield className="h-6 w-6 text-[#00685f]" aria-hidden />
                   <span className="text-lg font-extrabold tracking-tight text-[#00685f]">HealthLens</span>
-                </div>
+                </Link>
                 <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-[#e9f6f3]">
                   <CheckCircle2 className="h-12 w-12 text-[#00685f]" />
                 </div>

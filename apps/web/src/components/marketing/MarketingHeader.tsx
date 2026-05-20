@@ -1,0 +1,116 @@
+ "use client";
+
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+
+import { useAuthBootstrap } from "@/hooks/useAuthBootstrap";
+import { AuthenticatedTopHeader } from "@/components/layout/AuthenticatedTopHeader";
+import { apiClient } from "@/lib/api/apiClient";
+import { API_ROUTES } from "@/lib/api/routes";
+import { useAuthStore } from "@/stores/authStore";
+
+type CurrentUser = {
+  avatarUrl?: string | null;
+};
+
+export function MarketingHeader() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const isLoading = useAuthBootstrap();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
+  const clearAuth = useAuthStore((s) => s.clearAuth);
+  const { data: currentUser } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: async () => {
+      const response = await apiClient.get(API_ROUTES.USERS.ME);
+      return response.data?.data as CurrentUser;
+    },
+    enabled: isAuthenticated,
+    staleTime: 12 * 60 * 1000,
+    refetchInterval: 12 * 60 * 1000,
+    refetchOnWindowFocus: true,
+  });
+
+  const displayName = user?.fullName?.trim() || user?.email || "Người dùng";
+  const avatarInitial = displayName[0]?.toUpperCase() ?? "U";
+  const avatarUrl = currentUser?.avatarUrl ?? null;
+  const topHeaderNavItems = [
+    { name: "Trang chủ", href: "/home", isActive: pathname === "/home" },
+    {
+      name: "Kết quả khám",
+      href: "/health-records",
+      isActive: pathname === "/health-records" || pathname?.startsWith("/health-records/"),
+    },
+    { name: "Hồ sơ của tôi", href: "/settings/profile", isActive: pathname === "/settings/profile" },
+  ];
+
+  const logout = async () => {
+    try {
+      await apiClient.post(API_ROUTES.AUTH.LOGOUT);
+    } catch {
+      // Continue with local sign out if backend logout fails.
+    } finally {
+      clearAuth();
+      router.push("/login");
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <header
+        aria-hidden="true"
+        className="sticky top-0 z-50 border-b border-[#bcc9c6]/50 bg-[#f6fbfa]/90 backdrop-blur-md"
+      >
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3 md:px-10 lg:px-12">
+          <div className="h-8 w-36 animate-pulse rounded-lg bg-[#e1ebe8]" />
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <div className="h-10 w-24 animate-pulse rounded-lg bg-[#e1ebe8]" />
+            <div className="h-10 w-24 animate-pulse rounded-lg bg-[#e1ebe8]" />
+          </div>
+        </div>
+      </header>
+    );
+  }
+
+  if (isAuthenticated) {
+    return (
+      <AuthenticatedTopHeader
+        navItems={topHeaderNavItems}
+        avatarInitial={avatarInitial}
+        avatarUrl={avatarUrl}
+        brandHref="/"
+        onLogout={logout}
+        className="sticky top-0 z-50 w-full border-b border-[#bcc9c6]/20 bg-[#e9f6f3]/80 px-6 py-3 shadow-sm backdrop-blur-md print:hidden"
+      />
+    );
+  }
+
+  return (
+    <header className="sticky top-0 z-50 border-b border-[#bcc9c6]/50 bg-[#f6fbfa]/90 backdrop-blur-md">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3 md:px-10 lg:px-12">
+        <Link
+          href="/"
+          className="text-2xl font-bold tracking-tight text-[#005049] transition hover:text-[#00685f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00685f]"
+        >
+          HealthLens
+        </Link>
+        <nav aria-label="Tài khoản" className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <Link
+            href="/login"
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-[#bcc9c6] bg-white px-3 text-sm font-semibold text-[#00685f] transition hover:bg-[#e9f6f3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00685f] sm:px-4"
+          >
+            Đăng nhập
+          </Link>
+          <Link
+            href="/register"
+            className="inline-flex h-10 items-center justify-center rounded-lg bg-[#00685f] px-3 text-sm font-semibold text-white transition hover:bg-[#005049] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00685f] sm:px-4"
+          >
+            Đăng ký
+          </Link>
+        </nav>
+      </div>
+    </header>
+  );
+}
