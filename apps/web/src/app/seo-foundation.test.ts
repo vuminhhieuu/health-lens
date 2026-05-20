@@ -45,13 +45,15 @@ describe("SEO foundation (pae-4)", () => {
     expect(landingMetadata.openGraph?.description).toBeTruthy();
   });
 
-  it("ships HealthLens 3D favicon and app icons in public/", () => {
-    expect(existsSync(join(publicDir, "favicon.ico"))).toBe(true);
+  it("ships HealthLens 3D favicon via App Router and PNG icons in public/", () => {
+    expect(existsSync(join(appDir, "favicon.ico"))).toBe(true);
+    expect(existsSync(join(appDir, "icon.png"))).toBe(true);
+    expect(existsSync(join(appDir, "apple-icon.png"))).toBe(true);
+    expect(existsSync(join(publicDir, "favicon.ico"))).toBe(false);
     expect(existsSync(join(publicDir, "brand/healthlens-icon-3d-1024.png"))).toBe(true);
     expect(existsSync(join(publicDir, "apple-touch-icon.png"))).toBe(true);
     expect(existsSync(join(publicDir, "icon-192.png"))).toBe(true);
     expect(existsSync(join(publicDir, "icon-512.png"))).toBe(true);
-    expect(existsSync(join(appDir, "favicon.ico"))).toBe(true);
   });
 
   it("maps each sitemap path to an App Router page (smoke: routable)", () => {

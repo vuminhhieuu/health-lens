@@ -56,12 +56,13 @@ Composer
 
 - Added `sitemap.ts` and `robots.ts` with shared SEO constants; robots disallows `/home`, `/admin`, and dashboard/auth prefixes.
 - Landing `(marketing)/page.tsx` exports Vietnamese Open Graph metadata (`vi_VN`).
-- Replaced default Next assets with branded `favicon.ico`, `favicon.svg`, `apple-touch-icon.png`, and `icon.svg` (+ PNG sizes).
-- `pnpm test` in `apps/web`: 30 tests passed (including new `seo-foundation.test.ts`).
+- Replaced default Next assets with 3D shield PNG set; favicon via `src/app/favicon.ico` (App Router single source).
+- `pnpm test` in `apps/web`: vitest smoke + `site.test.ts` for URL normalization.
 
 ### File List
 
 - `apps/web/src/lib/seo/site.ts` (new)
+- `apps/web/src/lib/seo/site.test.ts` (new)
 - `apps/web/src/lib/seo/metadata.ts` (new)
 - `apps/web/src/app/sitemap.ts` (new)
 - `apps/web/src/app/robots.ts` (new)
@@ -69,12 +70,9 @@ Composer
 - `apps/web/src/app/layout.tsx`
 - `apps/web/src/app/(marketing)/page.tsx`
 - `apps/web/src/app/routing-policy.test.ts`
-- `apps/web/public/favicon.ico` (new)
-- `apps/web/public/favicon.svg` (new)
-- `apps/web/public/icon.svg` (new)
-- `apps/web/public/apple-touch-icon.png` (new)
-- `apps/web/public/icon-192.png` (new)
-- `apps/web/public/icon-512.png` (new)
+- `apps/web/src/app/favicon.ico`, `icon.png`, `apple-icon.png` (new)
+- `apps/web/public/brand/healthlens-icon-3d-1024.png` (new)
+- `apps/web/public/apple-touch-icon.png`, `icon-192.png`, `icon-512.png` (new)
 - `apps/web/scripts/smoke-sitemap-urls.mjs` (new)
 - `apps/web/.env.example` (new)
 
@@ -82,6 +80,7 @@ Composer
 
 - 2026-05-20: SEO foundation — sitemap, robots, landing/root metadata, HealthLens favicon set, vitest smoke.
 - 2026-05-20: Code review — sitemap `/help`, smoke script, apple-touch 180px, dev site URL, `.env.example`.
+- 2026-05-20: Copilot PR #97 — `normalizeSiteUrl`, single favicon source, smoke parses `/sitemap.xml`, story docs sync.
 
 ### Review Findings
 
