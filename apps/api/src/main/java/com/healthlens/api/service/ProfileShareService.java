@@ -1,8 +1,8 @@
 package com.healthlens.api.service;
 
 import com.healthlens.api.audit.AuditActions;
-import com.healthlens.api.audit.AuditEventRecorder;
-import com.healthlens.api.audit.AuditResourceTypes;
+import com.healthlens.api.audit.SharingAuditSupport;
+import com.healthlens.api.audit.SharingAuditSupport.SharingAuditFields;
 import com.healthlens.api.dto.response.AcceptInvitationResultResponse;
 import com.healthlens.api.dto.response.IncomingProfileInvitationResponse;
 import com.healthlens.api.dto.response.ProfileInvitationResponse;
@@ -45,10 +45,13 @@ public class ProfileShareService {
     private final ProfileShareRepository profileShareRepository;
     private final UserRepository userRepository;
     private final EmailEventPublisher emailEventPublisher;
-    private final AuditEventRecorder auditEventRecorder;
+    private final SharingAuditSupport sharingAuditSupport;
 
     @Value("${app.frontend.base-url:http://localhost:3000}")
     private String frontendBaseUrl;
+
+    @Value("${app.sharing.notify-owner-on-accept:true}")
+    private boolean notifyOwnerOnAccept;
     private static final String FAMILY_PROFILES_PATH = "/profiles";
 
     /** Login then return to accept page so the invitation is completed after authentication. */
@@ -65,7 +68,7 @@ public class ProfileShareService {
             ProfileShareRepository profileShareRepository,
             UserRepository userRepository,
             EmailEventPublisher emailEventPublisher,
-            AuditEventRecorder auditEventRecorder
+            SharingAuditSupport sharingAuditSupport
     ) {
         this.profileRepository = profileRepository;
         this.profileInvitationRepository = profileInvitationRepository;
@@ -73,7 +76,7 @@ public class ProfileShareService {
         this.profileShareRepository = profileShareRepository;
         this.userRepository = userRepository;
         this.emailEventPublisher = emailEventPublisher;
-        this.auditEventRecorder = auditEventRecorder;
+        this.sharingAuditSupport = sharingAuditSupport;
     }
 
     @Transactional
@@ -191,17 +194,17 @@ public class ProfileShareService {
             emailEventPublisher.publishProfileInvitation(inviter, normalizedEmail, link);
         }
 
-        writeUnifiedProfileAudit(
-                ownerId,
-                AuditActions.INVITE_PROFILE_SHARE,
-                profileId,
-                Map.of(
-                        "invitationId", inv.getId(),
-                        "inviteeEmail", normalizedEmail,
-                        "accessLevel", resolvedAccessLevel,
-                        "status", inv.getStatus()
-                )
-        );
+        SharingAuditFields.Builder inviteAudit = SharingAuditFields.builder()
+                .ownerId(ownerId)
+                .invitationId(inv.getId())
+                .inviteeEmail(normalizedEmail)
+                .extra("accessLevel", resolvedAccessLevel)
+                .extra("status", inv.getStatus());
+        profileRepository.findById(profileId)
+                .map(Profile::getDisplayName)
+                .filter(name -> name != null && !name.isBlank())
+                .ifPresent(name -> inviteAudit.extra("displayName", name.trim()));
+        sharingAuditSupport.recordSuccess(ownerId, AuditActions.INVITE_PROFILE_SHARE, profileId, inviteAudit.build());
 
         return mapToResponse(inv);
     }
@@ -214,11 +217,15 @@ public class ProfileShareService {
         if (!"pending".equals(inv.getStatus())) {
             throw new IllegalStateException("Chỉ có thể hủy lời mời đang chờ.");
         }
-        writeUnifiedProfileAudit(
+        sharingAuditSupport.recordSuccess(
                 ownerId,
                 AuditActions.CANCEL_PROFILE_INVITATION,
                 profileId,
-                Map.of("invitationId", invitationId, "inviteeEmail", inv.getInviteeEmail())
+                SharingAuditFields.builder()
+                        .ownerId(ownerId)
+                        .invitationId(invitationId)
+                        .inviteeEmail(inv.getInviteeEmail())
+                        .build()
         );
         profileInvitationRepository.delete(inv);
     }
@@ -260,11 +267,15 @@ public class ProfileShareService {
         String link = buildInvitationLink(inv.getToken());
         emailEventPublisher.publishProfileInvitation(inviter, inv.getInviteeEmail(), link);
 
-        writeUnifiedProfileAudit(
+        sharingAuditSupport.recordSuccess(
                 ownerId,
                 AuditActions.RESEND_PROFILE_INVITATION,
                 profileId,
-                Map.of("invitationId", invitationId, "inviteeEmail", inv.getInviteeEmail())
+                SharingAuditFields.builder()
+                        .ownerId(ownerId)
+                        .invitationId(invitationId)
+                        .inviteeEmail(inv.getInviteeEmail())
+                        .build()
         );
 
         return mapToResponse(inv);
@@ -272,8 +283,11 @@ public class ProfileShareService {
 
     @Transactional
     public AcceptInvitationResultResponse acceptInvitation(String token, UUID userId) {
-        ProfileInvitation invitation = profileInvitationRepository.findByTokenForUpdate(token)
-                .orElseThrow(() -> new ResourceNotFoundException("Lời mời không hợp lệ"));
+        ProfileInvitation invitation = profileInvitationRepository.findByToken(token).orElse(null);
+        if (invitation == null) {
+            sharingAuditSupport.recordAnonymousAccessDenied(null, "invalid_invitation_token");
+            throw new ResourceNotFoundException("Lời mời không hợp lệ");
+        }
 
         Instant now = Instant.now();
         boolean pastExpiry =
@@ -293,14 +307,23 @@ public class ProfileShareService {
         User viewer = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
-        if (!viewer.getEmail().trim().equalsIgnoreCase(invitation.getInviteeEmail().trim())) {
-            throw new AccessDeniedException("Email đăng nhập không khớp với lời mời");
-        }
-
         Profile profile = profileRepository.findById(invitation.getProfileId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hồ sơ"));
         UUID profileId = profile.getId();
         UUID ownerId = profile.getUser().getId();
+
+        if (!viewer.getEmail().trim().equalsIgnoreCase(invitation.getInviteeEmail().trim())) {
+            sharingAuditSupport.recordAccessDenied(
+                    userId,
+                    profileId,
+                    ownerId,
+                    viewer.getId(),
+                    invitation.getId(),
+                    invitation.getInviteeEmail(),
+                    "invitee_email_mismatch"
+            );
+            throw new AccessDeniedException("Email đăng nhập không khớp với lời mời");
+        }
 
         if ("accepted".equals(invitation.getStatus())) {
             ensureShareForInvitation(invitation, viewer.getId(), ownerId);
@@ -311,27 +334,35 @@ public class ProfileShareService {
             return new AcceptInvitationResultResponse("expired", FAMILY_PROFILES_PATH, profileId);
         }
 
-        if (profileShareRepository
-                .findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(profileId, viewer.getId())
-                .isEmpty()) {
+        if (!profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewer.getId())) {
             ProfileShare share = new ProfileShare();
             share.setProfileId(profileId);
             share.setOwnerId(ownerId);
             share.setViewerId(viewer.getId());
             share.setAccessLevel(invitation.getAccessLevel());
-            saveNewActiveProfileShareHandlingDuplicate(share, profileId, viewer.getId());
+            profileShareRepository.save(share);
         }
 
         invitation.setStatus("accepted");
         invitation.setAcceptedAt(now);
         profileInvitationRepository.save(invitation);
 
-        writeUnifiedProfileAudit(
+        sharingAuditSupport.recordSuccess(
                 userId,
                 AuditActions.ACCEPT_PROFILE_INVITATION,
                 profileId,
-                Map.of("invitationId", invitation.getId(), "ownerId", ownerId.toString())
+                SharingAuditFields.builder()
+                        .ownerId(ownerId)
+                        .viewerId(viewer.getId())
+                        .invitationId(invitation.getId())
+                        .inviteeEmail(invitation.getInviteeEmail())
+                        .extra("accessLevel", invitation.getAccessLevel())
+                        .build()
         );
+
+        if (createdShare && notifyOwnerOnAccept) {
+            notifyOwnerInvitationAccepted(ownerId, viewer, profile);
+        }
 
         return new AcceptInvitationResultResponse("accepted", FAMILY_PROFILES_PATH, profileId);
     }
@@ -346,7 +377,19 @@ public class ProfileShareService {
 
         User viewer = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
+        Profile profile = profileRepository.findById(invitation.getProfileId()).orElse(null);
+        UUID ownerId = profile != null ? profile.getUser().getId() : invitation.getInviterId();
+
         if (!viewer.getEmail().trim().equalsIgnoreCase(invitation.getInviteeEmail().trim())) {
+            sharingAuditSupport.recordAccessDenied(
+                    userId,
+                    invitation.getProfileId(),
+                    ownerId,
+                    viewer.getId(),
+                    invitationId,
+                    invitation.getInviteeEmail(),
+                    "invitee_email_mismatch"
+            );
             throw new AccessDeniedException("Email đăng nhập không khớp với lời mời");
         }
 
@@ -357,12 +400,30 @@ public class ProfileShareService {
         }
         profileInvitationRepository.save(invitation);
 
-        writeUnifiedProfileAudit(
+        sharingAuditSupport.recordSuccess(
                 userId,
                 AuditActions.REJECT_PROFILE_INVITATION,
                 invitation.getProfileId(),
-                Map.of("invitationId", invitationId, "status", invitation.getStatus())
+                SharingAuditFields.builder()
+                        .ownerId(ownerId)
+                        .viewerId(viewer.getId())
+                        .invitationId(invitationId)
+                        .inviteeEmail(invitation.getInviteeEmail())
+                        .extra("status", invitation.getStatus())
+                        .build()
         );
+    }
+
+    private void notifyOwnerInvitationAccepted(UUID ownerId, User viewer, Profile profile) {
+        userRepository.findById(ownerId).ifPresent(owner -> {
+            String profileName = profile.getDisplayName() != null && !profile.getDisplayName().isBlank()
+                    ? profile.getDisplayName().trim()
+                    : "Hồ sơ sức khỏe";
+            String profilesLink = frontendBaseUrl.endsWith("/")
+                    ? frontendBaseUrl.substring(0, frontendBaseUrl.length() - 1) + FAMILY_PROFILES_PATH
+                    : frontendBaseUrl + FAMILY_PROFILES_PATH;
+            emailEventPublisher.publishProfileShareAccepted(owner, viewer, profileName, profilesLink);
+        });
     }
 
     private void ensureShareForInvitation(ProfileInvitation invitation, UUID viewerId, UUID ownerId) {
@@ -398,7 +459,17 @@ public class ProfileShareService {
     private void assertProfileOwner(UUID requesterId, UUID profileId) {
         Profile profile = profileRepository.findById(profileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hồ sơ"));
-        if (!requesterId.equals(profile.getUser().getId())) {
+        UUID ownerId = profile.getUser().getId();
+        if (!requesterId.equals(ownerId)) {
+            sharingAuditSupport.recordAccessDenied(
+                    requesterId,
+                    profileId,
+                    ownerId,
+                    null,
+                    null,
+                    null,
+                    "not_profile_owner"
+            );
             throw new AccessDeniedException("Không có quyền truy cập hồ sơ này");
         }
     }
@@ -485,28 +556,15 @@ public class ProfileShareService {
         auditLog.setResourceId(shareId);
         profileShareAuditLogRepository.save(auditLog);
 
-        writeUnifiedProfileAudit(
+        sharingAuditSupport.recordSuccess(
                 actorId,
                 AuditActions.REVOKE_PROFILE_SHARE,
                 profileId,
-                Map.of("shareId", shareId, "viewerId", viewerId.toString())
+                SharingAuditFields.builder()
+                        .ownerId(actorId)
+                        .viewerId(viewerId)
+                        .extra("shareId", shareId.toString())
+                        .build()
         );
-    }
-
-    private void writeUnifiedProfileAudit(
-            UUID actorId,
-            String action,
-            UUID profileId,
-            Map<String, Object> details
-    ) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        profileRepository.findById(profileId).ifPresent(profile -> {
-            String displayName = profile.getDisplayName();
-            if (displayName != null && !displayName.isBlank()) {
-                payload.put("displayName", displayName.trim());
-            }
-        });
-        payload.putAll(details);
-        auditEventRecorder.recordEvent(actorId, action, AuditResourceTypes.PROFILE, profileId, payload);
     }
 }

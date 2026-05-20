@@ -121,6 +121,9 @@ app:
     account-status-cache-ttl: ${APP_SECURITY_ACCOUNT_STATUS_CACHE_TTL:60s}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
+  sharing:
+    # Notify profile owner by email when a pending invitation is accepted (toggle for PAE-12 later).
+    notify-owner-on-accept: ${APP_SHARING_NOTIFY_OWNER_ON_ACCEPT:true}
   stream:
     email-events: ${APP_STREAM_EMAIL_EVENTS:email.events}
     email-consumer-group: ${APP_STREAM_EMAIL_CONSUMER_GROUP:email-consumers}

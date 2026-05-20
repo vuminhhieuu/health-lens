@@ -550,6 +550,11 @@ public class AdminAuditLogService {
         if (AuditActions.RESEND_PROFILE_INVITATION.equals(action)) {
             return "Gửi lại lời mời chia sẻ — " + subject;
         }
+        if (AuditActions.PROFILE_SHARE_ACCESS_DENIED_FAILED.equals(action)) {
+            return extractJsonString(payloadJson(log), "reason")
+                    .map(reason -> "Truy cập chia sẻ bị từ chối — " + reason + " — " + subject)
+                    .orElse("Truy cập chia sẻ bị từ chối — " + subject);
+        }
         if (AuditActions.CREATE_PROFILE.equals(action)) {
             return "Tạo hồ sơ gia đình mới — " + subject;
         }
@@ -675,7 +680,8 @@ public class AdminAuditLogService {
 
     private Optional<String> profileLabelFromJson(AuditLog log) {
         Optional<String> displayName = extractJsonString(payloadJson(log), "displayName");
-        Optional<String> inviteeEmail = extractJsonString(payloadJson(log), "inviteeEmail");
+        Optional<String> inviteeMasked = extractJsonString(payloadJson(log), "inviteeEmailMasked");
+        Optional<String> inviteeEmail = inviteeMasked.or(() -> extractJsonString(payloadJson(log), "inviteeEmail"));
         if (displayName.isPresent() && inviteeEmail.isPresent()) {
             return Optional.of("Hồ sơ · " + displayName.get() + " · mời " + inviteeEmail.get());
         }

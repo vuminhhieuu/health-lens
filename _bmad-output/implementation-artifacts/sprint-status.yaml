@@ -265,7 +265,7 @@ development_status:
   remaining-3-family-sharing-lifecycle: in-progress
   remaining-3-1-invitation-accept-token-and-storage-hygiene: done
   remaining-3-2-accept-revoke-race-and-share-enforcement: done
-  remaining-3-3-sharing-lifecycle-audit-and-owner-notification: ready-for-dev
+  remaining-3-3-sharing-lifecycle-audit-and-owner-notification: done
   remaining-3-retrospective: optional
 
   # Epic 4: Admin Analytics Instrumentation

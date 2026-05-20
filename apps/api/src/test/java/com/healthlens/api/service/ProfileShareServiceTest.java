@@ -4,10 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-
+import com.healthlens.api.audit.AuditActions;
 import com.healthlens.api.dto.response.AcceptInvitationResultResponse;
 import com.healthlens.api.dto.response.IncomingProfileInvitationResponse;
 import com.healthlens.api.dto.response.ProfileInvitationResponse;
@@ -56,10 +57,12 @@ class ProfileShareServiceTest {
     @Mock
     private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
 
+    private com.healthlens.api.audit.SharingAuditSupport sharingAuditSupport;
     private ProfileShareService profileShareService;
 
     @BeforeEach
     void setUp() {
+        sharingAuditSupport = new com.healthlens.api.audit.SharingAuditSupport(auditEventRecorder);
         profileShareService = new ProfileShareService(
                 profileRepository,
                 profileInvitationRepository,
@@ -67,9 +70,10 @@ class ProfileShareServiceTest {
                 profileShareRepository,
                 userRepository,
                 emailEventPublisher,
-                auditEventRecorder
+                sharingAuditSupport
         );
         ReflectionTestUtils.setField(profileShareService, "frontendBaseUrl", "http://localhost:3000");
+        ReflectionTestUtils.setField(profileShareService, "notifyOwnerOnAccept", true);
     }
 
     @Test
@@ -159,9 +163,11 @@ class ProfileShareServiceTest {
         ProfileInvitation invitation = invitation(profileId, "viewer@healthlens.vn", "pending");
         User viewer = user(viewerId, "viewer@healthlens.vn");
         Profile profile = profile(profileId, ownerId);
+        User owner = user(ownerId, "owner@healthlens.vn");
 
         when(profileInvitationRepository.findByTokenForUpdate("token-3")).thenReturn(Optional.of(invitation));
         when(userRepository.findById(viewerId)).thenReturn(Optional.of(viewer));
+        when(userRepository.findById(ownerId)).thenReturn(Optional.of(owner));
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
 
         when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(profileId, viewerId))
@@ -175,19 +181,38 @@ class ProfileShareServiceTest {
         assertThat(result.redirectUrl()).isEqualTo("/profiles");
         verify(profileShareRepository).saveAndFlush(any(ProfileShare.class));
         verify(profileInvitationRepository).save(invitation);
+        verify(auditEventRecorder).recordEvent(
+                eq(viewerId),
+                eq(AuditActions.ACCEPT_PROFILE_INVITATION),
+                any(),
+                eq(profileId),
+                argThat(map -> map.containsKey("inviteeEmailMasked") && !map.containsKey("inviteeEmail"))
+        );
+        verify(emailEventPublisher).publishProfileShareAccepted(eq(owner), eq(viewer), any(), any());
     }
 
     @Test
     void acceptInvitation_emailMismatch_throwsForbidden() {
+        UUID ownerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
         UUID viewerId = UUID.randomUUID();
-        ProfileInvitation invitation = invitation(UUID.randomUUID(), "other@healthlens.vn", "pending");
+        ProfileInvitation invitation = invitation(profileId, "other@healthlens.vn", "pending");
         User viewer = user(viewerId, "viewer@healthlens.vn");
+        Profile profile = profile(profileId, ownerId);
 
         when(profileInvitationRepository.findByTokenForUpdate("token-4")).thenReturn(Optional.of(invitation));
         when(userRepository.findById(viewerId)).thenReturn(Optional.of(viewer));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
 
         assertThatThrownBy(() -> profileShareService.acceptInvitation("token-4", viewerId))
                 .isInstanceOf(AccessDeniedException.class);
+        verify(auditEventRecorder).recordEvent(
+                eq(viewerId),
+                eq(AuditActions.PROFILE_SHARE_ACCESS_DENIED_FAILED),
+                any(),
+                eq(profileId),
+                argThat(map -> "invitee_email_mismatch".equals(map.get("reason")))
+        );
     }
 
     @Test
