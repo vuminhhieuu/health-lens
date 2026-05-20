@@ -1,6 +1,6 @@
 # Story 4: SEO Foundation — Metadata, Sitemap, Robots
 
-Status: backlog
+Status: done
 
 ## Execution Scope
 
@@ -14,7 +14,7 @@ so that HealthLens can be discovered organically.
 
 ## Acceptance Criteria
 
-1. `apps/web/src/app/sitemap.ts` includes `/`, `/privacy`, `/terms`, `/support` (if exists).
+1. `apps/web/src/app/sitemap.ts` includes `/`, `/privacy`, `/terms`, `/help` (`/support` redirects, not indexed).
 2. `apps/web/src/app/robots.ts` allows public paths; disallows `/home`, `/admin`, dashboard paths.
 3. Landing has `metadata` / `openGraph`: title, description, locale `vi_VN`.
 4. Favicon + app icon in `apps/web/public/` (replace Next defaults).
@@ -22,10 +22,10 @@ so that HealthLens can be discovered organically.
 
 ## Tasks / Subtasks
 
-- [ ] Add `sitemap.ts`, `robots.ts` per Next.js App Router conventions.
-- [ ] `generateMetadata` on marketing landing.
+- [x] Add `sitemap.ts`, `robots.ts` per Next.js App Router conventions.
+- [x] `generateMetadata` on marketing landing.
 - [ ] Add `site.webmanifest` optional P2.
-- [ ] Update root layout default metadata template for child routes.
+- [x] Update root layout default metadata template for child routes.
 
 ## Dev Notes
 
@@ -43,4 +43,50 @@ so that HealthLens can be discovered organically.
 
 ### Agent Model Used
 
-(pending)
+Composer
+
+### Implementation Plan
+
+- Centralize site URL, sitemap paths, and robots disallow lists in `src/lib/seo/site.ts`.
+- Root layout uses `createRootMetadata()` with `metadataBase`, title template, icons, and default OG `vi_VN`.
+- Landing page exports `landingMetadata` with dedicated title/description and Open Graph locale.
+- Vitest smoke maps each sitemap path to an App Router `page.tsx` and asserts sitemap/robots generators.
+
+### Completion Notes
+
+- Added `sitemap.ts` and `robots.ts` with shared SEO constants; robots disallows `/home`, `/admin`, and dashboard/auth prefixes.
+- Landing `(marketing)/page.tsx` exports Vietnamese Open Graph metadata (`vi_VN`).
+- Replaced default Next assets with 3D shield PNG set; favicon via `src/app/favicon.ico` (App Router single source).
+- `pnpm test` in `apps/web`: vitest smoke + `site.test.ts` for URL normalization.
+
+### File List
+
+- `apps/web/src/lib/seo/site.ts` (new)
+- `apps/web/src/lib/seo/site.test.ts` (new)
+- `apps/web/src/lib/seo/metadata.ts` (new)
+- `apps/web/src/app/sitemap.ts` (new)
+- `apps/web/src/app/robots.ts` (new)
+- `apps/web/src/app/seo-foundation.test.ts` (new)
+- `apps/web/src/app/layout.tsx`
+- `apps/web/src/app/(marketing)/page.tsx`
+- `apps/web/src/app/routing-policy.test.ts`
+- `apps/web/src/app/favicon.ico`, `icon.png`, `apple-icon.png` (new)
+- `apps/web/public/brand/healthlens-icon-3d-1024.png` (new)
+- `apps/web/public/apple-touch-icon.png`, `icon-192.png`, `icon-512.png` (new)
+- `apps/web/scripts/smoke-sitemap-urls.mjs` (new)
+- `apps/web/.env.example` (new)
+
+### Change Log
+
+- 2026-05-20: SEO foundation — sitemap, robots, landing/root metadata, HealthLens favicon set, vitest smoke.
+- 2026-05-20: Code review — sitemap `/help`, smoke script, apple-touch 180px, dev site URL, `.env.example`.
+- 2026-05-20: Copilot PR #97 — `normalizeSiteUrl`, single favicon source, smoke parses `/sitemap.xml`, story docs sync.
+
+### Review Findings
+
+- [x] [Review][Decision] Sitemap đổi `/support` → `/help`; giữ redirect `/support` → `/help` cho link cũ
+- [x] [Review][Patch] AC5 — thêm `scripts/smoke-sitemap-urls.mjs` + test assert script tồn tại
+- [x] [Review][Patch] `apple-touch-icon.png` resize 180×180
+- [x] [Review][Patch] `getSiteUrl()` dùng `http://localhost:3000` khi `NODE_ENV=development`; thêm `.env.example`
+- [x] [Review][Patch] Gộp import `node:fs` trong `seo-foundation.test.ts`
+- [x] [Review][Defer] SVG mặc định Next (`next.svg`, `vercel.svg`) vẫn còn trong `public/` — không ảnh hưởng runtime, dọn ở story dọn dẹp assets sau

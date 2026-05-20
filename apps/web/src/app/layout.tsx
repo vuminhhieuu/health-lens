@@ -1,7 +1,7 @@
-import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { ConsentModal } from "@/components/features/consent/ConsentModal";
+import { createRootMetadata } from "@/lib/seo/metadata";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,10 +14,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "HealthLens",
-  description: "Nền tảng đọc và theo dõi kết quả sức khỏe cho người dùng Việt Nam.",
-};
+export const metadata = createRootMetadata();
 
 export default function RootLayout({
   children,

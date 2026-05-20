@@ -1,5 +1,5 @@
 # generated: 2026-04-01
-# last_updated: 2026-05-20T22:10:00+07:00
+# last_updated: 2026-05-20T23:45:00+07:00
 # project: health-lens
 # project_key: NOKEY
 # tracking_system: file-system
@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-05-20T22:10:00+07:00
+last_updated: 2026-05-20T23:45:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -299,7 +299,7 @@ development_status:
   pae-1-settings-hub-and-navigation-fix: done
   pae-2-marketing-route-group-and-root-routing: done
   pae-3-public-landing-page-ssr: done
-  pae-4-seo-foundation-metadata-sitemap-robots: backlog
+  pae-4-seo-foundation-metadata-sitemap-robots: done
   pae-5-public-privacy-and-terms-pages: backlog
   pae-6-change-password-api-and-settings-ui: backlog
   pae-7-settings-privacy-tab-consent-and-legal-links: backlog
