@@ -65,6 +65,7 @@ public final class ApiRoutes {
     public static final String PROFILE_FOLLOW_UP_REMINDERS = PROFILES_BASE + "/{profileId}/follow-up-reminders";
     public static final String PROFILE_FOLLOW_UP_REMINDER_BY_ID =
             PROFILE_FOLLOW_UP_REMINDERS + "/{reminderId}";
+    /** Revoke active share; path variable is viewer user id (not profile_shares.id). Story 3.2. */
     public static final String PROFILE_SHARE_BY_VIEWER = PROFILES_BASE + "/{profileId}/shares/{viewerId}";
     // Relative variants (for controllers already annotated with @RequestMapping(PROFILES_BASE))
     public static final String PROFILE_SHARE_BY_VIEWER_REL = "/{profileId}/shares/{viewerId}";

@@ -1,6 +1,6 @@
 # Story 3.2: Accept/Revoke Race And Share Enforcement
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 
@@ -24,11 +24,11 @@ so that revoked access cannot become active again.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 - Audit share/invitation data model and constraints (AC: #1, #2)
-- [ ] Task 2 - Add database/service-level concurrency protection (AC: #1, #2)
-- [ ] Task 3 - Enforce revoke immediately in API authorization and UI state (AC: #3)
-- [ ] Task 4 - Fix revoke fallback ID behavior (AC: #4)
-- [ ] Task 5 - Add concurrency and lifecycle tests (AC: #1-#5)
+- [x] Task 1 - Audit share/invitation data model and constraints (AC: #1, #2)
+- [x] Task 2 - Add database/service-level concurrency protection (AC: #1, #2)
+- [x] Task 3 - Enforce revoke immediately in API authorization and UI state (AC: #3) — API đã dùng `revoked_at`; client có xử lý `PROFILE_ACCESS_REVOKED` (apiClient)
+- [x] Task 4 - Fix revoke fallback ID behavior (AC: #4)
+- [x] Task 5 - Add concurrency and lifecycle tests (AC: #1-#5)
 
 ## Dev Notes
 
@@ -60,4 +60,12 @@ so that revoked access cannot become active again.
 
 ### Completion Notes List
 
+- DB đã có partial unique index `uq_profile_shares_profile_viewer_active` (V015); bổ sung khóa `PESSIMISTIC_WRITE` trên invitation theo token + xử lý `DataIntegrityViolationException` khi insert share trùng.
+- Thu hồi chỉ theo `(profileId, viewerId)` — bỏ fallback `findById` trên path segment để tránh nhầm UUID share vs viewer.
+
 ### File List
+
+- `apps/api/src/main/java/com/healthlens/api/repository/ProfileInvitationRepository.java`
+- `apps/api/src/main/java/com/healthlens/api/service/ProfileShareService.java`
+- `apps/api/src/test/java/com/healthlens/api/service/ProfileShareServiceTest.java`
+- `apps/api/src/test/java/com/healthlens/api/service/ProfileShareConcurrencyIntegrationTest.java`
