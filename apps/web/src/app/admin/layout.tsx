@@ -116,12 +116,12 @@ export default function AdminLayout({
     <div className="bg-slate-50 text-slate-900 min-h-screen font-sans">
       {/* Top Bar */}
       <header className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-3">
           <ShieldCheck className="h-6 w-6 text-teal-600" />
           <span className="text-lg font-bold tracking-tight text-slate-900">
             HealthLens <span className="text-teal-600">Admin</span>
           </span>
-        </div>
+        </Link>
 
         <button
           onClick={handleLogout}

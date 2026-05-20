@@ -22,17 +22,17 @@ const PENDING_DELETION_UI_MESSAGE = messageCatalog.auth.pendingDeletion;
 
 function safeInternalReturnUrl(value: string | null) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/";
+    return "/home";
   }
 
   try {
     const parsed = new URL(value, window.location.origin);
     if (parsed.origin !== window.location.origin) {
-      return "/";
+      return "/home";
     }
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
-    return "/";
+    return "/home";
   }
 }
 
@@ -107,7 +107,7 @@ function LoginContent() {
       }
 
       const returnUrl = safeInternalReturnUrl(searchParams.get("returnUrl"));
-      router.push(returnUrl);
+      router.push(returnUrl === "/" ? "/home" : returnUrl);
     } catch (error: unknown) {
       const errorCode = getApiErrorCode(error);
       const message = authErrorMessage(error);
@@ -126,9 +126,9 @@ function LoginContent() {
       {/* Header */}
       <header className="fixed top-0 z-50 w-full border-b border-[#d8e5e2] bg-[#effcf9]/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-6">
-          <p className="text-2xl font-bold tracking-tight text-[#005049]">
+          <Link href="/" className="text-2xl font-bold tracking-tight text-[#005049]">
             HealthLens
-          </p>
+          </Link>
           <button
             type="button"
             aria-label="Trợ giúp"

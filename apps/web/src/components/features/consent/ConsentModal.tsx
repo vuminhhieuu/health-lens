@@ -31,9 +31,16 @@ export const ConsentModal: React.FC = () => {
 
     // consentGiven is derived server-side against the active policy version (refresh / GET me/consent).
     const hiddenPaths = ["/login", "/register", "/forgot-password", "/reset-password", "/verify-email", "/admin"];
+    const publicMarketingPaths = ["/", "/privacy", "/terms", "/help", "/faq", "/questions"];
     const shouldHideOnAuthRoutes = hiddenPaths.some((path) => pathname?.startsWith(path));
+    const shouldHideOnPublicMarketingRoutes = publicMarketingPaths.some((path) => {
+        if (path === "/") {
+            return pathname === "/";
+        }
+        return pathname === path || pathname?.startsWith(`${path}/`);
+    });
 
-    if (!isAuthenticated || consentGiven || shouldHideOnAuthRoutes) {
+    if (!isAuthenticated || consentGiven || shouldHideOnAuthRoutes || shouldHideOnPublicMarketingRoutes) {
         return null;
     }
 

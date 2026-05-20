@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { registerSchema } from "@healthlens/shared/schemas/auth";
 import axios from "axios";
 import { CircleHelp, Info, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -102,7 +103,9 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-gradient-to-br from-[#effcf9] via-[#e9f6f3] to-[#d8e5e2] text-[#121e1c]">
       <header className="fixed top-0 z-50 w-full border-b border-[#d8e5e2] bg-[#effcf9]/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-6">
-          <p className="text-2xl font-bold tracking-tight text-[#005049]">HealthLens</p>
+          <Link href="/" className="text-2xl font-bold tracking-tight text-[#005049]">
+            HealthLens
+          </Link>
           <button
             type="button"
             aria-label="Trợ giúp"

@@ -62,14 +62,14 @@ const helpSections = [
   },
 ];
 
-export default function HelpPage() {
+export default function GuidePage() {
   return (
     <DashboardPageShell
-      title="Trang trợ giúp"
+      title="Trang hướng dẫn"
       subtitle="Các hướng dẫn ngắn để bạn dùng HealthLens tự tin hơn."
       breadcrumbs={[
         { label: "Trang chủ", href: "/home" },
-        { label: "Trợ giúp" },
+        { label: "Hướng dẫn" },
       ]}
     >
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">

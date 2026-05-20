@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuthStore } from "@/stores/authStore";
@@ -9,11 +9,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Search, Bell, HelpCircle,
   Home, FileText, User, Users, Settings, LogOut, Shield
 } from "lucide-react";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+import { AuthenticatedTopHeader } from "@/components/layout/AuthenticatedTopHeader";
 
 type CurrentUser = {
   id?: string;
@@ -36,9 +36,7 @@ export default function DashboardLayout({
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
 
-  const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
   const [displayName, setDisplayName] = useState<string | null>(null);
-  const avatarMenuRef = useRef<HTMLDivElement>(null);
 
   const { data: currentUser } = useQuery({
     queryKey: ["currentUser"],
@@ -51,16 +49,6 @@ export default function DashboardLayout({
     refetchInterval: 12 * 60 * 1000,
     refetchOnWindowFocus: true,
   });
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (avatarMenuRef.current && !avatarMenuRef.current.contains(event.target as Node)) {
-        setIsAvatarMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -141,102 +129,21 @@ export default function DashboardLayout({
     return `flex flex-col items-center gap-1 ${isActive ? "text-[#00685f]" : "text-[#6d7a77]"}`;
   };
 
+  const topHeaderNavItems = navItems.slice(0, 3).map((item) => ({
+    name: item.name,
+    href: item.href,
+    isActive: isNavItemActive(item),
+  }));
+
   return (
     <div className="bg-[#effcf9] text-[#121e1c] min-h-screen">
-      {/* Top Navigation Bar */}
-      <header className="fixed top-0 w-full z-50 bg-[#e9f6f3]/80 backdrop-blur-md flex justify-between items-center px-6 py-3 shadow-sm border-b border-[#bcc9c6]/20 print:hidden">
-        <div className="flex items-center gap-8">
-          <span className="text-xl font-bold tracking-tight text-[#005049]">HealthLens</span>
-
-          {/* Horizontal Nav Links in Header */}
-          <nav className="hidden md:flex items-center gap-6">
-            {navItems.slice(0, 3).map((item) => {
-              const isActive = isNavItemActive(item);
-              if (isActive) {
-                return (
-                  <Link key={item.name} href={item.href} className="text-[#00685f] font-semibold px-3 py-1 rounded-lg bg-white/50">
-                    {item.name}
-                  </Link>
-                );
-              }
-              return (
-                <Link key={item.name} href={item.href} className="text-[#6d7a77] font-medium hover:bg-[#e9f6f3]/50 transition-colors px-3 py-1 rounded-lg">
-                  {item.name}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="relative hidden sm:block">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6d7a77] w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Tìm kiếm..."
-              className="pl-10 pr-4 py-2 bg-[#e9f6f3] border-none rounded-full w-64 focus:ring-2 focus:ring-[#00685f]/20 text-sm outline-none"
-            />
-          </div>
-          <button className="p-2 text-[#3d4947] hover:bg-[#e9f6f3] transition-colors rounded-full relative">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-[#924628] rounded-full"></span>
-          </button>
-          <Link
-            href="/questions"
-            title="Mở trang thắc mắc"
-            aria-label="Mở trang thắc mắc"
-            className="flex min-h-12 min-w-12 items-center justify-center rounded-full p-2 text-[#3d4947] transition-colors hover:bg-[#e9f6f3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00685f]"
-          >
-            <HelpCircle className="w-5 h-5" />
-          </Link>
-          <div className="relative" ref={avatarMenuRef}>
-            <button
-              onClick={() => setIsAvatarMenuOpen(!isAvatarMenuOpen)}
-              className="flex w-10 h-10 items-center justify-center rounded-full overflow-hidden border-2 border-[#89f5e7] bg-[#d8e5e2] text-sm font-black text-[#00685f] focus:outline-none focus:ring-2 focus:ring-[#00685f]/50 transition-all"
-              aria-label="Mở menu tài khoản"
-            >
-              {avatarUrl ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img alt="Ảnh đại diện" className="w-full h-full object-cover" src={avatarUrl} />
-              ) : (
-                <span aria-hidden="true">{avatarInitial}</span>
-              )}
-            </button>
-
-            {isAvatarMenuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-[#bcc9c6]/20 py-2 z-50 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
-                <Link
-                  href="/settings/profile"
-                  onClick={() => setIsAvatarMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#3d4947] hover:bg-[#e9f6f3] transition-colors"
-                >
-                  <User className="w-4 h-4" />
-                  Hồ sơ cá nhân
-                </Link>
-                <Link
-                  href="/settings"
-                  onClick={() => setIsAvatarMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#3d4947] hover:bg-[#e9f6f3] transition-colors"
-                >
-                  <Settings className="w-4 h-4" />
-                  Cài đặt
-                </Link>
-                <div className="h-px bg-[#bcc9c6]/20 my-1"></div>
-                <button
-                  onClick={() => {
-                    setIsAvatarMenuOpen(false);
-                    logout();
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#ba1a1a] hover:bg-[#ffdad6]/40 transition-colors"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Đăng xuất
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      <AuthenticatedTopHeader
+        navItems={topHeaderNavItems}
+        avatarInitial={avatarInitial}
+        avatarUrl={avatarUrl}
+        brandHref="/"
+        onLogout={logout}
+      />
 
       <div className="flex pt-16 min-h-screen print:block print:pt-0">
         {/* Sidebar Navigation */}

@@ -507,7 +507,7 @@ export default function ProfileHistoryPage() {
                 để HealthLens phân tích toàn diện hơn.
               </p>
               <Link
-                href="/help"
+                href="/guide"
                 className="mt-5 inline-flex items-center gap-2 text-base font-semibold text-[#0c9f94] hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00685f]"
               >
                 Tìm hiểu cách tải lên

@@ -23,3 +23,8 @@
 ## Deferred from: code review of 7-10-unify-email-event-delivery.md (2026-05-20T15:20:00+07:00)
 
 - Sprint status includes unrelated `core-7-9-confirm-and-document-event-driven-architecture` status movement at `_bmad-output/implementation-artifacts/sprint-status.yaml:226`. Deferred because it appears to belong to the prior Story 7.9 workflow rather than the Story 7.10 email delivery implementation.
+
+## Deferred from: code review of pae-2-marketing-route-group-and-root-routing.md (2026-05-20)
+
+- Trùng lặp logic `logout` và query `currentUser` giữa `MarketingHeader` và `(dashboard)/layout` — tech debt nhỏ sau refactor header; có thể gom hook dùng chung sau.
+- Story File List chưa phản ánh ~16 file mới/sửa ngoài phạm vi ghi nhận ban đầu — cập nhật khi commit.
