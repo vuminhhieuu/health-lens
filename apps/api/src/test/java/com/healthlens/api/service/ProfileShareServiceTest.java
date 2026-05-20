@@ -206,7 +206,7 @@ class ProfileShareServiceTest {
 
         assertThatThrownBy(() -> profileShareService.acceptInvitation("token-4", viewerId))
                 .isInstanceOf(AccessDeniedException.class);
-        verify(auditEventRecorder).recordEvent(
+        verify(auditEventRecorder).recordEventRequiresNew(
                 eq(viewerId),
                 eq(AuditActions.PROFILE_SHARE_ACCESS_DENIED_FAILED),
                 any(),

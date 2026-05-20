@@ -462,6 +462,9 @@ public class EmailService {
             String profilesLink
     ) {
         if (templateEngine == null) {
+            String safeViewerName = HtmlUtils.htmlEscape(viewerName);
+            String safeProfileDisplayName = HtmlUtils.htmlEscape(profileDisplayName);
+            String safeProfilesLink = HtmlUtils.htmlEscape(profilesLink);
             return """
                     <html>
                       <body style="font-family: Segoe UI, Arial, sans-serif; color: #111827; background: #f3f4f6; padding: 24px;">
@@ -481,7 +484,7 @@ public class EmailService {
                         </div>
                       </body>
                     </html>
-                    """.formatted(viewerName, profileDisplayName, profilesLink);
+                    """.formatted(safeViewerName, safeProfileDisplayName, safeProfilesLink);
         }
 
         Context context = new Context();

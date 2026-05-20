@@ -48,6 +48,35 @@ public class UnifiedAuditLogWriter {
             String newValueJson,
             String metadataJson
     ) {
+        persist(actorId, action, resourceType, resourceId, oldValueJson, newValueJson, metadataJson);
+    }
+
+    /**
+     * Persist an audit row in a separate transaction so failure audits survive caller rollback
+     * (e.g. access denied followed by {@code AccessDeniedException} in the same {@code @Transactional} method).
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordRequiresNew(
+            UUID actorId,
+            String action,
+            String resourceType,
+            UUID resourceId,
+            String oldValueJson,
+            String newValueJson,
+            String metadataJson
+    ) {
+        persist(actorId, action, resourceType, resourceId, oldValueJson, newValueJson, metadataJson);
+    }
+
+    private void persist(
+            UUID actorId,
+            String action,
+            String resourceType,
+            UUID resourceId,
+            String oldValueJson,
+            String newValueJson,
+            String metadataJson
+    ) {
         UUID resolvedActorId = actorId != null ? actorId : resolveCurrentActorId();
         if (resolvedActorId == null) {
             log.warn(

@@ -36,7 +36,7 @@ public class SharingAuditSupport {
                 .inviteeEmail(inviteeEmail)
                 .reason(reason)
                 .build();
-        record(actorId, AuditActions.PROFILE_SHARE_ACCESS_DENIED_FAILED, profileId, fields, AuditOutcome.FAILURE);
+        recordAccessDeniedEvent(actorId, profileId, fields);
     }
 
     public void recordAnonymousAccessDenied(UUID profileId, String reason) {
@@ -50,6 +50,22 @@ public class SharingAuditSupport {
     }
 
     private void record(UUID actorId, String action, UUID profileId, SharingAuditFields fields, String outcome) {
+        Map<String, Object> payload = sharingPayload(actorId, fields, outcome);
+        auditEventRecorder.recordEvent(actorId, action, AuditResourceTypes.PROFILE, profileId, payload);
+    }
+
+    private void recordAccessDeniedEvent(UUID actorId, UUID profileId, SharingAuditFields fields) {
+        Map<String, Object> payload = sharingPayload(actorId, fields, AuditOutcome.FAILURE);
+        auditEventRecorder.recordEventRequiresNew(
+                actorId,
+                AuditActions.PROFILE_SHARE_ACCESS_DENIED_FAILED,
+                AuditResourceTypes.PROFILE,
+                profileId,
+                payload
+        );
+    }
+
+    private Map<String, Object> sharingPayload(UUID actorId, SharingAuditFields fields, String outcome) {
         Map<String, Object> payload = basePayload(
                 actorId,
                 fields.ownerId(),
@@ -60,7 +76,7 @@ public class SharingAuditSupport {
                 outcome
         );
         mergeExtras(payload, fields.extras());
-        auditEventRecorder.recordEvent(actorId, action, AuditResourceTypes.PROFILE, profileId, payload);
+        return payload;
     }
 
     private static Map<String, Object> basePayload(

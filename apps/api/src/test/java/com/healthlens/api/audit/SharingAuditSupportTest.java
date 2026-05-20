@@ -73,7 +73,7 @@ class SharingAuditSupportTest {
         sharingAuditSupport.recordAccessDenied(
                 actorId, profileId, UUID.randomUUID(), null, null, null, "not_profile_owner");
 
-        verify(auditEventRecorder).recordEvent(
+        verify(auditEventRecorder).recordEventRequiresNew(
                 eq(actorId),
                 eq(AuditActions.PROFILE_SHARE_ACCESS_DENIED_FAILED),
                 eq(AuditResourceTypes.PROFILE),
