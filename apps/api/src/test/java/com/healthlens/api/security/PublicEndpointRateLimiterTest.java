@@ -25,7 +25,7 @@ class PublicEndpointRateLimiterTest {
     void setUp() {
         redisTemplate = mock(StringRedisTemplate.class);
         valueOperations = mock(ValueOperations.class);
-        rateLimiter = new PublicEndpointRateLimiter(redisTemplate, false);
+        rateLimiter = new PublicEndpointRateLimiter(redisTemplate, false, 20, 3600, 5, 3600, 20, 3600, 5, 3600);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
     }
 

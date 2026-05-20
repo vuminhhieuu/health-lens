@@ -37,8 +37,13 @@ export const messageCatalog = {
     invitationProcessingFailed:
       "Không thể xử lý lời mời. Vui lòng thử lại.",
     invitationEmailMismatch: "Email đăng nhập không khớp với lời mời.",
+    invitationEmailMismatchHint:
+      "Lời mời được gửi tới một email cụ thể. Hãy đăng xuất và đăng nhập bằng đúng tài khoản được mời.",
+    invitationSwitchAccount: "Đăng nhập tài khoản khác",
     invitationInvalid:
       "Liên kết mời không hợp lệ hoặc không còn dùng được.",
+    invitationExpired:
+      "Lời mời này đã hết hạn hoặc không còn hiệu lực.",
     invitationRateLimited:
       "Bạn đã thử xử lý lời mời quá nhiều lần. Vui lòng thử lại sau ít phút.",
     loginInvalidOrServerError:

@@ -4,6 +4,9 @@ import { syncActiveConsentVersion } from "@/lib/consent/syncActiveConsentVersion
 import { useAuthStore } from "@/stores/authStore";
 import type { SessionConsent } from "@/stores/authStore";
 
+import { readSessionStorage } from "@/lib/browser/sessionStorage";
+import { PENDING_PROFILE_INVITATION_TOKEN_KEY } from "@/lib/sharing/profileInvitationStorage";
+
 import { API_ROUTES } from "./routes";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
@@ -32,6 +35,25 @@ function readCookie(name: string): string | null {
     .find((value) => value.startsWith(encodedName));
 
   return cookie ? decodeURIComponent(cookie.slice(encodedName.length)) : null;
+}
+
+function redirectToLoginPreservingInvitationContext() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const pathname = window.location.pathname;
+  if (pathname === "/invitations/accept") {
+    const tokenFromQuery = new URLSearchParams(window.location.search).get("token");
+    const token = tokenFromQuery ?? readSessionStorage(PENDING_PROFILE_INVITATION_TOKEN_KEY);
+    if (token) {
+      const returnUrl = `/invitations/accept?token=${encodeURIComponent(token)}`;
+      window.location.href = `/login?returnUrl=${encodeURIComponent(returnUrl)}`;
+      return;
+    }
+  }
+
+  window.location.href = "/login";
 }
 
 function isUnsafeAuthCookieEndpoint(url?: string, method?: string): boolean {
@@ -182,14 +204,14 @@ apiClient.interceptors.response.use(
         processQueue(new Error("Refresh token invalid"));
         useAuthStore.getState().clearAuth();
         if (typeof window !== "undefined") {
-          window.location.href = "/login";
+          redirectToLoginPreservingInvitationContext();
         }
         return Promise.reject(new Error("Refresh token invalid"));
       } catch (refreshError) {
         processQueue(refreshError);
         useAuthStore.getState().clearAuth();
         if (typeof window !== "undefined") {
-          window.location.href = "/login";
+          redirectToLoginPreservingInvitationContext();
         }
         return Promise.reject(refreshError);
       } finally {
