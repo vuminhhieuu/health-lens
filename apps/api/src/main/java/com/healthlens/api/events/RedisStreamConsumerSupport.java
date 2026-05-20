@@ -71,9 +71,13 @@ public class RedisStreamConsumerSupport {
         if (remainingCount == 0) {
             return records;
         }
+        StreamReadOptions readOptions = StreamReadOptions.empty().count(remainingCount);
+        if (records.isEmpty()) {
+            readOptions = readOptions.block(block);
+        }
         List<MapRecord<String, Object, Object>> newRecords = streamOps.read(
                 Consumer.from(consumerGroup, consumerName),
-                StreamReadOptions.empty().count(remainingCount).block(block),
+                readOptions,
                 StreamOffset.create(streamName, ReadOffset.lastConsumed()));
         if (newRecords != null) {
             records.addAll(newRecords);

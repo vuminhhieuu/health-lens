@@ -1,6 +1,7 @@
 package com.healthlens.api.events;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.RecordId;
@@ -16,6 +17,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -23,7 +25,7 @@ class RedisStreamConsumerSupportTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void readPendingThenNewReadsNewRecordsWhenPendingRecordsExistAndCapacityRemains() {
+    void readPendingThenNewReadsNewRecordsNonBlockingWhenPendingExist() {
         StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
         ApplicationStreamPublisher streamPublisher = mock(ApplicationStreamPublisher.class);
         StreamOperations<String, Object, Object> streamOps = mock(StreamOperations.class);
@@ -44,11 +46,48 @@ class RedisStreamConsumerSupportTest {
         );
 
         assertThat(records).containsExactly(pendingRecord, newRecord);
-        verify(streamOps, org.mockito.Mockito.times(2)).read(
+        ArgumentCaptor<StreamReadOptions> optionsCaptor = ArgumentCaptor.forClass(StreamReadOptions.class);
+        verify(streamOps, times(2)).read(
                 any(Consumer.class),
-                any(StreamReadOptions.class),
+                optionsCaptor.capture(),
                 anyStreamOffset()
         );
+        // Second read (new records) must NOT block when pending records exist
+        StreamReadOptions newReadOptions = optionsCaptor.getAllValues().get(1);
+        assertThat(newReadOptions).isEqualTo(StreamReadOptions.empty().count(9));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void readPendingThenNewBlocksWhenNoPendingRecordsExist() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        ApplicationStreamPublisher streamPublisher = mock(ApplicationStreamPublisher.class);
+        StreamOperations<String, Object, Object> streamOps = mock(StreamOperations.class);
+        MapRecord<String, Object, Object> newRecord = record("1-0", "new");
+        when(streamOps.read(any(Consumer.class), any(StreamReadOptions.class), anyStreamOffset()))
+                .thenReturn(List.of())
+                .thenReturn(List.of(newRecord));
+        RedisStreamConsumerSupport support = new RedisStreamConsumerSupport(redisTemplate, streamPublisher);
+
+        List<MapRecord<String, Object, Object>> records = support.readPendingThenNew(
+                streamOps,
+                "email.events",
+                "email-consumers",
+                "api-email-consumer",
+                10,
+                Duration.ofMillis(500)
+        );
+
+        assertThat(records).containsExactly(newRecord);
+        ArgumentCaptor<StreamReadOptions> optionsCaptor = ArgumentCaptor.forClass(StreamReadOptions.class);
+        verify(streamOps, times(2)).read(
+                any(Consumer.class),
+                optionsCaptor.capture(),
+                anyStreamOffset()
+        );
+        // Second read (new records) MUST block when no pending records exist
+        StreamReadOptions newReadOptions = optionsCaptor.getAllValues().get(1);
+        assertThat(newReadOptions).isEqualTo(StreamReadOptions.empty().count(10).block(Duration.ofMillis(500)));
     }
 
     @Test
@@ -88,3 +127,4 @@ class RedisStreamConsumerSupportTest {
         return any(StreamOffset[].class);
     }
 }
+
