@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -8,6 +8,7 @@ import { useAuthBootstrap } from "@/hooks/useAuthBootstrap";
 import { AuthenticatedTopHeader } from "@/components/layout/AuthenticatedTopHeader";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
+import { marketingShell } from "@/lib/marketing/layout";
 import { useAuthStore } from "@/stores/authStore";
 
 type CurrentUser = {
@@ -63,7 +64,7 @@ export function MarketingHeader() {
         aria-hidden="true"
         className="sticky top-0 z-50 border-b border-[#bcc9c6]/50 bg-[#f6fbfa]/90 backdrop-blur-md"
       >
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3 md:px-10 lg:px-12">
+        <div className={`${marketingShell} flex items-center justify-between gap-4 py-3`}>
           <div className="h-8 w-36 animate-pulse rounded-lg bg-[#e1ebe8]" />
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <div className="h-10 w-24 animate-pulse rounded-lg bg-[#e1ebe8]" />
@@ -89,7 +90,7 @@ export function MarketingHeader() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-[#bcc9c6]/50 bg-[#f6fbfa]/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3 md:px-10 lg:px-12">
+      <div className={`${marketingShell} flex items-center justify-between gap-4 py-3`}>
         <Link
           href="/"
           className="text-2xl font-bold tracking-tight text-[#005049] transition hover:text-[#00685f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00685f]"

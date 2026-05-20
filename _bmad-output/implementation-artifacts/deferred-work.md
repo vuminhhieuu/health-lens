@@ -29,6 +29,11 @@
 - Trùng lặp logic `logout` và query `currentUser` giữa `MarketingHeader` và `(dashboard)/layout` — tech debt nhỏ sau refactor header; có thể gom hook dùng chung sau.
 - Story File List chưa phản ánh ~16 file mới/sửa ngoài phạm vi ghi nhận ban đầu — cập nhật khi commit.
 
+## Deferred from: code review of pae-3-public-landing-page-ssr.md (2026-05-20)
+
+- Test landing chỉ assert chuỗi trong file nguồn (`marketing-landing.test.ts`) — Cùng pattern `routing-policy.test.ts`; bổ sung render test khi có harness RTL cho marketing pages.
+- Footer trùng `/support` và `/help` — Cả hai link cùng đích sau redirect; gọn navigation khi có trang support thật (remaining-2-6 / pae-8).
+
 ## Deferred from: code review of 7-11-introduce-application-stream-event-boundary.md (2026-05-20T21:45:00+07:00)
 
 - Consumer group bootstrap can skip the first real event if a stream is created with `_init`, a real event is appended before `createGroup(..., ReadOffset.latest())`, and the group starts after that event. Deferred because the same bootstrap race existed in the previous email/OCR consumer setup and was not introduced by this boundary refactor.

@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 
+import { marketingBand, marketingShell } from "@/lib/marketing/layout";
+
 type TocItem = {
   id: string;
   label: string;
@@ -22,7 +24,8 @@ export function PublicContentLayout({
   children,
 }: PublicContentLayoutProps) {
   return (
-    <main id="main-content" className="mx-auto w-full max-w-[96rem] flex-1 px-4 py-10 md:px-6 lg:px-8 xl:px-10">
+    <main id="main-content" className={`${marketingBand.white} flex-1 py-10 md:py-12`}>
+      <div className={marketingShell}>
       <section className="rounded-2xl border border-[#bcc9c6]/40 bg-white p-6 shadow-[0_8px_28px_rgba(18,30,28,0.08)] md:p-8">
         <h1 className="text-3xl font-black tracking-tight text-[#121e1c] md:text-4xl">{title}</h1>
         <p className="mt-4 text-base leading-7 text-[#3d4947]">{description}</p>
@@ -47,6 +50,7 @@ export function PublicContentLayout({
 
         <div className="space-y-4">{children}</div>
       </section>
+      </div>
     </main>
   );
 }

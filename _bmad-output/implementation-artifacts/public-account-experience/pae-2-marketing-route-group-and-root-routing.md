@@ -34,6 +34,7 @@ so that the marketing site and SEO pages are reachable while `/home` remains the
 - [x] [Review][Decision] Icon Trợ giúp trên `AuthenticatedTopHeader` trỏ `/questions` (FAQ công khai) thay vì `/huong-dan` (hướng dẫn trong app). — Resolved: chọn A, header authenticated trỏ `/huong-dan`.
 
 - [x] [Review][Decision] Task ghi chính sách "landing + CTA Vào ứng dụng" nhưng `MarketingHome` hiện không có CTA nào. — Resolved: chọn A, cập nhật story/spec — landing thống nhất, điều hướng qua header.
+- [x] [Review][Decision] (pae-3 follow-up) CTA inline Đăng ký/Đăng nhập cho khách — pae-3 AC ưu tiên prospect; user đã đăng nhập vẫn điều hướng qua header, không band đăng ký cuối trang.
 
 - [x] [Review][Patch] Flash header guest khi user đã đăng nhập trong lúc `useAuthBootstrap` chạy [`MarketingHeader.tsx:60`]
 - [x] [Review][Patch] Test consent thiếu assert `/questions` dù `ConsentModal` đã loại trừ route này [`routing-policy.test.ts:40`]
