@@ -10,6 +10,7 @@ import com.healthlens.api.entity.AccountStatus;
 import com.healthlens.api.entity.DataDeletionRequest;
 import com.healthlens.api.entity.DeletionRequestStatus;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.events.email.EmailEventPublisher;
 import com.healthlens.api.exception.DeletionCancellationConflictException;
 import com.healthlens.api.exception.DeletionCancellationForbiddenException;
 import com.healthlens.api.exception.DeletionCancellationTokenException;

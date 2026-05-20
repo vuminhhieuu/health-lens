@@ -6,6 +6,7 @@ import com.healthlens.api.entity.DataDeletionRequest;
 import com.healthlens.api.entity.DeletionRequestStatus;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.entity.UserRole;
+import com.healthlens.api.events.email.EmailEventPublisher;
 import com.healthlens.api.repository.ConsentLogRepository;
 import com.healthlens.api.repository.DataDeletionRequestRepository;
 import com.healthlens.api.repository.EmailVerificationTokenRepository;

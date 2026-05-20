@@ -1,12 +1,12 @@
 package com.healthlens.api.service;
 
-import com.healthlens.api.dto.event.EmailEvent;
 import com.healthlens.api.audit.AuditEventRecorder;
 import com.healthlens.api.entity.DataDeletionRequest;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.events.ApplicationStreamPublisher;
+import com.healthlens.api.events.email.EmailEvent;
+import com.healthlens.api.events.email.RedisEmailEventPublisher;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.core.StreamOperations;
-import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Instant;
 import java.util.Map;
@@ -18,7 +18,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 class EmailEventPublisherTest {
 
@@ -46,31 +45,25 @@ class EmailEventPublisherTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void publisherWritesSupportedEmailEventsToSingleStream() {
-        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        ApplicationStreamPublisher streamPublisher = mock(ApplicationStreamPublisher.class);
         AuditEventRecorder auditEventRecorder = mock(AuditEventRecorder.class);
-        StreamOperations<String, Object, Object> streamOps = mock(StreamOperations.class);
-        when(redisTemplate.opsForStream()).thenReturn(streamOps);
 
-        EmailEventPublisher publisher = new EmailEventPublisher(redisTemplate, auditEventRecorder, "email.events");
+        RedisEmailEventPublisher publisher = new RedisEmailEventPublisher(streamPublisher, auditEventRecorder, "email.events");
         UUID reminderId = UUID.randomUUID();
 
         publisher.publishFollowUpReminder(reminderId);
 
-        verify(streamOps).add(eq("email.events"), argThat(payload ->
+        verify(streamPublisher).publish(eq("email.events"), argThat(payload ->
                 "follow_up_reminder".equals(payload.get("eventType"))
                         && reminderId.toString().equals(payload.get("reminderId"))));
         verifyNoInteractions(auditEventRecorder);
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void publishDeletionConfirmationSerializesScheduledDeletionInstant() {
-        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        ApplicationStreamPublisher streamPublisher = mock(ApplicationStreamPublisher.class);
         AuditEventRecorder auditEventRecorder = mock(AuditEventRecorder.class);
-        StreamOperations<String, Object, Object> streamOps = mock(StreamOperations.class);
-        when(redisTemplate.opsForStream()).thenReturn(streamOps);
 
         User user = new User();
         user.setId(UUID.randomUUID());
@@ -79,10 +72,10 @@ class EmailEventPublisherTest {
         DataDeletionRequest deletionRequest = new DataDeletionRequest();
         deletionRequest.setScheduledDeletionAt(Instant.parse("2026-05-23T07:00:00Z"));
 
-        EmailEventPublisher publisher = new EmailEventPublisher(redisTemplate, auditEventRecorder, "email.events");
+        RedisEmailEventPublisher publisher = new RedisEmailEventPublisher(streamPublisher, auditEventRecorder, "email.events");
         publisher.publishDeletionConfirmation(user, deletionRequest, "http://localhost:3000/cancel-deletion?token=abc");
 
-        verify(streamOps).add(eq("email.events"), argThat(payload ->
+        verify(streamPublisher).publish(eq("email.events"), argThat(payload ->
                 "deletion_confirmation".equals(payload.get("eventType"))
                         && "2026-05-23T07:00:00Z".equals(payload.get("scheduledDeletionAt"))
                         && "Nguyen Van A".equals(payload.get("displayName"))
@@ -90,20 +83,17 @@ class EmailEventPublisherTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void publishFailureRecordsAuditWithoutThrowing() {
-        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        ApplicationStreamPublisher streamPublisher = mock(ApplicationStreamPublisher.class);
         AuditEventRecorder auditEventRecorder = mock(AuditEventRecorder.class);
-        StreamOperations<String, Object, Object> streamOps = mock(StreamOperations.class);
-        when(redisTemplate.opsForStream()).thenReturn(streamOps);
         org.mockito.Mockito.doThrow(new IllegalStateException("redis down"))
-                .when(streamOps).add(eq("email.events"), org.mockito.ArgumentMatchers.any(Map.class));
+                .when(streamPublisher).publish(eq("email.events"), org.mockito.ArgumentMatchers.any(Map.class));
 
         User user = new User();
         user.setId(UUID.randomUUID());
         user.setEmail("user@healthlens.vn");
 
-        EmailEventPublisher publisher = new EmailEventPublisher(redisTemplate, auditEventRecorder, "email.events");
+        RedisEmailEventPublisher publisher = new RedisEmailEventPublisher(streamPublisher, auditEventRecorder, "email.events");
         publisher.publishPasswordReset(user, "reset-token");
 
         verify(auditEventRecorder).recordEvent(

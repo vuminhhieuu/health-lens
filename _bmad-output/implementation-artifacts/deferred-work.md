@@ -28,3 +28,8 @@
 
 - Trùng lặp logic `logout` và query `currentUser` giữa `MarketingHeader` và `(dashboard)/layout` — tech debt nhỏ sau refactor header; có thể gom hook dùng chung sau.
 - Story File List chưa phản ánh ~16 file mới/sửa ngoài phạm vi ghi nhận ban đầu — cập nhật khi commit.
+
+## Deferred from: code review of 7-11-introduce-application-stream-event-boundary.md (2026-05-20T21:45:00+07:00)
+
+- Consumer group bootstrap can skip the first real event if a stream is created with `_init`, a real event is appended before `createGroup(..., ReadOffset.latest())`, and the group starts after that event. Deferred because the same bootstrap race existed in the previous email/OCR consumer setup and was not introduced by this boundary refactor.
+- OCR retry enqueue publishes to Redis before the queued DB state is saved, so a save failure after publish can leave DB state behind the stream event. Deferred because the same publish-before-save ordering existed before this boundary refactor; a later reliability story should decide whether to change retry transaction/outbox semantics.

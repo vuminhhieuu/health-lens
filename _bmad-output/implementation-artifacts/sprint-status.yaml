@@ -1,5 +1,5 @@
 # generated: 2026-04-01
-# last_updated: 2026-05-20T15:50:00+07:00
+# last_updated: 2026-05-20T22:10:00+07:00
 # project: health-lens
 # project_key: NOKEY
 # tracking_system: file-system
@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-05-20T15:50:00+07:00
+last_updated: 2026-05-20T22:10:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -225,7 +225,7 @@ development_status:
   core-7-8-shared-frontend-api-contract-types-for-high-churn-features: backlog
   core-7-9-confirm-and-document-event-driven-architecture: done
   core-7-10-unify-email-event-delivery: done
-  core-7-11-introduce-application-stream-event-boundary: backlog
+  core-7-11-introduce-application-stream-event-boundary: done
   core-7-12-normalize-mobile-source-root: backlog
   core-7-13-refresh-source-tree-and-architecture-docs: backlog
   core-8-1-ci-security-scan-baseline: ready-for-dev

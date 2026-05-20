@@ -1,14 +1,14 @@
-package com.healthlens.api.service;
+package com.healthlens.api.events.email;
 
 import com.healthlens.api.audit.AuditActions;
 import com.healthlens.api.audit.AuditEventRecorder;
 import com.healthlens.api.audit.AuditResourceTypes;
-import com.healthlens.api.dto.event.EmailEvent;
 import com.healthlens.api.entity.DataDeletionRequest;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.events.ApplicationStreamNames;
+import com.healthlens.api.events.ApplicationStreamPublisher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -18,22 +18,23 @@ import java.util.UUID;
 
 @Slf4j
 @Service
-public class EmailEventPublisher {
+public class RedisEmailEventPublisher implements EmailEventPublisher {
 
-    private final StringRedisTemplate redisTemplate;
+    private final ApplicationStreamPublisher streamPublisher;
     private final AuditEventRecorder auditEventRecorder;
     private final String emailEventStream;
 
-    public EmailEventPublisher(
-            StringRedisTemplate redisTemplate,
+    public RedisEmailEventPublisher(
+            ApplicationStreamPublisher streamPublisher,
             AuditEventRecorder auditEventRecorder,
-            @Value("${app.stream.email-events:email.events}") String emailEventStream
+            @Value("${app.stream.email-events:" + ApplicationStreamNames.EMAIL_EVENTS + "}") String emailEventStream
     ) {
-        this.redisTemplate = redisTemplate;
+        this.streamPublisher = streamPublisher;
         this.auditEventRecorder = auditEventRecorder;
         this.emailEventStream = emailEventStream;
     }
 
+    @Override
     public void publishVerification(User user, String token) {
         publish(EmailEvent.of(
                 EmailEvent.Type.VERIFICATION,
@@ -43,6 +44,7 @@ public class EmailEventPublisher {
         ));
     }
 
+    @Override
     public void publishPasswordReset(User user, String token) {
         publish(EmailEvent.of(
                 EmailEvent.Type.PASSWORD_RESET,
@@ -52,6 +54,7 @@ public class EmailEventPublisher {
         ));
     }
 
+    @Override
     public void publishDeletionConfirmation(User user, DataDeletionRequest deletionRequest, String cancellationLink) {
         publish(EmailEvent.of(
                 EmailEvent.Type.DELETION_CONFIRMATION,
@@ -67,6 +70,7 @@ public class EmailEventPublisher {
         ));
     }
 
+    @Override
     public void publishDeletionCancellation(User user) {
         publish(EmailEvent.of(
                 EmailEvent.Type.DELETION_CANCELLATION,
@@ -76,6 +80,7 @@ public class EmailEventPublisher {
         ));
     }
 
+    @Override
     public void publishDeletionCompletion(User user) {
         publish(EmailEvent.of(
                 EmailEvent.Type.DELETION_COMPLETION,
@@ -85,6 +90,7 @@ public class EmailEventPublisher {
         ));
     }
 
+    @Override
     public void publishProfileInvitation(User inviter, String inviteeEmail, String invitationLink) {
         publish(EmailEvent.of(
                 EmailEvent.Type.PROFILE_INVITATION,
@@ -94,6 +100,7 @@ public class EmailEventPublisher {
         ));
     }
 
+    @Override
     public void publishHealthRecordInvitation(User inviter, String inviteeEmail, String invitationLink) {
         publish(EmailEvent.of(
                 EmailEvent.Type.HEALTH_RECORD_INVITATION,
@@ -103,6 +110,7 @@ public class EmailEventPublisher {
         ));
     }
 
+    @Override
     public void publishFollowUpReminder(UUID reminderId) {
         publish(EmailEvent.of(
                 EmailEvent.Type.FOLLOW_UP_REMINDER,
@@ -128,7 +136,7 @@ public class EmailEventPublisher {
 
     private void publishNow(EmailEvent emailEvent) {
         try {
-            redisTemplate.opsForStream().add(emailEventStream, emailEvent.toStreamMap());
+            streamPublisher.publish(emailEventStream, emailEvent.toStreamMap());
         } catch (Exception ex) {
             log.warn("[EmailEventPublisher] Cannot publish {} email event for user {}",
                     emailEvent.eventType(), emailEvent.userId(), ex);

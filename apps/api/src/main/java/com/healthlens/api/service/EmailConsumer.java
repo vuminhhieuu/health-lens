@@ -1,19 +1,17 @@
 package com.healthlens.api.service;
 
-import com.healthlens.api.dto.event.EmailEvent;
 import com.healthlens.api.entity.DataDeletionRequest;
 import com.healthlens.api.entity.FollowUpReminder;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.events.ApplicationStreamPublisher;
+import com.healthlens.api.events.RedisStreamConsumerSupport;
+import com.healthlens.api.events.email.EmailEvent;
 import com.healthlens.api.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
-import org.springframework.data.redis.connection.stream.ReadOffset;
-import org.springframework.data.redis.connection.stream.StreamInfo;
-import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -21,7 +19,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,6 +32,8 @@ public class EmailConsumer {
     private final EmailService emailService;
     private final UserRepository userRepository;
     private final FollowUpReminderService followUpReminderService;
+    private final RedisStreamConsumerSupport streamConsumerSupport;
+    private final ApplicationStreamPublisher streamPublisher;
     private final String emailEventStream;
     private final String emailDeadLetterStream;
     private final String consumerGroup;
@@ -45,6 +44,8 @@ public class EmailConsumer {
             EmailService emailService,
             UserRepository userRepository,
             @Lazy FollowUpReminderService followUpReminderService,
+            RedisStreamConsumerSupport streamConsumerSupport,
+            ApplicationStreamPublisher streamPublisher,
             @Value("${app.stream.email-events:email.events}") String emailEventStream,
             @Value("${app.stream.email-dead-letter-events:email.events.dlq}") String emailDeadLetterStream,
             @Value("${app.stream.email-consumer-group:email-consumers}") String consumerGroup,
@@ -53,6 +54,8 @@ public class EmailConsumer {
         this.emailService = emailService;
         this.userRepository = userRepository;
         this.followUpReminderService = followUpReminderService;
+        this.streamConsumerSupport = streamConsumerSupport;
+        this.streamPublisher = streamPublisher;
         this.emailEventStream = emailEventStream;
         this.emailDeadLetterStream = emailDeadLetterStream;
         this.consumerGroup = consumerGroup;
@@ -65,39 +68,7 @@ public class EmailConsumer {
     }
 
     private void ensureConsumerGroup() {
-        StreamOperations<String, Object, Object> streamOps = redisTemplate.opsForStream();
-        try {
-            boolean streamExists = Boolean.TRUE.equals(redisTemplate.hasKey(emailEventStream));
-            boolean groupExists = false;
-
-            if (streamExists) {
-                StreamInfo.XInfoGroups groups = streamOps.groups(emailEventStream);
-                if (groups != null) {
-                    for (StreamInfo.XInfoGroup group : groups) {
-                        if (consumerGroup.equals(group.groupName())) {
-                            groupExists = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (groupExists) {
-                return;
-            }
-
-            if (!streamExists) {
-                streamOps.add(emailEventStream, Map.of("_init", "1"));
-            }
-
-            streamOps.createGroup(emailEventStream, ReadOffset.latest(), consumerGroup);
-        } catch (Exception ex) {
-            if (ex.getMessage() != null && ex.getMessage().contains("BUSYGROUP")) {
-                log.debug("[EmailConsumer] Consumer group {} already exists for stream {}", consumerGroup, emailEventStream);
-                return;
-            }
-            log.debug("[EmailConsumer] Stream/group initialization skipped: {}", ex.getMessage());
-        }
+        streamConsumerSupport.ensureConsumerGroup(emailEventStream, consumerGroup, "EmailConsumer");
     }
 
     @Scheduled(fixedDelayString = "${app.stream.email-poll-delay-ms:1000}")
@@ -107,25 +78,15 @@ public class EmailConsumer {
             log.debug("[EmailConsumer] Redis stream operations unavailable; skipping poll");
             return;
         }
-        List<MapRecord<String, Object, Object>> records = new ArrayList<>();
+        List<MapRecord<String, Object, Object>> records;
         try {
-            List<MapRecord<String, Object, Object>> pendingRecords = streamOps.read(
-                    Consumer.from(consumerGroup, consumerName),
-                    org.springframework.data.redis.connection.stream.StreamReadOptions.empty().count(10),
-                    StreamOffset.create(emailEventStream, ReadOffset.from("0")));
-            if (pendingRecords != null && !pendingRecords.isEmpty()) {
-                records.addAll(pendingRecords);
-            }
-
-            List<MapRecord<String, Object, Object>> newRecords = streamOps.read(
-                    Consumer.from(consumerGroup, consumerName),
-                    org.springframework.data.redis.connection.stream.StreamReadOptions.empty()
-                            .count(10)
-                            .block(Duration.ofMillis(500)),
-                    StreamOffset.create(emailEventStream, ReadOffset.lastConsumed()));
-            if (newRecords != null && !newRecords.isEmpty()) {
-                records.addAll(newRecords);
-            }
+            records = streamConsumerSupport.readPendingThenNew(
+                    streamOps,
+                    emailEventStream,
+                    consumerGroup,
+                    consumerName,
+                    10,
+                    Duration.ofMillis(500));
         } catch (Exception ex) {
             if (ex.getMessage() != null && ex.getMessage().contains("NOGROUP")) {
                 ensureConsumerGroup();
@@ -293,7 +254,7 @@ public class EmailConsumer {
                     ));
             deadLetter.put("failureReason", ex.reason);
             deadLetter.put("sourceRecordId", record.getId().getValue());
-            streamOps.add(emailDeadLetterStream, deadLetter);
+            streamPublisher.publish(emailDeadLetterStream, deadLetter);
             log.warn("[EmailConsumer] Invalid email event moved to DLQ. recordId={} reason={}",
                     record.getId(), ex.reason);
         } catch (Exception dlqEx) {

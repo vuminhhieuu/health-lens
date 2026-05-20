@@ -36,6 +36,8 @@ import com.healthlens.api.entity.HealthRecordShare;
 import com.healthlens.api.entity.OnlineRagAnswerCitation;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.events.ocr.OcrJobEvent;
+import com.healthlens.api.events.ocr.OcrJobEventPublisher;
 import com.healthlens.api.exception.ConsentRequiredException;
 import com.healthlens.api.exception.ProfileAccessRevokedException;
 import com.healthlens.api.exception.ResourceNotFoundException;
@@ -45,19 +47,15 @@ import com.healthlens.api.repository.OnlineRagAnswerCitationRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import com.healthlens.api.repository.ProfileShareRepository;
 import com.healthlens.api.security.PublicEndpointRateLimiter;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -111,7 +109,7 @@ public class HealthRecordService {
     private final PublicEndpointRateLimiter publicEndpointRateLimiter;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
-    private final String ocrStreamName;
+    private final OcrJobEventPublisher ocrJobEventPublisher;
 
     public HealthRecordService(
             StorageService storageService,
@@ -132,7 +130,7 @@ public class HealthRecordService {
             PublicEndpointRateLimiter publicEndpointRateLimiter,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper,
-            @Value("${app.stream.ocr-events:ocr.events}") String ocrStreamName
+            OcrJobEventPublisher ocrJobEventPublisher
     ) {
         this.storageService = storageService;
         this.profileRepository = profileRepository;
@@ -152,7 +150,7 @@ public class HealthRecordService {
         this.publicEndpointRateLimiter = publicEndpointRateLimiter;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
-        this.ocrStreamName = ocrStreamName;
+        this.ocrJobEventPublisher = ocrJobEventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -234,16 +232,16 @@ public class HealthRecordService {
         String mimeType = reservation.mimeType() == null || reservation.mimeType().isBlank()
                 ? deriveMimeTypeFromFileKey(reservation.fileKey())
                 : reservation.mimeType();
-        Map<String, String> ocrPayload = Map.of(
-                "jobId", jobId,
-                "correlationId", jobId,
-                "recordId", recordId.toString(),
-                "fileKey", reservation.fileKey(),
-                "fileVersion", "unversioned",
-                "mimeType", mimeType,
-                "profileId", reservation.profileId().toString()
-        );
-        enqueueOcrAfterCommit(ocrPayload);
+        ocrJobEventPublisher.publishAfterCommit(new OcrJobEvent(
+                jobId,
+                jobId,
+                recordId,
+                reservation.fileKey(),
+                OcrJobEvent.DEFAULT_FILE_VERSION,
+                mimeType,
+                reservation.profileId(),
+                null
+        ));
         redisTemplate.delete(uploadReservationKey(recordId));
 
         if (isNewRecord) {
@@ -262,21 +260,6 @@ public class HealthRecordService {
         userActivityService.recordUploadConfirmed(userId, !isNewRecord);
 
         return new ConfirmUploadResponse(recordId, STATUS_PROCESSING);
-    }
-
-    private void enqueueOcrAfterCommit(Map<String, String> ocrPayload) {
-        Runnable publish = () -> redisTemplate.opsForStream().add(ocrStreamName, ocrPayload);
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    publish.run();
-                }
-            });
-            return;
-        }
-        log.warn("Publishing OCR event outside an active transaction. recordId={}", ocrPayload.get("recordId"));
-        publish.run();
     }
 
     @Transactional(readOnly = true)

@@ -12,6 +12,7 @@ import com.healthlens.api.entity.HealthRecordShare;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.ProfileShareAuditLog;
 import com.healthlens.api.entity.User;
+import com.healthlens.api.events.email.EmailEventPublisher;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.repository.HealthRecordInvitationRepository;
 import com.healthlens.api.repository.HealthRecordRepository;
