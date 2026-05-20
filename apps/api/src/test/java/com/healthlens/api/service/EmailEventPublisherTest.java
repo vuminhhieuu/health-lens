@@ -83,6 +83,48 @@ class EmailEventPublisherTest {
     }
 
     @Test
+    void publishProfileShareAcceptedSerializesExpectedPayload() {
+        ApplicationStreamPublisher streamPublisher = mock(ApplicationStreamPublisher.class);
+        AuditEventRecorder auditEventRecorder = mock(AuditEventRecorder.class);
+
+        User owner = new User();
+        owner.setId(UUID.randomUUID());
+        owner.setEmail("owner@healthlens.vn");
+        User viewer = new User();
+        viewer.setFullName("Nguyen Van B");
+
+        RedisEmailEventPublisher publisher = new RedisEmailEventPublisher(streamPublisher, auditEventRecorder, "email.events");
+        publisher.publishProfileShareAccepted(owner, viewer, "Ba", "http://localhost:3000/profiles");
+
+        verify(streamPublisher).publish(eq("email.events"), argThat(payload ->
+                "profile_share_accepted".equals(payload.get("eventType"))
+                        && owner.getId().toString().equals(payload.get("userId"))
+                        && "owner@healthlens.vn".equals(payload.get("email"))
+                        && "Nguyen Van B".equals(payload.get("viewerName"))
+                        && "Ba".equals(payload.get("profileDisplayName"))
+                        && "http://localhost:3000/profiles".equals(payload.get("profilesLink"))));
+    }
+
+    @Test
+    void publishProfileShareAccepted_nullProfileDisplayNameSerializesEmptyString() {
+        ApplicationStreamPublisher streamPublisher = mock(ApplicationStreamPublisher.class);
+        AuditEventRecorder auditEventRecorder = mock(AuditEventRecorder.class);
+
+        User owner = new User();
+        owner.setId(UUID.randomUUID());
+        owner.setEmail("owner@healthlens.vn");
+        User viewer = new User();
+
+        RedisEmailEventPublisher publisher = new RedisEmailEventPublisher(streamPublisher, auditEventRecorder, "email.events");
+        publisher.publishProfileShareAccepted(owner, viewer, null, "http://localhost:3000/profiles");
+
+        verify(streamPublisher).publish(eq("email.events"), argThat(payload ->
+                "profile_share_accepted".equals(payload.get("eventType"))
+                        && "".equals(payload.get("profileDisplayName"))
+                        && "".equals(payload.get("viewerName"))));
+    }
+
+    @Test
     void publishFailureRecordsAuditWithoutThrowing() {
         ApplicationStreamPublisher streamPublisher = mock(ApplicationStreamPublisher.class);
         AuditEventRecorder auditEventRecorder = mock(AuditEventRecorder.class);

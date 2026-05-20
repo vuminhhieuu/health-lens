@@ -283,7 +283,7 @@ public class ProfileShareService {
 
     @Transactional
     public AcceptInvitationResultResponse acceptInvitation(String token, UUID userId) {
-        ProfileInvitation invitation = profileInvitationRepository.findByToken(token).orElse(null);
+        ProfileInvitation invitation = profileInvitationRepository.findByTokenForUpdate(token).orElse(null);
         if (invitation == null) {
             sharingAuditSupport.recordAnonymousAccessDenied(null, "invalid_invitation_token");
             throw new ResourceNotFoundException("Lời mời không hợp lệ");
@@ -326,7 +326,10 @@ public class ProfileShareService {
         }
 
         if ("accepted".equals(invitation.getStatus())) {
-            ensureShareForInvitation(invitation, viewer.getId(), ownerId);
+            boolean createdShare = ensureShareForInvitation(invitation, viewer.getId(), ownerId);
+            if (createdShare && notifyOwnerOnAccept) {
+                notifyOwnerInvitationAccepted(ownerId, viewer, profile);
+            }
             return new AcceptInvitationResultResponse("accepted", FAMILY_PROFILES_PATH, profileId);
         }
 
@@ -334,14 +337,7 @@ public class ProfileShareService {
             return new AcceptInvitationResultResponse("expired", FAMILY_PROFILES_PATH, profileId);
         }
 
-        if (!profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewer.getId())) {
-            ProfileShare share = new ProfileShare();
-            share.setProfileId(profileId);
-            share.setOwnerId(ownerId);
-            share.setViewerId(viewer.getId());
-            share.setAccessLevel(invitation.getAccessLevel());
-            profileShareRepository.save(share);
-        }
+        boolean createdShare = ensureShareForInvitation(invitation, viewer.getId(), ownerId);
 
         invitation.setStatus("accepted");
         invitation.setAcceptedAt(now);
@@ -426,31 +422,32 @@ public class ProfileShareService {
         });
     }
 
-    private void ensureShareForInvitation(ProfileInvitation invitation, UUID viewerId, UUID ownerId) {
+    private boolean ensureShareForInvitation(ProfileInvitation invitation, UUID viewerId, UUID ownerId) {
         if (profileShareRepository
                 .findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(invitation.getProfileId(), viewerId)
                 .isPresent()) {
-            return;
+            return false;
         }
         ProfileShare share = new ProfileShare();
         share.setProfileId(invitation.getProfileId());
         share.setOwnerId(ownerId);
         share.setViewerId(viewerId);
         share.setAccessLevel(invitation.getAccessLevel());
-        saveNewActiveProfileShareHandlingDuplicate(share, invitation.getProfileId(), viewerId);
+        return saveNewActiveProfileShareHandlingDuplicate(share, invitation.getProfileId(), viewerId);
     }
 
     /**
      * Partial unique index uq_profile_shares_profile_viewer_active prevents duplicate active rows; concurrent
      * accepts must remain idempotent.
      */
-    private void saveNewActiveProfileShareHandlingDuplicate(ProfileShare share, UUID profileId, UUID viewerId) {
+    private boolean saveNewActiveProfileShareHandlingDuplicate(ProfileShare share, UUID profileId, UUID viewerId) {
         try {
             // Flush immediately so partial unique index violation is catchable in this transaction.
             profileShareRepository.saveAndFlush(share);
+            return true;
         } catch (DataIntegrityViolationException ex) {
             if (profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId)) {
-                return;
+                return false;
             }
             throw ex;
         }

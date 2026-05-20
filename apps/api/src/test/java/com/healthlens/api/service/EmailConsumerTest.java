@@ -273,6 +273,45 @@ class EmailConsumerTest {
     }
 
     @Test
+    void handleRecord_routesProfileShareAcceptedEventToEmailService() {
+        UUID ownerId = UUID.randomUUID();
+
+        consumer.handleRecord(record(Map.of(
+                "eventType", EmailEvent.Type.PROFILE_SHARE_ACCEPTED.streamValue(),
+                "userId", ownerId.toString(),
+                "email", "owner@healthlens.vn",
+                "viewerName", "Nguyen Van B",
+                "profileDisplayName", "Ba",
+                "profilesLink", "http://localhost:3000/profiles"
+        )));
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(emailService).sendProfileShareAcceptedEmail(
+                userCaptor.capture(),
+                eq("Nguyen Van B"),
+                eq("Ba"),
+                eq("http://localhost:3000/profiles")
+        );
+        assertThat(userCaptor.getValue().getId()).isEqualTo(ownerId);
+        assertThat(userCaptor.getValue().getEmail()).isEqualTo("owner@healthlens.vn");
+    }
+
+    @Test
+    void handleRecord_profileShareAccepted_missingProfilesLink_throwsInvalidEmailEvent() {
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+                consumer.handleRecord(record(Map.of(
+                        "eventType", EmailEvent.Type.PROFILE_SHARE_ACCEPTED.streamValue(),
+                        "userId", UUID.randomUUID().toString(),
+                        "email", "owner@healthlens.vn",
+                        "viewerName", "Nguyen Van B",
+                        "profileDisplayName", "Ba"
+                ))));
+
+        assertThat(ex.getMessage()).isEqualTo("missing_profilesLink");
+        verify(emailService, never()).sendProfileShareAcceptedEmail(any(), any(), any(), any());
+    }
+
+    @Test
     void handleRecord_profileInvitation_inviterUserDoesNotCarryRecipientEmail() {
         UUID inviterId = UUID.randomUUID();
 
