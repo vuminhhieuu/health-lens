@@ -215,10 +215,19 @@ development_status:
   core-6-3-vietnamese-language-normalization-and-message-catalog: done
   core-6-4-standard-loading-empty-and-error-state-components: done
   core-6-5-medical-copy-and-disclaimer-review: done
-  core-7-1-backend-ai-ocr-rag-package-boundary-refactor: ready-for-dev
-  core-7-2-split-health-record-review-page-into-feature-components-and-hooks: ready-for-dev
-  core-7-3-extract-shared-profile-sharing-hook: ready-for-dev
-  core-7-4-email-template-cleanup: ready-for-dev
+  core-7-1-backend-ai-ocr-rag-package-boundary-refactor: backlog
+  core-7-2-split-health-record-review-page-into-feature-components-and-hooks: backlog
+  core-7-3-extract-shared-profile-sharing-hook: backlog
+  core-7-4-email-template-cleanup: backlog
+  core-7-5-split-admin-audit-log-page-into-feature-modules: backlog
+  core-7-6-split-admin-reference-data-pages-into-feature-modules: backlog
+  core-7-7-backend-health-record-service-responsibility-split: backlog
+  core-7-8-shared-frontend-api-contract-types-for-high-churn-features: backlog
+  core-7-9-confirm-and-document-event-driven-architecture: ready-for-dev
+  core-7-10-unify-email-event-delivery: backlog
+  core-7-11-introduce-application-stream-event-boundary: backlog
+  core-7-12-normalize-mobile-source-root: backlog
+  core-7-13-refresh-source-tree-and-architecture-docs: backlog
   core-8-1-ci-security-scan-baseline: ready-for-dev
   core-8-2-ai-ocr-regression-test-corpus-in-ci: ready-for-dev
   core-8-3-release-smoke-tests-for-provider-and-infrastructure-config: ready-for-dev
