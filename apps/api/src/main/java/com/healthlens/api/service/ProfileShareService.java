@@ -385,7 +385,8 @@ public class ProfileShareService {
      */
     private void saveNewActiveProfileShareHandlingDuplicate(ProfileShare share, UUID profileId, UUID viewerId) {
         try {
-            profileShareRepository.save(share);
+            // Flush immediately so partial unique index violation is catchable in this transaction.
+            profileShareRepository.saveAndFlush(share);
         } catch (DataIntegrityViolationException ex) {
             if (profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId)) {
                 return;

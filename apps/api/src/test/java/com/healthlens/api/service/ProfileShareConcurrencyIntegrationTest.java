@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.healthlens.api.audit.AuditEventRecorder;
 import com.healthlens.api.dto.response.AcceptInvitationResultResponse;
+import com.healthlens.api.events.email.EmailEventPublisher;
 import com.healthlens.api.exception.ResourceNotFoundException;
 import com.healthlens.api.support.PostgresTestContainerBase;
 import java.util.ArrayList;

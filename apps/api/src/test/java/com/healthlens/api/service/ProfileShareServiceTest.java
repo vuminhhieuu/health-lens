@@ -166,14 +166,14 @@ class ProfileShareServiceTest {
 
         when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(profileId, viewerId))
                 .thenReturn(Optional.empty());
-        when(profileShareRepository.save(any(ProfileShare.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(profileShareRepository.saveAndFlush(any(ProfileShare.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(profileInvitationRepository.save(any(ProfileInvitation.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         AcceptInvitationResultResponse result = profileShareService.acceptInvitation("token-3", viewerId);
 
         assertThat(result.outcome()).isEqualTo("accepted");
         assertThat(result.redirectUrl()).isEqualTo("/profiles");
-        verify(profileShareRepository).save(any(ProfileShare.class));
+        verify(profileShareRepository).saveAndFlush(any(ProfileShare.class));
         verify(profileInvitationRepository).save(invitation);
     }
 
@@ -387,12 +387,6 @@ class ProfileShareServiceTest {
         UUID ownerId = UUID.randomUUID();
         UUID profileId = UUID.randomUUID();
         UUID shareId = UUID.randomUUID();
-        UUID viewerId = UUID.randomUUID();
-        ProfileShare share = new ProfileShare();
-        share.setId(shareId);
-        share.setProfileId(profileId);
-        share.setOwnerId(ownerId);
-        share.setViewerId(viewerId);
 
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile(profileId, ownerId)));
         when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(profileId, shareId))
@@ -401,7 +395,7 @@ class ProfileShareServiceTest {
         assertThatThrownBy(() -> profileShareService.revokeShare(ownerId, profileId, shareId))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(profileShareRepository, never()).findById(any(UUID.class));
-        verify(profileShareRepository, never()).save(share);
+        verify(profileShareRepository, never()).save(any(ProfileShare.class));
     }
 
     @Test
@@ -419,7 +413,7 @@ class ProfileShareServiceTest {
 
         when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(profileId, viewerId))
                 .thenReturn(Optional.empty());
-        when(profileShareRepository.save(any(ProfileShare.class)))
+        when(profileShareRepository.saveAndFlush(any(ProfileShare.class)))
                 .thenThrow(new DataIntegrityViolationException("uq_profile_shares_profile_viewer_active"));
         when(profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId)).thenReturn(true);
         when(profileInvitationRepository.save(any(ProfileInvitation.class))).thenAnswer(invocation -> invocation.getArgument(0));
