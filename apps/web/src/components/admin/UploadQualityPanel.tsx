@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format, parseISO, subDays } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { AlertCircle, Calendar, Info, Loader2, X } from "lucide-react";
 
 import {
@@ -18,6 +18,13 @@ import {
   type PieSlice,
 } from "@/components/admin/UploadQualityDonutChart";
 import { adminApiClient } from "@/lib/api/adminApiClient";
+import {
+  getUploadQualityRangeError,
+  isUploadQualityRangeValid,
+  utcUploadQualityDefaultFrom,
+  utcUploadQualityDefaultTo,
+} from "@/lib/admin/uploadQualityAnalytics";
+import { utcAnalyticsToday } from "@/lib/admin/userAnalytics";
 import { API_ROUTES } from "@/lib/api/routes";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
 
@@ -84,12 +91,16 @@ function bucketToPieData(bucket: UploadQualityBucket): PieSlice[] {
 
 export function UploadQualityPanel() {
   const [granularity, setGranularity] = useState<"day" | "week">("day");
-  const [from, setFrom] = useState(format(subDays(new Date(), 6), "yyyy-MM-dd"));
-  const [to, setTo] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [from, setFrom] = useState(() => utcUploadQualityDefaultFrom());
+  const [to, setTo] = useState(() => utcUploadQualityDefaultTo());
   const [selectedBucket, setSelectedBucket] = useState<UploadQualityBucket | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyFilter, setHistoryFilter] = useState<UploadHistoryFilter>({});
   const [historyPage, setHistoryPage] = useState(0);
+  const todayUtc = utcAnalyticsToday();
+  const rangeValid = useMemo(() => isUploadQualityRangeValid(from, to), [from, to]);
+  const rangeError = useMemo(() => getUploadQualityRangeError(from, to), [from, to]);
+  const fromMax = to && to < todayUtc ? to : todayUtc;
 
   const openHistory = (filter: UploadHistoryFilter = {}) => {
     setHistoryFilter(filter);
@@ -101,6 +112,7 @@ export function UploadQualityPanel() {
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey,
+    enabled: rangeValid,
     queryFn: async () => {
       const response = await adminApiClient.get<{ data: UploadQualityResponse }>(
         API_ROUTES.ADMIN_ANALYTICS.UPLOAD_QUALITY,
@@ -144,56 +156,71 @@ export function UploadQualityPanel() {
           </p>
         </div>
 
-        <div className="flex flex-nowrap items-center gap-3 overflow-x-auto max-w-full">
-          <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
-            {(["day", "week"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setGranularity(value)}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition ${
-                  granularity === value
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {value === "day" ? "Theo ngày" : "Theo tuần"}
-              </button>
-            ))}
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-nowrap items-center gap-3 overflow-x-auto max-w-full">
+            <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+              {(["day", "week"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setGranularity(value)}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition ${
+                    granularity === value
+                      ? "bg-white text-blue-600 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {value === "day" ? "Theo ngày" : "Theo tuần"}
+                </button>
+              ))}
+            </div>
+
+            <label className="relative flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 cursor-pointer">
+              <span className="text-slate-400 shrink-0">Từ:</span>
+              <span className="font-medium text-slate-800 tabular-nums">{formatDisplayDate(from)}</span>
+              <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
+              <input
+                type="date"
+                value={from}
+                max={fromMax}
+                onChange={(event) => setFrom(event.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+                aria-label="Từ ngày (UTC)"
+              />
+            </label>
+
+            <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 cursor-pointer relative">
+              <span className="text-slate-400 shrink-0">Đến:</span>
+              <span className="font-medium text-slate-800 tabular-nums">{formatDisplayDate(to)}</span>
+              <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
+              <input
+                type="date"
+                value={to}
+                min={from}
+                max={todayUtc}
+                onChange={(event) => setTo(event.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+                aria-label="Đến ngày (UTC)"
+              />
+            </label>
+
+            {isFetching && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
           </div>
-
-          <label className="relative flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 cursor-pointer">
-            <span className="text-slate-400 shrink-0">Từ:</span>
-            <span className="font-medium text-slate-800 tabular-nums">{formatDisplayDate(from)}</span>
-            <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
-            <input
-              type="date"
-              value={from}
-              onChange={(event) => setFrom(event.target.value)}
-              className="absolute inset-0 opacity-0 cursor-pointer"
-              aria-label="Từ ngày"
-            />
-          </label>
-
-          <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 cursor-pointer relative">
-            <span className="text-slate-400 shrink-0">Đến:</span>
-            <span className="font-medium text-slate-800 tabular-nums">{formatDisplayDate(to)}</span>
-            <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
-            <input
-              type="date"
-              value={to}
-              onChange={(event) => setTo(event.target.value)}
-              className="absolute inset-0 opacity-0 cursor-pointer"
-              aria-label="Đến ngày"
-            />
-          </label>
-
-          {isFetching && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+          <p className="text-xs text-slate-400 flex items-center gap-1">
+            <Info className="h-3.5 w-3.5 shrink-0" />
+            Múi giờ UTC
+          </p>
         </div>
       </div>
 
       <div className="p-6 space-y-6">
-        {isLoading ? (
+        {!rangeValid ? (
+          <ErrorState
+            title="Khoảng thời gian không hợp lệ"
+            description={rangeError ?? "Khoảng thời gian không hợp lệ."}
+            className="min-h-80"
+          />
+        ) : isLoading ? (
           <LoadingState title="Đang tải dữ liệu chất lượng tải lên" className="min-h-80" />
         ) : isError ? (
           <ErrorState

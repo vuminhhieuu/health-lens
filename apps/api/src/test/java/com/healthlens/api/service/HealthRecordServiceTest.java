@@ -57,6 +57,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
@@ -101,6 +102,7 @@ class HealthRecordServiceTest {
         private ValueOperations<String, String> valueOperations;
         @Mock
         private StreamOperations<String, Object, Object> streamOperations;
+    @Mock private UserActivityService userActivityService;
 
         private HealthRecordService healthRecordService;
 
@@ -121,6 +123,7 @@ class HealthRecordServiceTest {
                                 healthRecordLegacyAuditWriter,
                                 unifiedAuditCoordinator,
                                 auditEventRecorder,
+                                userActivityService,
                                 publicEndpointRateLimiter,
                                 redisTemplate,
                                 new ObjectMapper(),
@@ -256,7 +259,8 @@ class HealthRecordServiceTest {
                 assertThat(payload.get("mimeType")).isEqualTo("image/jpeg");
                 assertThat(payload.get("correlationId")).isEqualTo(payload.get("jobId"));
                 verify(publicEndpointRateLimiter).consumeOcrTrigger(userId.toString(), recordId.toString());
-        }
+            verify(userActivityService).recordUploadConfirmed(userId, false);
+    }
 
         @Test
         @DisplayName("confirmUpload fail khi reservation khong ton tai")

@@ -1,12 +1,16 @@
 package com.healthlens.api.controller;
 
 import com.healthlens.api.config.SecurityConfig;
+import com.healthlens.api.dto.response.ActivityAnalyticsResponse;
 import com.healthlens.api.dto.response.UserAnalyticsResponse;
 import com.healthlens.api.exception.GlobalExceptionHandler;
 import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
 import com.healthlens.api.security.LoginRateLimiter;
+import com.healthlens.api.security.UserActivityRecordingFilter;
+import com.healthlens.api.support.SecurityFilterTestSupport;
 import com.healthlens.api.service.AnalyticsService;
+import com.healthlens.api.service.UserActivityService;
 import com.healthlens.api.util.JwtUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -25,7 +29,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -45,6 +50,9 @@ class AdminAnalyticsControllerTest {
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @MockitoBean
+    private UserActivityRecordingFilter userActivityRecordingFilter;
+
+    @MockitoBean
     private JwtUtil jwtUtil;
 
     @MockitoBean
@@ -56,13 +64,12 @@ class AdminAnalyticsControllerTest {
     @MockitoBean
     private LoginRateLimiter loginRateLimiter;
 
+    @MockitoBean
+    private UserActivityService userActivityService;
+
     @BeforeEach
     void setUp() throws Exception {
-        doAnswer(invocation -> {
-            jakarta.servlet.FilterChain chain = invocation.getArgument(2);
-            chain.doFilter(invocation.getArgument(0), invocation.getArgument(1));
-            return null;
-        }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
+        SecurityFilterTestSupport.stubPassthroughFilters(jwtAuthenticationFilter, userActivityRecordingFilter);
     }
 
     @Test
@@ -101,6 +108,49 @@ class AdminAnalyticsControllerTest {
     @DisplayName("GET /admin/analytics/users tra 400 khi khoang vuot gioi han")
     void getUserAnalytics_returnsBadRequestForInvalidRange() throws Exception {
         mockMvc.perform(get("/api/v1/admin/analytics/users")
+                        .param("from", "2020-01-01")
+                        .param("to", "2026-12-31")
+                        .with(SecurityMockMvcRequestPostProcessors.user("admin").roles("ADMIN")))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("GET /admin/analytics/activity tra ve du lieu khi admin hop le")
+    void getActivity_returnsDataForAdmin() throws Exception {
+        ActivityAnalyticsResponse.ActivitySummary summary = new ActivityAnalyticsResponse.ActivitySummary(
+                10, 8, 25.0, 5, 3, 66.7, 2, 1, 100.0);
+        ActivityAnalyticsResponse response = new ActivityAnalyticsResponse(
+                summary,
+                List.of(new ActivityAnalyticsResponse.WauBucket("2026-03-03", 12)),
+                List.of(),
+                List.of(new ActivityAnalyticsResponse.UploadBucket("2026-03-02", 5, 1)),
+                List.of());
+
+        when(analyticsService.getActivity(any(Instant.class), any(Instant.class), anyString(), anyBoolean()))
+                .thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/admin/analytics/activity")
+                        .param("from", "2026-03-01")
+                        .param("to", "2026-03-07")
+                        .param("granularity", "day")
+                        .with(SecurityMockMvcRequestPostProcessors.user("admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.summary.wauCurrentWeek").value(10))
+                .andExpect(jsonPath("$.data.wauBuckets[0].wau").value(12))
+                .andExpect(jsonPath("$.data.uploadBuckets[0].count").value(5));
+    }
+
+    @Test
+    @DisplayName("GET /admin/analytics/activity tra 400 khi khoang vuot 90 ngay")
+    void getActivity_returnsBadRequestForRangeOverMaxDays() throws Exception {
+        when(analyticsService.getActivity(any(Instant.class), any(Instant.class), anyString(), anyBoolean()))
+                .thenAnswer(invocation -> {
+                    AnalyticsService.validateActivityRange(
+                            invocation.getArgument(0), invocation.getArgument(1));
+                    return null;
+                });
+
+        mockMvc.perform(get("/api/v1/admin/analytics/activity")
                         .param("from", "2020-01-01")
                         .param("to", "2026-12-31")
                         .with(SecurityMockMvcRequestPostProcessors.user("admin").roles("ADMIN")))

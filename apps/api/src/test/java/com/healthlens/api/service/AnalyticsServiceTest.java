@@ -1,6 +1,7 @@
 package com.healthlens.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.healthlens.api.dto.response.ActivityAnalyticsResponse;
 import com.healthlens.api.dto.response.UploadHistoryPageResponse;
 import com.healthlens.api.dto.response.UploadQualityResponse;
 import com.healthlens.api.dto.response.UserAnalyticsResponse;
@@ -8,6 +9,9 @@ import com.healthlens.api.entity.UserRole;
 import com.healthlens.api.repository.AnalyticsRepository;
 import com.healthlens.api.repository.UserRepository;
 import com.healthlens.api.repository.projection.MonthlyUserGrowthProjection;
+import com.healthlens.api.repository.UserActivityEventRepository;
+import com.healthlens.api.repository.projection.ActivityUploadBucketProjection;
+import com.healthlens.api.repository.projection.ActivityWauBucketProjection;
 import com.healthlens.api.repository.projection.UploadFailureBreakdownProjection;
 import com.healthlens.api.repository.projection.UploadHistoryProjection;
 import com.healthlens.api.repository.projection.UploadQualityBucketProjection;
@@ -23,6 +27,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -34,6 +39,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -56,6 +62,9 @@ class AnalyticsServiceTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Mock
+    private UserActivityEventRepository userActivityEventRepository;
+
     private AnalyticsService analyticsService;
 
     @BeforeEach
@@ -63,7 +72,11 @@ class AnalyticsServiceTest {
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         lenient().when(valueOperations.get(anyString())).thenReturn(null);
         analyticsService = new AnalyticsService(
-                analyticsRepository, userRepository, redisTemplate, objectMapper);
+                analyticsRepository,
+                userActivityEventRepository,
+                userRepository,
+                redisTemplate,
+                objectMapper);
     }
 
     @Test
@@ -183,6 +196,126 @@ class AnalyticsServiceTest {
     }
 
     @Test
+    @DisplayName("getActivity tinh WAU, upload buckets va so sanh ky truoc")
+    void getActivity_calculatesWauUploadAndComparison() {
+        Instant from = Instant.parse("2026-03-02T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-03-09T00:00:00Z");
+        Duration range = Duration.between(from, toExclusive);
+        Instant previousFrom = from.minus(range);
+
+        ActivityWauBucketProjection wauWeek = wauBucket(LocalDate.of(2026, 3, 2), 12);
+        ActivityUploadBucketProjection uploadDay = uploadBucket(LocalDate.of(2026, 3, 2), 5, 1);
+
+        when(userActivityEventRepository.findWauBuckets(from, toExclusive)).thenReturn(List.of(wauWeek));
+        when(userActivityEventRepository.findUploadBuckets(from, toExclusive, "day"))
+                .thenReturn(List.of(uploadDay));
+        when(userActivityEventRepository.findWauBuckets(previousFrom, from)).thenReturn(List.of());
+        when(userActivityEventRepository.findUploadBuckets(previousFrom, from, "day")).thenReturn(List.of());
+        when(userActivityEventRepository.countDistinctActiveUsers(any(), any())).thenReturn(10L, 8L);
+        when(userActivityEventRepository.countUploads(any(), any())).thenAnswer(invocation -> {
+            Instant rangeFrom = invocation.getArgument(0);
+            Instant rangeTo = invocation.getArgument(1);
+            if (rangeFrom.equals(from) && rangeTo.equals(toExclusive)) {
+                return 5L;
+            }
+            if (rangeFrom.equals(previousFrom) && rangeTo.equals(from)) {
+                return 3L;
+            }
+            return 2L;
+        });
+
+        ActivityAnalyticsResponse response = analyticsService.getActivity(from, toExclusive, "day", true);
+
+        assertThat(response.wauBuckets()).hasSize(1);
+        assertThat(response.wauBuckets().get(0).periodStart()).isEqualTo("2026-03-02");
+        assertThat(response.wauBuckets().get(0).wau()).isEqualTo(12);
+        assertThat(response.uploadBuckets()).hasSize(7);
+        assertThat(response.uploadBuckets().get(0).periodStart()).isEqualTo("2026-03-02");
+        assertThat(response.uploadBuckets().get(0).count()).isEqualTo(5);
+        assertThat(response.uploadBuckets().get(0).retryCount()).isEqualTo(1);
+        assertThat(response.summary().uploadsInRange()).isEqualTo(5);
+        assertThat(response.summary().uploadsPreviousRange()).isEqualTo(3);
+        assertThat(response.summary().uploadChangePercent()).isCloseTo(66.7, org.assertj.core.data.Offset.offset(0.1));
+        assertThat(response.wauBucketsPrevious()).hasSize(1);
+        assertThat(response.wauBucketsPrevious().get(0).periodStart()).isEqualTo("2026-03-02");
+        assertThat(response.wauBucketsPrevious().get(0).wau()).isZero();
+        assertThat(response.uploadBucketsPrevious()).hasSize(7);
+        assertThat(response.uploadBucketsPrevious().get(0).count()).isZero();
+    }
+
+    @Test
+    @DisplayName("alignPreviousWauBuckets map theo periodStart lech dung so ngay khoang")
+    void alignPreviousWauBuckets_mapsByShiftedPeriodStart() {
+        Duration range = Duration.ofDays(7);
+        List<ActivityAnalyticsResponse.WauBucket> current = List.of(
+                new ActivityAnalyticsResponse.WauBucket("2026-03-10", 20));
+        List<ActivityAnalyticsResponse.WauBucket> previousRaw = List.of(
+                new ActivityAnalyticsResponse.WauBucket("2026-03-03", 15));
+
+        List<ActivityAnalyticsResponse.WauBucket> aligned =
+                AnalyticsService.alignPreviousWauBuckets(current, previousRaw, range);
+
+        assertThat(aligned).hasSize(1);
+        assertThat(aligned.get(0).periodStart()).isEqualTo("2026-03-10");
+        assertThat(aligned.get(0).wau()).isEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("fillWauBuckets lap day trong cho moi tuan UTC trong khoang")
+    void fillWauBuckets_fillsMissingWeeksWithZero() {
+        Instant from = Instant.parse("2026-03-02T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-03-16T00:00:00Z");
+        List<ActivityAnalyticsResponse.WauBucket> sparse = List.of(
+                new ActivityAnalyticsResponse.WauBucket("2026-03-02", 5));
+
+        List<ActivityAnalyticsResponse.WauBucket> filled =
+                AnalyticsService.fillWauBuckets(sparse, from, toExclusive);
+
+        assertThat(filled).hasSize(2);
+        assertThat(filled.get(0).periodStart()).isEqualTo("2026-03-02");
+        assertThat(filled.get(0).wau()).isEqualTo(5);
+        assertThat(filled.get(1).periodStart()).isEqualTo("2026-03-09");
+        assertThat(filled.get(1).wau()).isZero();
+    }
+
+    @Test
+    @DisplayName("fillUploadBuckets lap day trong cho moi ngay UTC trong khoang")
+    void fillUploadBuckets_fillsMissingDaysWithZero() {
+        Instant from = Instant.parse("2026-03-01T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-03-04T00:00:00Z");
+        List<ActivityAnalyticsResponse.UploadBucket> sparse = List.of(
+                new ActivityAnalyticsResponse.UploadBucket("2026-03-02", 3, 1));
+
+        List<ActivityAnalyticsResponse.UploadBucket> filled =
+                AnalyticsService.fillUploadBuckets(sparse, from, toExclusive, "day");
+
+        assertThat(filled).hasSize(3);
+        assertThat(filled.get(0).count()).isZero();
+        assertThat(filled.get(1).count()).isEqualTo(3);
+        assertThat(filled.get(1).retryCount()).isEqualTo(1);
+        assertThat(filled.get(2).count()).isZero();
+    }
+
+    @Test
+    @DisplayName("validateActivityRange reject khoang vuot 90 ngay")
+    void validateActivityRange_rejectsRangeOverMaxDays() {
+        Instant from = Instant.parse("2026-01-01T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-05-01T00:00:00Z");
+
+        assertThatThrownBy(() -> AnalyticsService.validateActivityRange(from, toExclusive))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("90");
+    }
+
+    @Test
+    @DisplayName("percentChange tra ve null khi ky truoc bang 0 va current lon hon 0")
+    void percentChange_nullWhenPreviousZeroAndCurrentPositive() {
+        assertThat(AnalyticsService.percentChange(5, 0)).isNull();
+        assertThat(AnalyticsService.percentChange(0, 0)).isEqualTo(0.0);
+        assertThat(AnalyticsService.percentChange(8, 4)).isEqualTo(100.0);
+    }
+
+    @Test
     @DisplayName("normalizeGranularity mac dinh day va reject gia tri khong hop le")
     void normalizeGranularity_defaultsAndRejectsInvalid() {
         assertThat(AnalyticsService.normalizeGranularity(null)).isEqualTo("day");
@@ -244,6 +377,22 @@ class AnalyticsServiceTest {
         MonthlyUserGrowthProjection projection = mock(MonthlyUserGrowthProjection.class);
         when(projection.getMonthStart()).thenReturn(monthStart);
         when(projection.getNewUsers()).thenReturn(newUsers);
+        return projection;
+    }
+
+    private static ActivityWauBucketProjection wauBucket(LocalDate periodStart, long wau) {
+        ActivityWauBucketProjection projection = mock(ActivityWauBucketProjection.class);
+        when(projection.getPeriodStart()).thenReturn(periodStart);
+        when(projection.getWau()).thenReturn(wau);
+        return projection;
+    }
+
+    private static ActivityUploadBucketProjection uploadBucket(
+            LocalDate periodStart, long count, long retryCount) {
+        ActivityUploadBucketProjection projection = mock(ActivityUploadBucketProjection.class);
+        when(projection.getPeriodStart()).thenReturn(periodStart);
+        when(projection.getUploadCount()).thenReturn(count);
+        when(projection.getRetryCount()).thenReturn(retryCount);
         return projection;
     }
 }

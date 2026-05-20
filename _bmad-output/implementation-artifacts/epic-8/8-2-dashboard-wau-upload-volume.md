@@ -1,6 +1,6 @@
 # Story 8.2: Dashboard hoạt động WAU và upload volume
 
-Status: ready-for-dev
+Status: done
 
 ## Execution scope
 
@@ -32,46 +32,51 @@ so that tôi đo mức sử dụng thực tế của hệ thống.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Backend: Activity tracking (AC: #1, #2)
-  - [ ] Bảng `user_activity_events(id, user_id, event_type, created_at)` (V018)
-  - [ ] Spring filter log `LOGIN`, `UPLOAD` events (quan trọng nhất)
-  - [ ] `GET /api/v1/admin/analytics/activity?granularity=day|week&from={date}&to={date}`
-  - [ ] WAU query: `SELECT DATE_TRUNC('week', created_at), COUNT(DISTINCT user_id) FROM user_activity_events ...`
-  - [ ] Upload volume query: count uploads per day/week
-- [ ] Task 2 — Web: Activity charts (AC: #1, #3, #4)
-  - [ ] Trong admin analytics page: thêm 2 sections
-  - [ ] WAU line chart (recharts)
-  - [ ] Upload volume bar chart (recharts BarChart)
-  - [ ] Toggle day/week granularity
-- [ ] Task 3 — Tests (AC: #1, #2)
-  - [ ] `AnalyticsServiceTest`: WAU calculation, upload count
+- [x] Task 1 — Backend: Activity tracking (AC: #1, #2)
+  - [x] Bảng `user_activity_events` (V043)
+  - [x] `UserActivityRecordingFilter` + confirmUpload ghi `AUTHENTICATED_API_CALL` / `UPLOAD_CONFIRMED`
+  - [x] `GET /api/v1/admin/analytics/activity?granularity=day|week&from&to&comparePrevious`
+  - [x] WAU query theo tuần (distinct user)
+  - [x] Upload volume query theo ngày/tuần
+- [x] Task 2 — Web: Activity charts (AC: #1, #3, #4)
+  - [x] `ActivityVolumePanel` trên `/admin` (giữa stats và chất lượng upload)
+  - [x] WAU line chart + upload bar chart (recharts)
+  - [x] Toggle day/week + so sánh kỳ trước
+- [x] Task 3 — Tests (AC: #1, #2)
+  - [x] `AnalyticsServiceTest`: WAU/upload buckets + percentChange
+  - [x] `activityAnalytics.test.ts`: UTC default range + rule validate max 90 ngày
 
 ## Dev Notes
 
 ### Activity Events Table
 
 ```sql
--- V018__create_user_activity_events.sql
+-- V043__create_user_activity_events.sql
 CREATE TABLE user_activity_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id),
-    event_type VARCHAR(50) NOT NULL,  -- 'AUTH', 'UPLOAD', 'VIEW'
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    event_type VARCHAR(50) NOT NULL,  -- 'AUTHENTICATED_API_CALL' | 'UPLOAD_CONFIRMED'
+    is_retry BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_activity_events_user_week ON user_activity_events(user_id, DATE_TRUNC('week', created_at));
-CREATE INDEX idx_activity_events_type_date ON user_activity_events(event_type, created_at);
+CREATE INDEX idx_activity_events_type_created ON user_activity_events (event_type, created_at);
+CREATE INDEX idx_activity_events_user_created ON user_activity_events (user_id, created_at);
+CREATE UNIQUE INDEX idx_activity_auth_daily
+    ON user_activity_events (user_id, ((created_at AT TIME ZONE 'UTC')::date))
+    WHERE event_type = 'AUTHENTICATED_API_CALL';
 ```
 
 ### WAU Definition
 
 ```sql
-SELECT DATE_TRUNC('week', created_at) AS week,
+SELECT DATE_TRUNC('week', created_at AT TIME ZONE 'UTC') AS week,
        COUNT(DISTINCT user_id) AS wau
 FROM user_activity_events
-WHERE event_type = 'AUTH'
-  AND created_at BETWEEN :from AND :to
+WHERE event_type = 'AUTHENTICATED_API_CALL'
+  AND created_at >= :from
+  AND created_at < :toExclusive
 GROUP BY 1
-ORDER BY 1 DESC;
+ORDER BY 1;
 ```
 
 ### References
@@ -82,10 +87,38 @@ ORDER BY 1 DESC;
 
 ### Agent Model Used
 
-_[To be filled by dev agent]_
-
-### Debug Log References
+Composer
 
 ### Completion Notes List
 
+- Migration `V043__create_user_activity_events.sql` với unique index 1 AUTH event / user / UTC day.
+- `UserActivityRecordingFilter` ghi `AUTHENTICATED_API_CALL` sau response thành công cho `ROLE_USER` (bỏ qua admin/auth/consent).
+- `HealthRecordService.confirmUpload` ghi `UPLOAD_CONFIRMED` (is_retry khi upload lại).
+- API `GET /api/v1/admin/analytics/activity` trả summary, WAU buckets (weekly), upload buckets (day|week), so sánh kỳ trước.
+- Web: `ActivityVolumePanel` hiển thị trên `/admin` (giữa `UserGrowthPanel` và `UploadQualityPanel`), bao gồm card WAU/upload theo tuần và biểu đồ WAU/upload theo range.
+- Frontend test: `activityAnalytics.test.ts` kiểm tra default UTC window và validate range (khớp `MAX_ACTIVITY_DAYS`).
+
 ### File List
+
+- `apps/api/src/main/resources/db/migration/V043__create_user_activity_events.sql`
+- `apps/api/src/main/java/com/healthlens/api/entity/UserActivityEvent.java`
+- `apps/api/src/main/java/com/healthlens/api/activity/UserActivityEventType.java`
+- `apps/api/src/main/java/com/healthlens/api/repository/UserActivityEventRepository.java`
+- `apps/api/src/main/java/com/healthlens/api/repository/projection/ActivityWauBucketProjection.java`
+- `apps/api/src/main/java/com/healthlens/api/repository/projection/ActivityUploadBucketProjection.java`
+- `apps/api/src/main/java/com/healthlens/api/service/UserActivityService.java`
+- `apps/api/src/main/java/com/healthlens/api/service/AnalyticsService.java`
+- `apps/api/src/main/java/com/healthlens/api/dto/response/ActivityAnalyticsResponse.java`
+- `apps/api/src/main/java/com/healthlens/api/controller/AdminAnalyticsController.java`
+- `apps/api/src/main/java/com/healthlens/api/security/UserActivityRecordingFilter.java`
+- `apps/api/src/test/java/com/healthlens/api/security/UserActivityRecordingFilterTest.java`
+- `apps/api/src/test/java/com/healthlens/api/service/UserActivityServiceTest.java`
+- `apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java`
+- `apps/api/src/main/java/com/healthlens/api/constants/ApiRoutes.java`
+- `apps/api/src/test/java/com/healthlens/api/service/AnalyticsServiceTest.java`
+- `packages/shared/constants/api.ts`
+- `apps/web/src/components/admin/ActivityVolumePanel.tsx`
+- `apps/web/src/components/admin/WauLineChart.tsx`
+- `apps/web/src/components/admin/UploadVolumeBarChart.tsx`
+- `apps/web/src/app/admin/page.tsx`
+- `apps/web/src/lib/admin/activityAnalytics.test.ts`

@@ -107,6 +107,7 @@ public class HealthRecordService {
     private final HealthRecordLegacyAuditWriter healthRecordLegacyAuditWriter;
     private final UnifiedAuditCoordinator unifiedAuditCoordinator;
     private final AuditEventRecorder auditEventRecorder;
+    private final UserActivityService userActivityService;
     private final PublicEndpointRateLimiter publicEndpointRateLimiter;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -127,6 +128,7 @@ public class HealthRecordService {
             HealthRecordLegacyAuditWriter healthRecordLegacyAuditWriter,
             UnifiedAuditCoordinator unifiedAuditCoordinator,
             AuditEventRecorder auditEventRecorder,
+            UserActivityService userActivityService,
             PublicEndpointRateLimiter publicEndpointRateLimiter,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper,
@@ -146,6 +148,7 @@ public class HealthRecordService {
         this.healthRecordLegacyAuditWriter = healthRecordLegacyAuditWriter;
         this.unifiedAuditCoordinator = unifiedAuditCoordinator;
         this.auditEventRecorder = auditEventRecorder;
+        this.userActivityService = userActivityService;
         this.publicEndpointRateLimiter = publicEndpointRateLimiter;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
@@ -256,9 +259,10 @@ public class HealthRecordService {
             );
         }
 
+        userActivityService.recordUploadConfirmed(userId, !isNewRecord);
+
         return new ConfirmUploadResponse(recordId, STATUS_PROCESSING);
     }
-
 
     private void enqueueOcrAfterCommit(Map<String, String> ocrPayload) {
         Runnable publish = () -> redisTemplate.opsForStream().add(ocrStreamName, ocrPayload);

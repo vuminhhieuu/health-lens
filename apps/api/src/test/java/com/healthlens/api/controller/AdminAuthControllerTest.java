@@ -6,7 +6,9 @@ import com.healthlens.api.exception.GlobalExceptionHandler;
 import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
 import com.healthlens.api.security.LoginRateLimiter;
+import com.healthlens.api.security.UserActivityRecordingFilter;
 import com.healthlens.api.service.AdminAuthService;
+import com.healthlens.api.support.SecurityFilterTestSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +26,6 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -50,6 +51,9 @@ class AdminAuthControllerTest {
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @MockitoBean
+    private UserActivityRecordingFilter userActivityRecordingFilter;
+
+    @MockitoBean
     private CustomUserDetailsService customUserDetailsService;
 
     @MockitoBean
@@ -57,11 +61,7 @@ class AdminAuthControllerTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        doAnswer(invocation -> {
-            jakarta.servlet.FilterChain chain = invocation.getArgument(2);
-            chain.doFilter(invocation.getArgument(0), invocation.getArgument(1));
-            return null;
-        }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
+        SecurityFilterTestSupport.stubPassthroughFilters(jwtAuthenticationFilter, userActivityRecordingFilter);
     }
 
     @Test

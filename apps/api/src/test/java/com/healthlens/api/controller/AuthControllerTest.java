@@ -12,7 +12,9 @@ import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
 import com.healthlens.api.security.LoginRateLimiter;
 import com.healthlens.api.security.PublicEndpointRateLimiter;
+import com.healthlens.api.security.UserActivityRecordingFilter;
 import com.healthlens.api.service.AuthService;
+import com.healthlens.api.support.SecurityFilterTestSupport;
 import com.healthlens.api.service.ConsentService;
 import com.healthlens.api.util.JwtUtil;
 import org.junit.jupiter.api.DisplayName;
@@ -31,7 +33,6 @@ import java.util.UUID;
 
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -61,6 +62,9 @@ class AuthControllerTest {
         private JwtAuthenticationFilter jwtAuthenticationFilter;
 
         @MockitoBean
+        private UserActivityRecordingFilter userActivityRecordingFilter;
+
+        @MockitoBean
         private JwtUtil jwtUtil;
 
         @MockitoBean
@@ -74,12 +78,7 @@ class AuthControllerTest {
 
         @org.junit.jupiter.api.BeforeEach
         void setUp() throws Exception {
-                // Make the mocked JwtAuthenticationFilter delegate to the filter chain
-                doAnswer(invocation -> {
-                        jakarta.servlet.FilterChain chain = invocation.getArgument(2);
-                        chain.doFilter(invocation.getArgument(0), invocation.getArgument(1));
-                        return null;
-                }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
+                SecurityFilterTestSupport.stubPassthroughFilters(jwtAuthenticationFilter, userActivityRecordingFilter);
         }
 
         // ========== REGISTER TESTS ==========

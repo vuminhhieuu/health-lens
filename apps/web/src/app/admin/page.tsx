@@ -1,8 +1,7 @@
 "use client";
 
 import { BarChart3 } from "lucide-react";
-
-import { AdminGeneralStats } from "@/components/admin/AdminGeneralStats";
+import { ActivityVolumePanel } from "@/components/admin/ActivityVolumePanel";
 import { UploadQualityPanel } from "@/components/admin/UploadQualityPanel";
 import { UserGrowthPanel } from "@/components/admin/UserGrowthPanel";
 
@@ -16,13 +15,13 @@ export default function AdminDashboardPage() {
             Thống kê
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-500">
-            Tổng quan tăng trưởng người dùng và chất lượng tải lên
+            Theo dõi tăng trưởng người dùng, hoạt động hệ thống và chất lượng tải lên
           </p>
         </div>
       </header>
 
       <UserGrowthPanel />
-      <AdminGeneralStats />
+      <ActivityVolumePanel />
       <UploadQualityPanel />
     </div>
   );

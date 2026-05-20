@@ -186,6 +186,7 @@ export const ApiPaths = {
     USERS: `/api/${API_VERSION}/admin/analytics/users`,
     UPLOAD_QUALITY: `/api/${API_VERSION}/admin/analytics/upload-quality`,
     UPLOAD_HISTORY: `/api/${API_VERSION}/admin/analytics/upload-history`,
+    ACTIVITY: `/api/${API_VERSION}/admin/analytics/activity`,
   },
 
   ADMIN_REFERENCE_DATA: {
