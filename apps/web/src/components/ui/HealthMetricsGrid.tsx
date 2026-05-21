@@ -30,7 +30,13 @@ export function HealthMetricsGrid({
   emptyDescription = "Hệ thống chưa trích xuất được chỉ số nào từ kết quả này.",
 }: HealthMetricsGridProps) {
   if (metrics.length === 0) {
-    return <EmptyState title={emptyTitle} description={emptyDescription} className="min-h-48" />;
+    return (
+      <EmptyState
+        title={emptyTitle}
+        description={emptyDescription}
+        className="min-h-48"
+      />
+    );
   }
 
   return (
@@ -43,14 +49,33 @@ export function HealthMetricsGrid({
         const isNormal = (metric.status ?? "no_data") === "normal";
 
         return (
+          // Accessibility: prefer using a native <button> (or an <a> with href)
+          // instead of changing semantics of a non-interactive element via
+          // `role="button"` + `tabIndex={0}`. Native controls expose correct
+          // keyboard behaviour (Space/Enter), focus handling, and built-in
+          // accessibility APIs to assistive tech. If you must use `role="button"`,
+          // ensure you fully implement keyboard handlers, focus styles, and ARIA
+          // states consistently. The simplest and most robust change is:
+          //   <button type="button" className="..." onClick={...}>...</button>
+          // which preserves the present visuals while improving semantics.
           <article
             key={`${metric.name}-${index}`}
             role="button"
             tabIndex={0}
             className="group cursor-pointer rounded-3xl bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:ring-2 hover:ring-[#00685f]/15"
             onClick={() => onSelectMetric(index)}
+            // Accessibility: activate on Enter (keydown) and Space (keyup) to match
+            // native button semantics. Handling Space on keydown can cause
+            // inconsistent behaviour with screen readers; keep Enter on keydown
+            // and Space on keyup.
             onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                onSelectMetric(index);
+              }
+            }}
+            onKeyUp={(event) => {
+              if (event.key === " ") {
                 event.preventDefault();
                 onSelectMetric(index);
               }
@@ -60,18 +85,31 @@ export function HealthMetricsGrid({
               <span className="line-clamp-2 text-xs font-extrabold uppercase text-[#3d4947]">
                 {metric.displayNameVi || metric.name}
               </span>
-              <CheckCircle className={`h-4 w-4 shrink-0 ${isNormal ? "text-[#00685f]" : "text-[#6d7a77]"}`} />
+              <CheckCircle
+                className={`h-4 w-4 shrink-0 ${isNormal ? "text-[#00685f]" : "text-[#6d7a77]"}`}
+              />
             </div>
             <div className="flex items-end gap-1.5">
-              <span className="text-[44px] leading-none font-black text-[#121e1c]">{metricValue}</span>
-              <span className="pb-1 text-2xs font-semibold text-[#3d4947]">{metricUnit}</span>
+              <span className="text-[44px] leading-none font-black text-[#121e1c]">
+                {metricValue}
+              </span>
+              <span className="pb-1 text-2xs font-semibold text-[#3d4947]">
+                {metricUnit}
+              </span>
             </div>
             <div className="mt-4 h-2 w-full rounded-full bg-[#deebe8]">
-              <div className="h-full rounded-full bg-[#008378] transition-all" style={{ width: `${metricPercent}%` }} />
+              <div
+                className="h-full rounded-full bg-[#008378] transition-all"
+                style={{ width: `${metricPercent}%` }}
+              />
             </div>
             <div className="mt-3 flex items-center justify-between gap-3 text-xs font-extrabold uppercase">
-              <span className="truncate text-[#4e6360]">Ngưỡng: {metricRangeText}</span>
-              <span className={isNormal ? "text-[#00685f]" : "text-[#773215]"}>{recordStatusLabel(metric.status)}</span>
+              <span className="truncate text-[#4e6360]">
+                Ngưỡng: {metricRangeText}
+              </span>
+              <span className={isNormal ? "text-[#00685f]" : "text-[#773215]"}>
+                {recordStatusLabel(metric.status)}
+              </span>
             </div>
           </article>
         );
@@ -97,7 +135,12 @@ function compactMetricPercent(metric: HealthMetricGridItem): number {
   const numericValue = Number(raw);
   const min = metric.referenceRange?.min;
   const max = metric.referenceRange?.max;
-  if (!Number.isFinite(numericValue) || typeof min !== "number" || typeof max !== "number" || max <= min) {
+  if (
+    !Number.isFinite(numericValue) ||
+    typeof min !== "number" ||
+    typeof max !== "number" ||
+    max <= min
+  ) {
     return 60;
   }
   const ratio = ((numericValue - min) / (max - min)) * 100;
