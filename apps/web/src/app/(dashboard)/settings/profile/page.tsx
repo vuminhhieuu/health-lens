@@ -5,15 +5,25 @@ import Link from "next/link";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { 
-  Pencil, Cross, Key, Shield, Trash2, CheckCircle2, User, X
+import {
+  Pencil,
+  Cross,
+  Key,
+  Shield,
+  Trash2,
+  CheckCircle2,
+  User,
+  X,
 } from "lucide-react";
 
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { notify } from "@/lib/notify";
-import { updateUserProfileSchema, UpdateUserProfileInput } from "@healthlens/shared";
+import {
+  updateUserProfileSchema,
+  UpdateUserProfileInput,
+} from "@healthlens/shared";
 
 type UserProfile = {
   id: string;
@@ -29,16 +39,16 @@ const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 const ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 function getInitials(name?: string | null) {
-  const parts = (name ?? "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
+  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
 
   if (parts.length === 0) {
     return "";
   }
 
-  return parts.slice(0, 2).map(part => part[0]?.toUpperCase()).join("");
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 }
 
 export default function ProfileSettingsPage() {
@@ -60,7 +70,11 @@ export default function ProfileSettingsPage() {
     mode: "onBlur",
   });
 
-  const { data: userProfile, isLoading, isError } = useQuery({
+  const {
+    data: userProfile,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ["currentUser"],
     queryFn: async () => {
       const response = await apiClient.get(API_ROUTES.USERS.ME);
@@ -100,12 +114,17 @@ export default function ProfileSettingsPage() {
       if (pendingAvatarFile) {
         const formData = new FormData();
         formData.append("file", pendingAvatarFile);
-        const avatarResponse = await apiClient.put(API_ROUTES.USERS.ME_AVATAR, formData);
+        const avatarResponse = await apiClient.put(
+          API_ROUTES.USERS.ME_AVATAR,
+          formData,
+        );
         return avatarResponse.data;
       }
 
       if (isAvatarRemovalPending) {
-        const avatarResponse = await apiClient.delete(API_ROUTES.USERS.ME_AVATAR);
+        const avatarResponse = await apiClient.delete(
+          API_ROUTES.USERS.ME_AVATAR,
+        );
         return avatarResponse.data;
       }
 
@@ -124,8 +143,9 @@ export default function ProfileSettingsPage() {
       }
       notify.success("Cập nhật thông tin thành công!");
     },
-    onError: (error: unknown) => {
-      console.error(error);
+    onError: (error) => {
+      console.error("Failed to update profile", error);
+      // user-facing feedback below; error handling/telemetry can be added later if needed
       setAvatarError("Không thể lưu ảnh đại diện. Vui lòng thử lại.");
       notify.error("Đã xảy ra lỗi khi cập nhật.");
     },
@@ -164,7 +184,7 @@ export default function ProfileSettingsPage() {
     }
 
     const previewUrl = URL.createObjectURL(file);
-    setAvatarPreviewUrl(previous => {
+    setAvatarPreviewUrl((previous) => {
       if (previous) {
         URL.revokeObjectURL(previous);
       }
@@ -179,7 +199,7 @@ export default function ProfileSettingsPage() {
   const handleAvatarRemove = () => {
     if (pendingAvatarFile || avatarPreviewUrl) {
       setPendingAvatarFile(null);
-      setAvatarPreviewUrl(previous => {
+      setAvatarPreviewUrl((previous) => {
         if (previous) {
           URL.revokeObjectURL(previous);
         }
@@ -205,7 +225,7 @@ export default function ProfileSettingsPage() {
     setPendingAvatarFile(null);
     setIsAvatarRemovalPending(false);
     setAvatarError(null);
-    setAvatarPreviewUrl(previous => {
+    setAvatarPreviewUrl((previous) => {
       if (previous) {
         URL.revokeObjectURL(previous);
       }
@@ -216,13 +236,26 @@ export default function ProfileSettingsPage() {
     }
   };
 
-  const avatarSrc = isAvatarRemovalPending ? null : avatarPreviewUrl ?? userProfile?.avatarUrl ?? null;
+  const avatarSrc = isAvatarRemovalPending
+    ? null
+    : (avatarPreviewUrl ?? userProfile?.avatarUrl ?? null);
   const initials = getInitials(userProfile?.fullName);
-  const hasPendingAvatarChange = Boolean(pendingAvatarFile) || isAvatarRemovalPending;
+  const hasPendingAvatarChange =
+    Boolean(pendingAvatarFile) || isAvatarRemovalPending;
   const isSaving = saveMutation.isPending;
 
-  if (isLoading) return <div className="p-8 text-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00685f] mx-auto"></div></div>;
-  if (isError) return <div className="p-8 text-center text-[#ba1a1a]">Không thể tải thông tin hồ sơ.</div>;
+  if (isLoading)
+    return (
+      <div className="p-8 text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00685f] mx-auto"></div>
+      </div>
+    );
+  if (isError)
+    return (
+      <div className="p-8 text-center text-[#ba1a1a]">
+        Không thể tải thông tin hồ sơ.
+      </div>
+    );
 
   return (
     <DashboardPageShell
@@ -231,20 +264,22 @@ export default function ProfileSettingsPage() {
     >
       {/* Profile Bento Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        
         {/* Left Column: Primary Information */}
         <div className="lg:col-span-2 space-y-8">
-          
           {/* Profile Information Card */}
           <section className="bg-white rounded-3xl p-8 shadow-[0_8px_32px_rgba(18,30,28,0.04)] border border-[#bcc9c6]/20 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-[#00685f]/5 rounded-bl-full -mr-16 -mt-16"></div>
-            
+
             <div className="flex flex-col md:flex-row md:items-center gap-8 mb-10">
               <div className="relative group">
                 <div className="w-24 h-24 rounded-2xl overflow-hidden ring-4 ring-[#e9f6f3] shadow-md bg-[#d8e5e2] flex items-center justify-center text-2xl font-black text-[#00685f]">
                   {avatarSrc ? (
                     /* eslint-disable-next-line @next/next/no-img-element */
-                    <img alt="Ảnh đại diện" className="w-full h-full object-cover" src={avatarSrc} />
+                    <img
+                      alt="Ảnh đại diện"
+                      className="w-full h-full object-cover"
+                      src={avatarSrc}
+                    />
                   ) : initials ? (
                     <span aria-hidden="true">{initials}</span>
                   ) : (
@@ -260,7 +295,8 @@ export default function ProfileSettingsPage() {
                 >
                   <Pencil className="w-4 h-4" />
                 </button>
-                {avatarPreviewUrl || (userProfile?.avatarUrl && !isAvatarRemovalPending) ? (
+                {avatarPreviewUrl ||
+                (userProfile?.avatarUrl && !isAvatarRemovalPending) ? (
                   <button
                     type="button"
                     aria-label="Gỡ ảnh đại diện"
@@ -273,8 +309,12 @@ export default function ProfileSettingsPage() {
                 ) : null}
               </div>
               <div className="flex-grow">
-                <h3 className="text-xl font-bold text-[#121e1c] mb-1">Ảnh đại diện</h3>
-                <p className="text-sm text-[#6d7a77] mb-4">Cập nhật ảnh để bác sĩ dễ dàng nhận diện bạn hơn.</p>
+                <h3 className="text-xl font-bold text-[#121e1c] mb-1">
+                  Ảnh đại diện
+                </h3>
+                <p className="text-sm text-[#6d7a77] mb-4">
+                  Cập nhật ảnh để bác sĩ dễ dàng nhận diện bạn hơn.
+                </p>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -284,42 +324,63 @@ export default function ProfileSettingsPage() {
                   aria-label="Tải ảnh đại diện"
                 />
                 {pendingAvatarFile ? (
-                  <p className="text-sm font-bold text-[#00685f]" role="status">Ảnh sẽ được cập nhật khi lưu.</p>
+                  <p className="text-sm font-bold text-[#00685f]" role="status">
+                    Ảnh sẽ được cập nhật khi lưu.
+                  </p>
                 ) : null}
                 {isAvatarRemovalPending ? (
-                  <p className="text-sm font-bold text-[#00685f]" role="status">Ảnh sẽ được gỡ khi lưu.</p>
+                  <p className="text-sm font-bold text-[#00685f]" role="status">
+                    Ảnh sẽ được gỡ khi lưu.
+                  </p>
                 ) : null}
                 {avatarError ? (
-                  <p className="mt-3 text-sm font-medium text-[#ba1a1a]" role="alert">{avatarError}</p>
+                  <p
+                    className="mt-3 text-sm font-medium text-[#ba1a1a]"
+                    role="alert"
+                  >
+                    {avatarError}
+                  </p>
                 ) : null}
               </div>
             </div>
 
-            <form className="grid grid-cols-1 md:grid-cols-2 gap-6" onSubmit={handleSubmit(onSubmit)}>
-              
+            <form
+              className="grid grid-cols-1 md:grid-cols-2 gap-6"
+              onSubmit={handleSubmit(onSubmit)}
+            >
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#6d7a77]">Họ tên *</label>
-                <input 
-                  type="text" 
+                <label className="text-sm font-bold text-[#6d7a77]">
+                  Họ tên *
+                </label>
+                <input
+                  type="text"
                   {...register("fullName")}
-                  className="h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium w-full text-[#121e1c]" 
+                  className="h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium w-full text-[#121e1c]"
                   placeholder="Nhập họ và tên"
                 />
-                {errors.fullName && <p className="text-sm text-[#ba1a1a]">{errors.fullName.message}</p>}
+                {errors.fullName && (
+                  <p className="text-sm text-[#ba1a1a]">
+                    {errors.fullName.message}
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#6d7a77]">Email (Read-only)</label>
-                <input 
-                  type="email" 
+                <label className="text-sm font-bold text-[#6d7a77]">
+                  Email (Read-only)
+                </label>
+                <input
+                  type="email"
                   value={userProfile?.email || ""}
-                  readOnly 
-                  className="h-12 px-4 rounded-xl bg-[#d8e5e2]/40 border-none text-[#6d7a77] font-medium cursor-not-allowed w-full" 
+                  readOnly
+                  className="h-12 px-4 rounded-xl bg-[#d8e5e2]/40 border-none text-[#6d7a77] font-medium cursor-not-allowed w-full"
                 />
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#6d7a77]">Ngày sinh</label>
+                <label className="text-sm font-bold text-[#6d7a77]">
+                  Ngày sinh
+                </label>
                 <div>
                   <input
                     id="profile-settings-birth-date"
@@ -328,62 +389,78 @@ export default function ProfileSettingsPage() {
                     className="h-12 w-full px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c]"
                   />
                 </div>
-                {errors.birthDate && <p className="text-sm text-[#ba1a1a]">{errors.birthDate.message}</p>}
+                {errors.birthDate && (
+                  <p className="text-sm text-[#ba1a1a]">
+                    {errors.birthDate.message}
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#6d7a77]">Giới tính</label>
+                <label className="text-sm font-bold text-[#6d7a77]">
+                  Giới tính
+                </label>
                 <Controller
                   name="gender"
                   control={control}
                   render={({ field }) => (
                     <div className="flex gap-6 h-12 items-center">
                       <label className="flex items-center gap-3 cursor-pointer group">
-                        <input 
-                          type="radio" 
+                        <input
+                          type="radio"
                           value="male"
                           checked={field.value === "male"}
                           onChange={() => field.onChange("male")}
-                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]" 
+                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]"
                         />
-                        <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">Nam</span>
+                        <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">
+                          Nam
+                        </span>
                       </label>
                       <label className="flex items-center gap-3 cursor-pointer group">
-                        <input 
-                          type="radio" 
+                        <input
+                          type="radio"
                           value="female"
                           checked={field.value === "female"}
                           onChange={() => field.onChange("female")}
-                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]" 
+                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]"
                         />
-                        <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">Nữ</span>
+                        <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">
+                          Nữ
+                        </span>
                       </label>
                       <label className="flex items-center gap-3 cursor-pointer group">
-                        <input 
-                          type="radio" 
+                        <input
+                          type="radio"
                           value="other"
                           checked={field.value === "other"}
                           onChange={() => field.onChange("other")}
-                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]" 
+                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]"
                         />
-                        <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">Khác</span>
+                        <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">
+                          Khác
+                        </span>
                       </label>
                     </div>
                   )}
                 />
-                {errors.gender && <p className="text-sm text-[#ba1a1a]">{errors.gender.message}</p>}
+                {errors.gender && (
+                  <p className="text-sm text-[#ba1a1a]">
+                    {errors.gender.message}
+                  </p>
+                )}
               </div>
 
               <div className="md:col-span-2 flex justify-end gap-4 mt-4 pt-6 border-t border-[#bcc9c6]/20">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={handleCancel}
                   className="px-8 py-3 rounded-xl font-bold text-[#3d4947] hover:bg-[#e9f6f3] transition-colors"
                 >
                   Hủy
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={isSaving || (!isValid && !hasPendingAvatarChange)}
                   className="px-8 py-3 bg-gradient-to-r from-[#00685f] to-[#008378] text-white rounded-xl font-bold shadow-lg shadow-[#00685f]/20 active:scale-95 transition-all disabled:opacity-60"
                 >
@@ -397,29 +474,62 @@ export default function ProfileSettingsPage() {
           <section className="bg-white rounded-3xl p-8 shadow-[0_8px_32px_rgba(18,30,28,0.04)] border border-[#bcc9c6]/20">
             <div className="flex items-center gap-3 mb-8">
               <Cross className="text-[#00685f] w-6 h-6" />
-              <h2 className="text-2xl font-bold text-[#121e1c]">Thông tin sức khỏe</h2>
+              <h2 className="text-2xl font-bold text-[#121e1c]">
+                Thông tin sức khỏe
+              </h2>
             </div>
-            
+
             <div className="space-y-8 opacity-60 pointer-events-none">
               <div>
-                <label className="block text-sm font-bold text-[#6d7a77] mb-4">Bệnh mãn tính (Chưa khả dụng)</label>
+                <label className="block text-sm font-bold text-[#6d7a77] mb-4">
+                  Bệnh mãn tính (Chưa khả dụng)
+                </label>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {["Tiểu đường", "Huyết áp cao", "Cholesterol cao", "Bệnh tim", "Hen suyễn"].map(disease => (
-                    <label key={disease} className="flex items-center gap-3 p-3 rounded-xl bg-[#e9f6f3] border border-transparent">
-                      <input type="checkbox" className="rounded text-[#00685f]" disabled />
-                      <span className="text-sm font-medium text-[#121e1c]">{disease}</span>
+                  {[
+                    "Tiểu đường",
+                    "Huyết áp cao",
+                    "Cholesterol cao",
+                    "Bệnh tim",
+                    "Hen suyễn",
+                  ].map((disease) => (
+                    <label
+                      key={disease}
+                      className="flex items-center gap-3 p-3 rounded-xl bg-[#e9f6f3] border border-transparent"
+                    >
+                      <input
+                        type="checkbox"
+                        className="rounded text-[#00685f]"
+                        disabled
+                      />
+                      <span className="text-sm font-medium text-[#121e1c]">
+                        {disease}
+                      </span>
                     </label>
                   ))}
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-bold text-[#6d7a77]">Thuốc hiện tại</label>
-                  <textarea className="w-full p-4 rounded-2xl bg-[#e9f6f3] border-none text-sm resize-none" placeholder="Nhập tên thuốc..." rows={3} disabled></textarea>
+                  <label className="text-sm font-bold text-[#6d7a77]">
+                    Thuốc hiện tại
+                  </label>
+                  <textarea
+                    className="w-full p-4 rounded-2xl bg-[#e9f6f3] border-none text-sm resize-none"
+                    placeholder="Nhập tên thuốc..."
+                    rows={3}
+                    disabled
+                  ></textarea>
                 </div>
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-bold text-[#6d7a77]">Dị ứng</label>
-                  <textarea className="w-full p-4 rounded-2xl bg-[#e9f6f3] border-none text-sm resize-none" placeholder="Ví dụ: Hải sản..." rows={3} disabled></textarea>
+                  <label className="text-sm font-bold text-[#6d7a77]">
+                    Dị ứng
+                  </label>
+                  <textarea
+                    className="w-full p-4 rounded-2xl bg-[#e9f6f3] border-none text-sm resize-none"
+                    placeholder="Ví dụ: Hải sản..."
+                    rows={3}
+                    disabled
+                  ></textarea>
                 </div>
               </div>
             </div>
@@ -428,21 +538,27 @@ export default function ProfileSettingsPage() {
 
         {/* Right Column: Settings & Support */}
         <div className="space-y-8">
-          
           {/* Account Settings Card */}
           <section className="bg-white rounded-3xl p-8 shadow-[0_8px_32px_rgba(18,30,28,0.04)] border border-[#bcc9c6]/20">
             <div className="flex items-center gap-3 mb-8">
               <Shield className="text-[#00685f] w-6 h-6" />
-              <h2 className="text-xl font-bold text-[#121e1c]">Cài đặt tài khoản</h2>
+              <h2 className="text-xl font-bold text-[#121e1c]">
+                Cài đặt tài khoản
+              </h2>
             </div>
-            
+
             <div className="space-y-6">
-              <a href="#" className="flex items-center justify-between group py-2">
+              <a
+                href="#"
+                className="flex items-center justify-between group py-2"
+              >
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-[#e9f6f3] group-hover:bg-[#008378] group-hover:text-white transition-colors">
                     <Key className="w-4 h-4" />
                   </div>
-                  <span className="font-medium text-[#3d4947] group-hover:text-[#00685f] transition-colors">Đổi mật khẩu</span>
+                  <span className="font-medium text-[#3d4947] group-hover:text-[#00685f] transition-colors">
+                    Đổi mật khẩu
+                  </span>
                 </div>
               </a>
               <div className="flex items-center justify-between py-2 opacity-60">
@@ -450,11 +566,13 @@ export default function ProfileSettingsPage() {
                   <div className="p-2 rounded-lg bg-[#e9f6f3]">
                     <Shield className="w-4 h-4" />
                   </div>
-                  <span className="font-medium text-[#3d4947]">Xác thực hai yếu tố (2FA)</span>
+                  <span className="font-medium text-[#3d4947]">
+                    Xác thực hai yếu tố (2FA)
+                  </span>
                 </div>
               </div>
               <div className="pt-6 border-t border-[#bcc9c6]/20">
-              <Link
+                <Link
                   href="/settings/delete-account"
                   className="w-full py-3 rounded-xl border-2 border-[#ba1a1a]/20 text-[#ba1a1a] font-bold hover:bg-[#ba1a1a]/5 transition-colors flex items-center justify-center gap-2 block"
                 >
@@ -470,16 +588,26 @@ export default function ProfileSettingsPage() {
               <div className="w-12 h-12 bg-white/40 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6">
                 <CheckCircle2 className="text-[#00685f] w-6 h-6" />
               </div>
-              <h3 className="text-xl font-extrabold mb-2">Độ hoàn thiện hồ sơ</h3>
+              <h3 className="text-xl font-extrabold mb-2">
+                Độ hoàn thiện hồ sơ
+              </h3>
               <div className="flex items-end gap-2 mb-4">
                 <span className="text-4xl font-black text-[#00201d]">85%</span>
-                <span className="text-sm font-bold mb-1 opacity-70">Rất tốt!</span>
+                <span className="text-sm font-bold mb-1 opacity-70">
+                  Rất tốt!
+                </span>
               </div>
               <div className="w-full h-2 bg-white/50 rounded-full mb-6 overflow-hidden">
                 <div className="h-full bg-[#00685f] w-[85%] rounded-full shadow-sm"></div>
               </div>
-              <p className="text-sm leading-relaxed mb-6 text-[#274d48]">Thêm thông tin về bảo hiểm y tế để hoàn thiện 100% hồ sơ của bạn.</p>
-              <button disabled className="w-full bg-[#456b66] text-white py-3 rounded-xl font-bold shadow-lg shadow-black/10 active:scale-95 transition-transform opacity-70">
+              <p className="text-sm leading-relaxed mb-6 text-[#274d48]">
+                Thêm thông tin về bảo hiểm y tế để hoàn thiện 100% hồ sơ của
+                bạn.
+              </p>
+              <button
+                disabled
+                className="w-full bg-[#456b66] text-white py-3 rounded-xl font-bold shadow-lg shadow-black/10 active:scale-95 transition-transform opacity-70"
+              >
                 Hoàn thiện ngay
               </button>
             </div>
@@ -488,14 +616,28 @@ export default function ProfileSettingsPage() {
 
           {/* Support Section */}
           <div className="p-6 rounded-3xl bg-[#e4f1ee] border border-[#bcc9c6]/20 text-center">
-            <p className="text-xs text-[#6d7a77] font-bold uppercase tracking-widest mb-4">Cần hỗ trợ?</p>
-            <p className="text-sm text-[#3d4947] mb-6 leading-relaxed">Nếu bạn gặp khó khăn khi cập nhật thông tin, liên hệ đội ngũ hỗ trợ.</p>
+            <p className="text-xs text-[#6d7a77] font-bold uppercase tracking-widest mb-4">
+              Cần hỗ trợ?
+            </p>
+            <p className="text-sm text-[#3d4947] mb-6 leading-relaxed">
+              Nếu bạn gặp khó khăn khi cập nhật thông tin, liên hệ đội ngũ hỗ
+              trợ.
+            </p>
             <div className="flex flex-col gap-2">
-              <a href="tel:19001234" className="text-[#00685f] font-bold hover:underline">1900 1234</a>
-              <a href="mailto:support@healthlens.vn" className="text-[#00685f] font-bold hover:underline">support@healthlens.vn</a>
+              <a
+                href="tel:19001234"
+                className="text-[#00685f] font-bold hover:underline"
+              >
+                1900 1234
+              </a>
+              <a
+                href="mailto:support@healthlens.vn"
+                className="text-[#00685f] font-bold hover:underline"
+              >
+                support@healthlens.vn
+              </a>
             </div>
           </div>
-
         </div>
       </div>
     </DashboardPageShell>

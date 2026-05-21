@@ -1,6 +1,6 @@
 # Story 6.1: Frontend Dead Code And Export Cleanup
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 
