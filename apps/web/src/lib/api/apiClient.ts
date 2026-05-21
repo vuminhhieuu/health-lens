@@ -1,8 +1,7 @@
 import axios, { AxiosHeaders } from "axios";
 
-import { syncActiveConsentVersion } from "@/lib/consent/syncActiveConsentVersion";
+import { refreshSessionOnce } from "@/lib/auth/refreshSession";
 import { useAuthStore } from "@/stores/authStore";
-import type { SessionConsent } from "@/stores/authStore";
 
 import { readSessionStorage } from "@/lib/browser/sessionStorage";
 import { PENDING_PROFILE_INVITATION_TOKEN_KEY } from "@/lib/sharing/profileInvitationStorage";
@@ -171,32 +170,9 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshResponse = await apiClient.post(API_ROUTES.AUTH.REFRESH);
-        const payload = refreshResponse.data?.data;
-        const newAccessToken = payload?.accessToken;
-        const refreshedUser = payload?.user as
-          | { id: string; email: string; role: string; fullName?: string }
-          | undefined;
-        const consent: SessionConsent = {
-          consentGiven: Boolean(payload?.consentGiven),
-          consentVersion:
-            payload?.consentVersion === undefined || payload?.consentVersion === null
-              ? null
-              : String(payload.consentVersion),
-        };
+        const refreshed = await refreshSessionOnce();
 
-        if (newAccessToken) {
-          const { user: currentUser } = useAuthStore.getState();
-          // Merge refreshed data with current user to preserve fields like fullName
-          // that may not be present in every refresh response
-          const mergedUser = currentUser
-            ? { ...currentUser, ...refreshedUser, fullName: refreshedUser?.fullName ?? currentUser.fullName }
-            : refreshedUser;
-          const userToPersist = mergedUser ?? currentUser;
-          if (userToPersist) {
-            useAuthStore.getState().setAuth(userToPersist, newAccessToken, consent);
-            await syncActiveConsentVersion();
-          }
+        if (refreshed) {
           processQueue(null);
           return apiClient(originalRequest);
         }

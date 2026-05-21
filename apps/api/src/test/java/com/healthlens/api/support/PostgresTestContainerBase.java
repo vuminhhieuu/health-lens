@@ -3,18 +3,25 @@ package com.healthlens.api.support;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers
+/**
+ * Shared Postgres for integration tests. The container is started once per JVM so later
+ * test classes do not hit {@link java.net.ConnectException} after JUnit stops a reused
+ * {@code @Container} field from the parent class.
+ */
 public abstract class PostgresTestContainerBase {
 
-    @Container
     @SuppressWarnings("resource")
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withDatabaseName("healthlens_test")
-            .withUsername("healthlens")
-            .withPassword("healthlens_test_password");
+    private static final PostgreSQLContainer<?> POSTGRES = startPostgres();
+
+    private static PostgreSQLContainer<?> startPostgres() {
+        PostgreSQLContainer<?> container = new PostgreSQLContainer<>("postgres:16-alpine")
+                .withDatabaseName("healthlens_test")
+                .withUsername("healthlens")
+                .withPassword("healthlens_test_password");
+        container.start();
+        return container;
+    }
 
     @DynamicPropertySource
     static void configureDatasource(DynamicPropertyRegistry registry) {

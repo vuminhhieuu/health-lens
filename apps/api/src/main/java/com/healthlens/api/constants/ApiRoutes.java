@@ -94,6 +94,14 @@ public final class ApiRoutes {
     public static final String HEALTH_RECORD_INVITATIONS_INCOMING = API_V1 + "/health-record-invitations/incoming";
 
     // =========================================
+    // Notification Paths (Frontend: ApiPaths.NOTIFICATIONS)
+    // =========================================
+    public static final String NOTIFICATIONS_BASE = API_V1 + "/notifications";
+    public static final String NOTIFICATIONS_INBOX = NOTIFICATIONS_BASE + "/inbox";
+    public static final String NOTIFICATIONS_INBOX_READ = NOTIFICATIONS_BASE + "/inbox/read";
+    public static final String NOTIFICATIONS_INBOX_READ_ALL = NOTIFICATIONS_BASE + "/inbox/read-all";
+
+    // =========================================
     // Document Paths (Frontend: ApiPaths.DOCUMENTS)
     // =========================================
     public static final String DOCUMENTS_BASE = API_V1 + "/documents";

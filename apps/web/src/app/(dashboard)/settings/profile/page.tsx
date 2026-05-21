@@ -7,12 +7,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Pencil,
-  Cross,
   Key,
   Shield,
   Trash2,
-  CheckCircle2,
   User,
+  Users,
   X,
 } from "lucide-react";
 
@@ -471,69 +470,23 @@ export default function ProfileSettingsPage() {
             </form>
           </section>
 
-          {/* Health Information Card (Stub based on UI) */}
           <section className="bg-white rounded-3xl p-8 shadow-[0_8px_32px_rgba(18,30,28,0.04)] border border-[#bcc9c6]/20">
-            <div className="flex items-center gap-3 mb-8">
-              <Cross className="text-[#00685f] w-6 h-6" />
-              <h2 className="text-2xl font-bold text-[#121e1c]">
-                Thông tin sức khỏe
+            <div className="flex items-center gap-3 mb-4">
+              <Users className="text-[#00685f] w-6 h-6" />
+              <h2 className="text-xl font-bold text-[#121e1c]">
+                Hồ sơ gia đình & lịch sử khám
               </h2>
             </div>
-
-            <div className="space-y-8 opacity-60 pointer-events-none">
-              <div>
-                <label className="block text-sm font-bold text-[#6d7a77] mb-4">
-                  Bệnh mãn tính (Chưa khả dụng)
-                </label>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {[
-                    "Tiểu đường",
-                    "Huyết áp cao",
-                    "Cholesterol cao",
-                    "Bệnh tim",
-                    "Hen suyễn",
-                  ].map((disease) => (
-                    <label
-                      key={disease}
-                      className="flex items-center gap-3 p-3 rounded-xl bg-[#e9f6f3] border border-transparent"
-                    >
-                      <input
-                        type="checkbox"
-                        className="rounded text-[#00685f]"
-                        disabled
-                      />
-                      <span className="text-sm font-medium text-[#121e1c]">
-                        {disease}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-bold text-[#6d7a77]">
-                    Thuốc hiện tại
-                  </label>
-                  <textarea
-                    className="w-full p-4 rounded-2xl bg-[#e9f6f3] border-none text-sm resize-none"
-                    placeholder="Nhập tên thuốc..."
-                    rows={3}
-                    disabled
-                  ></textarea>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-bold text-[#6d7a77]">
-                    Dị ứng
-                  </label>
-                  <textarea
-                    className="w-full p-4 rounded-2xl bg-[#e9f6f3] border-none text-sm resize-none"
-                    placeholder="Ví dụ: Hải sản..."
-                    rows={3}
-                    disabled
-                  ></textarea>
-                </div>
-              </div>
-            </div>
+            <p className="text-sm text-[#6d7a77] mb-6 leading-relaxed">
+              Bệnh nền, thuốc và dị ứng được quản lý theo từng hồ sơ gia đình — không
+              nhập tại trang cài đặt tài khoản.
+            </p>
+            <Link
+              href="/profiles"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#e9f6f3] text-[#00685f] font-bold hover:bg-[#c2ebe3] transition-colors"
+            >
+              Mở hồ sơ gia đình
+            </Link>
           </section>
         </div>
 
@@ -559,7 +512,10 @@ export default function ProfileSettingsPage() {
                   </span>
                 </div>
               </Link>
-              <div className="flex items-center justify-between py-2 opacity-60">
+              <div
+                className="flex items-center justify-between py-2"
+                aria-describedby="profile-2fa-coming-soon-hint"
+              >
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-[#e9f6f3]">
                     <Shield className="w-4 h-4" />
@@ -568,6 +524,17 @@ export default function ProfileSettingsPage() {
                     Xác thực hai yếu tố (2FA)
                   </span>
                 </div>
+                <Link
+                  href="/settings"
+                  className="text-xs font-bold uppercase tracking-wide text-[#6d7a77] bg-[#e9f6f3] px-3 py-1 rounded-full hover:bg-[#c2ebe3] hover:text-[#00685f] transition-colors"
+                  title="Xác thực hai yếu tố sẽ có trong bản cập nhật tiếp theo"
+                >
+                  Sắp có
+                </Link>
+                <span id="profile-2fa-coming-soon-hint" className="sr-only">
+                  Tính năng đang được chuẩn bị. Bạn sẽ bật xác thực hai yếu tố tại
+                  trang cài đặt khi ra mắt.
+                </span>
               </div>
               <div className="pt-6 border-t border-[#bcc9c6]/20">
                 <Link
@@ -578,38 +545,6 @@ export default function ProfileSettingsPage() {
                 </Link>
               </div>
             </div>
-          </section>
-
-          {/* Profile Completion Card */}
-          <section className="bg-gradient-to-br from-[#c2ebe3] to-[#a6cfc8] text-[#456b66] rounded-3xl p-8 shadow-md border-none relative overflow-hidden">
-            <div className="relative z-10">
-              <div className="w-12 h-12 bg-white/40 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6">
-                <CheckCircle2 className="text-[#00685f] w-6 h-6" />
-              </div>
-              <h3 className="text-xl font-extrabold mb-2">
-                Độ hoàn thiện hồ sơ
-              </h3>
-              <div className="flex items-end gap-2 mb-4">
-                <span className="text-4xl font-black text-[#00201d]">85%</span>
-                <span className="text-sm font-bold mb-1 opacity-70">
-                  Rất tốt!
-                </span>
-              </div>
-              <div className="w-full h-2 bg-white/50 rounded-full mb-6 overflow-hidden">
-                <div className="h-full bg-[#00685f] w-[85%] rounded-full shadow-sm"></div>
-              </div>
-              <p className="text-sm leading-relaxed mb-6 text-[#274d48]">
-                Thêm thông tin về bảo hiểm y tế để hoàn thiện 100% hồ sơ của
-                bạn.
-              </p>
-              <button
-                disabled
-                className="w-full bg-[#456b66] text-white py-3 rounded-xl font-bold shadow-lg shadow-black/10 active:scale-95 transition-transform opacity-70"
-              >
-                Hoàn thiện ngay
-              </button>
-            </div>
-            <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-[#00685f]/10 rounded-full blur-3xl"></div>
           </section>
 
           <SettingsDirectContactCard

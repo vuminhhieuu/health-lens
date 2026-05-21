@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { useAuthStore } from "@/stores/authStore";
 import { useAuthBootstrap } from "@/hooks/useAuthBootstrap";
+import { useAuthHydrated } from "@/hooks/useAuthHydrated";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -32,8 +33,10 @@ export default function DashboardLayout({
 }>) {
   const router = useRouter();
   const pathname = usePathname();
-  const isLoading = useAuthBootstrap();
+  const hydrated = useAuthHydrated();
+  const isBootstrapping = useAuthBootstrap();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authReady = hydrated && !isBootstrapping;
   const user = useAuthStore((s) => s.user);
 
   const [displayName, setDisplayName] = useState<string | null>(null);
@@ -51,14 +54,16 @@ export default function DashboardLayout({
   });
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      const returnPath =
-        typeof window !== "undefined"
-          ? `${window.location.pathname}${window.location.search}`
-          : "";
-      router.replace(`/login?returnUrl=${encodeURIComponent(returnPath || "/home")}`);
+    if (!authReady || isAuthenticated) {
+      return;
     }
-  }, [isLoading, isAuthenticated, router]);
+
+    const returnPath =
+      typeof window !== "undefined"
+        ? `${window.location.pathname}${window.location.search}`
+        : "";
+    router.replace(`/login?returnUrl=${encodeURIComponent(returnPath || "/home")}`);
+  }, [authReady, isAuthenticated, router]);
 
   // Derive display name from the shared current-user query used by profile settings.
   useEffect(() => {
@@ -74,7 +79,7 @@ export default function DashboardLayout({
   const avatarInitial = (displayName ?? user?.fullName ?? user?.email ?? "U").trim()[0]?.toUpperCase() ?? "U";
   const avatarUrl = currentUser?.avatarUrl ?? null;
 
-  if (isLoading) {
+  if (!authReady) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

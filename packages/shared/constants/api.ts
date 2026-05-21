@@ -125,6 +125,13 @@ export const ApiPaths = {
     INCOMING: `/api/${API_VERSION}/health-record-invitations/incoming`,
   },
 
+  /** Unified notification inbox (aggregates invitations + read state) */
+  NOTIFICATIONS: {
+    INBOX: `/api/${API_VERSION}/notifications/inbox`,
+    INBOX_READ: `/api/${API_VERSION}/notifications/inbox/read`,
+    INBOX_READ_ALL: `/api/${API_VERSION}/notifications/inbox/read-all`,
+  },
+
   /** Document management endpoints */
   DOCUMENTS: {
     BASE: `/api/${API_VERSION}/documents`,

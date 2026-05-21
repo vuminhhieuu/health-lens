@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Mail, Share2 } from "lucide-react";
@@ -12,9 +11,12 @@ import {
   ProfileCard,
   HealthStatus,
 } from "@/components/features/profiles/ProfileCard";
+import { MarkInboxReadFromUrl } from "@/components/features/notifications/MarkInboxReadFromUrl";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { useNotificationInbox } from "@/hooks/useNotificationInbox";
 import { apiClient } from "@/lib/api/apiClient";
 import { notify } from "@/lib/notify";
+import { extractInvitationToken } from "@/lib/sharing/extractInvitationToken";
 import { InviteMemberModal } from "@/components/features/profiles/InviteMemberModal";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
 import {
@@ -84,9 +86,15 @@ function extractApiDetail(error: unknown, fallback: string): string {
   return fallback;
 }
 
+type AcceptHealthRecordInvitationResult = {
+  outcome: string;
+  redirectUrl: string;
+};
+
 export default function HealthRecordsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { markAsReadAsync } = useNotificationInbox();
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [invitingProfileId, setInvitingProfileId] = useState<string | null>(null);
   useEffect(() => {
@@ -146,6 +154,54 @@ export default function HealthRecordsPage() {
     },
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
+  });
+
+  const acceptHealthRecordInvitationMutation = useMutation({
+    mutationFn: async ({
+      acceptPath,
+    }: {
+      acceptPath: string;
+      invitationId: string;
+    }) => {
+      const token = extractInvitationToken(acceptPath);
+      if (!token) {
+        throw new Error("invalid-token");
+      }
+      const response = await apiClient.post(ApiPaths.HEALTH_RECORD_INVITATIONS.ACCEPT(token));
+      const result = response.data?.data as AcceptHealthRecordInvitationResult | undefined;
+      if (!result?.redirectUrl) {
+        throw new Error("invalid-result");
+      }
+      return result;
+    },
+    onMutate: async ({ invitationId }) => {
+      await markAsReadAsync(`HEALTH_RECORD_INVITATION:${invitationId}`);
+    },
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["health-record-invitations-incoming"],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["shared-health-records"] });
+      void queryClient.invalidateQueries({ queryKey: ["notification-inbox"] });
+
+      if (result.outcome === "accepted") {
+        notify.success("Đã chấp nhận lời mời. Đang mở kết quả khám được chia sẻ.");
+        router.push(result.redirectUrl);
+        return;
+      }
+
+      if (result.outcome === "expired") {
+        notify.error("Lời mời đã hết hạn.");
+        return;
+      }
+
+      if (result.outcome === "require-login") {
+        router.push(result.redirectUrl);
+      }
+    },
+    onError: (error: unknown) => {
+      notify.error(extractApiDetail(error, "Không thể chấp nhận lời mời lúc này."));
+    },
   });
 
   const updateAccessMutation = useMutation({
@@ -305,6 +361,10 @@ export default function HealthRecordsPage() {
       title="Kết quả khám"
       subtitle="Chọn hồ sơ để xem lịch sử khám bệnh của từng thành viên."
     >
+      <Suspense fallback={null}>
+        <MarkInboxReadFromUrl />
+      </Suspense>
+
       {incomingHealthRecordInvitations.length > 0 ? (
         <div className="mb-8 flex flex-col gap-4">
           {incomingHealthRecordInvitations.map((invitation) => (
@@ -328,12 +388,19 @@ export default function HealthRecordsPage() {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-3">
-                <Link
-                  href={invitation.acceptPath}
-                  className="inline-flex items-center justify-center rounded-2xl bg-[#008378] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110"
+                <button
+                  type="button"
+                  onClick={() =>
+                    acceptHealthRecordInvitationMutation.mutate({
+                      acceptPath: invitation.acceptPath,
+                      invitationId: invitation.id,
+                    })
+                  }
+                  disabled={acceptHealthRecordInvitationMutation.isPending}
+                  className="inline-flex items-center justify-center rounded-2xl bg-[#008378] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110 disabled:opacity-60"
                 >
                   Chấp nhận và xem
-                </Link>
+                </button>
               </div>
             </div>
           ))}

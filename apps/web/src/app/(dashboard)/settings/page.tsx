@@ -41,7 +41,7 @@ const settingsSections: SettingsSection[] = [
   },
   {
     title: "Thông báo",
-    description: "Thiết lập cách HealthLens nhắc bạn về kết quả và cập nhật.",
+    description: "Xem lời mời trong app; tùy chọn email đang được chuẩn bị.",
     href: "/settings/notifications",
     icon: Bell,
   },

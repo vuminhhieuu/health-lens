@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Bell, HelpCircle, LogOut, Search, Settings, User } from "lucide-react";
+import { HelpCircle, LogOut, Search, Settings, User } from "lucide-react";
+
+import { NotificationBell } from "@/components/features/notifications/NotificationBell";
 
 import {
   authenticatedHeaderInnerClassName,
@@ -87,15 +89,7 @@ export function AuthenticatedTopHeader({
               className="w-64 rounded-full bg-[#e9f6f3] py-2 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-[#00685f]/20"
             />
           </div>
-          <button
-            type="button"
-            title="Mở thông báo"
-            aria-label="Mở thông báo"
-            className="relative rounded-full p-2 text-[#3d4947] transition-colors hover:bg-[#e9f6f3]"
-          >
-            <Bell className="h-5 w-5" />
-            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#924628]"></span>
-          </button>
+          <NotificationBell />
           <Link
             href="/questions"
             title="Mở trang thắc mắc"
