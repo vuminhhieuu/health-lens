@@ -1,6 +1,7 @@
 "use client";
 
 import { User, ChevronRight, Calendar } from "lucide-react";
+import SafeImage from "@/components/ui/SafeImage";
 import type { LucideIcon } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
@@ -57,11 +58,14 @@ export function ProfileCard({
   const status = latestStatus ? statusConfig[latestStatus] : null;
 
   const formattedDate = lastUpdated
-    ? formatDistanceToNow(new Date(lastUpdated), { addSuffix: true, locale: vi })
+    ? formatDistanceToNow(new Date(lastUpdated), {
+        addSuffix: true,
+        locale: vi,
+      })
     : "Chưa có dữ liệu";
 
-  const isNew = lastRecordAt 
-    ? (new Date().getTime() - new Date(lastRecordAt).getTime()) < 5 * 60 * 1000 
+  const isNew = lastRecordAt
+    ? new Date().getTime() - new Date(lastRecordAt).getTime() < 5 * 60 * 1000
     : false;
 
   return (
@@ -71,9 +75,11 @@ export function ProfileCard({
         group relative flex flex-col p-6 rounded-3xl transition-all duration-300
         border-2 
         ${onPress ? "cursor-pointer" : ""}
-        ${isSelected 
-          ? "bg-white border-[#00685f] shadow-lg shadow-[#00685f]/10 -translate-y-1" 
-          : "bg-white/60 border-transparent hover:bg-white hover:border-[#bcc9c6]/40 shadow-sm hover:shadow-md hover:-translate-y-0.5"}
+        ${
+          isSelected
+            ? "bg-white border-[#00685f] shadow-lg shadow-[#00685f]/10 -translate-y-1"
+            : "bg-white/60 border-transparent hover:bg-white hover:border-[#bcc9c6]/40 shadow-sm hover:shadow-md hover:-translate-y-0.5"
+        }
         ${isNew ? "ring-2 ring-[#00685f] ring-offset-2 animate-pulse-short" : ""}
       `}
     >
@@ -89,8 +95,12 @@ export function ProfileCard({
           <div className="relative">
             <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[#e9f6f3] border-2 border-[#89f5e7]/30 flex items-center justify-center">
               {avatarUrl ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
+                <SafeImage
+                  raw
+                  src={avatarUrl}
+                  alt={name}
+                  className="w-full h-full object-cover"
+                />
               ) : (
                 <User className="w-7 h-7 text-[#00685f]" />
               )}
@@ -121,7 +131,9 @@ export function ProfileCard({
             }}
             className="inline-flex items-center gap-1 rounded-xl border border-[#c5dfd9] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#00685f] transition hover:bg-[#f0faf8]"
           >
-            {secondaryAction.icon ? <secondaryAction.icon className="h-3.5 w-3.5" /> : null}
+            {secondaryAction.icon ? (
+              <secondaryAction.icon className="h-3.5 w-3.5" />
+            ) : null}
             {secondaryAction.label}
           </button>
         ) : onPress ? (
@@ -130,15 +142,17 @@ export function ProfileCard({
       </div>
 
       {notes && (
-        <p className="text-sm text-[#3d4947] line-clamp-2 mb-4">
-          {notes}
-        </p>
+        <p className="text-sm text-[#3d4947] line-clamp-2 mb-4">{notes}</p>
       )}
 
       <div className="mt-auto pt-4 border-t border-[#bcc9c6]/20 flex flex-col gap-3">
         {status ? (
-          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold w-fit ${status.color}`}>
-            <span className={`w-2 h-2 rounded-full ${status.dot} animate-pulse`}></span>
+          <div
+            className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold w-fit ${status.color}`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${status.dot} animate-pulse`}
+            ></span>
             {status.label}
           </div>
         ) : (
@@ -146,8 +160,7 @@ export function ProfileCard({
             <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
             Chưa có cập nhật
           </div>
-        )
-        }
+        )}
 
         <div className="flex items-center gap-2 text-[#6d7a77] text-xs font-medium">
           <Calendar className="w-3.5 h-3.5" />

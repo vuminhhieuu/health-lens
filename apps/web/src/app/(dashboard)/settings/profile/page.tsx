@@ -20,6 +20,7 @@ import { API_ROUTES } from "@/lib/api/routes";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { SettingsDirectContactCard } from "../_components/SettingsDirectContactCard";
 import { notify } from "@/lib/notify";
+import SafeImage from "@/components/ui/SafeImage";
 import {
   updateUserProfileSchema,
   UpdateUserProfileInput,
@@ -274,11 +275,11 @@ export default function ProfileSettingsPage() {
               <div className="relative group">
                 <div className="w-24 h-24 rounded-2xl overflow-hidden ring-4 ring-[#e9f6f3] shadow-md bg-[#d8e5e2] flex items-center justify-center text-2xl font-black text-[#00685f]">
                   {avatarSrc ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
+                    <SafeImage
+                      raw
+                      src={avatarSrc}
                       alt="Ảnh đại diện"
                       className="w-full h-full object-cover"
-                      src={avatarSrc}
                     />
                   ) : initials ? (
                     <span aria-hidden="true">{initials}</span>

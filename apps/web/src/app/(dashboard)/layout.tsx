@@ -10,8 +10,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Home, FileText, User, Users, Settings, LogOut, Shield
+  Home,
+  FileText,
+  User,
+  Users,
+  Settings,
+  LogOut,
+  Shield,
 } from "lucide-react";
+import SafeImage from "@/components/ui/SafeImage";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { AuthenticatedTopHeader } from "@/components/layout/AuthenticatedTopHeader";
@@ -76,7 +83,10 @@ export default function DashboardLayout({
     setDisplayName(parts.slice(-2).join(" "));
   }, [currentUser?.fullName, user?.fullName]);
 
-  const avatarInitial = (displayName ?? user?.fullName ?? user?.email ?? "U").trim()[0]?.toUpperCase() ?? "U";
+  const avatarInitial =
+    (displayName ?? user?.fullName ?? user?.email ?? "U")
+      .trim()[0]
+      ?.toUpperCase() ?? "U";
   const avatarUrl = currentUser?.avatarUrl ?? null;
 
   if (!authReady) {
@@ -93,29 +103,51 @@ export default function DashboardLayout({
 
   const navItems = [
     { name: "Trang chủ", href: "/home", icon: Home, exact: true },
-    { name: "Kết quả khám", href: "/health-records", icon: FileText, exact: false },
-    { name: "Hồ sơ của tôi", href: "/settings/profile", icon: User, exact: true },
+    {
+      name: "Kết quả khám",
+      href: "/health-records",
+      icon: FileText,
+      exact: false,
+    },
+    {
+      name: "Hồ sơ của tôi",
+      href: "/settings/profile",
+      icon: User,
+      exact: true,
+    },
     { name: "Hồ sơ gia đình", href: "/profiles", icon: Users, exact: false },
     { name: "Cài đặt", href: "/settings", icon: Settings, exact: true },
   ];
   const isAdmin = user?.role === "ROLE_ADMIN";
 
-  const isProfileHistoryRoute = /^\/profiles\/[^/]+\/history(?:\/.*)?$/.test(pathname ?? "");
+  const isProfileHistoryRoute = /^\/profiles\/[^/]+\/history(?:\/.*)?$/.test(
+    pathname ?? "",
+  );
   const isNavItemActive = (item: { href: string; exact: boolean }) => {
     if (item.href === "/health-records") {
-      return pathname === item.href || pathname?.startsWith(`${item.href}/`) || isProfileHistoryRoute;
+      return (
+        pathname === item.href ||
+        pathname?.startsWith(`${item.href}/`) ||
+        isProfileHistoryRoute
+      );
     }
     if (item.href === "/settings/profile") {
       return pathname === item.href;
     }
     if (item.href === "/settings") {
-      return pathname === item.href || (pathname?.startsWith(`${item.href}/`) && pathname !== "/settings/profile");
+      return (
+        pathname === item.href ||
+        (pathname?.startsWith(`${item.href}/`) &&
+          pathname !== "/settings/profile")
+      );
     }
     if (item.href === "/profiles") {
       if (isProfileHistoryRoute) return false;
       return pathname === item.href || pathname?.startsWith(`${item.href}/`);
     }
-    return item.exact ? pathname === item.href : pathname === item.href || pathname?.startsWith(`${item.href}/`);
+    return item.exact
+      ? pathname === item.href
+      : pathname === item.href || pathname?.startsWith(`${item.href}/`);
   };
 
   const logout = async () => {
@@ -154,12 +186,18 @@ export default function DashboardLayout({
         {/* Sidebar Navigation */}
         <aside className="hidden md:flex h-screen w-72 flex-col fixed left-0 bg-gradient-to-b from-[#e9f6f3] to-transparent p-6 gap-2 border-r border-[#bcc9c6]/20 print:hidden">
           <div className="mb-8 px-2">
-            <p className="text-xs font-bold uppercase tracking-widest text-[#6d7a77] mb-4">Tài khoản</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-[#6d7a77] mb-4">
+              Tài khoản
+            </p>
             <div className="flex items-center gap-3 mb-6 bg-white p-3 rounded-2xl shadow-sm border border-[#bcc9c6]/20">
               <div className="w-12 h-12 rounded-xl bg-[#008378] flex items-center justify-center overflow-hidden text-white font-black">
                 {avatarUrl ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={avatarUrl} alt="Ảnh đại diện" className="h-full w-full object-cover" />
+                  <SafeImage
+                    raw
+                    src={avatarUrl}
+                    alt="Ảnh đại diện"
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
                   <User className="h-6 w-6" aria-hidden="true" />
                 )}
@@ -188,7 +226,11 @@ export default function DashboardLayout({
 
               if (isActive) {
                 return (
-                  <Link key={item.name} href={item.href} className="flex items-center gap-3 px-4 py-3 bg-white text-[#00685f] rounded-xl shadow-sm font-bold border-r-4 border-[#00685f] transition-all duration-200">
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className="flex items-center gap-3 px-4 py-3 bg-white text-[#00685f] rounded-xl shadow-sm font-bold border-r-4 border-[#00685f] transition-all duration-200"
+                  >
                     <Icon className="w-5 h-5" />
                     <span className="font-medium">{item.name}</span>
                   </Link>
@@ -196,7 +238,11 @@ export default function DashboardLayout({
               }
 
               return (
-                <Link key={item.name} href={item.href} className="flex items-center gap-3 px-4 py-3 text-[#6d7a77] hover:text-[#00685f] hover:bg-white/60 rounded-xl transition-all">
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className="flex items-center gap-3 px-4 py-3 text-[#6d7a77] hover:text-[#00685f] hover:bg-white/60 rounded-xl transition-all"
+                >
                   <Icon className="w-5 h-5" />
                   <span className="font-medium">{item.name}</span>
                 </Link>
@@ -205,10 +251,16 @@ export default function DashboardLayout({
           </nav>
 
           <div className="mt-auto flex flex-col gap-4">
-            <button disabled className="w-full bg-gradient-to-br from-[#00685f] to-[#008378] text-white py-3 rounded-xl font-bold shadow-lg shadow-[#00685f]/20 active:scale-95 duration-200 opacity-60 cursor-not-allowed">
+            <button
+              disabled
+              className="w-full bg-gradient-to-br from-[#00685f] to-[#008378] text-white py-3 rounded-xl font-bold shadow-lg shadow-[#00685f]/20 active:scale-95 duration-200 opacity-60 cursor-not-allowed"
+            >
               Đặt lịch khám
             </button>
-            <button onClick={logout} className="flex items-center gap-3 px-4 py-3 text-[#ba1a1a] font-medium hover:bg-[#ffdad6]/40 rounded-xl transition-all w-full">
+            <button
+              onClick={logout}
+              className="flex items-center gap-3 px-4 py-3 text-[#ba1a1a] font-medium hover:bg-[#ffdad6]/40 rounded-xl transition-all w-full"
+            >
               <LogOut className="w-5 h-5" />
               <span>Đăng xuất</span>
             </button>
@@ -227,12 +279,20 @@ export default function DashboardLayout({
           <Home className="w-5 h-5" />
           <span className="text-[10px] font-bold">Trang chủ</span>
         </Link>
-        <Link href="/health-records" className={getMobileNavClassName("/health-records")}>
+        <Link
+          href="/health-records"
+          className={getMobileNavClassName("/health-records")}
+        >
           <FileText className="w-5 h-5" />
           <span className="text-[10px] font-bold">Sức khỏe</span>
         </Link>
-        <Link href="/settings/profile" className={getMobileNavClassName("/settings/profile")}>
-          <User className={`w-5 h-5 ${isNavItemActive({ href: "/settings/profile", exact: true }) ? "fill-current" : ""}`} />
+        <Link
+          href="/settings/profile"
+          className={getMobileNavClassName("/settings/profile")}
+        >
+          <User
+            className={`w-5 h-5 ${isNavItemActive({ href: "/settings/profile", exact: true }) ? "fill-current" : ""}`}
+          />
           <span className="text-[10px] font-bold">Hồ sơ</span>
         </Link>
         <Link href="/settings" className={getMobileNavClassName("/settings")}>

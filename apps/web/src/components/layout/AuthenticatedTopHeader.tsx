@@ -10,6 +10,7 @@ import {
   authenticatedHeaderInnerClassName,
   authenticatedHeaderSurfaceClassName,
 } from "@/lib/layout/shell";
+import SafeImage from "@/components/ui/SafeImage";
 
 type HeaderNavItem = {
   name: string;
@@ -41,7 +42,10 @@ export function AuthenticatedTopHeader({
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (avatarMenuRef.current && !avatarMenuRef.current.contains(event.target as Node)) {
+      if (
+        avatarMenuRef.current &&
+        !avatarMenuRef.current.contains(event.target as Node)
+      ) {
         setIsAvatarMenuOpen(false);
       }
     }
@@ -54,7 +58,10 @@ export function AuthenticatedTopHeader({
     <header className={className}>
       <div className={innerClassName}>
         <div className="flex items-center gap-8">
-          <Link href={brandHref} className="text-2xl font-bold tracking-tight text-[#005049]">
+          <Link
+            href={brandHref}
+            className="text-2xl font-bold tracking-tight text-[#005049]"
+          >
             HealthLens
           </Link>
           <nav className="hidden items-center gap-6 md:flex">
@@ -105,8 +112,12 @@ export function AuthenticatedTopHeader({
               aria-label="Mở menu tài khoản"
             >
               {avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img alt="Ảnh đại diện" className="h-full w-full object-cover" src={avatarUrl} />
+                <SafeImage
+                  raw
+                  src={avatarUrl}
+                  alt="Ảnh đại diện"
+                  className="h-full w-full object-cover"
+                />
               ) : (
                 <span aria-hidden="true">{avatarInitial}</span>
               )}
