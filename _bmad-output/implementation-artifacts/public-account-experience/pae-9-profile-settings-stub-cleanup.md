@@ -1,6 +1,6 @@
 # Story 9: Profile Settings Stub Cleanup
 
-Status: backlog
+Status: done
 
 ## Execution Scope
 
@@ -22,9 +22,13 @@ so that I am not misled by disabled or fake UI.
 
 ## Tasks / Subtasks
 
-- [ ] Edit `apps/web/src/app/(dashboard)/settings/profile/page.tsx`.
-- [ ] Remove unused `Link` import if still present (REVIEW-FULL-v2 §8.6).
-- [ ] Fix `setTimeout` success message cleanup if still applicable (§8.7).
+- [x] Edit `apps/web/src/app/(dashboard)/settings/profile/page.tsx`.
+- [x] Remove unused `Link` import if still present (REVIEW-FULL-v2 §8.6).
+- [x] Fix `setTimeout` success message cleanup if still applicable (§8.7).
+
+### Review Findings
+
+- [x] [Review][Patch] 2FA chỉ hiển thị badge "Sắp có", không có link/aria mô tả Phase 2 [apps/web/src/app/(dashboard)/settings/profile/page.tsx:524]
 
 ## Dev Notes
 
@@ -40,4 +44,26 @@ so that I am not misled by disabled or fake UI.
 
 ### Agent Model Used
 
-(pending)
+Composer
+
+### Implementation Plan
+
+- Removed disabled health stub; added CTA to `/profiles` for family profiles and exam history.
+- Replaced fake 2FA row with non-interactive "Sắp có" badge (Phase 2 user 2FA).
+- Removed hardcoded 85% completion card.
+- Kept `SettingsDirectContactCard` (pae-8 support constants) and `/settings/change-password` link.
+- Nav decision: keep split — "Hồ sơ của tôi" → account `/settings/profile`; "Hồ sơ gia đình" → `/profiles` (layout unchanged).
+
+### Completion Notes
+
+- Trang hồ sơ cài đặt chỉ còn tính năng hoạt động: không block sức khỏe giả, không % hoàn thiện cứng, 2FA hiển thị "Sắp có".
+- CTA quản lý sức khỏe/hồ sơ gia đình trỏ `/profiles`; đổi mật khẩu và liên hệ hỗ trợ giữ nguyên (pae-6, pae-8).
+- Kiểm tra thủ công: mở `/settings/profile`, xác nhận không còn UI gây hiểu nhầm.
+
+### File List
+
+- `apps/web/src/app/(dashboard)/settings/profile/page.tsx`
+
+### Change Log
+
+- 2026-05-21: Removed health stub, fake completion %, and fake 2FA; linked health management to `/profiles`.

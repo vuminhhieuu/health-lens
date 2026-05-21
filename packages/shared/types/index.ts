@@ -14,3 +14,18 @@ export interface HealthRecord {
   profileId: string;
   examDate: string;
 }
+
+export type NotificationInboxItemType =
+  | 'PROFILE_INVITATION'
+  | 'HEALTH_RECORD_INVITATION'
+  | 'REMINDER_UPCOMING';
+
+export interface NotificationInboxItem {
+  id: string;
+  type: NotificationInboxItemType;
+  title: string;
+  body: string;
+  createdAt: string;
+  actionUrl: string;
+  read: boolean;
+}

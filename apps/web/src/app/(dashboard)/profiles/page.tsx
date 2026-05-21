@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { Suspense, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import {
   Plus,
   Search,
@@ -9,7 +10,6 @@ import {
   AlertCircle,
   Mail,
 } from "lucide-react";
-import Link from "next/link";
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
@@ -30,7 +30,11 @@ import {
 } from "@/components/features/profiles/ProfileCard";
 import { CreateProfileModal } from "@/components/features/profiles/CreateProfileModal";
 import { EditProfileModal } from "@/components/features/profiles/EditProfileModal";
+import { MarkInboxReadFromUrl } from "@/components/features/notifications/MarkInboxReadFromUrl";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { useNotificationInbox } from "@/hooks/useNotificationInbox";
+import { parseAcceptProfileInvitationResult } from "@/lib/sharing/acceptInvitationResult";
+import { extractInvitationToken } from "@/lib/sharing/extractInvitationToken";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
 import { CreateProfileInput, UpdateProfileInput } from "@healthlens/shared";
 
@@ -63,7 +67,9 @@ function extractApiDetail(error: unknown, fallback: string): string {
 }
 
 export default function ProfilesPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
+  const { markAsRead } = useNotificationInbox();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
@@ -121,9 +127,59 @@ export default function ProfilesPage() {
       void queryClient.invalidateQueries({
         queryKey: ["profile-invitations-incoming"],
       });
+      void queryClient.invalidateQueries({ queryKey: ["notification-inbox"] });
     },
     onError: (error: unknown) => {
       notify.error(extractApiDetail(error, "Không thể từ chối lời mời lúc này."));
+    },
+  });
+
+  const acceptIncomingInvitationMutation = useMutation({
+    mutationFn: async ({
+      acceptPath,
+    }: {
+      acceptPath: string;
+      invitationId: string;
+    }) => {
+      const token = extractInvitationToken(acceptPath);
+      if (!token) {
+        throw new Error("invalid-token");
+      }
+      const response = await apiClient.post(ApiPaths.INVITATIONS.ACCEPT(token));
+      const result = parseAcceptProfileInvitationResult(response.data?.data);
+      if (!result) {
+        throw new Error("invalid-result");
+      }
+      return result;
+    },
+    onSuccess: (result, { invitationId }) => {
+      markAsRead(`PROFILE_INVITATION:${invitationId}`);
+
+      void queryClient.invalidateQueries({
+        queryKey: ["profile-invitations-incoming"],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["shared-profiles"] });
+      void queryClient.invalidateQueries({ queryKey: ["notification-inbox"] });
+
+      if (result.outcome === "accepted") {
+        notify.success("Đã chấp nhận lời mời. Bạn có thể xem hồ sơ được chia sẻ.");
+        const target =
+          result.redirectUrl === "/" ? "/profiles" : result.redirectUrl;
+        router.push(target);
+        return;
+      }
+
+      if (result.outcome === "expired") {
+        notify.error("Lời mời đã hết hạn.");
+        return;
+      }
+
+      if (result.outcome === "require-login") {
+        router.push(result.redirectUrl);
+      }
+    },
+    onError: (error: unknown) => {
+      notify.error(extractApiDetail(error, "Không thể chấp nhận lời mời lúc này."));
     },
   });
 
@@ -289,6 +345,10 @@ export default function ProfilesPage() {
         </div>
       }
     >
+      <Suspense fallback={null}>
+        <MarkInboxReadFromUrl />
+      </Suspense>
+
       {incomingInvitations.length > 0 ? (
         <div className="mb-8 flex flex-col gap-4">
           {incomingInvitations.map((inv) => (
@@ -329,12 +389,19 @@ export default function ProfilesPage() {
                 >
                   Từ chối
                 </button>
-                <Link
-                  href={inv.acceptPath}
-                  className="inline-flex items-center justify-center rounded-2xl bg-[#008378] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110"
+                <button
+                  type="button"
+                  onClick={() =>
+                    acceptIncomingInvitationMutation.mutate({
+                      acceptPath: inv.acceptPath,
+                      invitationId: inv.id,
+                    })
+                  }
+                  disabled={acceptIncomingInvitationMutation.isPending}
+                  className="inline-flex items-center justify-center rounded-2xl bg-[#008378] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110 disabled:opacity-60"
                 >
                   Chấp nhận và xem
-                </Link>
+                </button>
               </div>
             </div>
           ))}

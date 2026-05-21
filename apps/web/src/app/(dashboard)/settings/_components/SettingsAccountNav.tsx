@@ -1,8 +1,13 @@
 import type { LucideIcon } from "lucide-react";
-import { Info, KeyRound, Shield, UserRound } from "lucide-react";
+import { Bell, Info, KeyRound, Shield, UserRound } from "lucide-react";
 import Link from "next/link";
 
-export type SettingsAccountNavActive = "change-password" | "privacy" | "profile" | "about";
+export type SettingsAccountNavActive =
+  | "change-password"
+  | "privacy"
+  | "profile"
+  | "notifications"
+  | "about";
 
 type NavItemProps = {
   href?: string;
@@ -75,6 +80,12 @@ export function SettingsAccountNav({ active }: SettingsAccountNavProps) {
         icon={UserRound}
         label="Hồ sơ của tôi"
         active={active === "profile"}
+      />
+      <NavItem
+        href="/settings/notifications"
+        icon={Bell}
+        label="Thông báo"
+        active={active === "notifications"}
       />
       <NavItem
         href="/settings/about"
