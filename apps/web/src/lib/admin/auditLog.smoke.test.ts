@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   auditHasActiveFilters,
   buildAuditLogUrl,
+  buildPageList,
   buildTraceOnlyFilters,
   resolveInitialAuditState,
 } from "./auditLog";
@@ -34,6 +35,13 @@ describe("auditLog URL smoke (6.4)", () => {
     expect(trace.correlationId).toBe("corr-1");
     expect(trace.actorEmail).toBe("");
     expect(auditHasActiveFilters(trace, "all")).toBe(true);
+  });
+
+  it("buildPageList does not lead with ellipsis when page 0 is shown", () => {
+    expect(buildPageList(5, 10)[0]).not.toBe("ellipsis");
+    expect(buildPageList(5, 10)).toEqual([0, "ellipsis", 4, 5, 6, "ellipsis", 9]);
+    expect(buildPageList(0, 10)).toEqual([0, 1, "ellipsis", 9]);
+    expect(buildPageList(9, 10)).toEqual([0, "ellipsis", 8, 9]);
   });
 
   it("active filters include correlationId", () => {

@@ -27,8 +27,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -49,6 +47,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -56,7 +55,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class AdminAuditLogServiceTest {
 
     @Mock
@@ -464,25 +462,36 @@ class AdminAuditLogServiceTest {
         return query;
     }
 
+    /**
+     * Criteria API mocks for {@code Specification#toPredicate} only — lenient here because
+     * JPA combines {@code fetchActor()} and filter lambdas with overlapping {@code cb.*} calls.
+     */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void stubActorEmailSpecMocks(Root<AuditLog> root, CriteriaQuery<AuditLog> query, CriteriaBuilder cb) {
         Join actorJoin = mock(Join.class);
-        Path emailPath = mock(Path.class);
         Expression<String> lowerExpr = mock(Expression.class);
         Predicate leafPredicate = mock(Predicate.class);
         Predicate orPredicate = mock(Predicate.class);
         Predicate conjunction = mock(Predicate.class);
 
-        when(root.fetch("actor", JoinType.LEFT)).thenReturn(mock(Fetch.class));
-        when(root.join("actor", JoinType.LEFT)).thenReturn(actorJoin);
-        when(actorJoin.get("email")).thenReturn(emailPath);
-        when(cb.lower(any(Expression.class))).thenReturn(lowerExpr);
-        when(cb.equal(any(), any())).thenReturn(leafPredicate);
-        when(cb.or(any(Predicate[].class))).thenReturn(orPredicate);
-        when(cb.conjunction()).thenReturn(conjunction);
-        doReturn(lowerExpr).when(jsonPathExpressions).extractPathText(any(), any(), eq("newValueJson"), eq("email"));
-        doReturn(lowerExpr).when(jsonPathExpressions).extractPathText(any(), any(), eq("oldValueJson"), eq("email"));
-        doReturn(lowerExpr).when(jsonPathExpressions).extractPathText(any(), any(), eq("metadataJson"), eq("email"));
+        lenient().when(root.fetch("actor", JoinType.LEFT)).thenReturn(mock(Fetch.class));
+        lenient().when(root.join("actor", JoinType.LEFT)).thenReturn(actorJoin);
+        lenient().when(actorJoin.get("email")).thenReturn(mock(Path.class));
+        lenient().when(cb.lower(any(Expression.class))).thenReturn(lowerExpr);
+        lenient().when(cb.equal(any(), any())).thenReturn(leafPredicate);
+        lenient().when(cb.or(
+                any(Predicate.class),
+                any(Predicate.class),
+                any(Predicate.class),
+                any(Predicate.class)
+        )).thenReturn(orPredicate);
+        lenient().when(cb.conjunction()).thenReturn(conjunction);
+        lenient().doReturn(lowerExpr).when(jsonPathExpressions)
+                .extractPathText(any(), any(), eq("newValueJson"), eq("email"));
+        lenient().doReturn(lowerExpr).when(jsonPathExpressions)
+                .extractPathText(any(), any(), eq("oldValueJson"), eq("email"));
+        lenient().doReturn(lowerExpr).when(jsonPathExpressions)
+                .extractPathText(any(), any(), eq("metadataJson"), eq("email"));
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

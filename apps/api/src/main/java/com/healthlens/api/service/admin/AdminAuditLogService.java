@@ -223,15 +223,19 @@ public class AdminAuditLogService {
     /**
      * Loads one keyset page for CSV export in a dedicated read-only transaction so streaming export
      * does not hold a single connection for the full {@code maxRows} loop.
+     * <p>
+     * Public so Spring's proxy can apply {@link Propagation#REQUIRES_NEW}; code in this bean should
+     * call {@link #loadExportBatch} (routes via self-proxy) rather than invoking this directly.
      */
     @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-    List<AuditLog> fetchExportBatch(Specification<AuditLog> exportSpec, int batchSize) {
+    public List<AuditLog> fetchExportBatch(Specification<AuditLog> exportSpec, int batchSize) {
         return auditLogRepository.findAll(
                 withActorFetched(exportSpec),
                 PageRequest.of(0, batchSize, EXPORT_CSV_SORT)
         ).getContent();
     }
 
+    /** Routes export reads through the self-proxy so each batch gets {@link Propagation#REQUIRES_NEW}. */
     private List<AuditLog> loadExportBatch(Specification<AuditLog> exportSpec, int batchSize) {
         if (self != null) {
             return self.fetchExportBatch(exportSpec, batchSize);

@@ -130,7 +130,7 @@ All phases follow same QA pattern:
 ## Files Overview
 
 ```
-/home/vmhieu/Workspace/UIT/health-lens/design-artifacts/
+_bmad-output/design-artifacts/
 
 PHASE 2 (Ready Now):
 ├── PHASE-2-STITCH-PROMPT-VI.md       ← COPY THIS

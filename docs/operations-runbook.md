@@ -41,7 +41,7 @@
 ## Deployment Notes
 
 - Local development uses Docker Compose.
-- Staging uses the documented cloud split in [STAGING_DEPLOYMENT.md](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/docs/STAGING_DEPLOYMENT.md).
+- Staging uses the documented cloud split in [STAGING_DEPLOYMENT.md](STAGING_DEPLOYMENT.md).
 - Production and staging behavior should follow the environment profiles in the API config.
 - Provider switches for LLM, OCR, embedding, and RAG should follow [provider-switching-runbook.md](./provider-switching-runbook.md), including staging smoke tests and rollback preparation.
 

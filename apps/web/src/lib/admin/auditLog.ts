@@ -565,9 +565,9 @@ export function buildPageList(current: number, total: number): (number | "ellips
   }
   const sorted = [...pages].sort((a, b) => a - b);
   const out: (number | "ellipsis")[] = [];
-  let prev = -2;
+  let prev = -1;
   for (const p of sorted) {
-    if (p - prev > 1) {
+    if (out.length > 0 && p - prev > 1) {
       out.push("ellipsis");
     }
     out.push(p);
