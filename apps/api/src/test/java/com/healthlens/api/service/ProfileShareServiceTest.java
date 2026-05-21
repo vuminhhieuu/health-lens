@@ -34,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -97,7 +98,7 @@ class ProfileShareServiceTest {
     @Test
     void acceptInvitation_withoutLogin_returnsRegisterRedirect() {
         ProfileInvitation invitation = invitation(UUID.randomUUID(), "viewer@healthlens.vn", "pending");
-        when(profileInvitationRepository.findByToken("token-1")).thenReturn(Optional.of(invitation));
+        when(profileInvitationRepository.findByTokenForUpdate("token-1")).thenReturn(Optional.of(invitation));
 
         AcceptInvitationResultResponse result = profileShareService.acceptInvitation("token-1", null);
         assertThat(result.outcome()).isEqualTo("require-login");
@@ -110,7 +111,7 @@ class ProfileShareServiceTest {
     void acceptInvitation_withExpiredToken_returnsFamilyProfilesWithoutUpdatingInvitation() {
         ProfileInvitation invitation = invitation(UUID.randomUUID(), "viewer@healthlens.vn", "pending");
         invitation.setExpiresAt(Instant.now().minusSeconds(5));
-        when(profileInvitationRepository.findByToken("token-2")).thenReturn(Optional.of(invitation));
+        when(profileInvitationRepository.findByTokenForUpdate("token-2")).thenReturn(Optional.of(invitation));
 
         AcceptInvitationResultResponse result = profileShareService.acceptInvitation("token-2", UUID.randomUUID());
 
@@ -126,7 +127,7 @@ class ProfileShareServiceTest {
         ProfileInvitation invitation = invitation(profileId, "viewer@healthlens.vn", "accepted");
         invitation.setExpiresAt(Instant.now().minusSeconds(60));
 
-        when(profileInvitationRepository.findByToken("token-accepted-old")).thenReturn(Optional.of(invitation));
+        when(profileInvitationRepository.findByTokenForUpdate("token-accepted-old")).thenReturn(Optional.of(invitation));
 
         AcceptInvitationResultResponse result = profileShareService.acceptInvitation("token-accepted-old", viewerId);
 
@@ -141,7 +142,7 @@ class ProfileShareServiceTest {
         ProfileInvitation invitation = invitation(profileId, "viewer@healthlens.vn", "accepted");
         invitation.setExpiresAt(Instant.now().minusSeconds(60));
 
-        when(profileInvitationRepository.findByToken("token-accepted-anon")).thenReturn(Optional.of(invitation));
+        when(profileInvitationRepository.findByTokenForUpdate("token-accepted-anon")).thenReturn(Optional.of(invitation));
 
         AcceptInvitationResultResponse result = profileShareService.acceptInvitation("token-accepted-anon", null);
 
@@ -159,20 +160,20 @@ class ProfileShareServiceTest {
         User viewer = user(viewerId, "viewer@healthlens.vn");
         Profile profile = profile(profileId, ownerId);
 
-        when(profileInvitationRepository.findByToken("token-3")).thenReturn(Optional.of(invitation));
+        when(profileInvitationRepository.findByTokenForUpdate("token-3")).thenReturn(Optional.of(invitation));
         when(userRepository.findById(viewerId)).thenReturn(Optional.of(viewer));
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
 
-        when(profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId))
-                .thenReturn(false);
-        when(profileShareRepository.save(any(ProfileShare.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(profileId, viewerId))
+                .thenReturn(Optional.empty());
+        when(profileShareRepository.saveAndFlush(any(ProfileShare.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(profileInvitationRepository.save(any(ProfileInvitation.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         AcceptInvitationResultResponse result = profileShareService.acceptInvitation("token-3", viewerId);
 
         assertThat(result.outcome()).isEqualTo("accepted");
         assertThat(result.redirectUrl()).isEqualTo("/profiles");
-        verify(profileShareRepository).save(any(ProfileShare.class));
+        verify(profileShareRepository).saveAndFlush(any(ProfileShare.class));
         verify(profileInvitationRepository).save(invitation);
     }
 
@@ -182,7 +183,7 @@ class ProfileShareServiceTest {
         ProfileInvitation invitation = invitation(UUID.randomUUID(), "other@healthlens.vn", "pending");
         User viewer = user(viewerId, "viewer@healthlens.vn");
 
-        when(profileInvitationRepository.findByToken("token-4")).thenReturn(Optional.of(invitation));
+        when(profileInvitationRepository.findByTokenForUpdate("token-4")).thenReturn(Optional.of(invitation));
         when(userRepository.findById(viewerId)).thenReturn(Optional.of(viewer));
 
         assertThatThrownBy(() -> profileShareService.acceptInvitation("token-4", viewerId))
@@ -233,7 +234,7 @@ class ProfileShareServiceTest {
         User viewer = user(viewerId, "viewer@healthlens.vn");
 
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
-        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId))
+        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(profileId, viewerId))
             .thenReturn(Optional.of(share));
         when(userRepository.findById(viewerId)).thenReturn(Optional.of(viewer));
         when(profileShareAuditLogRepository.save(any(ProfileShareAuditLog.class)))
@@ -256,9 +257,8 @@ class ProfileShareServiceTest {
         UUID viewerId = UUID.randomUUID();
 
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile(profileId, ownerId)));
-        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId))
+        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(profileId, viewerId))
                 .thenReturn(Optional.empty());
-        when(profileShareRepository.findById(viewerId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> profileShareService.revokeShare(ownerId, profileId, viewerId))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -358,7 +358,7 @@ class ProfileShareServiceTest {
         share.setViewerId(viewerId);
 
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile(profileId, ownerId)));
-        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId))
+        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(profileId, viewerId))
                 .thenReturn(Optional.of(share));
         when(userRepository.findById(viewerId)).thenReturn(Optional.empty());
 
@@ -383,42 +383,44 @@ class ProfileShareServiceTest {
     }
 
     @Test
-    void revokeShare_whenShareNoLongerActive_throwsNotFound() {
-        UUID ownerId = UUID.randomUUID();
-        UUID profileId = UUID.randomUUID();
-        UUID viewerId = UUID.randomUUID();
-
-        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile(profileId, ownerId)));
-        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId))
-                .thenReturn(Optional.empty());
-        when(profileShareRepository.findById(viewerId)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> profileShareService.revokeShare(ownerId, profileId, viewerId))
-                .isInstanceOf(ResourceNotFoundException.class);
-    }
-
-    @Test
-    void revokeShare_whenViewerIdMissing_canFallbackToShareId() {
+    void revokeShare_shareIdInViewerPathSlot_throwsNotFound() {
         UUID ownerId = UUID.randomUUID();
         UUID profileId = UUID.randomUUID();
         UUID shareId = UUID.randomUUID();
-        UUID viewerId = UUID.randomUUID();
-        ProfileShare share = new ProfileShare();
-        share.setId(shareId);
-        share.setProfileId(profileId);
-        share.setOwnerId(ownerId);
-        share.setViewerId(viewerId);
 
         when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile(profileId, ownerId)));
-        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, shareId))
+        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(profileId, shareId))
                 .thenReturn(Optional.empty());
-        when(profileShareRepository.findById(shareId)).thenReturn(Optional.of(share));
-        when(userRepository.findById(viewerId)).thenReturn(Optional.empty());
 
-        profileShareService.revokeShare(ownerId, profileId, shareId);
+        assertThatThrownBy(() -> profileShareService.revokeShare(ownerId, profileId, shareId))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(profileShareRepository, never()).findById(any(UUID.class));
+        verify(profileShareRepository, never()).save(any(ProfileShare.class));
+    }
 
-        assertThat(share.getRevokedAt()).isNotNull();
-        verify(profileShareRepository).save(share);
+    @Test
+    void acceptInvitation_concurrentDuplicateShareInsert_treatedAsSuccess() {
+        UUID ownerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID viewerId = UUID.randomUUID();
+        ProfileInvitation invitation = invitation(profileId, "viewer@healthlens.vn", "pending");
+        User viewer = user(viewerId, "viewer@healthlens.vn");
+        Profile profile = profile(profileId, ownerId);
+
+        when(profileInvitationRepository.findByTokenForUpdate("token-dup")).thenReturn(Optional.of(invitation));
+        when(userRepository.findById(viewerId)).thenReturn(Optional.of(viewer));
+        when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+
+        when(profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(profileId, viewerId))
+                .thenReturn(Optional.empty());
+        when(profileShareRepository.saveAndFlush(any(ProfileShare.class)))
+                .thenThrow(new DataIntegrityViolationException("uq_profile_shares_profile_viewer_active"));
+        when(profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId)).thenReturn(true);
+        when(profileInvitationRepository.save(any(ProfileInvitation.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AcceptInvitationResultResponse result = profileShareService.acceptInvitation("token-dup", viewerId);
+
+        assertThat(result.outcome()).isEqualTo("accepted");
     }
 
     private static Profile profile(UUID profileId, UUID ownerId) {

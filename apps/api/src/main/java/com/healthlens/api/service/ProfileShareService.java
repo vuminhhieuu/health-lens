@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -225,11 +226,10 @@ public class ProfileShareService {
     @Transactional
     public void revokeShare(UUID ownerId, UUID profileId, UUID viewerId) {
         assertProfileOwner(ownerId, profileId);
-        ProfileShare share = profileShareRepository.findByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId)
-                .orElseGet(() -> profileShareRepository.findById(viewerId)
-                        .filter(found -> profileId.equals(found.getProfileId()))
-                        .filter(found -> found.getRevokedAt() == null)
-                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy quyền chia sẻ đang hoạt động")));
+        // Path segment is viewer id only. Do not treat it as share PK — UUID collision could revoke the wrong row.
+        ProfileShare share = profileShareRepository
+                .findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(profileId, viewerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy quyền chia sẻ đang hoạt động"));
         UUID resolvedViewerId = share.getViewerId();
         share.setRevokedAt(Instant.now());
         profileShareRepository.save(share);
@@ -272,7 +272,7 @@ public class ProfileShareService {
 
     @Transactional
     public AcceptInvitationResultResponse acceptInvitation(String token, UUID userId) {
-        ProfileInvitation invitation = profileInvitationRepository.findByToken(token)
+        ProfileInvitation invitation = profileInvitationRepository.findByTokenForUpdate(token)
                 .orElseThrow(() -> new ResourceNotFoundException("Lời mời không hợp lệ"));
 
         Instant now = Instant.now();
@@ -311,13 +311,15 @@ public class ProfileShareService {
             return new AcceptInvitationResultResponse("expired", FAMILY_PROFILES_PATH, profileId);
         }
 
-        if (!profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewer.getId())) {
+        if (profileShareRepository
+                .findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(profileId, viewer.getId())
+                .isEmpty()) {
             ProfileShare share = new ProfileShare();
             share.setProfileId(profileId);
             share.setOwnerId(ownerId);
             share.setViewerId(viewer.getId());
             share.setAccessLevel(invitation.getAccessLevel());
-            profileShareRepository.save(share);
+            saveNewActiveProfileShareHandlingDuplicate(share, profileId, viewer.getId());
         }
 
         invitation.setStatus("accepted");
@@ -364,7 +366,9 @@ public class ProfileShareService {
     }
 
     private void ensureShareForInvitation(ProfileInvitation invitation, UUID viewerId, UUID ownerId) {
-        if (profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(invitation.getProfileId(), viewerId)) {
+        if (profileShareRepository
+                .findByProfileIdAndViewerIdAndRevokedAtIsNullForUpdate(invitation.getProfileId(), viewerId)
+                .isPresent()) {
             return;
         }
         ProfileShare share = new ProfileShare();
@@ -372,7 +376,23 @@ public class ProfileShareService {
         share.setOwnerId(ownerId);
         share.setViewerId(viewerId);
         share.setAccessLevel(invitation.getAccessLevel());
-        profileShareRepository.save(share);
+        saveNewActiveProfileShareHandlingDuplicate(share, invitation.getProfileId(), viewerId);
+    }
+
+    /**
+     * Partial unique index uq_profile_shares_profile_viewer_active prevents duplicate active rows; concurrent
+     * accepts must remain idempotent.
+     */
+    private void saveNewActiveProfileShareHandlingDuplicate(ProfileShare share, UUID profileId, UUID viewerId) {
+        try {
+            // Flush immediately so partial unique index violation is catchable in this transaction.
+            profileShareRepository.saveAndFlush(share);
+        } catch (DataIntegrityViolationException ex) {
+            if (profileShareRepository.existsByProfileIdAndViewerIdAndRevokedAtIsNull(profileId, viewerId)) {
+                return;
+            }
+            throw ex;
+        }
     }
 
     private void assertProfileOwner(UUID requesterId, UUID profileId) {
