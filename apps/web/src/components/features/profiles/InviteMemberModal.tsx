@@ -3,6 +3,8 @@
 import React, { FormEvent, useState } from "react";
 import { UserPlus, Mail, Shield, Loader2, ArrowRight, X } from "lucide-react";
 
+import { InlineFieldError } from "@/components/ui/StateComponents";
+
 export const INVITE_ACCESS_OPTIONS = [
   { value: "view", label: "Chỉ xem" },
   { value: "edit", label: "Chỉnh sửa" },
@@ -178,9 +180,7 @@ export function InviteMemberModal({
               </div>
             </div>
 
-            {showInviteError && error ? (
-              <p className="text-sm font-medium text-[#ba1a1a]">{error}</p>
-            ) : null}
+            <InlineFieldError id="invite-form-error" message={showInviteError ? error : null} />
 
             <div className="rounded-2xl border border-[#d6ece7] bg-[#f7fcfa] p-4">
               <div className="mb-3 flex items-center justify-between">

@@ -317,18 +317,20 @@ export default function ProfileHistoryPage() {
             </div>
 
             <div className="mb-4 grid grid-cols-1 divide-y divide-[#e8eeec] overflow-hidden rounded-2xl border border-[#dde6e3] bg-[#f8fbfa] lg:grid-cols-4 lg:divide-x lg:divide-y-0">
-              <label className="flex min-h-13 items-center gap-2.5 px-5 text-sm font-medium text-[#7b8a87]">
-                <Search className="h-3.75 w-3.75" />
+              <label htmlFor="history-search" className="flex min-h-13 items-center gap-2.5 px-5 text-sm font-medium text-[#7b8a87]">
+                <Search className="h-3.75 w-3.75" aria-hidden="true" />
                 <input
+                  id="history-search"
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                   placeholder="Tìm kiếm kết quả..."
                   className="w-full bg-transparent text-sm text-[#4e6360] placeholder:text-[#9ba9a6] outline-none"
                 />
               </label>
-              <label className="flex min-h-13 items-center gap-2.5 px-5 text-sm font-medium text-[#7b8a87]">
-                <Calendar className="h-3.75 w-3.75" />
+              <label htmlFor="history-period-filter" className="flex min-h-13 items-center gap-2.5 px-5 text-sm font-medium text-[#7b8a87]">
+                <Calendar className="h-3.75 w-3.75" aria-hidden="true" />
                 <select
+                  id="history-period-filter"
                   value={periodFilter}
                   onChange={(event) => setPeriodFilter(event.target.value)}
                   className="w-full bg-transparent text-sm text-[#4e6360] outline-none"
@@ -340,9 +342,10 @@ export default function ProfileHistoryPage() {
                   <option value="12m">12 tháng gần đây</option>
                 </select>
               </label>
-              <label className="flex min-h-13 items-center gap-2.5 px-5 text-sm font-medium text-[#7b8a87]">
-                <Filter className="h-3.75 w-3.75" />
+              <label htmlFor="history-test-type-filter" className="flex min-h-13 items-center gap-2.5 px-5 text-sm font-medium text-[#7b8a87]">
+                <Filter className="h-3.75 w-3.75" aria-hidden="true" />
                 <select
+                  id="history-test-type-filter"
                   value={testTypeFilter}
                   onChange={(event) => setTestTypeFilter(event.target.value)}
                   className="w-full bg-transparent text-sm text-[#4e6360] outline-none"
@@ -355,9 +358,10 @@ export default function ProfileHistoryPage() {
                   ))}
                 </select>
               </label>
-              <label className="flex min-h-13 items-center gap-2.5 px-5 text-sm font-medium text-[#7b8a87]">
-                <Filter className="h-3.75 w-3.75" />
+              <label htmlFor="history-status-filter" className="flex min-h-13 items-center gap-2.5 px-5 text-sm font-medium text-[#7b8a87]">
+                <Filter className="h-3.75 w-3.75" aria-hidden="true" />
                 <select
+                  id="history-status-filter"
                   value={statusFilter}
                   onChange={(event) => setStatusFilter(event.target.value)}
                   className="w-full bg-transparent text-sm text-[#4e6360] outline-none"
@@ -468,7 +472,9 @@ export default function ProfileHistoryPage() {
               )}
             </div>
             {deleteError ? (
-              <p className="mt-3 text-sm text-[#ba1a1a]">{deleteError}</p>
+              <p className="mt-3 text-sm text-[#ba1a1a]" role="alert" aria-live="assertive">
+                {deleteError}
+              </p>
             ) : null}
           </article>
 

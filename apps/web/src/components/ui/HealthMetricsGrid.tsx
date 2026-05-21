@@ -47,46 +47,23 @@ export function HealthMetricsGrid({
         const metricRangeText = compactRangeText(metric);
         const metricPercent = compactMetricPercent(metric);
         const isNormal = (metric.status ?? "no_data") === "normal";
+        const metricLabel = metric.displayNameVi || metric.name;
 
         return (
-          // Accessibility: prefer using a native <button> (or an <a> with href)
-          // instead of changing semantics of a non-interactive element via
-          // `role="button"` + `tabIndex={0}`. Native controls expose correct
-          // keyboard behaviour (Space/Enter), focus handling, and built-in
-          // accessibility APIs to assistive tech. If you must use `role="button"`,
-          // ensure you fully implement keyboard handlers, focus styles, and ARIA
-          // states consistently. The simplest and most robust change is:
-          //   <button type="button" className="..." onClick={...}>...</button>
-          // which preserves the present visuals while improving semantics.
-          <article
+          <button
             key={`${metric.name}-${index}`}
-            role="button"
-            tabIndex={0}
-            className="group cursor-pointer rounded-3xl bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:ring-2 hover:ring-[#00685f]/15"
+            type="button"
+            className="group w-full cursor-pointer rounded-3xl bg-white p-5 text-left shadow-sm transition-all duration-200 hover:shadow-md hover:ring-2 hover:ring-[#00685f]/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00685f]"
             onClick={() => onSelectMetric(index)}
-            // Accessibility: activate on Enter (keydown) and Space (keyup) to match
-            // native button semantics. Handling Space on keydown can cause
-            // inconsistent behaviour with screen readers; keep Enter on keydown
-            // and Space on keyup.
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                onSelectMetric(index);
-              }
-            }}
-            onKeyUp={(event) => {
-              if (event.key === " ") {
-                event.preventDefault();
-                onSelectMetric(index);
-              }
-            }}
+            aria-label={`${metricLabel}, ${metricValue} ${metricUnit}, ngưỡng ${metricRangeText}, ${recordStatusLabel(metric.status)}`}
           >
             <div className="mb-5 flex items-start justify-between gap-2">
               <span className="line-clamp-2 text-xs font-extrabold uppercase text-[#3d4947]">
-                {metric.displayNameVi || metric.name}
+                {metricLabel}
               </span>
               <CheckCircle
                 className={`h-4 w-4 shrink-0 ${isNormal ? "text-[#00685f]" : "text-[#6d7a77]"}`}
+                aria-hidden="true"
               />
             </div>
             <div className="flex items-end gap-1.5">
@@ -101,6 +78,7 @@ export function HealthMetricsGrid({
               <div
                 className="h-full rounded-full bg-[#008378] transition-all"
                 style={{ width: `${metricPercent}%` }}
+                aria-hidden="true"
               />
             </div>
             <div className="mt-3 flex items-center justify-between gap-3 text-xs font-extrabold uppercase">
@@ -111,7 +89,7 @@ export function HealthMetricsGrid({
                 {recordStatusLabel(metric.status)}
               </span>
             </div>
-          </article>
+          </button>
         );
       })}
     </div>

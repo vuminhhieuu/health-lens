@@ -21,6 +21,7 @@ import { ApiPaths } from "@healthlens/shared/constants";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { apiClient } from "@/lib/api/apiClient";
 import { notify } from "@/lib/notify";
+import { EmptyState, ErrorState, InlineFieldError, LoadingState } from "@/components/ui";
 
 const REMINDER_TYPES = [
   "Tái khám",
@@ -143,40 +144,34 @@ export default function FollowUpRemindersPage() {
       ]}
     >
       {isLoading ? (
-        <section className="flex min-h-64 items-center justify-center rounded-xl border border-[#bcc9c6]/30 bg-white p-6 text-[#4e6360] shadow-sm">
-          <Loader2 className="mr-3 h-5 w-5 animate-spin text-[#00685f]" aria-hidden="true" />
-          Đang tải hồ sơ sức khỏe...
-        </section>
+        <LoadingState
+          title="Đang tải hồ sơ sức khỏe"
+          className="min-h-64 rounded-xl border-[#bcc9c6]/30 bg-white shadow-sm"
+        />
       ) : null}
 
       {!isLoading && isError ? (
-        <section className="rounded-xl border border-[#f2b8b5] bg-[#fff8f7] p-5 text-sm leading-6 text-[#7d2b22]">
-          Không thể tải danh sách hồ sơ. Vui lòng thử lại sau.
-        </section>
+        <ErrorState
+          title="Không thể tải danh sách hồ sơ"
+          description="Vui lòng thử lại sau."
+          className="min-h-64 rounded-xl border-[#f2b8b5] bg-[#fff8f7] shadow-sm"
+        />
       ) : null}
 
       {!isLoading && !isError && !hasProfiles ? (
-        <section className="rounded-xl border border-[#bcc9c6]/30 bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#e9f6f3] text-[#00685f]">
-              <Users className="h-6 w-6" aria-hidden="true" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-[#121e1c]">
-                Bạn chưa có hồ sơ sức khỏe
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-[#4e6360]">
-                Tạo hồ sơ trước để HealthLens lưu nhắc lịch theo từng người.
-              </p>
-              <Link
-                href="/profiles"
-                className="mt-4 inline-flex min-h-12 items-center rounded-full bg-[#00685f] px-5 text-sm font-bold text-white transition hover:bg-[#008378] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#005049]"
-              >
-                Quản lý hồ sơ
-              </Link>
-            </div>
-          </div>
-        </section>
+        <EmptyState
+          title="Bạn chưa có hồ sơ sức khỏe"
+          description="Tạo hồ sơ trước để HealthLens lưu nhắc lịch theo từng người."
+          action={
+            <Link
+              href="/profiles"
+              className="inline-flex min-h-12 items-center rounded-full bg-[#00685f] px-5 text-sm font-bold text-white transition hover:bg-[#008378] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#005049]"
+            >
+              Quản lý hồ sơ
+            </Link>
+          }
+          className="min-h-64 rounded-xl border-[#bcc9c6]/30 bg-white shadow-sm"
+        />
       ) : null}
 
       {!isLoading && !isError && hasProfiles ? (
@@ -441,11 +436,7 @@ function FollowUpReminderWorkspace({
                 aria-invalid={Boolean(errors.reminderDate)}
                 className="min-h-12 w-full rounded-xl border border-[#b7e8e0] bg-[#f7fffd] px-4 text-sm font-semibold text-[#3d4947] outline-none transition focus:border-[#00685f] focus:ring-2 focus:ring-[#b7e8e0]"
               />
-              {errors.reminderDate ? (
-                <p id="follow-up-date-error" className="mt-2 text-sm font-semibold text-[#ba1a1a]">
-                  {errors.reminderDate}
-                </p>
-              ) : null}
+              <InlineFieldError id="follow-up-date-error" message={errors.reminderDate} />
             </div>
 
             <div>
@@ -469,11 +460,7 @@ function FollowUpReminderWorkspace({
                   </option>
                 ))}
               </select>
-              {errors.reminderType ? (
-                <p id="follow-up-type-error" className="mt-2 text-sm font-semibold text-[#ba1a1a]">
-                  {errors.reminderType}
-                </p>
-              ) : null}
+              <InlineFieldError id="follow-up-type-error" message={errors.reminderType} />
             </div>
 
             <div>
@@ -493,14 +480,14 @@ function FollowUpReminderWorkspace({
               />
             </div>
 
-            {errors.submit ? (
-              <p className="rounded-xl border border-[#f2b8b5] bg-[#fff8f7] px-4 py-3 text-sm font-semibold text-[#ba1a1a]">
-                {errors.submit}
-              </p>
-            ) : null}
+            <InlineFieldError id="follow-up-submit-error" message={errors.submit} />
 
             {successMessage ? (
-              <p className="rounded-xl border border-[#8fd8cc] bg-[#e9f6f3] px-4 py-3 text-sm font-semibold text-[#00685f]">
+              <p
+                role="status"
+                aria-live="polite"
+                className="rounded-xl border border-[#8fd8cc] bg-[#e9f6f3] px-4 py-3 text-sm font-semibold text-[#00685f]"
+              >
                 {successMessage}
               </p>
             ) : null}
@@ -547,22 +534,26 @@ function FollowUpReminderWorkspace({
           </div>
 
           {isRemindersLoading ? (
-            <div className="flex min-h-24 items-center rounded-xl border border-dashed border-[#bcc9c6] bg-[#f7fffd] p-5 text-sm font-medium text-[#4e6360]">
-              <Loader2 className="mr-3 h-4 w-4 animate-spin text-[#00685f]" aria-hidden="true" />
-              Đang tải nhắc lịch...
-            </div>
+            <LoadingState
+              title="Đang tải nhắc lịch"
+              className="min-h-24 rounded-xl border-[#bcc9c6] bg-[#f7fffd]"
+            />
           ) : null}
 
           {!isRemindersLoading && isRemindersError ? (
-            <div className="rounded-xl border border-[#f2b8b5] bg-[#fff8f7] p-5 text-sm font-semibold text-[#ba1a1a]">
-              Không thể tải danh sách nhắc lịch. Vui lòng thử lại sau.
-            </div>
+            <ErrorState
+              title="Không thể tải danh sách nhắc lịch"
+              description="Vui lòng thử lại sau."
+              className="min-h-24 rounded-xl border-[#f2b8b5] bg-[#fff8f7]"
+            />
           ) : null}
 
           {!isRemindersLoading && !isRemindersError && reminders.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-[#bcc9c6] bg-[#f7fffd] p-5 text-sm font-medium text-[#4e6360]">
-              Chưa có nhắc lịch cho hồ sơ này.
-            </div>
+            <EmptyState
+              title="Chưa có nhắc lịch"
+              description="Chưa có nhắc lịch cho hồ sơ này."
+              className="min-h-24 rounded-xl border-[#bcc9c6] bg-[#f7fffd]"
+            />
           ) : null}
 
           {!isRemindersLoading && !isRemindersError && reminders.length > 0 ? (

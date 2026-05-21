@@ -3,10 +3,13 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import axios from "axios";
-import { Loader2 } from "lucide-react";
 import { ApiPaths } from "@healthlens/shared/constants";
 import { apiClient } from "@/lib/api/apiClient";
 import { invitationErrorMessage, messageCatalog } from "@/lib/i18n/messages";
+import {
+  InvitationErrorState,
+  InvitationLoadingState,
+} from "@/components/auth/InvitationFlowShell";
 
 function loginReturnUrlForToken(token: string): string {
   const returnUrl = `/health-record-invitations/accept?token=${encodeURIComponent(token)}`;
@@ -23,19 +26,6 @@ type AcceptResult = {
   recordId: string;
   profileId: string;
 };
-
-function LoadingState() {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-[#effcf9] px-6">
-      <div className="rounded-2xl bg-white px-6 py-5 shadow-sm">
-        <div className="flex items-center gap-3 text-[#005049]">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <p className="text-sm font-semibold">Đang xử lý lời mời chia sẻ kết quả...</p>
-        </div>
-      </div>
-    </main>
-  );
-}
 
 function AcceptHealthRecordInvitationContent() {
   const searchParams = useSearchParams();
@@ -93,26 +83,35 @@ function AcceptHealthRecordInvitationContent() {
 
   if (!token) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#effcf9] px-6">
-        <p className="rounded-xl bg-white px-5 py-4 text-sm text-[#ba1a1a] shadow-sm">Liên kết mời không hợp lệ.</p>
-      </main>
+      <InvitationErrorState
+        title="Liên kết mời không hợp lệ"
+        description="Vui lòng kiểm tra lại email hoặc yêu cầu người gửi gửi lại lời mời."
+      />
     );
   }
 
   if (error) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#effcf9] px-6">
-        <p className="rounded-xl bg-white px-5 py-4 text-sm text-[#ba1a1a] shadow-sm">{error}</p>
-      </main>
-    );
+    return <InvitationErrorState title="Không thể xử lý lời mời" description={error} />;
   }
 
-  return <LoadingState />;
+  return (
+    <InvitationLoadingState
+      title="Đang xử lý lời mời"
+      description="Hệ thống đang xác thực và mở quyền xem kết quả được chia sẻ."
+    />
+  );
 }
 
 export default function AcceptHealthRecordInvitationPage() {
   return (
-    <Suspense fallback={<LoadingState />}>
+    <Suspense
+      fallback={
+        <InvitationLoadingState
+          title="Đang xử lý lời mời"
+          description="Hệ thống đang xác thực và mở quyền xem kết quả được chia sẻ."
+        />
+      }
+    >
       <AcceptHealthRecordInvitationContent />
     </Suspense>
   );

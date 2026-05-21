@@ -10,6 +10,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
+import { InlineFieldError } from "@/components/ui/StateComponents";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { getApiErrorStatus, messageCatalog } from "@/lib/i18n/messages";
@@ -92,7 +93,7 @@ function ResetPasswordContent() {
       <AuthPageShell footer decoration={shellDecoration}>
         <div className="text-center">
           <h1 className="mb-4 text-2xl font-bold text-[#ba1a1a]">Lỗi Truy Cập</h1>
-          <p className="mb-6 text-[#3d4947]">
+          <p className="mb-6 text-[#3d4947]" role="alert" aria-live="assertive">
             Liên kết đặt lại mật khẩu của bạn không hợp lệ hoặc đã hết hạn.
           </p>
           <Link href="/forgot-password" className="font-bold text-[#00685f] hover:underline">
@@ -157,6 +158,8 @@ function ResetPasswordContent() {
               autoComplete="new-password"
               placeholder="••••••••"
               {...register("newPassword")}
+              aria-invalid={Boolean(errors.newPassword)}
+              aria-describedby={errors.newPassword ? "reset-password-error" : undefined}
               className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 pl-12 pr-12 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
             />
             <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#3d4947]" />
@@ -169,9 +172,7 @@ function ResetPasswordContent() {
               {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
           </div>
-          {errors.newPassword ? (
-            <p className="text-sm text-[#ba1a1a]">{errors.newPassword.message}</p>
-          ) : null}
+          <InlineFieldError id="reset-password-error" message={errors.newPassword?.message} />
         </div>
 
         <div className="space-y-2">
@@ -188,17 +189,17 @@ function ResetPasswordContent() {
               autoComplete="new-password"
               placeholder="••••••••"
               {...register("confirmPassword")}
+              aria-invalid={Boolean(errors.confirmPassword)}
+              aria-describedby={errors.confirmPassword ? "reset-confirm-password-error" : undefined}
               className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 pl-12 pr-12 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
             />
             <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#3d4947]" />
           </div>
-          {errors.confirmPassword ? (
-            <p className="text-sm text-[#ba1a1a]">{errors.confirmPassword.message}</p>
-          ) : null}
+          <InlineFieldError id="reset-confirm-password-error" message={errors.confirmPassword?.message} />
         </div>
 
         {submitError ? (
-          <p role="alert" className="text-center text-sm font-medium text-[#ba1a1a]">
+          <p role="alert" aria-live="assertive" className="text-center text-sm font-medium text-[#ba1a1a]">
             {submitError}
           </p>
         ) : null}

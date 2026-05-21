@@ -20,6 +20,7 @@ import {
 import { ApiPaths } from "@healthlens/shared/constants";
 
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
 import { apiClient } from "@/lib/api/apiClient";
 
 type Profile = {
@@ -70,10 +71,10 @@ function VisitSummaryFallback() {
         { label: "Tóm tắt đi khám" },
       ]}
     >
-      <section className="flex min-h-64 items-center justify-center rounded-xl border border-[#bcc9c6]/30 bg-white p-6 text-[#4e6360] shadow-sm">
-        <Loader2 className="mr-3 h-5 w-5 animate-spin text-[#00685f]" aria-hidden="true" />
-        Đang tải tóm tắt đi khám...
-      </section>
+      <LoadingState
+        title="Đang tải tóm tắt đi khám"
+        className="min-h-64 rounded-xl border-[#bcc9c6]/30 bg-white shadow-sm"
+      />
     </DashboardPageShell>
   );
 }
@@ -158,10 +159,10 @@ function VisitSummaryPageContent() {
     >
       <PrintStyles />
       {isProfilesLoading ? (
-        <section className="flex min-h-64 items-center justify-center rounded-xl border border-[#bcc9c6]/30 bg-white p-6 text-[#4e6360] shadow-sm">
-          <Loader2 className="mr-3 h-5 w-5 animate-spin text-[#00685f]" aria-hidden="true" />
-          Đang tải hồ sơ sức khỏe...
-        </section>
+        <LoadingState
+          title="Đang tải hồ sơ sức khỏe"
+          className="min-h-64 rounded-xl border-[#bcc9c6]/30 bg-white shadow-sm"
+        />
       ) : null}
 
       {!isProfilesLoading && isProfilesError ? (
@@ -250,10 +251,10 @@ function VisitSummaryPageContent() {
               </div>
 
               {isRecordsLoading ? (
-                <div className="mt-6 flex min-h-36 items-center justify-center rounded-xl bg-[#f6fbfa] text-sm text-[#4e6360]">
-                  <Loader2 className="mr-3 h-5 w-5 animate-spin text-[#00685f]" aria-hidden="true" />
-                  Đang tải kết quả khám gần nhất...
-                </div>
+                <LoadingState
+                  title="Đang tải kết quả khám gần nhất"
+                  className="mt-6 min-h-36 rounded-xl border-none bg-[#f6fbfa] shadow-none"
+                />
               ) : null}
 
               {!isRecordsLoading && isRecordsError ? (
@@ -445,9 +446,11 @@ function IconBox({ children }: { children: React.ReactNode }) {
 
 function ErrorPanel({ message }: { message: string }) {
   return (
-    <section className="rounded-xl border border-[#f2b8b5] bg-[#fff8f7] p-5 text-sm leading-6 text-[#7d2b22]">
-      {message}
-    </section>
+    <ErrorState
+      title="Không thể tải dữ liệu"
+      description={message}
+      className="min-h-24 rounded-xl border-[#f2b8b5] bg-[#fff8f7] shadow-sm"
+    />
   );
 }
 

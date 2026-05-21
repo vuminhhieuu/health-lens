@@ -22,6 +22,7 @@ import SafeImage from "@/components/ui/SafeImage";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { AuthenticatedTopHeader } from "@/components/layout/AuthenticatedTopHeader";
+import { LoadingState } from "@/components/ui";
 
 type CurrentUser = {
   id?: string;
@@ -91,8 +92,11 @@ export default function DashboardLayout({
 
   if (!authReady) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="flex min-h-screen items-center justify-center">
+        <LoadingState
+          title="Đang tải không gian làm việc"
+          className="min-h-32 border-none bg-transparent shadow-none"
+        />
       </div>
     );
   }

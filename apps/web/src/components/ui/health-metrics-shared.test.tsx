@@ -33,7 +33,8 @@ describe("shared health metric UI", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /glucose/i }));
+    const metricButton = screen.getByRole("button", { name: /glucose/i });
+    await user.click(metricButton);
     await user.keyboard("{Enter}");
 
     expect(onSelectMetric).toHaveBeenCalledTimes(2);

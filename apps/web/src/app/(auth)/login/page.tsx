@@ -12,6 +12,7 @@ import { z } from "zod";
 import { ApiPaths } from "@healthlens/shared/constants";
 
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
+import { InlineFieldError } from "@/components/ui/StateComponents";
 import { syncActiveConsentVersion } from "@/lib/consent/syncActiveConsentVersion";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
@@ -201,13 +202,11 @@ function LoginContent() {
                 placeholder="email@vi-du.com"
                 {...register("email")}
                 disabled={isPendingDeletionBlocked}
+                aria-invalid={Boolean(errors.email)}
+                aria-describedby={errors.email ? "login-email-error" : undefined}
                 className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
               />
-              {errors.email ? (
-                <p className="text-sm text-[#ba1a1a]">
-                  {errors.email.message}
-                </p>
-              ) : null}
+              <InlineFieldError id="login-email-error" message={errors.email?.message} />
             </div>
 
             {/* Password */}
@@ -226,6 +225,8 @@ function LoginContent() {
                   placeholder="••••••••"
                   {...register("password")}
                   disabled={isPendingDeletionBlocked}
+                  aria-invalid={Boolean(errors.password)}
+                  aria-describedby={errors.password ? "login-password-error" : undefined}
                   className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 pr-12 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
                 />
                 <button
@@ -241,11 +242,7 @@ function LoginContent() {
                   )}
                 </button>
               </div>
-              {errors.password ? (
-                <p className="text-sm text-[#ba1a1a]">
-                  {errors.password.message}
-                </p>
-              ) : null}
+              <InlineFieldError id="login-password-error" message={errors.password?.message} />
             </div>
 
             {/* Forgot password */}
@@ -263,6 +260,7 @@ function LoginContent() {
               <p
                 id="login-submit-error"
                 role="alert"
+                aria-live="assertive"
                 className="text-center text-sm font-medium text-[#ba1a1a]"
               >
                 {submitError}

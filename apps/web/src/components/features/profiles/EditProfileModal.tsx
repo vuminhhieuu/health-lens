@@ -7,6 +7,8 @@ import { X, FileEdit, Info, Loader2 } from "lucide-react";
 import { UpdateProfileInput, updateProfileSchema } from "@healthlens/shared";
 import type { ProfileGender } from "@healthlens/shared";
 
+import { InlineFieldError } from "@/components/ui/StateComponents";
+
 type EditableProfile = {
   id: string;
   displayName: string;
@@ -129,45 +131,43 @@ export function EditProfileModal({
             className="space-y-6"
           >
             <div className="space-y-2">
-              <label className="text-sm font-bold text-[#6d7a77] ml-1">
+              <label htmlFor="edit-profile-display-name" className="text-sm font-bold text-[#6d7a77] ml-1">
                 Tên hiển thị *
               </label>
               <input
+                id="edit-profile-display-name"
                 {...register("displayName")}
                 readOnly={isReadOnly}
+                aria-invalid={Boolean(errors.displayName)}
+                aria-describedby={errors.displayName ? "edit-profile-display-name-error" : undefined}
                 placeholder="Ví dụ: Mẹ, Bố..."
                 className={`w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all placeholder:text-[#bcc9c6] ${isReadOnly ? "cursor-default" : ""}`}
               />
-              {errors.displayName && (
-                <p className="text-xs font-bold text-[#ba1a1a] ml-1">
-                  {errors.displayName.message}
-                </p>
-              )}
+              <InlineFieldError
+                id="edit-profile-display-name-error"
+                message={errors.displayName?.message}
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-bold text-[#6d7a77] ml-1">
+                <label htmlFor="edit-profile-birth-date" className="text-sm font-bold text-[#6d7a77] ml-1">
                   Ngày sinh
                 </label>
-                <div>
-                  <input
-                    id="edit-profile-birth-date"
-                    type="date"
-                    {...register("birthDate")}
-                    readOnly={isReadOnly}
-                    className={`w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all ${isReadOnly ? "cursor-default" : ""}`}
-                  />
-                </div>
-                {errors.birthDate && (
-                  <p className="text-xs font-bold text-[#ba1a1a] ml-1">
-                    {errors.birthDate.message}
-                  </p>
-                )}
+                <input
+                  id="edit-profile-birth-date"
+                  type="date"
+                  {...register("birthDate")}
+                  readOnly={isReadOnly}
+                  aria-invalid={Boolean(errors.birthDate)}
+                  aria-describedby={errors.birthDate ? "edit-profile-birth-date-error" : undefined}
+                  className={`w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all ${isReadOnly ? "cursor-default" : ""}`}
+                />
+                <InlineFieldError id="edit-profile-birth-date-error" message={errors.birthDate?.message} />
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-[#6d7a77] ml-1">
+                <label htmlFor="edit-profile-gender" className="text-sm font-bold text-[#6d7a77] ml-1">
                   Giới tính
                 </label>
                 <Controller
@@ -175,9 +175,12 @@ export function EditProfileModal({
                   control={control}
                   render={({ field }) => (
                     <select
+                      id="edit-profile-gender"
                       {...field}
                       disabled={isReadOnly}
                       value={field.value ?? ""}
+                      aria-invalid={Boolean(errors.gender)}
+                      aria-describedby={errors.gender ? "edit-profile-gender-error" : undefined}
                       className={`w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all appearance-none ${isReadOnly ? "cursor-default" : "cursor-pointer"}`}
                     >
                       <option value="male">Nam</option>
@@ -186,25 +189,25 @@ export function EditProfileModal({
                     </select>
                   )}
                 />
+                <InlineFieldError id="edit-profile-gender-error" message={errors.gender?.message} />
               </div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-bold text-[#6d7a77] ml-1">
+              <label htmlFor="edit-profile-notes" className="text-sm font-bold text-[#6d7a77] ml-1">
                 Ghi chú thêm
               </label>
               <textarea
+                id="edit-profile-notes"
                 {...register("notes")}
                 readOnly={isReadOnly}
+                aria-invalid={Boolean(errors.notes)}
+                aria-describedby={errors.notes ? "edit-profile-notes-error" : undefined}
                 placeholder="Ví dụ: Tiểu đường type 2, cần theo dõi huyết áp..."
                 rows={4}
                 className={`w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all resize-none placeholder:text-[#bcc9c6] ${isReadOnly ? "cursor-default" : ""}`}
               />
-              {errors.notes && (
-                <p className="text-xs font-bold text-[#ba1a1a] ml-1">
-                  {errors.notes.message}
-                </p>
-              )}
+              <InlineFieldError id="edit-profile-notes-error" message={errors.notes?.message} />
             </div>
 
             <div className="flex items-start gap-3 p-4 bg-[#e4f1ee] rounded-2xl text-[#005049]">

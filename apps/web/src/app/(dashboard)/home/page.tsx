@@ -25,6 +25,7 @@ import { apiClient } from "@/lib/api/apiClient";
 import { notify } from "@/lib/notify";
 import { InviteMemberModal } from "@/components/features/profiles/InviteMemberModal";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
 
 type Profile = {
   id: string;
@@ -353,28 +354,30 @@ export default function DashboardHomePage() {
 
           <div className="space-y-4">
             {isDashboardLoading ? (
-              <div className="rounded-2xl border border-[#bcc9c6]/30 bg-white p-5 text-sm text-[#6d7a77] shadow-sm">
-                Đang tải dữ liệu sức khỏe mới nhất...
-              </div>
+              <LoadingState
+                title="Đang tải dữ liệu sức khỏe mới nhất"
+                className="min-h-32 rounded-2xl border-[#bcc9c6]/30 bg-white shadow-sm"
+              />
             ) : hasDashboardError ? (
-              <div className="rounded-2xl border border-[#fecdd3] bg-white p-5 text-sm text-[#9f1239] shadow-sm">
-                Chưa thể hiển thị kết quả gần đây do lỗi tải dữ liệu.
-              </div>
+              <ErrorState
+                title="Không thể tải kết quả gần đây"
+                description="Chưa thể hiển thị kết quả gần đây do lỗi tải dữ liệu."
+                className="min-h-32 rounded-2xl border-[#fecdd3] bg-white shadow-sm"
+              />
             ) : recentRecords.length === 0 ? (
-              <div className="rounded-2xl border border-[#bcc9c6]/30 bg-white p-6 text-sm text-[#6d7a77] shadow-sm">
-                <p className="text-lg font-bold text-[#121e1c]">
-                  Chưa có kết quả sức khỏe cho {primaryProfileName}.
-                </p>
-                <p className="mt-2">
-                  Tải phiếu xét nghiệm hoặc kết quả khám đầu tiên để dashboard hiển thị dữ liệu thật.
-                </p>
-                <Link
-                  href={uploadHrefForProfile(primaryProfileId)}
-                  className="mt-5 inline-flex min-h-11 items-center rounded-full bg-[#00685f] px-5 text-sm font-bold text-white transition hover:bg-[#008378]"
-                >
-                  Tải kết quả lên
-                </Link>
-              </div>
+              <EmptyState
+                title={`Chưa có kết quả sức khỏe cho ${primaryProfileName}`}
+                description="Tải phiếu xét nghiệm hoặc kết quả khám đầu tiên để dashboard hiển thị dữ liệu thật."
+                action={
+                  <Link
+                    href={uploadHrefForProfile(primaryProfileId)}
+                    className="inline-flex min-h-11 items-center rounded-full bg-[#00685f] px-5 text-sm font-bold text-white transition hover:bg-[#008378]"
+                  >
+                    Tải kết quả lên
+                  </Link>
+                }
+                className="min-h-32 rounded-2xl border-[#bcc9c6]/30 bg-white shadow-sm"
+              />
             ) : (
               recentRecords.map((record) => (
                 <article
