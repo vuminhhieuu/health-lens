@@ -1,8 +1,10 @@
 # Epic 7 Code Organization Assessment
 
 Status: assessment  
-Date: 2026-05-20  
+Date: 2026-05-20 (baseline); **post-6.4 audit-log sync: 2026-05-21**  
 Scope: project structure, backend package boundaries, frontend feature organization, shared contracts, and refactor backlog fit.
+
+> **Post-6.4 / core-7-5 (2026-05-21):** `admin/audit-log/page.tsx` decomposed to ~133 lines compose-only + `lib/admin/auditLog.ts`, `hooks/admin/*`, `components/admin/audit-log/*`. Line counts in §1 below marked *(pre-refactor)* where stale.
 
 Related deeper review: `source-code-architecture-review.md`  
 Consolidated backlog synthesis: `epic-7-issues-and-proposed-stories.md`
@@ -105,7 +107,7 @@ This is acceptable for the current project size, but the API is approaching the 
 Largest page hotspots:
 
 - `apps/web/src/app/(dashboard)/health-records/review/[recordId]/page.tsx` - 2,446 lines.
-- `apps/web/src/app/admin/audit-log/page.tsx` - 1,813 lines.
+- `apps/web/src/app/admin/audit-log/page.tsx` - 1,813 lines *(pre-refactor; **~133** as of 2026-05-21 — story 6.4 / 7.5 done)*.
 - `apps/web/src/app/admin/reference-data/approvals/page.tsx` - 1,098 lines.
 - `apps/web/src/app/admin/reference-data/page.tsx` - 1,035 lines.
 - `apps/web/src/app/(dashboard)/home/page.tsx` - 741 lines.
@@ -159,21 +161,11 @@ This should be tracked as a lightweight contract organization story, not bundled
 
 ## Gaps Outside The Four Existing Stories
 
-### Recommended Add: Story 7.5 - Split Admin Audit Log Page Into Feature Modules
+### Story 7.5 - Split Admin Audit Log Page Into Feature Modules — **done (2026-05-21)**
 
-Priority: P2  
-Area: Frontend admin, audit logs, online RAG citation audit
+Delivered via `remaining-6-4-admin-audit-log-hardening-and-decomposition` (Phase C) and closed in `7-5-split-admin-audit-log-page-into-feature-modules.md`. Citation helpers remain in `lib/admin/auditLog.ts` + `OnlineRagCitationPanel.tsx` (optional future split to `onlineRagCitations.ts` is follow-up only).
 
-Rationale:
-
-`admin/audit-log/page.tsx` is the second largest web file and contains multiple feature concerns: audit log filters, URL param sync, citation review panel, CSV export, detail modal, formatting utilities, pagination helpers, and page rendering.
-
-Suggested scope:
-
-- Extract audit log types and parameter builders to `lib/admin/auditLog.ts`.
-- Extract citation audit helpers to `lib/admin/onlineRagCitations.ts` or `components/admin/online-rag-citations`.
-- Extract `AuditDetailModal`, filter controls, pagination, and citation panel into focused components.
-- Preserve URL filter behavior and CSV export behavior.
+*(Pre-refactor rationale retained for history: monolith ~1,813 lines; filters, URL sync, citation panel, CSV export, modal, helpers in one route file.)*
 
 ### Recommended Add: Story 7.6 - Split Admin Reference Data Pages Into Feature Modules
 

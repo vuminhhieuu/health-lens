@@ -26,7 +26,10 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -59,6 +62,15 @@ public class AdminAuditLogService {
     private final ReferenceMetricRepository referenceMetricRepository;
     private final JsonPathExpressions jsonPathExpressions;
     private final ObjectMapper objectMapper;
+
+    /** Self-proxy for {@link Propagation#REQUIRES_NEW} per export batch (avoids one long read-only transaction). */
+    private AdminAuditLogService self;
+
+    @Autowired
+    @Lazy
+    void setSelf(AdminAuditLogService self) {
+        this.self = self;
+    }
 
     @Transactional(readOnly = true)
     public AuditLogPageDto query(
@@ -106,8 +118,7 @@ public class AdminAuditLogService {
         );
     }
 
-    /** Export all rows matching filters (bounded by maxRows). */
-    @Transactional(readOnly = true)
+    /** Export all rows matching filters (bounded by maxRows). No class-level transaction — each batch uses a short read-only TX. */
     public void writeCsv(
             String resourceType,
             UUID resourceId,
@@ -121,8 +132,7 @@ public class AdminAuditLogService {
         writeCsv(resourceType, resourceId, actorEmail, action, null, from, to, writer, maxRows);
     }
 
-    /** Export all rows matching filters (bounded by maxRows). */
-    @Transactional(readOnly = true)
+    /** Export all rows matching filters (bounded by maxRows). No class-level transaction — each batch uses a short read-only TX. */
     public void writeCsv(
             String resourceType,
             UUID resourceId,
@@ -170,11 +180,7 @@ public class AdminAuditLogService {
                 if (cursorCreatedAt != null && cursorId != null) {
                     exportSpec = exportSpec.and(seekBeforeCursor(cursorCreatedAt, cursorId));
                 }
-                Page<AuditLog> page = auditLogRepository.findAll(
-                        withActorFetched(exportSpec),
-                        PageRequest.of(0, batchSize, EXPORT_CSV_SORT)
-                );
-                List<AuditLog> rows = page.getContent();
+                List<AuditLog> rows = loadExportBatch(exportSpec, batchSize);
                 if (rows.isEmpty()) {
                     break;
                 }
@@ -212,6 +218,32 @@ public class AdminAuditLogService {
             }
             printer.flush();
         }
+    }
+
+    /**
+     * Loads one keyset page for CSV export in a dedicated read-only transaction so streaming export
+     * does not hold a single connection for the full {@code maxRows} loop.
+     * <p>
+     * Public so Spring's proxy can apply {@link Propagation#REQUIRES_NEW}; code in this bean should
+     * call {@link #loadExportBatch} (routes via self-proxy) rather than invoking this directly.
+     */
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public List<AuditLog> fetchExportBatch(Specification<AuditLog> exportSpec, int batchSize) {
+        return auditLogRepository.findAll(
+                withActorFetched(exportSpec),
+                PageRequest.of(0, batchSize, EXPORT_CSV_SORT)
+        ).getContent();
+    }
+
+    /** Routes export reads through the self-proxy so each batch gets {@link Propagation#REQUIRES_NEW}. */
+    private List<AuditLog> loadExportBatch(Specification<AuditLog> exportSpec, int batchSize) {
+        if (self != null) {
+            return self.fetchExportBatch(exportSpec, batchSize);
+        }
+        return auditLogRepository.findAll(
+                withActorFetched(exportSpec),
+                PageRequest.of(0, batchSize, EXPORT_CSV_SORT)
+        ).getContent();
     }
 
     /**

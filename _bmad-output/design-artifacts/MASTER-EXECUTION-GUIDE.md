@@ -28,7 +28,7 @@ Bây giờ bạn có ba prompt sẵn sàng để tiếp tục:
 **Step 1: Copy Prompt (5 phút)**
 ```
 File: PHASE-2-STITCH-PROMPT-VI.md
-Location: /home/vmhieu/Workspace/UIT/health-lens/design-artifacts/
+Location: _bmad-output/design-artifacts/
 ```
 - Mở file
 - Copy toàn bộ prompt (từ START đến END)
@@ -217,7 +217,7 @@ Checklist:
 ## 📂 FILE LOCATIONS
 
 ```
-/home/vmhieu/Workspace/UIT/health-lens/design-artifacts/
+_bmad-output/design-artifacts/
 
 PHASE PROMPTS:
 ├── PHASE-1-IMPLEMENTATION-GUIDE.md (completed)

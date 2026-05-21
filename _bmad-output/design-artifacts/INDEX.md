@@ -358,19 +358,19 @@ Result: Complete design system with 50+ components + 20 screens!
 
 All files are in:
 ```
-/home/vmhieu/Workspace/UIT/health-lens/design-artifacts/
+_bmad-output/design-artifacts/
 ```
 
 Quick access:
 ```bash
 # See all files
-ls -la /home/vmhieu/Workspace/UIT/health-lens/design-artifacts/
+ls -la _bmad-output/design-artifacts/
 
 # View specific file
 cat PHASE-2-STITCH-PROMPT-VI.md
 
 # Search for content
-grep -r "HealthStatusBadge" /home/vmhieu/Workspace/UIT/health-lens/design-artifacts/
+grep -r "HealthStatusBadge" _bmad-output/design-artifacts/
 ```
 
 ---

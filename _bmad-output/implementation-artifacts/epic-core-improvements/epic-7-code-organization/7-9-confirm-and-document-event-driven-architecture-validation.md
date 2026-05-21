@@ -35,8 +35,8 @@ Story `7-9` đã đạt mức khá tốt cho một story định hướng kiến
 ## Recommended Conditions Before Execution
 
 1. Khi thực hiện story này, coi deliverable bắt buộc là:
-   - một decision section rõ ràng trong [source-code-architecture-review.md](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/_bmad-output/implementation-artifacts/epic-core-improvements/epic-7-code-organization/source-code-architecture-review.md)
-   - một bản backlog/order update trong [epic-7-issues-and-proposed-stories.md](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/_bmad-output/implementation-artifacts/epic-core-improvements/epic-7-code-organization/epic-7-issues-and-proposed-stories.md)
+   - một decision section rõ ràng trong [source-code-architecture-review.md](source-code-architecture-review.md)
+   - một bản backlog/order update trong [epic-7-issues-and-proposed-stories.md](epic-7-issues-and-proposed-stories.md)
    - và một doc kiến trúc ngắn trong `docs/` hoặc planning artifacts
 2. Decision table nên bắt buộc cover ít nhất 5 category:
    - OCR jobs

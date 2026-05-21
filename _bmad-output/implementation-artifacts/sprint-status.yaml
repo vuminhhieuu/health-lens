@@ -219,7 +219,7 @@ development_status:
   core-7-2-split-health-record-review-page-into-feature-components-and-hooks: backlog
   core-7-3-extract-shared-profile-sharing-hook: backlog
   core-7-4-email-template-cleanup: backlog
-  core-7-5-split-admin-audit-log-page-into-feature-modules: backlog
+  core-7-5-split-admin-audit-log-page-into-feature-modules: done
   core-7-6-split-admin-reference-data-pages-into-feature-modules: backlog
   core-7-7-backend-health-record-service-responsibility-split: backlog
   core-7-8-shared-frontend-api-contract-types-for-high-churn-features: backlog
@@ -285,6 +285,7 @@ development_status:
   remaining-6-1-frontend-dead-code-and-export-cleanup: done
   remaining-6-2-accessibility-and-shared-ui-components-cleanup: done
   remaining-6-3-frontend-bundle-and-image-rule-cleanup: ready-for-dev
+  remaining-6-4-admin-audit-log-hardening-and-decomposition: done
   remaining-6-retrospective: optional
 
 # =====================================================

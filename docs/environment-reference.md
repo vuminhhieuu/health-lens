@@ -117,7 +117,7 @@ Reindex procedure when changing `EMBEDDING_MODEL`, `EMBEDDING_BASE_URL`, or `QDR
 
 ## Canonical Sources
 
-- [README.md](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/README.md)
-- [apps/api/src/main/resources/application.yml](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/apps/api/src/main/resources/application.yml)
-- [docker/compose.yml](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/docker/compose.yml)
-- [docker/compose.dev.yml](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/docker/compose.dev.yml)
+- [README.md](../README.md)
+- [apps/api/src/main/resources/application.yml](../apps/api/src/main/resources/application.yml)
+- [docker/compose.yml](../docker/compose.yml)
+- [docker/compose.dev.yml](../docker/compose.dev.yml)

@@ -14,9 +14,9 @@ Mục tiêu: tạo **1 tài liệu review duy nhất** đủ chi tiết để:
 - Source code hiện tại (monorepo `apps/web`, `apps/api`, `services/ocr-service`, `packages/shared`)
 
 **Tài liệu dùng để kiểm chứng/tham khảo**:
-- [REVIEW-FULL-v2.md](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/docs/REVIEW-FULL-v2.md)
-- [REVIEW-DISPOSITION.md](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/docs/REVIEW-DISPOSITION.md)
-- [PRODUCTION-READINESS.md](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/docs/PRODUCTION-READINESS.md)
+- [REVIEW-FULL-v2.md](REVIEW-FULL-v2.md)
+- [REVIEW-DISPOSITION.md](REVIEW-DISPOSITION.md)
+- [PRODUCTION-READINESS.md](PRODUCTION-READINESS.md)
 - `_bmad-output/planning-artifacts/prd.md` (scope, compliance: Nghị định 13/2023/NĐ-CP)
 
 ## 1) Các quyết định scope đã chốt trong cuộc trao đổi
@@ -53,7 +53,7 @@ Không nên thiết kế “A = provider cố định”. Thiết kế productio
 - N provider adapters (Textract/GCV/Azure/EasyOCR/…)
 - Parser metrics tách riêng khỏi OCR (để khi đổi provider không rewrite parsing)
 
-Hiện code đang “couple” theo kiểu `OcrService.processImage(url)` và consumer gọi luôn cho mọi file type. Ví dụ: [OcrJobConsumer.java](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/apps/api/src/main/java/com/healthlens/api/service/OcrJobConsumer.java) luôn gọi `ocrService.processImage(downloadUrl)` (không phân biệt PDF/image).
+Hiện code đang “couple” theo kiểu `OcrService.processImage(url)` và consumer gọi luôn cho mọi file type. Ví dụ: [OcrJobConsumer.java](../../../apps/api/src/main/java/com/healthlens/api/service/OcrJobConsumer.java) luôn gọi `ocrService.processImage(downloadUrl)` (không phân biệt PDF/image).
 
 ## 3) Production Definition of Done (gates)
 
@@ -109,9 +109,9 @@ Theo `_bmad-output/implementation-artifacts/sprint-status.yaml` (last_updated 20
 ### P0-A) OCR PDF pipeline đang mismatch (gần như “broken by design”)
 
 Dấu hiệu code-level:
-- Upload cho phép PDF (`accept="application/pdf"`): [UploadButton.tsx](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/apps/web/src/components/features/upload/UploadButton.tsx)
-- Backend generate upload url có path cho `application/pdf`: [HealthRecordService.java](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java)
-- Nhưng OCR consumer không phân biệt filetype: [OcrJobConsumer.java](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/apps/api/src/main/java/com/healthlens/api/service/OcrJobConsumer.java) line 110 gọi `ocrService.processImage(downloadUrl)`
+- Upload cho phép PDF (`accept="application/pdf"`): [UploadButton.tsx](../../../apps/web/src/components/features/upload/UploadButton.tsx)
+- Backend generate upload url có path cho `application/pdf`: [HealthRecordService.java](../../../apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java)
+- Nhưng OCR consumer không phân biệt filetype: [OcrJobConsumer.java](../../../apps/api/src/main/java/com/healthlens/api/service/OcrJobConsumer.java) line 110 gọi `ocrService.processImage(downloadUrl)`
 - OCR microservice hiện tại là EasyOCR (image OCR), không phải PDF OCR (thường cần “document OCR” hoặc render PDF->image).
 
 Production impact:
@@ -197,10 +197,10 @@ Các gap theo v2 cần kiểm chứng kỹ:
 
 ### 7.1 Epic 7 (Reference data)
 
-Hiện trạng web:
-- Admin dashboard stub: [admin/page.tsx](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/apps/web/src/app/admin/page.tsx)
-- Audit log viewer stub: [admin/audit-log/page.tsx](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/apps/web/src/app/admin/audit-log/page.tsx)
-- Reference data page có nhưng cần đối chiếu “approval workflow + import + audit log viewer”.
+Hiện trạng web (cập nhật 2026-05-21):
+- Admin dashboard stub: [admin/page.tsx](../../../apps/web/src/app/admin/page.tsx)
+- **Audit log viewer:** shipped — compose-only route + `components/admin/audit-log/` (remaining-6-4, core-7-5); không còn placeholder.
+- Reference data page có nhưng cần đối chiếu “approval workflow + import”.
 
 Production must-have:
 - Không có đường “bypass approval” (nếu approval là requirement).

@@ -380,6 +380,25 @@ As a maintainer, I want frontend bundle and image warnings addressed, so that bu
 2. `@next/next/no-img-element` warnings are resolved or explicitly justified.
 3. Bundle-impact changes are measured before/after where practical.
 
+### Story 6.4: Admin Audit Log Hardening, Page Decomposition, And Reference Data UI Cleanup
+
+**Priority:** P2  
+**Implementation status:** done (2026-05-21) — artifact: `remaining-production-review/epic-6-cleanup-accessibility-maintainability/6-4-admin-audit-log-hardening-and-decomposition.md`
+
+As an admin and maintainer, I want the audit log surface decomposed, export behavior documented and efficient, and redundant navigation removed, so that I can operate and evolve audit logging without regressions, long DB transactions, or confusing duplicate links.
+
+**Review findings:** L-14, L-15, L-16 — addressed in implementation; automated tests pass; UX smoke checklist 8/8 Pass (2026-05-21, see story artifact). Delivers core **7-5** decomposition via Phase C.
+
+**Acceptance Criteria**
+
+1. `/admin/audit-log` filters, pagination, detail modal, citation panel (if present), and CSV export behave as before refactor.
+2. Audit-log route composes focused modules; `page.tsx` is not a monolith.
+3. CSV UTF-8 BOM is documented or removed with clear Excel/UTF-8 acceptance criteria.
+4. Large CSV export does not use one long read-only transaction across all batches.
+5. Tests cover CSV export edges, `UnifiedAuditLogWriter` paths, and `actorEmail` filter (user email + JSON email fields).
+6. Duplicate 「Nhật ký hoạt động」 CTA removed from `/admin/reference-data` (sidebar retains nav).
+7. Audit list/export API contracts unchanged except optional leading BOM byte.
+
 ## Recommended Next Step
 
 Chốt một trong hai hướng:

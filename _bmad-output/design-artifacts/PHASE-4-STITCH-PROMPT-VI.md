@@ -936,7 +936,7 @@ Phase 4: Screens         4-6 hours  📋 READY (after Phase 3)
 TOTAL: 12-17 hours
 
 All files will be in:
-/home/vmhieu/Workspace/UIT/health-lens/design-artifacts/
+_bmad-output/design-artifacts/
 ```
 
 ---

@@ -76,7 +76,7 @@ Observed state:
 
 Implication:
 
-After `7-2`, the next frontend organization stories should target admin audit log and admin reference-data pages.
+After `7-2`, admin audit log decomposition is **done** (2026-05-21 via remaining-6-4 / `7-5`). Next frontend organization target: **admin reference-data pages** (`7-6`).
 
 ### E. Shared Contracts Need Organization Before They Need Generation
 
@@ -103,11 +103,11 @@ These are lower-risk but still valid Epic 7 maintainability items and should be 
 
 ## Proposed Additional Stories
 
-### 7.5 Split Admin Audit Log Page Into Feature Modules
+### 7.5 Split Admin Audit Log Page Into Feature Modules — **done (2026-05-21)**
 
-Reason:
+Delivered via remaining-6-4 Phase C / L-14. Route `page.tsx` ~133 lines (compose-only); modules under `lib/admin/auditLog.ts`, `hooks/admin/`, `components/admin/audit-log/`. Artifact: `7-5-split-admin-audit-log-page-into-feature-modules.md`.
 
-`apps/web/src/app/admin/audit-log/page.tsx` is one of the largest route files and mixes filters, URL state, CSV export, citation review, detail modal, formatting helpers, and rendering.
+*(Historical reason: pre-refactor monolith mixed filters, URL state, CSV export, citation panel, modal, helpers, and rendering.)*
 
 ### 7.6 Split Admin Reference Data Pages Into Feature Modules
 
@@ -168,7 +168,7 @@ Project documentation has drifted from the current source tree and migration his
 3. `7-11` Introduce application stream/event boundary.
 4. `7-10` Unify email event delivery.
 5. `7-2` Split health record review page into feature components and hooks.
-6. `7-5` Split admin audit log page into feature modules.
+6. `7-5` Split admin audit log page into feature modules. — **done** (2026-05-21, via `remaining-6-4`; artifact `7-5-split-admin-audit-log-page-into-feature-modules.md`).
 7. `7-6` Split admin reference-data pages into feature modules.
 8. `7-3` Extract shared profile sharing hook.
 9. `7-4` Email template cleanup.
