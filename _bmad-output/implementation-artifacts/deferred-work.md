@@ -50,3 +50,14 @@
 ## Deferred from: code review of pae-6-change-password-api-and-settings-ui.md (2026-05-21)
 
 - `AdminAuditLogService` chưa có nhãn hiển thị cho audit action `CHANGE_PASSWORD` — ngoài AC story; bổ sung khi làm màn audit auth.
+
+## Deferred from: code review of pae-8-settings-about-tab-version-and-support.md (2026-05-21)
+
+- AC4: profile vẫn card “Độ hoàn thiện hồ sơ” 85% cứng — xử lý trong `pae-9`.
+- Gom `ResourceLinkRow` / `AboutMetricTile` dùng chung với privacy settings.
+- Thay khối liên hệ about bằng `SettingsSupportCard` + mailto có version.
+
+## Deferred from: code review of pae-7-settings-privacy-tab-consent-and-legal-links.md (2026-05-21)
+
+- Test chỉ đọc source tĩnh, không mock API/React Query — pattern giống các story PAE khác; bổ sung khi có harness component test dùng chung.
+- Lặp cấu hình `DashboardPageShell` 3 lần (loading/error/success) — có thể extract helper sau khi ổn định UI settings.

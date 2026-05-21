@@ -2,17 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { changePasswordSchema, type ChangePasswordInput } from "@healthlens/shared/schemas/auth";
-import {
-  Eye,
-  EyeOff,
-  KeyRound,
-  Lock,
-  Mail,
-  Shield,
-  ShieldCheck,
-  UserRound,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Lock, Mail, Shield, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useForm, type UseFormRegisterReturn } from "react-hook-form";
@@ -21,11 +11,11 @@ import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { changePasswordErrorMessage } from "@/lib/i18n/messages";
-import { marketingContact } from "@/lib/marketing/contact";
 import { notify } from "@/lib/notify";
 
-const profileCardClassName =
-  "bg-white rounded-3xl p-8 shadow-[0_8px_32px_rgba(18,30,28,0.04)] border border-[#bcc9c6]/20";
+import { SettingsAccountNav } from "../_components/SettingsAccountNav";
+import { SettingsDirectContactCard } from "../_components/SettingsDirectContactCard";
+import { settingsCardClassName, settingsTipCardClassName } from "../_components/settingsStyles";
 
 const inputClassName =
   "h-12 w-full rounded-xl border-none bg-[#e9f6f3] px-4 pl-11 pr-12 text-[#121e1c] font-medium outline-none transition focus:ring-2 focus:ring-[#00685f]/20";
@@ -91,52 +81,6 @@ function PasswordField({
   );
 }
 
-type SecurityNavItemProps = {
-  href?: string;
-  icon: LucideIcon;
-  label: string;
-  active?: boolean;
-  disabled?: boolean;
-};
-
-function SecurityNavItem({ href, icon: Icon, label, active, disabled }: SecurityNavItemProps) {
-  const content = (
-    <div
-      className={`flex items-center gap-3 py-2 ${disabled ? "opacity-60" : "group"}`}
-      aria-current={active ? "page" : undefined}
-    >
-      <div
-        className={`rounded-lg p-2 transition-colors ${
-          active
-            ? "bg-[#00685f] text-white"
-            : disabled
-              ? "bg-[#e9f6f3] text-[#6d7a77]"
-              : "bg-[#e9f6f3] text-[#00685f] group-hover:bg-[#008378] group-hover:text-white"
-        }`}
-      >
-        <Icon className="h-4 w-4" aria-hidden="true" />
-      </div>
-      <span
-        className={`font-medium ${
-          active ? "text-[#00685f]" : disabled ? "text-[#6d7a77]" : "text-[#3d4947] group-hover:text-[#00685f]"
-        }`}
-      >
-        {label}
-      </span>
-    </div>
-  );
-
-  if (disabled || !href) {
-    return (
-      <div role="listitem" aria-disabled="true">
-        {content}
-      </div>
-    );
-  }
-
-  return <Link href={href}>{content}</Link>;
-}
-
 export default function ChangePasswordPage() {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
@@ -193,7 +137,7 @@ export default function ChangePasswordPage() {
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
         {/* Cột chính (2/3) — form đổi mật khẩu */}
         <div className="space-y-8 lg:col-span-2">
-          <section className={`${profileCardClassName} relative overflow-hidden`}>
+          <section className={`${settingsCardClassName} relative overflow-hidden`}>
             <div className="absolute top-0 right-0 -mt-16 -mr-16 h-32 w-32 rounded-bl-full bg-[#00685f]/5" />
 
             <div className="relative mb-10 flex flex-col gap-6 md:flex-row md:items-center">
@@ -261,7 +205,7 @@ export default function ChangePasswordPage() {
           </section>
 
           {/* Card phụ dưới form — “điều gì xảy ra sau khi lưu” (tương tự block Thông tin sức khỏe trên profile) */}
-          <section className={profileCardClassName}>
+          <section className={settingsCardClassName}>
             <div className="mb-6 flex items-center gap-3">
               <ShieldCheck className="h-6 w-6 text-[#00685f]" aria-hidden="true" />
               <h2 className="text-xl font-bold text-[#121e1c]">Sau khi lưu mật khẩu mới</h2>
@@ -294,21 +238,15 @@ export default function ChangePasswordPage() {
         {/* Cột phụ (1/3) — định hướng, mẹo, hỗ trợ */}
         <div className="space-y-8">
           {/* 1. Lối tắt bảo mật (đối xứng “Cài đặt tài khoản” trên profile) */}
-          <section className={profileCardClassName}>
+          <section className={settingsCardClassName}>
             <div className="mb-8 flex items-center gap-3">
               <Shield className="h-6 w-6 text-[#00685f]" aria-hidden="true" />
               <h2 className="text-xl font-bold text-[#121e1c]">Bảo mật & tài khoản</h2>
             </div>
-            <nav className="space-y-2" aria-label="Lối tắt bảo mật">
-              <SecurityNavItem href="/settings/change-password" icon={KeyRound} label="Đổi mật khẩu" active />
-              <SecurityNavItem icon={Shield} label="Xác thực hai yếu tố (sắp có)" disabled />
-              <SecurityNavItem href="/settings/profile" icon={UserRound} label="Hồ sơ của tôi" />
-              <SecurityNavItem href="/settings/privacy" icon={Shield} label="Quyền riêng tư" />
-            </nav>
+            <SettingsAccountNav active="change-password" />
           </section>
 
-          {/* 2. Mẹo mật khẩu mạnh */}
-          <section className="relative overflow-hidden rounded-3xl border border-[#bcc9c6]/20 bg-gradient-to-br from-[#c2ebe3] to-[#a6cfc8] p-8 shadow-[0_8px_32px_rgba(18,30,28,0.04)]">
+          <section className={settingsTipCardClassName}>
             <div className="relative z-10">
               <div className="mb-6 flex items-center gap-3">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/50 backdrop-blur-md">
@@ -334,8 +272,7 @@ export default function ChangePasswordPage() {
             />
           </section>
 
-          {/* 3. Quên mật khẩu & hỗ trợ — cùng shell và căn lề với card mẹo */}
-          <section className={profileCardClassName}>
+          <section className={settingsCardClassName}>
             <div className="mb-6 flex items-center gap-3">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#e9f6f3]">
                 <Mail className="h-6 w-6 text-[#00685f]" aria-hidden="true" />
@@ -352,28 +289,12 @@ export default function ChangePasswordPage() {
               <Mail className="h-4 w-4" aria-hidden="true" />
               Đặt lại qua email
             </Link>
-
-            <div className="mt-8 border-t border-[#bcc9c6]/20 pt-8 text-center">
-              <p className="text-xs font-bold uppercase tracking-widest text-[#6d7a77]">Cần hỗ trợ?</p>
-              <p className="mt-2 text-sm leading-relaxed text-[#3d4947]">
-                Liên hệ đội ngũ nếu bạn gặp khó khăn khi đổi mật khẩu.
-              </p>
-              <div className="mt-4 flex flex-col items-center gap-2">
-                <a
-                  href={marketingContact.phoneHref}
-                  className="text-sm font-bold text-[#00685f] hover:underline"
-                >
-                  {marketingContact.phoneDisplay}
-                </a>
-                <a
-                  href={`mailto:${marketingContact.email}`}
-                  className="text-sm font-bold text-[#00685f] hover:underline"
-                >
-                  {marketingContact.email}
-                </a>
-              </div>
-            </div>
           </section>
+
+          <SettingsDirectContactCard
+            title="Cần hỗ trợ?"
+            description="Liên hệ đội ngũ nếu bạn gặp khó khăn khi đổi mật khẩu."
+          />
         </div>
       </div>
     </DashboardPageShell>
