@@ -43,6 +43,7 @@ public final class AuditActions {
     public static final String FORGOT_PASSWORD = "FORGOT_PASSWORD";
     public static final String EMAIL_PROVIDER_FAILURE = "EMAIL_PROVIDER_FAILURE";
     public static final String RESET_PASSWORD = "RESET_PASSWORD";
+    public static final String CHANGE_PASSWORD = "CHANGE_PASSWORD";
     public static final String ADMIN_LOGIN = "ADMIN_LOGIN";
     public static final String ADMIN_TOTP_SETUP = "ADMIN_TOTP_SETUP";
     public static final String ADMIN_TOTP_VERIFY = "ADMIN_TOTP_VERIFY";

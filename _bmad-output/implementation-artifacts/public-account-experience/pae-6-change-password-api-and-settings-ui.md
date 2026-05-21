@@ -1,6 +1,6 @@
 # Story 6: Change Password API And Settings UI
 
-Status: backlog
+Status: done
 
 ## Execution Scope
 
@@ -23,15 +23,25 @@ so that I can rotate credentials without using the email reset flow.
 
 ## Tasks / Subtasks
 
-- [ ] Backend: `AuthController.changePassword`, service method, password encoder verify + update.
-- [ ] DTO validation; no email enumeration in errors.
-- [ ] Frontend page replaces stub from `pae-1`.
-- [ ] Invalidate other sessions optional — document if out of scope.
+- [x] Backend: `AuthController.changePassword`, service method, password encoder verify + update.
+- [x] DTO validation; no email enumeration in errors.
+- [x] Frontend page replaces stub from `pae-1`.
+- [x] Invalidate other sessions optional — document if out of scope.
+
+### Review Findings
+
+- [x] [Review][Patch] `WeakPasswordException` luôn trả `field: "password"` trong khi DTO là `newPassword` — đã thêm `field` trên exception + handler.
+- [x] [Review][Patch] `POST /auth/change-password` nằm trong `AUTH_PATTERN` `permitAll()` — đã `authenticated()` riêng trước `AUTH_PATTERN`.
+- [x] [Review][Patch] Không chặn `newPassword` trùng `currentPassword` — đã validate trong `AuthService`.
+- [x] [Review][Patch] `extractUserId` dựa vào `UUID.fromString` fail với `anonymousUser` — đã reject `anonymousUser` rõ ràng.
+- [x] [Review][Patch] UI gộp mọi lỗi 400 thành một thông báo chung — `changePasswordErrorMessage()` đọc `detail` / `errors[]`.
+- [x] [Review][Defer] `AdminAuditLogService` chưa có nhãn hiển thị cho `CHANGE_PASSWORD` — deferred, ngoài AC story
 
 ## Dev Notes
 
 - Forgot/reset password already exists — do not duplicate.
 - REVIEW-FULL-v2 §8: change password missing.
+- **Session invalidation:** On success, all refresh tokens for the user are revoked (same as reset-password). Other devices lose refresh capability until re-login.
 
 ### Likely Files
 
@@ -44,4 +54,29 @@ so that I can rotate credentials without using the email reset flow.
 
 ### Agent Model Used
 
-(pending)
+Composer
+
+### Completion Notes
+
+- `POST /api/v1/auth/change-password` with `ChangePasswordRequest`; JWT required; wrong current password → 400 (`IllegalArgumentException`); weak password → validation / `WeakPasswordException`.
+- `AuthService.changePassword` updates hash, revokes refresh tokens, audits `CHANGE_PASSWORD`.
+- Settings UI: RHF + `changePasswordSchema`, notify on success/error; profile link → `/settings/change-password`.
+- Tests: `AuthServiceTest`, `AuthControllerTest`, `change-password.validation.test.ts` (web vitest passed). API Maven tests not run locally (mvn unavailable in agent environment).
+
+### File List
+
+- `apps/api/src/main/java/com/healthlens/api/dto/request/ChangePasswordRequest.java`
+- `apps/api/src/main/java/com/healthlens/api/controller/AuthController.java`
+- `apps/api/src/main/java/com/healthlens/api/service/AuthService.java`
+- `apps/api/src/main/java/com/healthlens/api/audit/AuditActions.java`
+- `apps/api/src/test/java/com/healthlens/api/controller/AuthControllerTest.java`
+- `apps/api/src/test/java/com/healthlens/api/service/AuthServiceTest.java`
+- `packages/shared/schemas/auth.ts`
+- `packages/shared/schemas/index.ts`
+- `apps/web/src/app/(dashboard)/settings/change-password/page.tsx`
+- `apps/web/src/app/(dashboard)/settings/change-password/change-password.validation.test.ts`
+- `apps/web/src/app/(dashboard)/settings/profile/page.tsx`
+
+### Change Log
+
+- 2026-05-21: Change password API, settings form, profile link, and tests.

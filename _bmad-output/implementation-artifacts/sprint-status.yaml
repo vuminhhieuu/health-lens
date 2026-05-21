@@ -300,8 +300,8 @@ development_status:
   pae-2-marketing-route-group-and-root-routing: done
   pae-3-public-landing-page-ssr: done
   pae-4-seo-foundation-metadata-sitemap-robots: done
-  pae-5-public-privacy-and-terms-pages: backlog
-  pae-6-change-password-api-and-settings-ui: backlog
+  pae-5-public-privacy-and-terms-pages: done
+  pae-6-change-password-api-and-settings-ui: done
   pae-7-settings-privacy-tab-consent-and-legal-links: backlog
   pae-8-settings-about-tab-version-and-support: backlog
   pae-9-profile-settings-stub-cleanup: backlog

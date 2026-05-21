@@ -2,6 +2,7 @@ package com.healthlens.api.controller;
 
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.constants.SecurityConstants;
+import com.healthlens.api.dto.request.ChangePasswordRequest;
 import com.healthlens.api.dto.request.ForgotPasswordRequest;
 import com.healthlens.api.dto.request.LoginRequest;
 import com.healthlens.api.dto.request.RegisterRequest;
@@ -17,6 +18,8 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -221,6 +224,28 @@ public class AuthController {
     }
 
     /**
+     * POST /api/v1/auth/change-password
+     * Requires authenticated session (Bearer JWT). Wrong current password → 400.
+     */
+    @PostMapping("/change-password")
+    public ResponseEntity<Map<String, Object>> changePassword(
+            Authentication authentication,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        UUID userId = extractUserId(authentication);
+        authService.changePassword(userId, request);
+
+        Map<String, Object> body = Map.of(
+                "data", Map.of("message", "Mật khẩu đã được cập nhật thành công."),
+                "meta", Map.of(
+                        "timestamp", Instant.now().toString(),
+                        "requestId", UUID.randomUUID().toString()
+                )
+        );
+
+        return ResponseEntity.ok(body);
+    }
+
+    /**
      * POST /api/v1/auth/forgot-password
      * AC #1: email tồn tại -> tạo reset token, gửi email
      * AC #2: email không tồn tại -> vẫn trả 200 OK (an toàn thông tin)
@@ -278,6 +303,23 @@ public class AuthController {
         cookie.setMaxAge(0);
         cookie.setAttribute("SameSite", "Lax");
         response.addCookie(cookie);
+    }
+
+    private static final String ANONYMOUS_PRINCIPAL = "anonymousUser";
+
+    private UUID extractUserId(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new BadCredentialsException("Không được xác thực");
+        }
+        String principalName = authentication.getName();
+        if (principalName == null || ANONYMOUS_PRINCIPAL.equals(principalName)) {
+            throw new BadCredentialsException("Không được xác thực");
+        }
+        try {
+            return UUID.fromString(principalName);
+        } catch (IllegalArgumentException ex) {
+            throw new BadCredentialsException("Không được xác thực");
+        }
     }
 
     private String extractRefreshTokenFromCookie(HttpServletRequest request) {

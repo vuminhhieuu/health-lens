@@ -33,10 +33,12 @@ import java.util.UUID;
 
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -356,6 +358,59 @@ class AuthControllerTest {
                         .andExpect(jsonPath("$.data.user.id").value(userId.toString()))
                         .andExpect(jsonPath("$.data.consentGiven").value(false))
                         .andExpect(jsonPath("$.data.consentVersion").value(nullValue()));
+        }
+
+        // ========== CHANGE PASSWORD TESTS ==========
+
+        @Test
+        @DisplayName("POST /api/v1/auth/change-password -> 200 khi doi mat khau thanh cong")
+        void changePassword_success() throws Exception {
+                UUID userId = UUID.randomUUID();
+                doNothing().when(authService).changePassword(eq(userId), any());
+
+                mockMvc.perform(post("/api/v1/auth/change-password")
+                                .with(user(userId.toString()))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"currentPassword\":\"OldPass1\",\"newPassword\":\"NewStrongPass1\"}"))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.data.message").value("Mật khẩu đã được cập nhật thành công."));
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/auth/change-password -> 400 khi sai mat khau hien tai")
+        void changePassword_wrongCurrentPassword() throws Exception {
+                UUID userId = UUID.randomUUID();
+                org.mockito.Mockito.doThrow(new IllegalArgumentException("Mật khẩu hiện tại không đúng"))
+                                .when(authService).changePassword(eq(userId), any());
+
+                mockMvc.perform(post("/api/v1/auth/change-password")
+                                .with(user(userId.toString()))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"currentPassword\":\"WrongPass1\",\"newPassword\":\"NewStrongPass1\"}"))
+                                .andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$.detail").value("Mật khẩu hiện tại không đúng"));
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/auth/change-password -> 400 validation khi mat khau moi yeu")
+        void changePassword_weakNewPassword() throws Exception {
+                UUID userId = UUID.randomUUID();
+
+                mockMvc.perform(post("/api/v1/auth/change-password")
+                                .with(user(userId.toString()))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"currentPassword\":\"OldPass1\",\"newPassword\":\"weak\"}"))
+                                .andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$.errors[0].field").value("newPassword"));
+        }
+
+        @Test
+        @DisplayName("POST /api/v1/auth/change-password -> 401 khi chua dang nhap")
+        void changePassword_unauthenticated() throws Exception {
+                mockMvc.perform(post("/api/v1/auth/change-password")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"currentPassword\":\"OldPass1\",\"newPassword\":\"NewStrongPass1\"}"))
+                                .andExpect(status().isUnauthorized());
         }
 
         // ========== LOGOUT TESTS ==========

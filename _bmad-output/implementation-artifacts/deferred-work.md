@@ -46,3 +46,7 @@
 ## Deferred from: code review of 2-6-forgot-password-page-refactor-and-public-auth-link-consistency (2026-05-21)
 
 - Nút ngôn ngữ trên login vẫn là `button` không có hành động — tồn tại trước story 2.6; cần story i18n/language switcher riêng.
+
+## Deferred from: code review of pae-6-change-password-api-and-settings-ui.md (2026-05-21)
+
+- `AdminAuditLogService` chưa có nhãn hiển thị cho audit action `CHANGE_PASSWORD` — ngoài AC story; bổ sung khi làm màn audit auth.

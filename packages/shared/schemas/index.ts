@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-export { registerSchema, type RegisterInput } from "./auth";
+export {
+  registerSchema,
+  type RegisterInput,
+  changePasswordSchema,
+  type ChangePasswordInput,
+  passwordSchema,
+} from "./auth";
 export { updateUserProfileSchema, type UpdateUserProfileInput } from "./user";
 export * from "./profile";
 

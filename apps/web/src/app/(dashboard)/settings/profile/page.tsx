@@ -548,10 +548,7 @@ export default function ProfileSettingsPage() {
             </div>
 
             <div className="space-y-6">
-              <a
-                href="#"
-                className="flex items-center justify-between group py-2"
-              >
+              <Link href="/settings/change-password" className="flex items-center justify-between group py-2">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-[#e9f6f3] group-hover:bg-[#008378] group-hover:text-white transition-colors">
                     <Key className="w-4 h-4" />
@@ -560,7 +557,7 @@ export default function ProfileSettingsPage() {
                     Đổi mật khẩu
                   </span>
                 </div>
-              </a>
+              </Link>
               <div className="flex items-center justify-between py-2 opacity-60">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-[#e9f6f3]">

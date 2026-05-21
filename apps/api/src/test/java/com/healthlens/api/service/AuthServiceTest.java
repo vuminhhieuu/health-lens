@@ -1,5 +1,6 @@
 package com.healthlens.api.service;
 
+import com.healthlens.api.dto.request.ChangePasswordRequest;
 import com.healthlens.api.dto.request.ForgotPasswordRequest;
 import com.healthlens.api.dto.request.LoginRequest;
 import com.healthlens.api.dto.request.ResetPasswordRequest;
@@ -14,6 +15,7 @@ import com.healthlens.api.entity.UserRole;
 import com.healthlens.api.events.email.EmailEventPublisher;
 import com.healthlens.api.exception.AccountLockedException;
 import com.healthlens.api.exception.RateLimitExceededException;
+import com.healthlens.api.exception.WeakPasswordException;
 import com.healthlens.api.repository.EmailVerificationTokenRepository;
 import com.healthlens.api.repository.PasswordResetTokenRepository;
 import com.healthlens.api.repository.RefreshTokenRepository;
@@ -544,6 +546,70 @@ class AuthServiceTest {
                 argThat(details -> "user@example.com".equals(details.get("email")))
         );
         verify(forgotPasswordRateLimiter).recordRequest("user@example.com");
+    }
+
+    @Test
+    @DisplayName("changePassword thanh cong va thu hoi refresh token")
+    void changePassword_success() {
+        User user = createVerifiedUser();
+        ChangePasswordRequest request = new ChangePasswordRequest("OldPass1", "NewStrongPass1");
+
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("OldPass1", user.getPasswordHash())).thenReturn(true);
+        when(passwordEncoder.encode("NewStrongPass1")).thenReturn("new-hashed-pass");
+
+        authService.changePassword(user.getId(), request);
+
+        assertThat(user.getPasswordHash()).isEqualTo("new-hashed-pass");
+        verify(refreshTokenRepository).revokeAllByUserId(eq(user.getId()), any(Instant.class));
+        verify(auditEventRecorder).recordEvent(
+                eq(user.getId()),
+                eq(AuditActions.CHANGE_PASSWORD),
+                eq(AuditResourceTypes.AUTH),
+                eq(user.getId()),
+                any()
+        );
+    }
+
+    @Test
+    @DisplayName("changePassword sai mat khau hien tai -> IllegalArgumentException")
+    void changePassword_wrongCurrentPassword() {
+        User user = createVerifiedUser();
+        ChangePasswordRequest request = new ChangePasswordRequest("WrongPass1", "NewStrongPass1");
+
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("WrongPass1", user.getPasswordHash())).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.changePassword(user.getId(), request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Mật khẩu hiện tại không đúng");
+    }
+
+    @Test
+    @DisplayName("changePassword mat khau moi trung mat khau hien tai -> IllegalArgumentException")
+    void changePassword_sameAsCurrentPassword() {
+        User user = createVerifiedUser();
+        ChangePasswordRequest request = new ChangePasswordRequest("OldPass1", "OldPass1");
+
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("OldPass1", user.getPasswordHash())).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.changePassword(user.getId(), request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Mật khẩu mới phải khác mật khẩu hiện tại");
+    }
+
+    @Test
+    @DisplayName("changePassword mat khau moi yeu -> WeakPasswordException")
+    void changePassword_weakNewPassword() {
+        User user = createVerifiedUser();
+        ChangePasswordRequest request = new ChangePasswordRequest("OldPass1", "weak");
+
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("OldPass1", user.getPasswordHash())).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.changePassword(user.getId(), request))
+                .isInstanceOf(WeakPasswordException.class);
     }
 
     @Test
