@@ -14,10 +14,7 @@ type NavItemProps = {
 
 function NavItem({ href, icon: Icon, label, active, disabled }: NavItemProps) {
   const content = (
-    <div
-      className={`flex items-center gap-3 py-2 ${disabled ? "opacity-60" : "group"}`}
-      aria-current={active ? "page" : undefined}
-    >
+    <div className={`flex items-center gap-3 py-2 ${disabled ? "opacity-60" : "group"}`}>
       <div
         className={`rounded-lg p-2 transition-colors ${
           active
@@ -47,7 +44,11 @@ function NavItem({ href, icon: Icon, label, active, disabled }: NavItemProps) {
     );
   }
 
-  return <Link href={href}>{content}</Link>;
+  return (
+    <Link href={href} aria-current={active ? "page" : undefined}>
+      {content}
+    </Link>
+  );
 }
 
 type SettingsAccountNavProps = {

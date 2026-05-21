@@ -201,7 +201,7 @@ function ConsentStatusPanel({
       : "Hộp thoại đồng thuận sẽ hiện khi bạn dùng tính năng liên quan dữ liệu sức khỏe.";
 
   return (
-    <div className="space-y-5" role="status">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[#bcc9c6]/20 pb-5">
         <span
           className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-bold ${badge.className}`}
