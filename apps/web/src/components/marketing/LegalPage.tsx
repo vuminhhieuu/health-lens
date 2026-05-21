@@ -28,8 +28,8 @@ export function LegalPage({ content }: LegalPageProps) {
             }
             return (
               <ul key={`${section.id}-ul-${index}`} className="list-disc space-y-2 pl-5">
-                {block.items.map((item) => (
-                  <li key={item}>{item}</li>
+                {block.items.map((item, itemIndex) => (
+                  <li key={`${section.id}-ul-${index}-item-${itemIndex}`}>{item}</li>
                 ))}
               </ul>
             );

@@ -1,5 +1,6 @@
 package com.healthlens.api.dto.request;
 
+// Password rules must stay aligned with packages/shared/schemas/auth.ts (passwordSchema).
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;

@@ -21,6 +21,7 @@ import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { changePasswordErrorMessage } from "@/lib/i18n/messages";
+import { marketingContact } from "@/lib/marketing/contact";
 import { notify } from "@/lib/notify";
 
 const profileCardClassName =
@@ -50,6 +51,9 @@ function PasswordField({
   error,
   registration,
 }: PasswordFieldProps) {
+  const errorId = `${id}-error`;
+  const hasError = Boolean(error);
+
   return (
     <div className="flex flex-col gap-2">
       <label htmlFor={id} className={labelClassName}>
@@ -66,6 +70,8 @@ function PasswordField({
           autoComplete={autoComplete}
           className={inputClassName}
           {...registration}
+          aria-invalid={hasError}
+          aria-describedby={hasError ? errorId : undefined}
         />
         <button
           type="button"
@@ -76,7 +82,11 @@ function PasswordField({
           {visible ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
         </button>
       </div>
-      {error ? <p className="text-sm text-[#ba1a1a]">{error}</p> : null}
+      {hasError ? (
+        <p id={errorId} role="alert" className="text-sm text-[#ba1a1a]">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -117,7 +127,11 @@ function SecurityNavItem({ href, icon: Icon, label, active, disabled }: Security
   );
 
   if (disabled || !href) {
-    return <div>{content}</div>;
+    return (
+      <div role="listitem" aria-disabled="true">
+        {content}
+      </div>
+    );
   }
 
   return <Link href={href}>{content}</Link>;
@@ -345,14 +359,17 @@ export default function ChangePasswordPage() {
                 Liên hệ đội ngũ nếu bạn gặp khó khăn khi đổi mật khẩu.
               </p>
               <div className="mt-4 flex flex-col items-center gap-2">
-                <a href="tel:19001234" className="text-sm font-bold text-[#00685f] hover:underline">
-                  1900 1234
-                </a>
                 <a
-                  href="mailto:support@healthlens.vn"
+                  href={marketingContact.phoneHref}
                   className="text-sm font-bold text-[#00685f] hover:underline"
                 >
-                  support@healthlens.vn
+                  {marketingContact.phoneDisplay}
+                </a>
+                <a
+                  href={`mailto:${marketingContact.email}`}
+                  className="text-sm font-bold text-[#00685f] hover:underline"
+                >
+                  {marketingContact.email}
                 </a>
               </div>
             </div>

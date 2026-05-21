@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+/** Keep in sync with backend DTO validation (e.g. ChangePasswordRequest, RegisterRequest). */
 export const passwordSchema = z
   .string()
   .min(8, "Mật khẩu tối thiểu 8 ký tự")
