@@ -163,7 +163,7 @@ public class GlobalExceptionHandler {
         problem.setType(URI.create("https://healthlens.vn/errors/validation-error"));
         problem.setTitle("Dữ liệu không hợp lệ");
         problem.setInstance(URI.create(request.getRequestURI()));
-        problem.setProperty("errors", List.of(Map.of("field", "password", "message", ex.getMessage())));
+        problem.setProperty("errors", List.of(Map.of("field", ex.getField(), "message", ex.getMessage())));
         applyErrorCode(problem, ApiErrorCode.VALIDATION_ERROR);
         return problem;
     }

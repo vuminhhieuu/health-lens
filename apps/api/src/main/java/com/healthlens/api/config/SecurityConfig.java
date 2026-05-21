@@ -73,6 +73,7 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                     .requestMatchers(ApiRoutes.ACTUATOR_HEALTH, ApiRoutes.ACTUATOR_HEALTH_PATTERN).permitAll()
+                    .requestMatchers(ApiRoutes.AUTH_CHANGE_PASSWORD).authenticated()
                     .requestMatchers(ApiRoutes.AUTH_PATTERN).permitAll()
                     .requestMatchers(ApiRoutes.DEV_PATTERN).permitAll()
                     .requestMatchers(ApiRoutes.USERS_DELETION_PATTERN).permitAll()

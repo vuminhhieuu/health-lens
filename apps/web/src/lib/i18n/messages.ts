@@ -163,6 +163,30 @@ export function invitationErrorMessage(error: unknown): string {
     : messageCatalog.sharing.networkError;
 }
 
+export function changePasswordErrorMessage(error: unknown): string {
+  const status = getApiErrorStatus(error);
+  const payload = getApiErrorPayload(error);
+
+  if (status === 401) {
+    return "Phiên đăng nhập hết hạn, vui lòng đăng nhập lại";
+  }
+
+  if (status === 400) {
+    if (payload?.detail) {
+      return payload.detail;
+    }
+    const firstFieldMessage = payload?.errors?.find((item) => item.message)?.message;
+    if (firstFieldMessage) {
+      return firstFieldMessage;
+    }
+    return "Mật khẩu hiện tại không đúng hoặc mật khẩu mới chưa đạt yêu cầu";
+  }
+
+  return status
+    ? "Không thể đổi mật khẩu, vui lòng thử lại"
+    : messageCatalog.auth.networkError;
+}
+
 export function registerErrorMessage(error: unknown): string {
   const code = getApiErrorCode(error);
   const payload = getApiErrorPayload(error);

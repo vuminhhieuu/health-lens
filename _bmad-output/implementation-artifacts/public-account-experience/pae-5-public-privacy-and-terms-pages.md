@@ -1,6 +1,6 @@
 # Story 5: Public Privacy And Terms Pages
 
-Status: backlog
+Status: done
 
 ## Execution Scope
 
@@ -22,11 +22,15 @@ so that I can make informed decisions before consenting.
 
 ## Tasks / Subtasks
 
-- [ ] `apps/web/src/app/(marketing)/privacy/page.tsx` and `terms/page.tsx` (or `/privacy` at app root outside dashboard).
-- [ ] Content source: markdown in `content/legal/` or inline — keep maintainable.
-- [ ] Align sections with `ConsentModal` copy themes (no contradictory promises).
-- [ ] Remove empty `apps/web/src/app/terms/` directory stub if present; replace with real `page.tsx`.
-- [ ] Tests: routes 200, no auth redirect.
+- [x] `apps/web/src/app/(marketing)/privacy/page.tsx` and `terms/page.tsx` (or `/privacy` at app root outside dashboard).
+- [x] Content source: markdown in `content/legal/` or inline — keep maintainable.
+- [x] Align sections with `ConsentModal` copy themes (no contradictory promises).
+- [x] Remove empty `apps/web/src/app/terms/` directory stub if present; replace with real `page.tsx`.
+- [x] Tests: routes 200, no auth redirect.
+
+### Review Findings
+
+- [x] [Review][Patch] Test AC “routes 200” chưa được xác minh trực tiếp [`apps/web/src/app/(marketing)/public-legal-pages.test.ts`] — đã bổ sung assert sitemap + routable pages + smoke script.
 
 ## Dev Notes
 
@@ -48,4 +52,25 @@ so that I can make informed decisions before consenting.
 
 ### Agent Model Used
 
-(pending)
+Composer
+
+### Completion Notes
+
+- Added maintainable Vietnamese legal copy in `apps/web/src/content/legal/` (privacy + terms) aligned with ConsentModal themes (NĐ 13/2023, AES-256, no third-party sharing without consent, medical disclaimer, OCR limits).
+- `LegalPage` + `LegalDraftBanner` render marketing routes without dashboard auth gate; draft banner shown.
+- Vitest: `public-legal-pages.test.ts` verifies marketing placement, no auth bootstrap, required legal topics.
+
+### File List
+
+- `apps/web/src/content/legal/types.ts`
+- `apps/web/src/content/legal/privacy-vi.ts`
+- `apps/web/src/content/legal/terms-vi.ts`
+- `apps/web/src/components/marketing/LegalDraftBanner.tsx`
+- `apps/web/src/components/marketing/LegalPage.tsx`
+- `apps/web/src/app/(marketing)/privacy/page.tsx`
+- `apps/web/src/app/(marketing)/terms/page.tsx`
+- `apps/web/src/app/(marketing)/public-legal-pages.test.ts`
+
+### Change Log
+
+- 2026-05-21: Implemented public privacy/terms pages with draft banner and tests.

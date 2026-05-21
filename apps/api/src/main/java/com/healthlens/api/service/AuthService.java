@@ -4,6 +4,7 @@ import com.healthlens.api.dto.request.LoginRequest;
 import com.healthlens.api.dto.request.RegisterRequest;
 import com.healthlens.api.dto.response.LoginResponse;
 import com.healthlens.api.dto.response.RefreshResponse;
+import com.healthlens.api.dto.request.ChangePasswordRequest;
 import com.healthlens.api.dto.request.ForgotPasswordRequest;
 import com.healthlens.api.dto.request.ResetPasswordRequest;
 import com.healthlens.api.entity.EmailVerificationToken;
@@ -498,6 +499,38 @@ public class AuthService {
     }
 
     /**
+     * Change password for authenticated user. Wrong current password → 400 via IllegalArgumentException.
+     * Revokes all refresh tokens (other sessions) after success — same as reset-password.
+     */
+    @Transactional
+    public void changePassword(UUID userId, ChangePasswordRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadCredentialsException("Không được xác thực"));
+
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+            throw new IllegalArgumentException("Mật khẩu hiện tại không đúng");
+        }
+
+        if (request.currentPassword().equals(request.newPassword())) {
+            throw new IllegalArgumentException("Mật khẩu mới phải khác mật khẩu hiện tại");
+        }
+
+        validatePasswordPolicy(request.newPassword(), "newPassword");
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(user);
+
+        refreshTokenRepository.revokeAllByUserId(userId, Instant.now());
+
+        auditEventRecorder.recordEvent(
+                userId,
+                AuditActions.CHANGE_PASSWORD,
+                AuditResourceTypes.AUTH,
+                userId,
+                Map.of()
+        );
+    }
+
+    /**
      * Reset password: validate token, update password, revoke tokens. (AC #3, #4, #5, #6)
      */
     @Transactional
@@ -510,7 +543,7 @@ public class AuthService {
         }
 
         // AC #3: Update password
-        validatePasswordPolicy(request.newPassword());
+        validatePasswordPolicy(request.newPassword(), "newPassword");
         User user = token.getUser();
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
@@ -532,9 +565,15 @@ public class AuthService {
     }
 
     private void validatePasswordPolicy(String password) {
+        validatePasswordPolicy(password, "password");
+    }
+
+    private void validatePasswordPolicy(String password, String field) {
         if (password == null || password.length() < 8 || !password.matches(".*[A-Z].*")
                 || !password.matches(".*\\d.*")) {
-            throw new WeakPasswordException("Mật khẩu phải có ít nhất 8 ký tự, gồm 1 chữ hoa và 1 chữ số");
+            throw new WeakPasswordException(
+                    "Mật khẩu phải có ít nhất 8 ký tự, gồm 1 chữ hoa và 1 chữ số",
+                    field);
         }
     }
 

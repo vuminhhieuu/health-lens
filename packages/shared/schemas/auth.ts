@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+/** Keep in sync with backend DTO validation (e.g. ChangePasswordRequest, RegisterRequest). */
 export const passwordSchema = z
   .string()
   .min(8, "Mật khẩu tối thiểu 8 ký tự")
@@ -45,4 +46,17 @@ export const resetPasswordSchema = z
   });
 
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Vui lòng nhập mật khẩu hiện tại"),
+    newPassword: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Mật khẩu xác nhận không khớp",
+    path: ["confirmPassword"],
+  });
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
