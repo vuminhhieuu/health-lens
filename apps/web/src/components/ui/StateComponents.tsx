@@ -171,7 +171,7 @@ export function InlineFieldError({ id, message }: { id: string; message?: string
   if (!message) return null;
 
   return (
-    <p id={id} role="alert" className="mt-2 text-sm font-semibold text-[#ba1a1a]">
+    <p id={id} role="alert" aria-live="assertive" className="mt-2 text-sm font-semibold text-[#ba1a1a]">
       {message}
     </p>
   );

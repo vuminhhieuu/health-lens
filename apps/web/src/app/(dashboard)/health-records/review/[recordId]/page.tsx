@@ -38,7 +38,9 @@ import { z } from "zod";
 import { apiClient } from "@/lib/api/apiClient";
 import { notify } from "@/lib/notify";
 import { ALLOWED_FILE_TYPES, ApiPaths, UPLOAD_MAX_SIZE_BYTES } from "@healthlens/shared/constants";
+import { HealthMetricsGrid } from "@/components/ui/HealthMetricsGrid";
 import { HealthMetricCard } from "@/components/ui/HealthMetricCard";
+import { ReferenceRangeIndicator } from "@/components/ui/ReferenceRangeIndicator";
 import { ErrorState, InlineFieldError, LoadingState } from "@/components/ui";
 import { OcrFailureScreen } from "@/components/features/upload/OcrFailureScreen";
 import { DeleteRecordModal } from "@/components/features/health-records/DeleteRecordModal";
@@ -1341,10 +1343,14 @@ export default function ReviewRecordPage() {
               </div>
             </section>
             {deleteRecordError ? (
-              <div className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]">{deleteRecordError}</div>
+              <div role="alert" aria-live="assertive" className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]">
+                {deleteRecordError}
+              </div>
             ) : null}
             {pdfDownloadError ? (
-              <div className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]">{pdfDownloadError}</div>
+              <div role="alert" aria-live="assertive" className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]">
+                {pdfDownloadError}
+              </div>
             ) : null}
 
             {/* ── Zone 1: Status Summary (Gradient Card) ── */}
@@ -1419,51 +1425,7 @@ export default function ReviewRecordPage() {
                   Tổng {metrics.length}
                 </span>
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {metrics.map((metric, idx) => {
-                  const metricValue = metric.value?.trim() || "--";
-                  const metricUnit = metric.unit?.trim() || "";
-                  const metricRangeText = compactRangeText(metric);
-                  const metricPercent = compactMetricPercent(metric);
-                  const isNormal = (metric.status ?? "no_data") === "normal";
-                  return (
-                    <article
-                      key={`${metric.name}-${idx}`}
-                      role="button"
-                      tabIndex={0}
-                      className="group cursor-pointer rounded-3xl bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:ring-2 hover:ring-[#00685f]/15"
-                      onClick={() => setSelectedMetricIndex(idx)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          setSelectedMetricIndex(idx);
-                        }
-                      }}
-                    >
-                      <div className="mb-5 flex items-start justify-between gap-2">
-                        <span className="line-clamp-2 text-xs font-extrabold uppercase text-[#3d4947]">
-                          {metric.displayNameVi || metric.name}
-                        </span>
-                        <CheckCircle className={`h-4 w-4 shrink-0 ${isNormal ? "text-[#00685f]" : "text-[#6d7a77]"}`} />
-                      </div>
-                      <div className="flex items-end gap-1.5">
-                        <span className="text-[44px] leading-none font-black text-[#121e1c]">{metricValue}</span>
-                        <span className="pb-1 text-2xs font-semibold text-[#3d4947]">{metricUnit}</span>
-                      </div>
-                      <div className="mt-4 h-2 w-full rounded-full bg-[#deebe8]">
-                        <div
-                          className="h-full rounded-full bg-[#008378] transition-all"
-                          style={{ width: `${metricPercent}%` }}
-                        />
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-3 text-xs font-extrabold uppercase">
-                        <span className="truncate text-[#4e6360]">Ngưỡng: {metricRangeText}</span>
-                        <span className={isNormal ? "text-[#00685f]" : "text-[#773215]"}>{recordStatusLabel(metric.status)}</span>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
+              <HealthMetricsGrid metrics={metrics} onSelectMetric={setSelectedMetricIndex} />
             </section>
 
             {selectedMetricIndex !== null && metrics[selectedMetricIndex] ? (
@@ -1516,8 +1478,9 @@ export default function ReviewRecordPage() {
         <div className="lg:col-span-7 xl:col-span-8 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm">
-              <label className="block text-sm font-medium text-[#3d4947]">Ngày khám</label>
+              <label htmlFor="exam-date" className="block text-sm font-medium text-[#3d4947]">Ngày khám</label>
               <input
+                id="exam-date"
                 type="date"
                 className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378]"
                 value={examDate}
@@ -1526,8 +1489,9 @@ export default function ReviewRecordPage() {
               />
             </div>
             <div className="rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm">
-              <label className="block text-sm font-medium text-[#3d4947]">Loại phiếu (VD: Xét nghiệm máu...)</label>
+              <label htmlFor="record-type" className="block text-sm font-medium text-[#3d4947]">Loại phiếu (VD: Xét nghiệm máu...)</label>
               <input
+                id="record-type"
                 type="text"
                 placeholder="Loại phiếu khám..."
                 className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378]"
@@ -1539,8 +1503,9 @@ export default function ReviewRecordPage() {
           </div>
 
           <div className="rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm">
-            <label className="block text-sm font-medium text-[#3d4947]">Tên bệnh viện / Phòng khám</label>
+            <label htmlFor="hospital-name" className="block text-sm font-medium text-[#3d4947]">Tên bệnh viện / Phòng khám</label>
             <input
+              id="hospital-name"
               type="text"
               placeholder="Nhập tên bệnh viện..."
               className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378]"
@@ -1551,8 +1516,9 @@ export default function ReviewRecordPage() {
           </div>
 
           <div className="rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm">
-            <label className="block text-sm font-medium text-[#3d4947]">Chẩn đoán / Kết luận của bác sĩ</label>
+            <label htmlFor="diagnosis" className="block text-sm font-medium text-[#3d4947]">Chẩn đoán / Kết luận của bác sĩ</label>
             <textarea
+              id="diagnosis"
               rows={3}
               placeholder="Nhập chẩn đoán hoặc kết luận chung..."
               className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378] resize-none"
@@ -1798,7 +1764,7 @@ export default function ReviewRecordPage() {
           )}
 
           {saveError && (
-            <div className="rounded-xl bg-[#ffdad6] p-4 text-sm text-[#ba1a1a] flex items-center gap-2">
+            <div role="alert" aria-live="assertive" className="rounded-xl bg-[#ffdad6] p-4 text-sm text-[#ba1a1a] flex items-center gap-2">
               <AlertCircle className="h-5 w-5" />
               {saveError}
             </div>
@@ -1880,11 +1846,12 @@ export default function ReviewRecordPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-[#3d4947] mb-1.5">
+                <label htmlFor="add-metric-name" className="block text-sm font-medium text-[#3d4947] mb-1.5">
                   Tên chỉ số <span className="text-[#ba1a1a]">*</span>
                 </label>
                 {referenceMetrics.length > 0 ? (
                   <select
+                    id="add-metric-name"
                     className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378] bg-white"
                     value={addForm.name}
                     aria-invalid={addErrorField === "name"}
@@ -1900,6 +1867,7 @@ export default function ReviewRecordPage() {
                   </select>
                 ) : (
                   <input
+                    id="add-metric-name"
                     type="text"
                     placeholder="Nhập tên chỉ số..."
                     className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378]"
@@ -1916,10 +1884,11 @@ export default function ReviewRecordPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[#3d4947] mb-1.5">
+                <label htmlFor="add-metric-value" className="block text-sm font-medium text-[#3d4947] mb-1.5">
                   Giá trị <span className="text-[#ba1a1a]">*</span>
                 </label>
                 <input
+                  id="add-metric-value"
                   type="text"
                   placeholder="VD: 5.4 hoặc Âm tính"
                   className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378]"
@@ -1935,10 +1904,11 @@ export default function ReviewRecordPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[#3d4947] mb-1.5">
+                <label htmlFor="add-metric-unit" className="block text-sm font-medium text-[#3d4947] mb-1.5">
                   Đơn vị <span className="text-[#ba1a1a]">*</span>
                 </label>
                 <input
+                  id="add-metric-unit"
                   type="text"
                   placeholder="VD: mmol/L"
                   className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378]"
@@ -2091,7 +2061,11 @@ function RecordShareModal({
             </div>
           </div>
 
-          {error ? <p className="text-sm font-medium text-[#ba1a1a]">{error}</p> : null}
+          {error ? (
+            <p role="alert" aria-live="assertive" className="text-sm font-medium text-[#ba1a1a]">
+              {error}
+            </p>
+          ) : null}
 
           <section className="rounded-2xl border border-[#d6ece7] bg-[#f7fcfa] p-4">
             <div className="mb-3 flex items-center justify-between">
@@ -2241,19 +2215,6 @@ function MetricDetailPopup({
   const metricUnit = metric.unit?.trim() || "";
   const metricPercent = compactMetricPercent(metric);
   const isNormal = (metric.status ?? "no_data") === "normal";
-  const displayReference = metric.referenceRange
-    ? `${metric.referenceRange.min} - ${metric.referenceRange.max} ${metric.referenceRange.unit ?? metric.unit}`
-    : "Không có dữ liệu tham chiếu";
-  const rangeContext = metric.rangeContext;
-  const contextNote =
-    rangeContext && (rangeContext.gender || rangeContext.ageRange)
-      ? `Ngưỡng áp dụng cho: ${[
-          rangeContext.gender === "female" ? "Nữ" : rangeContext.gender === "male" ? "Nam" : null,
-          rangeContext.ageRange ? `${rangeContext.ageRange} tuổi` : null,
-        ]
-          .filter(Boolean)
-          .join(", ")}`
-      : null;
   const staticExplanation = metric.explanation?.trim() || "";
   const explanationText = staticExplanation
     ? toThreeLineExplanation(staticExplanation)
@@ -2305,42 +2266,17 @@ function MetricDetailPopup({
         </div>
 
         <div className="space-y-3 px-6 py-5">
-          <div className="space-y-2.5 rounded-xl bg-[#f7fbfa] p-4 text-sm leading-relaxed text-[#35514c]">
-            <p>
-              <span className="font-semibold">Ngưỡng tham chiếu: </span>
-              {displayReference}
-            </p>
-            {metric.referenceRangeSource && metric.referenceRangeSource !== "none" ? (
-              <p>
-                <span className="font-semibold">Nguồn ngưỡng: </span>
-                {metric.referenceRangeSource === "document" ? "Theo phiếu xét nghiệm" : "Theo hệ thống tham chiếu"}
-              </p>
-            ) : null}
-            {metric.referenceRangeSource === "system" ? (
-              <p>
-                <span className="font-semibold">Ngữ cảnh ngưỡng: </span>
-                {contextNote ?? "Ngưỡng tham chiếu chung"}
-              </p>
-            ) : null}
-            {metric.critical ? (
-              <p className="rounded-lg bg-[#fff2f2] px-3 py-2 text-[#ba1a1a]">
-                Chỉ số có dấu hiệu vượt ngưỡng nguy cấp, nên liên hệ bác sĩ để được tư vấn sớm.
-              </p>
-            ) : null}
-            {isExplanationLoading && !staticExplanation ? (
-              <div className="space-y-2 pt-1">
-                <div className="h-3 w-full animate-pulse rounded bg-[#d4e7e3]" />
-                <div className="h-3 w-4/5 animate-pulse rounded bg-[#d4e7e3]" />
-                <div className="h-3 w-3/5 animate-pulse rounded bg-[#d4e7e3]" />
-              </div>
-            ) : null}
-            {explanationText ? (
-              <p className="whitespace-pre-line">
-                <span className="font-semibold">Giải thích: </span>
-                {explanationText}
-              </p>
-            ) : null}
-          </div>
+          <ReferenceRangeIndicator
+            referenceRange={metric.referenceRange}
+            unit={metric.unit}
+            referenceRangeSource={metric.referenceRangeSource}
+            rangeContext={metric.rangeContext}
+            critical={metric.critical}
+            explanation={explanationText}
+            isExplanationLoading={isExplanationLoading && !staticExplanation}
+            className="space-y-2.5 rounded-xl bg-[#f7fbfa] p-4 text-sm leading-relaxed text-[#35514c]"
+            skeletonLines={3}
+          />
 
           <div className="flex items-center justify-between pt-1">
             <button

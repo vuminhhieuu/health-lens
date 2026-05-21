@@ -108,7 +108,7 @@ export function OcrFailureScreen({
           </div>
 
           {retryUploadError ? (
-            <div className="rounded-2xl border border-[#f2b8b5] bg-[#ffefee] px-4 py-3 text-sm font-medium text-[#ba1a1a]">
+            <div role="alert" aria-live="assertive" className="rounded-2xl border border-[#f2b8b5] bg-[#ffefee] px-4 py-3 text-sm font-medium text-[#ba1a1a]">
               {retryUploadError}
             </div>
           ) : null}
