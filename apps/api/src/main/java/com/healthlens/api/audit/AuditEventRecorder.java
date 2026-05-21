@@ -56,6 +56,25 @@ public class AuditEventRecorder {
         );
     }
 
+    /** Same as {@link #recordEvent} but commits in a separate transaction (survives caller rollback). */
+    public void recordEventRequiresNew(
+            UUID actorId,
+            String action,
+            String resourceType,
+            UUID resourceId,
+            Map<String, ?> details
+    ) {
+        unifiedAuditLogWriter.recordRequiresNew(
+                actorId,
+                action,
+                resourceType,
+                resourceId,
+                null,
+                null,
+                toJson(action, details)
+        );
+    }
+
     /** For pre-auth or failed-auth events where no authenticated actor exists yet. */
     public void recordAnonymous(
             String action,

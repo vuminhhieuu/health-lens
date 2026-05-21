@@ -26,6 +26,7 @@ public final class AuditActions {
     public static final String REJECT_PROFILE_INVITATION = "REJECT_PROFILE_INVITATION";
     public static final String REVOKE_PROFILE_SHARE = "REVOKE_PROFILE_SHARE";
     public static final String RESEND_PROFILE_INVITATION = "RESEND_PROFILE_INVITATION";
+    public static final String PROFILE_SHARE_ACCESS_DENIED_FAILED = "PROFILE_SHARE_ACCESS_DENIED_FAILED";
 
     public static final String INVITE_HEALTH_RECORD_SHARE = "INVITE_HEALTH_RECORD_SHARE";
     public static final String ACCEPT_HEALTH_RECORD_SHARE = "ACCEPT_HEALTH_RECORD_SHARE";

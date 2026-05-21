@@ -18,6 +18,7 @@ public record EmailEvent(
         DELETION_CANCELLATION("deletion_cancellation"),
         DELETION_COMPLETION("deletion_completion"),
         PROFILE_INVITATION("profile_invitation"),
+        PROFILE_SHARE_ACCEPTED("profile_share_accepted"),
         HEALTH_RECORD_INVITATION("health_record_invitation"),
         FOLLOW_UP_REMINDER("follow_up_reminder");
 

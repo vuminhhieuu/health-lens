@@ -19,6 +19,9 @@ public interface EmailEventPublisher {
 
     void publishProfileInvitation(User inviter, String inviteeEmail, String invitationLink);
 
+    /** Notifies the profile owner that an invitee accepted sharing access. */
+    void publishProfileShareAccepted(User owner, User viewer, String profileDisplayName, String profilesLink);
+
     void publishHealthRecordInvitation(User inviter, String inviteeEmail, String invitationLink);
 
     void publishFollowUpReminder(UUID reminderId);

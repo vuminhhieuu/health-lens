@@ -235,6 +235,37 @@ public class EmailService {
         }
     }
 
+    public void sendProfileShareAcceptedEmail(
+            User owner,
+            String viewerName,
+            String profileDisplayName,
+            String profilesLink
+    ) {
+        if (mailSender == null) {
+            log.error("[EmailService] JavaMailSender is not configured! Cannot notify owner {}", owner.getEmail());
+            throw new IllegalStateException("JavaMailSender is not configured");
+        }
+
+        String resolvedViewerName = viewerName == null || viewerName.isBlank() ? "Một thành viên" : viewerName.trim();
+        String resolvedProfileName = profileDisplayName == null || profileDisplayName.isBlank()
+                ? "Hồ sơ sức khỏe"
+                : profileDisplayName.trim();
+        String htmlContent = renderProfileShareAcceptedTemplate(resolvedViewerName, resolvedProfileName, profilesLink);
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(owner.getEmail());
+            helper.setSubject("[HealthLens] " + resolvedViewerName + " đã chấp nhận chia sẻ hồ sơ");
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+        } catch (MessagingException e) {
+            log.error("[EmailService] Failed to send profile share accepted notification to {}", owner.getEmail(), e);
+            throw new IllegalStateException("Gửi email thông báo chấp nhận chia sẻ thất bại", e);
+        }
+    }
+
     public void sendHealthRecordInvitationEmail(User inviter, String inviteeEmail, String invitationLink) {
         if (mailSender == null) {
             log.error("[EmailService] JavaMailSender is not configured! Cannot send health record invitation to {}", inviteeEmail);
@@ -423,6 +454,44 @@ public class EmailService {
         context.setVariable("inviterName", inviterName);
         context.setVariable("invitationLink", invitationLink);
         return templateEngine.process("email/profile-invitation", context);
+    }
+
+    private String renderProfileShareAcceptedTemplate(
+            String viewerName,
+            String profileDisplayName,
+            String profilesLink
+    ) {
+        if (templateEngine == null) {
+            String safeViewerName = HtmlUtils.htmlEscape(viewerName);
+            String safeProfileDisplayName = HtmlUtils.htmlEscape(profileDisplayName);
+            String safeProfilesLink = HtmlUtils.htmlEscape(profilesLink);
+            return """
+                    <html>
+                      <body style="font-family: Segoe UI, Arial, sans-serif; color: #111827; background: #f3f4f6; padding: 24px;">
+                        <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden;">
+                          <div style="background: #10b981; padding: 24px; text-align: center;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 26px;">HealthLens</h1>
+                          </div>
+                          <div style="padding: 28px;">
+                            <h2 style="margin-top: 0;">Lời mời chia sẻ đã được chấp nhận</h2>
+                            <p><strong>%s</strong> đã chấp nhận lời mời và có thể xem hồ sơ <strong>%s</strong>.</p>
+                            <div style="text-align: center; margin: 24px 0;">
+                              <a href="%s" style="display: inline-block; background: #10b981; color: #ffffff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700;">
+                                Xem hồ sơ gia đình
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      </body>
+                    </html>
+                    """.formatted(safeViewerName, safeProfileDisplayName, safeProfilesLink);
+        }
+
+        Context context = new Context();
+        context.setVariable("viewerName", viewerName);
+        context.setVariable("profileDisplayName", profileDisplayName);
+        context.setVariable("profilesLink", profilesLink);
+        return templateEngine.process("email/profile-share-accepted", context);
     }
 
     private String renderVerificationTemplate(String verificationLink) {

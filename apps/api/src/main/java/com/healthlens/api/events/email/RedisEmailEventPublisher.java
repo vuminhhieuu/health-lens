@@ -100,6 +100,21 @@ public class RedisEmailEventPublisher implements EmailEventPublisher {
         ));
     }
 
+    /** Notifies the profile owner that an invitee accepted sharing access. */
+    @Override
+    public void publishProfileShareAccepted(User owner, User viewer, String profileDisplayName, String profilesLink) {
+        publish(EmailEvent.of(
+                EmailEvent.Type.PROFILE_SHARE_ACCEPTED,
+                owner.getId(),
+                owner.getEmail(),
+                Map.of(
+                        "viewerName", safe(viewer.getFullName()),
+                        "profileDisplayName", profileDisplayName == null ? "" : profileDisplayName,
+                        "profilesLink", profilesLink
+                )
+        ));
+    }
+
     @Override
     public void publishHealthRecordInvitation(User inviter, String inviteeEmail, String invitationLink) {
         publish(EmailEvent.of(

@@ -166,6 +166,16 @@ public class EmailConsumer {
             return;
         }
 
+        if (EmailEvent.Type.PROFILE_SHARE_ACCEPTED.streamValue().equals(eventType)) {
+            emailService.sendProfileShareAcceptedEmail(
+                    eventUser(value),
+                    stringVal(value.get("viewerName")),
+                    stringVal(value.get("profileDisplayName")),
+                    required(value, "profilesLink")
+            );
+            return;
+        }
+
         if (EmailEvent.Type.HEALTH_RECORD_INVITATION.streamValue().equals(eventType)) {
             emailService.sendHealthRecordInvitationEmail(
                     inviterUser(value),

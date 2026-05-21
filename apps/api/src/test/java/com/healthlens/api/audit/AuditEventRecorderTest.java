@@ -46,6 +46,29 @@ class AuditEventRecorderTest {
     }
 
     @Test
+    void recordEventRequiresNew_delegatesToWriterInNewTransaction() {
+        UUID userId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        recorder.recordEventRequiresNew(
+                userId,
+                AuditActions.PROFILE_SHARE_ACCESS_DENIED_FAILED,
+                AuditResourceTypes.PROFILE,
+                profileId,
+                Map.of("reason", "not_profile_owner")
+        );
+
+        verify(unifiedAuditLogWriter).recordRequiresNew(
+                eq(userId),
+                eq(AuditActions.PROFILE_SHARE_ACCESS_DENIED_FAILED),
+                eq(AuditResourceTypes.PROFILE),
+                eq(profileId),
+                isNull(),
+                isNull(),
+                eq("{\"reason\":\"not_profile_owner\"}")
+        );
+    }
+
+    @Test
     void recordEvent_serializesDetails() {
         UUID userId = UUID.randomUUID();
         recorder.recordEvent(

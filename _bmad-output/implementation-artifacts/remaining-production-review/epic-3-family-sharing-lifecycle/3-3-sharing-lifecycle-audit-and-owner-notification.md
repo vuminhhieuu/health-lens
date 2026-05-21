@@ -1,6 +1,6 @@
 # Story 3.3: Sharing Lifecycle Audit And Owner Notification
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 
@@ -23,11 +23,11 @@ so that I know who gained or lost access to my health profile.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 - Define sharing lifecycle audit event names and metadata (AC: #1, #3, #4)
-- [ ] Task 2 - Emit events from invite/accept/reject/cancel/revoke/failure paths (AC: #1)
-- [ ] Task 3 - Add owner notification on accepted invite if policy requires it (AC: #2)
-- [ ] Task 4 - Mask sensitive metadata (AC: #4)
-- [ ] Task 5 - Add audit and notification tests (AC: #1-#4)
+- [x] Task 1 - Define sharing lifecycle audit event names and metadata (AC: #1, #3, #4)
+- [x] Task 2 - Emit events from invite/accept/reject/cancel/revoke/failure paths (AC: #1)
+- [x] Task 3 - Add owner notification on accepted invite if policy requires it (AC: #2)
+- [x] Task 4 - Mask sensitive metadata (AC: #4)
+- [x] Task 5 - Add audit and notification tests (AC: #1-#4)
 
 ## Dev Notes
 
@@ -58,10 +58,32 @@ so that I know who gained or lost access to my health profile.
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Composer
 
 ### Debug Log References
 
 ### Completion Notes List
 
+- Added `SharingAuditSupport` + `AuditPiiMasker` for canonical sharing audit payloads (`actorId`, `ownerId`, `viewerId`, `invitationId`, `correlationId`, `outcome`, `inviteeEmailMasked`).
+- Added `PROFILE_SHARE_ACCESS_DENIED_FAILED` for non-owner access and invitee email mismatch; invalid token logged anonymously without token value.
+- Owner email on first accept via `PROFILE_SHARE_ACCEPTED` event; toggle `app.sharing.notify-owner-on-accept` (default `true`).
+- Extended `AuditRedactor` to strip raw `inviteeEmail` / invitation tokens from any audit JSON.
+
 ### File List
+
+- apps/api/src/main/java/com/healthlens/api/audit/AuditPiiMasker.java
+- apps/api/src/main/java/com/healthlens/api/audit/SharingAuditSupport.java
+- apps/api/src/main/java/com/healthlens/api/audit/AuditActions.java
+- apps/api/src/main/java/com/healthlens/api/audit/AuditRedactor.java
+- apps/api/src/main/java/com/healthlens/api/service/ProfileShareService.java
+- apps/api/src/main/java/com/healthlens/api/dto/event/EmailEvent.java
+- apps/api/src/main/java/com/healthlens/api/service/EmailEventPublisher.java
+- apps/api/src/main/java/com/healthlens/api/service/EmailService.java
+- apps/api/src/main/java/com/healthlens/api/service/EmailConsumer.java
+- apps/api/src/main/java/com/healthlens/api/service/admin/AdminAuditLogService.java
+- apps/api/src/main/resources/application.yml
+- apps/api/src/main/resources/templates/email/profile-share-accepted.html
+- apps/api/src/test/java/com/healthlens/api/audit/AuditPiiMaskerTest.java
+- apps/api/src/test/java/com/healthlens/api/audit/SharingAuditSupportTest.java
+- apps/api/src/test/java/com/healthlens/api/audit/AuditRedactorTest.java
+- apps/api/src/test/java/com/healthlens/api/service/ProfileShareServiceTest.java
