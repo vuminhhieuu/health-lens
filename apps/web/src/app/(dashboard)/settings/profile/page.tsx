@@ -19,6 +19,7 @@ import {
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { SettingsDirectContactCard } from "../_components/SettingsDirectContactCard";
 import { notify } from "@/lib/notify";
 import {
   updateUserProfileSchema,
@@ -611,30 +612,10 @@ export default function ProfileSettingsPage() {
             <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-[#00685f]/10 rounded-full blur-3xl"></div>
           </section>
 
-          {/* Support Section */}
-          <div className="p-6 rounded-3xl bg-[#e4f1ee] border border-[#bcc9c6]/20 text-center">
-            <p className="text-xs text-[#6d7a77] font-bold uppercase tracking-widest mb-4">
-              Cần hỗ trợ?
-            </p>
-            <p className="text-sm text-[#3d4947] mb-6 leading-relaxed">
-              Nếu bạn gặp khó khăn khi cập nhật thông tin, liên hệ đội ngũ hỗ
-              trợ.
-            </p>
-            <div className="flex flex-col gap-2">
-              <a
-                href="tel:19001234"
-                className="text-[#00685f] font-bold hover:underline"
-              >
-                1900 1234
-              </a>
-              <a
-                href="mailto:support@healthlens.vn"
-                className="text-[#00685f] font-bold hover:underline"
-              >
-                support@healthlens.vn
-              </a>
-            </div>
-          </div>
+          <SettingsDirectContactCard
+            title="Cần hỗ trợ?"
+            description="Nếu bạn gặp khó khăn khi cập nhật thông tin, liên hệ đội ngũ hỗ trợ."
+          />
         </div>
       </div>
     </DashboardPageShell>
