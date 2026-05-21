@@ -80,6 +80,23 @@ describe("ForgotPasswordPage", () => {
     });
   });
 
+  it("does not start client cooldown when the request fails", async () => {
+    postMock.mockRejectedValueOnce(new Error("network"));
+    const user = userEvent.setup();
+
+    render(<ForgotPasswordPage />);
+
+    await user.type(screen.getByLabelText("Email"), "user@example.com");
+    await user.click(screen.getByRole("button", { name: "Gửi yêu cầu" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(messageCatalog.auth.networkError);
+    });
+
+    expect(screen.getByRole("button", { name: "Gửi yêu cầu" })).toBeEnabled();
+    expect(sessionStorage.getItem("forgot-password-last-request-at")).toBeNull();
+  });
+
   it("maps server failure to generic retry copy", async () => {
     postMock.mockRejectedValueOnce(axiosError(500));
     const user = userEvent.setup();

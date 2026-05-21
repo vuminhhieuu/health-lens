@@ -1,13 +1,14 @@
+import {
+  readSessionStorage,
+  writeSessionStorage,
+} from "@/lib/browser/sessionStorage";
+
 export const FORGOT_PASSWORD_COOLDOWN_MS = 60_000;
 
 const STORAGE_KEY = "forgot-password-last-request-at";
 
 export function getForgotPasswordCooldownRemainingMs(): number {
-  if (typeof sessionStorage === "undefined") {
-    return 0;
-  }
-
-  const raw = sessionStorage.getItem(STORAGE_KEY);
+  const raw = readSessionStorage(STORAGE_KEY);
   if (!raw) {
     return 0;
   }
@@ -21,11 +22,7 @@ export function getForgotPasswordCooldownRemainingMs(): number {
 }
 
 export function markForgotPasswordRequestSent(at = Date.now()) {
-  if (typeof sessionStorage === "undefined") {
-    return;
-  }
-
-  sessionStorage.setItem(STORAGE_KEY, String(at));
+  writeSessionStorage(STORAGE_KEY, String(at));
 }
 
 export function forgotPasswordCooldownSeconds(remainingMs: number) {

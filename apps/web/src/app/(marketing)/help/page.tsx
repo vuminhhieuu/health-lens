@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BookOpen, LifeBuoy, Shield } from "lucide-react";
+import { ArrowRight, BookOpen, Shield } from "lucide-react";
 
 import { PublicContentLayout, PublicContentSection } from "@/components/marketing/PublicContentLayout";
 

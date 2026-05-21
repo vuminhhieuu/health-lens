@@ -32,30 +32,31 @@ public class ForgotPasswordRateLimiter {
 
     public void checkRateLimit(String email) {
         String normalizedEmail = normalizeEmail(email);
-        checkCooldown(normalizedEmail);
         checkHourlyLimit(normalizedEmail);
+        acquireCooldownSlot(normalizedEmail);
     }
 
     public void recordRequest(String email) {
-        String normalizedEmail = normalizeEmail(email);
-        setCooldown(normalizedEmail);
-        recordHourlyAttempt(normalizedEmail);
+        recordHourlyAttempt(normalizeEmail(email));
     }
 
-    private void checkCooldown(String normalizedEmail) {
+    private void acquireCooldownSlot(String normalizedEmail) {
         try {
-            String key = cooldownKey(normalizedEmail);
-            if (!Boolean.TRUE.equals(redisTemplate.hasKey(key))) {
+            Boolean acquired = redisTemplate
+                    .opsForValue()
+                    .setIfAbsent(cooldownKey(normalizedEmail), "1", MIN_INTERVAL);
+            if (Boolean.TRUE.equals(acquired)) {
                 return;
             }
-            Long ttl = redisTemplate.getExpire(key);
+
+            Long ttl = redisTemplate.getExpire(cooldownKey(normalizedEmail));
             long retryAfterSeconds = (ttl != null && ttl > 0) ? ttl : MIN_INTERVAL.toSeconds();
             throw cooldownExceeded(retryAfterSeconds);
         } catch (RateLimitExceededException e) {
             throw e;
         } catch (Exception e) {
             log.error(
-                    "Redis unavailable when checking forgot password cooldown. Fail-closed: {}. Email: {}",
+                    "Redis unavailable when acquiring forgot password cooldown. Fail-closed: {}. Email: {}",
                     failClosed,
                     normalizedEmail,
                     e);
@@ -93,17 +94,6 @@ public class ForgotPasswordRateLimiter {
                 throw new RateLimitExceededException(
                         "Hệ thống tạm ngưng. Vui lòng thử lại sau.",
                         WINDOW_DURATION.toSeconds());
-            }
-        }
-    }
-
-    private void setCooldown(String normalizedEmail) {
-        try {
-            redisTemplate.opsForValue().set(cooldownKey(normalizedEmail), "1", MIN_INTERVAL);
-        } catch (Exception e) {
-            log.error("Redis unavailable when setting forgot password cooldown. Email: {}", normalizedEmail, e);
-            if (failClosed) {
-                throw cooldownExceeded(MIN_INTERVAL.toSeconds());
             }
         }
     }

@@ -13,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -31,9 +32,13 @@ class ForgotPasswordRateLimiterTest {
     }
 
     @Test
-    @DisplayName("checkRateLimit blocks when 60s cooldown key exists")
+    @DisplayName("checkRateLimit blocks when cooldown slot cannot be acquired")
     void checkRateLimit_blocksCooldown() {
-        when(redisTemplate.hasKey("forgot_password_cooldown:user@example.com")).thenReturn(true);
+        when(valueOperations.setIfAbsent(
+                        eq("forgot_password_cooldown:user@example.com"),
+                        eq("1"),
+                        eq(Duration.ofSeconds(60))))
+                .thenReturn(false);
         when(redisTemplate.getExpire("forgot_password_cooldown:user@example.com")).thenReturn(42L);
 
         assertThatThrownBy(() -> rateLimiter.checkRateLimit("User@Example.com"))
@@ -42,23 +47,45 @@ class ForgotPasswordRateLimiterTest {
     }
 
     @Test
-    @DisplayName("recordRequest sets 60s cooldown and increments hourly bucket")
-    void recordRequest_setsCooldownAndHourlyAttempt() {
+    @DisplayName("checkRateLimit acquires cooldown only after hourly limit passes")
+    void checkRateLimit_acquiresCooldownSlot() {
+        when(valueOperations.get("forgot_password_attempts:user@example.com")).thenReturn("1");
+        when(valueOperations.setIfAbsent(
+                        eq("forgot_password_cooldown:user@example.com"),
+                        eq("1"),
+                        eq(Duration.ofSeconds(60))))
+                .thenReturn(true);
+
+        assertThatCode(() -> rateLimiter.checkRateLimit("user@example.com"))
+                .doesNotThrowAnyException();
+
+        verify(valueOperations)
+                .setIfAbsent(
+                        eq("forgot_password_cooldown:user@example.com"),
+                        eq("1"),
+                        eq(Duration.ofSeconds(60)));
+    }
+
+    @Test
+    @DisplayName("recordRequest increments hourly bucket without rewriting cooldown")
+    void recordRequest_incrementsHourlyAttemptOnly() {
         when(valueOperations.increment("forgot_password_attempts:user@example.com")).thenReturn(1L);
 
         rateLimiter.recordRequest("user@example.com");
 
-        verify(valueOperations).set(
-                eq("forgot_password_cooldown:user@example.com"),
-                eq("1"),
-                eq(Duration.ofSeconds(60)));
+        verify(valueOperations, never())
+                .set(eq("forgot_password_cooldown:user@example.com"), eq("1"), eq(Duration.ofSeconds(60)));
         verify(redisTemplate).expire("forgot_password_attempts:user@example.com", Duration.ofHours(1));
     }
 
     @Test
-    @DisplayName("checkRateLimit allows when cooldown absent and hourly bucket below limit")
+    @DisplayName("checkRateLimit allows when cooldown acquired and hourly bucket below limit")
     void checkRateLimit_allowsFreshRequest() {
-        when(redisTemplate.hasKey("forgot_password_cooldown:user@example.com")).thenReturn(false);
+        when(valueOperations.setIfAbsent(
+                        eq("forgot_password_cooldown:user@example.com"),
+                        eq("1"),
+                        eq(Duration.ofSeconds(60))))
+                .thenReturn(true);
         when(valueOperations.get("forgot_password_attempts:user@example.com")).thenReturn("1");
 
         assertThatCode(() -> rateLimiter.checkRateLimit("user@example.com"))

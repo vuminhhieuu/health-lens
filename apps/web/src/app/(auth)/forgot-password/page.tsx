@@ -25,9 +25,9 @@ export default function ForgotPasswordPage() {
   const [submitError, setSubmitError] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState("");
-  const [shouldFocusEmail, setShouldFocusEmail] = useState(false);
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState(0);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
+  const focusEmailAfterResendRef = useRef(false);
 
   const {
     register,
@@ -45,11 +45,11 @@ export default function ForgotPasswordPage() {
   const emailField = register("email");
 
   useEffect(() => {
-    if (!isSuccess && shouldFocusEmail) {
+    if (!isSuccess && focusEmailAfterResendRef.current) {
       emailInputRef.current?.focus();
-      setShouldFocusEmail(false);
+      focusEmailAfterResendRef.current = false;
     }
-  }, [isSuccess, shouldFocusEmail]);
+  }, [isSuccess]);
 
   useEffect(() => {
     const syncCooldown = () => setCooldownRemainingMs(getForgotPasswordCooldownRemainingMs());
@@ -73,12 +73,12 @@ export default function ForgotPasswordPage() {
     }
 
     setSubmitError("");
-    markForgotPasswordRequestSent();
 
     try {
       await apiClient.post(API_ROUTES.AUTH.FORGOT_PASSWORD, {
         email: data.email,
       });
+      markForgotPasswordRequestSent();
       setSubmittedEmail(data.email);
       setIsSuccess(true);
       notify.success(messageCatalog.auth.forgotPasswordSent);
@@ -100,9 +100,9 @@ export default function ForgotPasswordPage() {
     if (submittedEmail) {
       setValue("email", submittedEmail);
     }
+    focusEmailAfterResendRef.current = true;
     setIsSuccess(false);
     setSubmitError("");
-    setShouldFocusEmail(true);
   };
 
   return (

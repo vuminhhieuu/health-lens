@@ -197,20 +197,22 @@ export default function RegisterPage() {
               {errors.confirmPassword ? <p className="text-sm text-[#ba1a1a]">{errors.confirmPassword.message}</p> : null}
             </div>
 
-            <label htmlFor="acceptedTerms" className="flex cursor-pointer items-start gap-3 py-1">
+            <div className="flex items-start gap-3 py-1">
               <input
                 id="acceptedTerms"
                 type="checkbox"
                 {...register("acceptedTerms")}
                 className="mt-0.5 h-5 w-5 rounded border-[#6d7a77] text-[#00685f]"
               />
-              <span className="text-sm leading-snug text-[#3d4947]">
-                Tôi đã đọc và chấp nhận{" "}
+              <p className="text-sm leading-snug text-[#3d4947]">
+                <label htmlFor="acceptedTerms" className="cursor-pointer">
+                  Tôi đã đọc và chấp nhận
+                </label>{" "}
                 <Link href={termsLink?.href ?? "/terms"} className="font-semibold text-[#00685f] hover:underline">
                   Điều khoản sử dụng
                 </Link>
-              </span>
-            </label>
+              </p>
+            </div>
             {errors.acceptedTerms ? <p className="text-sm text-[#ba1a1a]">{errors.acceptedTerms.message}</p> : null}
 
             {successMessage ? (
