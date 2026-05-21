@@ -282,7 +282,7 @@ development_status:
 
   # Epic 6: Cleanup, Accessibility & Frontend Maintainability
   remaining-6-cleanup-accessibility-maintainability: in-progress
-  remaining-6-1-frontend-dead-code-and-export-cleanup: ready-for-dev
+  remaining-6-1-frontend-dead-code-and-export-cleanup: done
   remaining-6-2-accessibility-and-shared-ui-components-cleanup: ready-for-dev
   remaining-6-3-frontend-bundle-and-image-rule-cleanup: ready-for-dev
   remaining-6-retrospective: optional
