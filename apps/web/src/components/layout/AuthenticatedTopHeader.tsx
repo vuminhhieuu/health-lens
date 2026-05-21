@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Bell, HelpCircle, LogOut, Search, Settings, User } from "lucide-react";
 
+import {
+  authenticatedHeaderInnerClassName,
+  authenticatedHeaderSurfaceClassName,
+} from "@/lib/layout/shell";
+
 type HeaderNavItem = {
   name: string;
   href: string;
@@ -26,8 +31,8 @@ export function AuthenticatedTopHeader({
   avatarUrl,
   brandHref = "/",
   onLogout,
-  className = "fixed top-0 z-50 w-full border-b border-[#bcc9c6]/20 bg-[#e9f6f3]/80 px-6 py-3 shadow-sm backdrop-blur-md print:hidden",
-  innerClassName = "flex items-center justify-between",
+  className = `fixed top-0 z-50 w-full ${authenticatedHeaderSurfaceClassName}`,
+  innerClassName = authenticatedHeaderInnerClassName,
 }: AuthenticatedTopHeaderProps) {
   const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
   const avatarMenuRef = useRef<HTMLDivElement>(null);

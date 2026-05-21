@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema } from "@healthlens/shared/schemas/auth";
-import { AlertTriangle, CircleHelp, Eye, EyeOff, Globe, LogIn, ShieldCheck, TriangleAlert } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, Globe, LogIn, ShieldCheck, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, Suspense } from "react";
@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
+import { AuthPageShell } from "@/components/auth/AuthPageShell";
 import { syncActiveConsentVersion } from "@/lib/consent/syncActiveConsentVersion";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
@@ -122,35 +123,24 @@ function LoginContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#effcf9] via-[#e9f6f3] to-[#d8e5e2] text-[#121e1c]">
-      {/* Header */}
-      <header className="fixed top-0 z-50 w-full border-b border-[#d8e5e2] bg-[#effcf9]/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-6">
-          <Link href="/" className="text-2xl font-bold tracking-tight text-[#005049]">
-            HealthLens
-          </Link>
-          <button
-            type="button"
-            aria-label="Trợ giúp"
-            className="rounded-full p-2 text-[#3f6560] transition hover:bg-[#d8e5e2]"
-          >
-            <CircleHelp className="h-5 w-5" />
-          </button>
-          <button
-            type="button"
-            aria-label="Ngôn ngữ"
-            className="rounded-full p-2 text-[#3f6560] transition hover:bg-[#d8e5e2]"
-          >
-            <Globe className="h-5 w-5" />
-          </button>
+    <AuthPageShell
+      footer
+      headerActions={
+        <button
+          type="button"
+          aria-label="Ngôn ngữ"
+          className="rounded-full p-2 text-[#3f6560] transition hover:bg-[#d8e5e2]"
+        >
+          <Globe className="h-5 w-5" />
+        </button>
+      }
+      decoration={
+        <div className="pointer-events-none fixed bottom-0 right-0 hidden p-8 opacity-10 lg:block">
+          <ShieldCheck className="h-56 w-56 text-[#00685f]" />
         </div>
-      </header>
-
-      {/* Main */}
-      <main className="mx-auto flex min-h-screen w-full max-w-7xl items-center justify-center px-4 pb-12 pt-24">
-        <section className="w-full max-w-[460px] rounded-xl bg-white p-8 shadow-[0_8px_32px_rgba(18,30,28,0.08)] md:p-10">
-          {/* Title */}
-          <div className="mb-10 text-center">
+      }
+    >
+      <div className="mb-10 text-center">
             <h1 className="mb-2 text-3xl font-extrabold tracking-tight text-[#121e1c]">
               Đăng Nhập
             </h1>
@@ -314,27 +304,6 @@ function LoginContent() {
             </p>
           </div>
 
-          {/* Footer links (Stitch reference) */}
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-xs text-[#6d7a77]">
-            <Link href="#" className="transition hover:text-[#00685f]">
-              Quy định bảo mật
-            </Link>
-            <span className="text-[#d8e5e2]">|</span>
-            <Link href="#" className="transition hover:text-[#00685f]">
-              Điều khoản sử dụng
-            </Link>
-            <span className="text-[#d8e5e2]">|</span>
-            <Link href="#" className="transition hover:text-[#00685f]">
-              Trợ giúp
-            </Link>
-          </div>
-        </section>
-      </main>
-
-      {/* Decorative background icon */}
-      <div className="pointer-events-none fixed bottom-0 right-0 hidden p-8 opacity-10 lg:block">
-        <ShieldCheck className="h-56 w-56 text-[#00685f]" />
-      </div>
-    </div>
+    </AuthPageShell>
   );
 }

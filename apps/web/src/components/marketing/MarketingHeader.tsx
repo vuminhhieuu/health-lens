@@ -8,7 +8,14 @@ import { useAuthBootstrap } from "@/hooks/useAuthBootstrap";
 import { AuthenticatedTopHeader } from "@/components/layout/AuthenticatedTopHeader";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
-import { marketingShell } from "@/lib/marketing/layout";
+import {
+  authenticatedHeaderInnerClassName,
+  authenticatedHeaderSurfaceClassName,
+} from "@/lib/layout/shell";
+import {
+  publicMarketingHeaderClassName,
+  publicMarketingHeaderInnerClassName,
+} from "@/lib/marketing/layout";
 import { useAuthStore } from "@/stores/authStore";
 
 type CurrentUser = {
@@ -60,11 +67,8 @@ export function MarketingHeader() {
 
   if (isLoading) {
     return (
-      <header
-        aria-hidden="true"
-        className="sticky top-0 z-50 border-b border-[#bcc9c6]/50 bg-[#f6fbfa]/90 backdrop-blur-md"
-      >
-        <div className={`${marketingShell} flex items-center justify-between gap-4 py-3`}>
+      <header aria-hidden="true" className={publicMarketingHeaderClassName}>
+        <div className={`${publicMarketingHeaderInnerClassName} gap-4`}>
           <div className="h-8 w-36 animate-pulse rounded-lg bg-[#e1ebe8]" />
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <div className="h-10 w-24 animate-pulse rounded-lg bg-[#e1ebe8]" />
@@ -83,15 +87,15 @@ export function MarketingHeader() {
         avatarUrl={avatarUrl}
         brandHref="/"
         onLogout={logout}
-        className="sticky top-0 z-50 w-full border-b border-[#bcc9c6]/20 bg-[#e9f6f3]/80 py-3 shadow-sm backdrop-blur-md print:hidden"
-        innerClassName={`${marketingShell} flex items-center justify-between`}
+        className={`sticky top-0 z-50 w-full ${authenticatedHeaderSurfaceClassName}`}
+        innerClassName={authenticatedHeaderInnerClassName}
       />
     );
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[#bcc9c6]/50 bg-[#f6fbfa]/90 backdrop-blur-md">
-      <div className={`${marketingShell} flex items-center justify-between gap-4 py-3`}>
+    <header className={publicMarketingHeaderClassName}>
+      <div className={`${publicMarketingHeaderInnerClassName} gap-4`}>
         <Link
           href="/"
           className="text-2xl font-bold tracking-tight text-[#005049] transition hover:text-[#00685f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00685f]"

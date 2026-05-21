@@ -1,5 +1,5 @@
 # generated: 2026-04-01
-# last_updated: 2026-05-20T23:45:00+07:00
+# last_updated: 2026-05-21T11:22:00+07:00
 # project: health-lens
 # project_key: NOKEY
 # tracking_system: file-system
@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-05-20T23:45:00+07:00
+last_updated: 2026-05-21T11:22:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -258,7 +258,7 @@ development_status:
   remaining-2-3-cancel-deletion-link-and-token-flow-hardening: done
   remaining-2-4-public-auth-endpoint-rate-limit-and-error-semantics: done
   remaining-2-5-refresh-token-rotation-race-hardening: done
-  remaining-2-6-forgot-password-page-refactor-and-public-auth-link-consistency: ready-for-dev
+  remaining-2-6-forgot-password-page-refactor-and-public-auth-link-consistency: done
   remaining-2-retrospective: optional
 
   # Epic 3: Family Sharing Lifecycle Correctness

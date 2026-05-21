@@ -43,6 +43,20 @@ describe("public landing page (pae-3)", () => {
     expect(guestCtas).not.toContain("Đăng ký");
   });
 
+  it("uses /home-aligned horizontal shell on landing and footer", () => {
+    const marketingHome = source(marketingDir, "MarketingHome.tsx");
+    const footer = source(componentsDir, "MarketingFooter.tsx");
+    const header = source(componentsDir, "MarketingHeader.tsx");
+    const layout = readFileSync(join(process.cwd(), "src/lib/marketing/layout.ts"), "utf8");
+
+    expect(layout).toContain("authenticatedContentShell");
+    expect(marketingHome).toContain("marketingShell");
+    expect(footer).toContain("marketingShell");
+    expect(header).toContain("publicMarketingHeaderClassName");
+    expect(layout).toContain("px-6");
+    expect(layout).not.toContain("max-w-[88rem]");
+  });
+
   it("exposes support route and footer legal links", () => {
     const supportPage = source(marketingDir, "support/page.tsx");
     const footer = source(componentsDir, "MarketingFooter.tsx");

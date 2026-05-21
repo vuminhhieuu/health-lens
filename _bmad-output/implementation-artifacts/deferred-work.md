@@ -42,3 +42,7 @@
 
 - Consumer group bootstrap can skip the first real event if a stream is created with `_init`, a real event is appended before `createGroup(..., ReadOffset.latest())`, and the group starts after that event. Deferred because the same bootstrap race existed in the previous email/OCR consumer setup and was not introduced by this boundary refactor.
 - OCR retry enqueue publishes to Redis before the queued DB state is saved, so a save failure after publish can leave DB state behind the stream event. Deferred because the same publish-before-save ordering existed before this boundary refactor; a later reliability story should decide whether to change retry transaction/outbox semantics.
+
+## Deferred from: code review of 2-6-forgot-password-page-refactor-and-public-auth-link-consistency (2026-05-21)
+
+- Nút ngôn ngữ trên login vẫn là `button` không có hành động — tồn tại trước story 2.6; cần story i18n/language switcher riêng.
