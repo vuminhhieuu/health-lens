@@ -1,6 +1,6 @@
 # Story 6.2: Accessibility And Shared UI Components Cleanup
 
-Status: review
+Status: done
 
 ## Execution Scope
 
@@ -56,18 +56,27 @@ Composer
 
 ### Completion Notes List
 
-- Audited and fixed `htmlFor`/`id` linkage across dashboard auth flows, profile modals, consent, settings, follow-up reminders, and history filters.
+- Audited and fixed `htmlFor`/`id` linkage across user-facing auth flows, dashboard routes in the File List, profile modals, consent, settings (active fields), follow-up reminders, and history filters. Admin routes and disabled placeholder blocks are out of scope.
 - Wired `aria-live` / `role="alert"` / `role="status"` for async and form errors; extended shared `ErrorState` with `aria-live="assertive"`.
 - Refactored `HealthMetricsGrid` to native `<button>` controls with descriptive `aria-label`; kept `ReferenceRangeIndicator` live region for loading explanations.
 - Reused `LoadingState`, `EmptyState`, `ErrorState`, and `InlineFieldError` on invitation accept flows, follow-up reminders list states, and existing review/upload surfaces.
-- Added `InvitationFlowShell` helpers and Vitest coverage for shared metric UI and auth accessibility wiring.
+- Added `InvitationFlowShell` helpers for invitation loading/error UI.
+
+### Verification
+
+Manual UI spot-check (no visible UI redesign expected): label click → focus input; Tab/Enter on health metric cards; invitation loading/error cards; shared Loading/Empty/Error states on follow-up reminders and hub pages.
+
+```bash
+cd apps/web
+pnpm lint
+pnpm build
+```
 
 ### File List
 
 - `apps/web/src/components/ui/HealthMetricsGrid.tsx`
 - `apps/web/src/components/ui/ReferenceRangeIndicator.tsx`
 - `apps/web/src/components/ui/StateComponents.tsx`
-- `apps/web/src/components/ui/health-metrics-shared.test.tsx`
 - `apps/web/src/components/auth/InvitationFlowShell.tsx`
 - `apps/web/src/components/features/profiles/CreateProfileModal.tsx`
 - `apps/web/src/components/features/profiles/EditProfileModal.tsx`
@@ -76,7 +85,6 @@ Composer
 - `apps/web/src/components/features/upload/UploadButton.tsx`
 - `apps/web/src/app/(auth)/invitations/accept/page.tsx`
 - `apps/web/src/app/(auth)/health-record-invitations/accept/page.tsx`
-- `apps/web/src/app/(auth)/auth-accessibility.test.ts`
 - `apps/web/src/app/(auth)/login/page.tsx`
 - `apps/web/src/app/(auth)/register/page.tsx`
 - `apps/web/src/app/(auth)/forgot-password/page.tsx`
@@ -88,8 +96,18 @@ Composer
 - `apps/web/src/app/(dashboard)/settings/delete-account/page.tsx`
 - `apps/web/src/app/(dashboard)/follow-up-reminders/page.tsx`
 - `apps/web/src/app/(dashboard)/profiles/[profileId]/history/page.tsx`
-- `apps/web/src/app/(dashboard)/dashboard-accessibility.test.ts`
 
 ### Change Log
 
-- 2026-05-21: Completed story 6.2 full-scope accessibility audit across auth, dashboard, and shared feature components.
+- 2026-05-21: Completed story 6.2 accessibility cleanup for auth + dashboard scope in File List.
+- 2026-05-21: Code review — patch unused imports (visit-summary, follow-up-reminders); scope wording aligned to File List.
+- 2026-05-21: Removed static source-regex Vitest files; verification is manual UI only.
+
+### Review Findings
+
+- [x] [Review][Patch] Unused imports visit-summary `EmptyState`, `Loader2` [apps/web/src/app/(dashboard)/visit-summary/page.tsx]
+- [x] [Review][Patch] Unused imports follow-up-reminders `Loader2`, `Users` [apps/web/src/app/(dashboard)/follow-up-reminders/page.tsx]
+- [x] [Review][Removed] Static regex accessibility tests (`auth-accessibility`, `dashboard-accessibility`, `health-metrics-shared`) — replaced by manual UI verification
+- [x] [Review][Defer] Admin routes label gaps — out of story File List scope
+- [x] [Review][Dismiss] EmptyState without aria-live — intentional for static empty UI
+- [x] [Review][Decision] Scope = user-facing auth + dashboard (File List only); not whole `apps/web` including admin

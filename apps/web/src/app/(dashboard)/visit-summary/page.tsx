@@ -10,7 +10,6 @@ import {
   CheckSquare,
   ClipboardList,
   FileText,
-  Loader2,
   Printer,
   Stethoscope,
   Upload,
@@ -20,7 +19,7 @@ import {
 import { ApiPaths } from "@healthlens/shared/constants";
 
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
+import { ErrorState, LoadingState } from "@/components/ui";
 import { apiClient } from "@/lib/api/apiClient";
 
 type Profile = {

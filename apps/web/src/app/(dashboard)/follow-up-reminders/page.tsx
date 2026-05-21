@@ -9,10 +9,8 @@ import {
   Bell,
   CalendarDays,
   ClipboardList,
-  Loader2,
   Pencil,
   Trash2,
-  Users,
   X,
 } from "lucide-react";
 
