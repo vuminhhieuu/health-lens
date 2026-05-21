@@ -127,7 +127,7 @@ export function UploadButton({
       </button>
 
       {status === "uploading" && (
-        <div className="mt-3 w-full space-y-2">
+        <div className="mt-3 w-full space-y-2" role="status" aria-live="polite">
           <p className="text-sm font-medium text-[#3d4947]">Đang tải lên: {uploadProgress}%</p>
           <div className="h-2 overflow-hidden rounded-full bg-[#d6ebe7]">
             <div className="h-full bg-[#008378] transition-all" style={{ width: `${uploadProgress}%` }} />
@@ -135,11 +135,19 @@ export function UploadButton({
         </div>
       )}
 
-      {status === "done" && <p className="mt-3 text-sm font-medium text-[#0f766e]">Tải lên thành công, hệ thống đang xử lý kết quả.</p>}
+      {status === "done" ? (
+        <p className="mt-3 text-sm font-medium text-[#0f766e]" role="status" aria-live="polite">
+          Tải lên thành công, hệ thống đang xử lý kết quả.
+        </p>
+      ) : null}
 
       {status === "error" && (
-        <p className="mt-3 flex items-center gap-2 text-sm font-medium text-[#ba1a1a]">
-          <AlertCircle className="h-4 w-4" />
+        <p
+          className="mt-3 flex items-center gap-2 text-sm font-medium text-[#ba1a1a]"
+          role="alert"
+          aria-live="assertive"
+        >
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
           {error}
         </p>
       )}

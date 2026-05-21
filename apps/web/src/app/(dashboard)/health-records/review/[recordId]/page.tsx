@@ -1,6 +1,13 @@
 "use client";
 
-import { type ChangeEvent, type ReactNode, useEffect, useMemo, useState, useRef } from "react";
+import {
+  type ChangeEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+} from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -37,12 +44,24 @@ import { z } from "zod";
 
 import { apiClient } from "@/lib/api/apiClient";
 import { notify } from "@/lib/notify";
-import { ALLOWED_FILE_TYPES, ApiPaths, UPLOAD_MAX_SIZE_BYTES } from "@healthlens/shared/constants";
+import {
+  ALLOWED_FILE_TYPES,
+  ApiPaths,
+  UPLOAD_MAX_SIZE_BYTES,
+} from "@healthlens/shared/constants";
+import { HealthMetricsGrid } from "@/components/ui/HealthMetricsGrid";
 import { HealthMetricCard } from "@/components/ui/HealthMetricCard";
+import { ReferenceRangeIndicator } from "@/components/ui/ReferenceRangeIndicator";
 import { ErrorState, InlineFieldError, LoadingState } from "@/components/ui";
 import { OcrFailureScreen } from "@/components/features/upload/OcrFailureScreen";
 import { DeleteRecordModal } from "@/components/features/health-records/DeleteRecordModal";
-import { getApiErrorPayload, getApiErrorStatus, messageCatalog, retryAfterMinutes } from "@/lib/i18n/messages";
+import SafeImage from "@/components/ui/SafeImage";
+import {
+  getApiErrorPayload,
+  getApiErrorStatus,
+  messageCatalog,
+  retryAfterMinutes,
+} from "@/lib/i18n/messages";
 import { recommendationDisclaimerText } from "@/lib/utils/medicalDisclaimer";
 import { toThreeLineExplanation } from "@/lib/utils/explanationFormatter";
 
@@ -100,7 +119,11 @@ type Profile = {
   displayName: string;
 };
 
-type ReviewRecordStatus = "processing" | "review_required" | "done" | "ocr_failed";
+type ReviewRecordStatus =
+  | "processing"
+  | "review_required"
+  | "done"
+  | "ocr_failed";
 
 type ReviewRecordData = {
   profileId?: string;
@@ -151,20 +174,23 @@ type RecommendationGroup = {
 
 const metricSchema = z.object({
   name: z.string().trim().min(1, "Tên chỉ số không được để trống"),
-  value: z
-    .string()
-    .trim()
-    .min(1, "Giá trị không được để trống"),
+  value: z.string().trim().min(1, "Giá trị không được để trống"),
   unit: z.string().trim().min(1, "Đơn vị không được để trống"),
   source: z.enum(["ocr", "manual"]),
 });
 
-function metricLabel(metric: Pick<MetricDto, "name"> | null | undefined, index: number) {
+function metricLabel(
+  metric: Pick<MetricDto, "name"> | null | undefined,
+  index: number,
+) {
   const name = metric?.name?.trim();
   return name ? "“" + name + "”" : "#" + (index + 1);
 }
 
-function validateMetricForSave(metric: MetricDto, index: number): string | null {
+function validateMetricForSave(
+  metric: MetricDto,
+  index: number,
+): string | null {
   const validation = metricSchema.safeParse({
     name: metric.name,
     value: metric.value,
@@ -172,8 +198,15 @@ function validateMetricForSave(metric: MetricDto, index: number): string | null 
     source: "manual",
   });
   if (validation.success) return null;
-  const message = validation.error.issues[0]?.message ?? "Dữ liệu chỉ số không hợp lệ";
-  return "Chỉ số " + metricLabel(metric, index) + ": " + message.charAt(0).toLowerCase() + message.slice(1);
+  const message =
+    validation.error.issues[0]?.message ?? "Dữ liệu chỉ số không hợp lệ";
+  return (
+    "Chỉ số " +
+    metricLabel(metric, index) +
+    ": " +
+    message.charAt(0).toLowerCase() +
+    message.slice(1)
+  );
 }
 
 function extractFilename(contentDisposition: unknown): string | null {
@@ -201,7 +234,11 @@ function getResponse(error: unknown) {
   if (!error || typeof error !== "object") {
     return undefined;
   }
-  return (error as { response?: { headers?: Record<string, unknown>; status?: number } }).response;
+  return (
+    error as {
+      response?: { headers?: Record<string, unknown>; status?: number };
+    }
+  ).response;
 }
 
 function getResponseCorrelationId(error: unknown) {
@@ -253,28 +290,39 @@ export default function ReviewRecordPage() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [documentPreviewFailed, setDocumentPreviewFailed] = useState(false);
-  const [pdfPreviewObjectUrl, setPdfPreviewObjectUrl] = useState<string | null>(null);
+  const [pdfPreviewObjectUrl, setPdfPreviewObjectUrl] = useState<string | null>(
+    null,
+  );
   const [isPdfPreviewLoading, setIsPdfPreviewLoading] = useState(false);
-  const [selectedMetricIndex, setSelectedMetricIndex] = useState<number | null>(null);
+  const [selectedMetricIndex, setSelectedMetricIndex] = useState<number | null>(
+    null,
+  );
   const [isKeepingPartial, setIsKeepingPartial] = useState(false);
   const [isRetryUploading, setIsRetryUploading] = useState(false);
   const [retryUploadError, setRetryUploadError] = useState<string | null>(null);
   const [isDeletingRecord, setIsDeletingRecord] = useState(false);
-  const [deleteRecordError, setDeleteRecordError] = useState<string | null>(null);
+  const [deleteRecordError, setDeleteRecordError] = useState<string | null>(
+    null,
+  );
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [pdfDownloadError, setPdfDownloadError] = useState<string | null>(null);
   const [showDeleteRecordModal, setShowDeleteRecordModal] = useState(false);
   const [showRecordShareModal, setShowRecordShareModal] = useState(false);
   const [recordShareEmail, setRecordShareEmail] = useState("");
-  const [recordShareAccessLevel, setRecordShareAccessLevel] = useState<"view" | "edit">("view");
+  const [recordShareAccessLevel, setRecordShareAccessLevel] = useState<
+    "view" | "edit"
+  >("view");
   const [recordShareError, setRecordShareError] = useState<string | null>(null);
-  const [pendingRecordShareRevoke, setPendingRecordShareRevoke] = useState<HealthRecordSharedMember | null>(null);
+  const [pendingRecordShareRevoke, setPendingRecordShareRevoke] =
+    useState<HealthRecordSharedMember | null>(null);
   const retryFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", value: "", unit: "" });
   const [addError, setAddError] = useState<string | null>(null);
-  const [addErrorField, setAddErrorField] = useState<AddMetricField | null>(null);
+  const [addErrorField, setAddErrorField] = useState<AddMetricField | null>(
+    null,
+  );
 
   const { data, refetch, isLoading, isError } = useQuery<ReviewRecordData>({
     queryKey: ["record-status", recordId],
@@ -311,42 +359,56 @@ export default function ReviewRecordPage() {
   const { data: recommendationsData } = useQuery<RecommendationsData>({
     queryKey: ["record-recommendations", recordId, data?.status],
     queryFn: async () => {
-      const res = await apiClient.get(ApiPaths.HEALTH_RECORDS.RECOMMENDATIONS(recordId));
+      const res = await apiClient.get(
+        ApiPaths.HEALTH_RECORDS.RECOMMENDATIONS(recordId),
+      );
       return res.data?.data;
     },
     enabled: Boolean(recordId && data?.status === "done"),
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: recordSharedMembers = [], isFetching: isRecordSharedMembersLoading } = useQuery<
-    HealthRecordSharedMember[]
-  >({
+  const {
+    data: recordSharedMembers = [],
+    isFetching: isRecordSharedMembersLoading,
+  } = useQuery<HealthRecordSharedMember[]>({
     queryKey: ["health-record-shared-members", recordId],
     queryFn: async () => {
-      const response = await apiClient.get(ApiPaths.HEALTH_RECORDS.INVITATIONS(recordId));
+      const response = await apiClient.get(
+        ApiPaths.HEALTH_RECORDS.INVITATIONS(recordId),
+      );
       return ((response.data?.data ?? []) as HealthRecordSharedMember[]).filter(
-        (member) => member.status !== "revoked" && member.status !== "expired"
+        (member) => member.status !== "revoked" && member.status !== "expired",
       );
     },
     enabled: showRecordShareModal,
   });
 
   const inviteRecordMutation = useMutation({
-    mutationFn: async (payload: { email: string; accessLevel: "view" | "edit" }) => {
-      const response = await apiClient.post(ApiPaths.HEALTH_RECORDS.INVITATIONS(recordId), {
-        email: payload.email,
-        accessLevel: payload.accessLevel,
-      });
+    mutationFn: async (payload: {
+      email: string;
+      accessLevel: "view" | "edit";
+    }) => {
+      const response = await apiClient.post(
+        ApiPaths.HEALTH_RECORDS.INVITATIONS(recordId),
+        {
+          email: payload.email,
+          accessLevel: payload.accessLevel,
+        },
+      );
       return response.data?.data as HealthRecordSharedMember;
     },
     onSuccess: async () => {
       setRecordShareEmail("");
       setRecordShareError(null);
-      await queryClient.invalidateQueries({ queryKey: ["health-record-shared-members", recordId] });
+      await queryClient.invalidateQueries({
+        queryKey: ["health-record-shared-members", recordId],
+      });
       notify.success("Đã gửi lời mời chia sẻ kết quả khám.");
     },
     onError: () => {
-      const message = "Gửi lời mời thất bại. Vui lòng kiểm tra email và thử lại.";
+      const message =
+        "Gửi lời mời thất bại. Vui lòng kiểm tra email và thử lại.";
       setRecordShareError(message);
       notify.error(message);
     },
@@ -359,10 +421,14 @@ export default function ReviewRecordPage() {
         if (!data?.profileId) {
           throw new Error("Missing profile id");
         }
-        await apiClient.delete(ApiPaths.PROFILES.REVOKE_SHARE(data.profileId, viewerId));
+        await apiClient.delete(
+          ApiPaths.PROFILES.REVOKE_SHARE(data.profileId, viewerId),
+        );
         return member;
       }
-      await apiClient.delete(ApiPaths.HEALTH_RECORDS.REVOKE_SHARE(recordId, viewerId));
+      await apiClient.delete(
+        ApiPaths.HEALTH_RECORDS.REVOKE_SHARE(recordId, viewerId),
+      );
       return member;
     },
     onSuccess: async (member) => {
@@ -371,9 +437,15 @@ export default function ReviewRecordPage() {
       queryClient.setQueryData(
         ["health-record-shared-members", recordId],
         (previous: HealthRecordSharedMember[] | undefined) =>
-          (previous ?? []).filter((item) => item.id !== member.id && item.email.toLowerCase() !== member.email.toLowerCase())
+          (previous ?? []).filter(
+            (item) =>
+              item.id !== member.id &&
+              item.email.toLowerCase() !== member.email.toLowerCase(),
+          ),
       );
-      await queryClient.invalidateQueries({ queryKey: ["health-record-shared-members", recordId] });
+      await queryClient.invalidateQueries({
+        queryKey: ["health-record-shared-members", recordId],
+      });
       notify.success("Đã thu hồi quyền truy cập kết quả khám.");
     },
     onError: () => {
@@ -384,7 +456,10 @@ export default function ReviewRecordPage() {
   });
 
   const updateRecordShareAccessMutation = useMutation({
-    mutationFn: async (payload: { member: HealthRecordSharedMember; accessLevel: "view" | "edit" }) => {
+    mutationFn: async (payload: {
+      member: HealthRecordSharedMember;
+      accessLevel: "view" | "edit";
+    }) => {
       if (payload.member.shareScope === "profile") {
         if (!data?.profileId) {
           throw new Error("Missing profile id");
@@ -406,13 +481,18 @@ export default function ReviewRecordPage() {
         ["health-record-shared-members", recordId],
         (previous: HealthRecordSharedMember[] | undefined) =>
           (previous ?? []).map((item) =>
-            item.id === variables.member.id || item.email.toLowerCase() === variables.member.email.toLowerCase()
+            item.id === variables.member.id ||
+            item.email.toLowerCase() === variables.member.email.toLowerCase()
               ? { ...item, accessLevel: variables.accessLevel }
-              : item
-          )
+              : item,
+          ),
       );
-      await queryClient.invalidateQueries({ queryKey: ["health-record-shared-members", recordId] });
-      notify.success(`Đã cập nhật quyền ${variables.accessLevel === "edit" ? "chỉnh sửa" : "chỉ xem"}.`);
+      await queryClient.invalidateQueries({
+        queryKey: ["health-record-shared-members", recordId],
+      });
+      notify.success(
+        `Đã cập nhật quyền ${variables.accessLevel === "edit" ? "chỉnh sửa" : "chỉ xem"}.`,
+      );
     },
     onError: () => {
       const message = "Cập nhật quyền thất bại. Vui lòng thử lại.";
@@ -422,24 +502,39 @@ export default function ReviewRecordPage() {
   });
   const recommendationGroups = useMemo(
     () => groupRecommendations(recommendationsData?.recommendations ?? []),
-    [recommendationsData?.recommendations]
+    [recommendationsData?.recommendations],
   );
-  const selectedMetric = selectedMetricIndex !== null ? metrics[selectedMetricIndex] : null;
-  const selectedMetricStaticExplanation = selectedMetric?.explanation?.trim() || "";
-  const { data: popupExplanationData, isLoading: isExplanationLoading } = useQuery({
-    queryKey: ["metric-explanation", recordId, selectedMetric?.name, selectedMetric?.value, selectedMetric?.status],
-    queryFn: async () => {
-      if (!recordId || !selectedMetric) return { explanation: "", source: "fallback" };
-      const res = await apiClient.get(ApiPaths.HEALTH_RECORDS.EXPLANATION(recordId, selectedMetric.name));
-      const payload = res.data?.data;
-      return {
-        explanation: (payload?.explanation as string | undefined) ?? "",
-        source: (payload?.source as string | undefined) ?? "fallback",
-      };
-    },
-    enabled: selectedMetricIndex !== null && !selectedMetricStaticExplanation && Boolean(recordId),
-    staleTime: 7 * 24 * 60 * 60 * 1000,
-  });
+  const selectedMetric =
+    selectedMetricIndex !== null ? metrics[selectedMetricIndex] : null;
+  const selectedMetricStaticExplanation =
+    selectedMetric?.explanation?.trim() || "";
+  const { data: popupExplanationData, isLoading: isExplanationLoading } =
+    useQuery({
+      queryKey: [
+        "metric-explanation",
+        recordId,
+        selectedMetric?.name,
+        selectedMetric?.value,
+        selectedMetric?.status,
+      ],
+      queryFn: async () => {
+        if (!recordId || !selectedMetric)
+          return { explanation: "", source: "fallback" };
+        const res = await apiClient.get(
+          ApiPaths.HEALTH_RECORDS.EXPLANATION(recordId, selectedMetric.name),
+        );
+        const payload = res.data?.data;
+        return {
+          explanation: (payload?.explanation as string | undefined) ?? "",
+          source: (payload?.source as string | undefined) ?? "fallback",
+        };
+      },
+      enabled:
+        selectedMetricIndex !== null &&
+        !selectedMetricStaticExplanation &&
+        Boolean(recordId),
+      staleTime: 7 * 24 * 60 * 60 * 1000,
+    });
 
   const initialized = useRef(false);
   const initialSnapshotRef = useRef<string>("");
@@ -482,8 +577,9 @@ export default function ReviewRecordPage() {
       });
       initialized.current = true;
       setEditMode(
-        (data.status === "review_required" || (data.status === "ocr_failed" && manualMode)) &&
-        (data.canEdit ?? data.isOwner ?? true)
+        (data.status === "review_required" ||
+          (data.status === "ocr_failed" && manualMode)) &&
+          (data.canEdit ?? data.isOwner ?? true),
       );
     }
   }, [data, manualMode]);
@@ -515,9 +611,10 @@ export default function ReviewRecordPage() {
       })
       .then((response) => {
         if (cancelled) return;
-        const blob = response.data instanceof Blob && response.data.type
-          ? response.data
-          : new Blob([response.data], { type: "application/pdf" });
+        const blob =
+          response.data instanceof Blob && response.data.type
+            ? response.data
+            : new Blob([response.data], { type: "application/pdf" });
         objectUrl = URL.createObjectURL(blob);
         setPdfPreviewObjectUrl(objectUrl);
       })
@@ -582,7 +679,10 @@ export default function ReviewRecordPage() {
     }
 
     notifiedOcrFailureRef.current = recordId;
-    notify.error(data.ocrFailureReason?.trim() || "Không thể nhận diện dữ liệu từ tệp đã tải lên.");
+    notify.error(
+      data.ocrFailureReason?.trim() ||
+        "Không thể nhận diện dữ liệu từ tệp đã tải lên.",
+    );
   }, [data?.ocrFailureReason, data?.status, manualMode, recordId]);
 
   const handleEditClick = (index: number) => {
@@ -601,7 +701,9 @@ export default function ReviewRecordPage() {
     });
 
     if (!validation.success) {
-      setSaveError(validation.error.issues[0]?.message ?? "Dữ liệu chỉ số không hợp lệ");
+      setSaveError(
+        validation.error.issues[0]?.message ?? "Dữ liệu chỉ số không hợp lệ",
+      );
       return;
     }
 
@@ -645,8 +747,14 @@ export default function ReviewRecordPage() {
 
     if (!validation.success) {
       const field = validation.error.issues[0]?.path[0];
-      setAddErrorField(field === "name" || field === "value" || field === "unit" ? field : null);
-      setAddError(validation.error.issues[0]?.message ?? "Dữ liệu không hợp lệ");
+      setAddErrorField(
+        field === "name" || field === "value" || field === "unit"
+          ? field
+          : null,
+      );
+      setAddError(
+        validation.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+      );
       return;
     }
 
@@ -684,9 +792,12 @@ export default function ReviewRecordPage() {
       setSaveError(null);
       setShowConfirmModal(false);
 
-      const resolvedKeepPartial = keepPartial || (data?.status === "ocr_failed" && manualMode);
+      const resolvedKeepPartial =
+        keepPartial || (data?.status === "ocr_failed" && manualMode);
       const finalMetrics: MetricDto[] = metrics;
-      const metricValidationError = finalMetrics.map(validateMetricForSave).find(Boolean);
+      const metricValidationError = finalMetrics
+        .map(validateMetricForSave)
+        .find(Boolean);
       if (metricValidationError) {
         setSaveError(metricValidationError);
         return false;
@@ -721,8 +832,14 @@ export default function ReviewRecordPage() {
       notify.success("Lưu kết quả khám thành công!");
       return true;
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { detail?: string; title?: string }; status?: number } };
-      const serverMsg = axiosErr?.response?.data?.detail ?? axiosErr?.response?.data?.title;
+      const axiosErr = err as {
+        response?: {
+          data?: { detail?: string; title?: string };
+          status?: number;
+        };
+      };
+      const serverMsg =
+        axiosErr?.response?.data?.detail ?? axiosErr?.response?.data?.title;
       const statusCode = axiosErr?.response?.status;
       if (serverMsg) {
         const message = statusCode
@@ -754,7 +871,11 @@ export default function ReviewRecordPage() {
   };
 
   const validateRetryFile = (file: File) => {
-    if (!ALLOWED_FILE_TYPES.includes(file.type as (typeof ALLOWED_FILE_TYPES)[number])) {
+    if (
+      !ALLOWED_FILE_TYPES.includes(
+        file.type as (typeof ALLOWED_FILE_TYPES)[number],
+      )
+    ) {
       return "Chỉ chấp nhận file PDF/JPG/PNG.";
     }
     if (file.size > UPLOAD_MAX_SIZE_BYTES) {
@@ -787,18 +908,26 @@ export default function ReviewRecordPage() {
     try {
       setIsRetryUploading(true);
       const fileType = file.type === "application/pdf" ? "pdf" : file.type;
-      const uploadInfoResp = await apiClient.post(ApiPaths.HEALTH_RECORDS.UPLOAD_URL, {
-        profileId: data.profileId,
-        fileType,
-        retryRecordId: recordId,
-      });
-      const uploadInfo = uploadInfoResp.data?.data as { uploadUrl: string; recordId: string };
+      const uploadInfoResp = await apiClient.post(
+        ApiPaths.HEALTH_RECORDS.UPLOAD_URL,
+        {
+          profileId: data.profileId,
+          fileType,
+          retryRecordId: recordId,
+        },
+      );
+      const uploadInfo = uploadInfoResp.data?.data as {
+        uploadUrl: string;
+        recordId: string;
+      };
 
       await axios.put(uploadInfo.uploadUrl, file, {
         headers: { "Content-Type": file.type },
       });
 
-      await apiClient.post(ApiPaths.HEALTH_RECORDS.CONFIRM_UPLOAD(uploadInfo.recordId));
+      await apiClient.post(
+        ApiPaths.HEALTH_RECORDS.CONFIRM_UPLOAD(uploadInfo.recordId),
+      );
       notify.success("Đã tải tệp mới. Hệ thống đang xử lý lại OCR.");
       initialized.current = false;
       await refetch();
@@ -807,9 +936,10 @@ export default function ReviewRecordPage() {
       logReviewActionError("retry-upload", error);
       const status = getApiErrorStatus(error);
       const payload = getApiErrorPayload(error);
-      const message = status === 429
-        ? messageCatalog.upload.ocrRateLimited(retryAfterMinutes(payload, 60))
-        : "Tải tệp mới thất bại. Vui lòng thử lại.";
+      const message =
+        status === 429
+          ? messageCatalog.upload.ocrRateLimited(retryAfterMinutes(payload, 60))
+          : "Tải tệp mới thất bại. Vui lòng thử lại.";
       setRetryUploadError(message);
       notify.error(message);
     } finally {
@@ -825,7 +955,9 @@ export default function ReviewRecordPage() {
       setShowDeleteRecordModal(false);
       await apiClient.delete(ApiPaths.HEALTH_RECORDS.DELETE(recordId));
       notify.success("Đã xóa kết quả khám thành công.");
-      const redirectPath = data?.profileId ? `/profiles/${data.profileId}/history` : "/health-records";
+      const redirectPath = data?.profileId
+        ? `/profiles/${data.profileId}/history`
+        : "/health-records";
       router.push(redirectPath);
     } catch (error) {
       logReviewActionError("delete-record", error);
@@ -842,10 +974,13 @@ export default function ReviewRecordPage() {
     try {
       setIsDownloadingPdf(true);
       setPdfDownloadError(null);
-      const response = await apiClient.get(ApiPaths.HEALTH_RECORDS.DOWNLOAD_PDF(recordId), {
-        responseType: "blob",
-        headers: { Accept: "application/pdf" },
-      });
+      const response = await apiClient.get(
+        ApiPaths.HEALTH_RECORDS.DOWNLOAD_PDF(recordId),
+        {
+          responseType: "blob",
+          headers: { Accept: "application/pdf" },
+        },
+      );
       const blob = new Blob([response.data], { type: "application/pdf" });
       const objectUrl = URL.createObjectURL(blob);
       const filename =
@@ -883,7 +1018,9 @@ export default function ReviewRecordPage() {
     });
   };
 
-  const historyHref = data?.profileId ? `/profiles/${data.profileId}/history` : null;
+  const historyHref = data?.profileId
+    ? `/profiles/${data.profileId}/history`
+    : null;
   const deleteRecordModal = (
     <DeleteRecordModal
       open={showDeleteRecordModal}
@@ -894,14 +1031,25 @@ export default function ReviewRecordPage() {
   );
   const renderOriginalDocumentPreview = (
     fileUrlValue: string | null | undefined,
-    options: { compact?: boolean; fit?: "contain" | "width"; unavailableReason?: string } = {}
+    options: {
+      compact?: boolean;
+      fit?: "contain" | "width";
+      unavailableReason?: string;
+    } = {},
   ) => {
     const resolvedFileUrl = fileUrlValue?.trim() ?? "";
     const resolvedIsPdf = isPdfFileUrl(resolvedFileUrl);
     const isCompact = options.compact ?? false;
     const pdfPreviewUrl = resolvedIsPdf ? pdfPreviewObjectUrl : null;
-    const canRenderPreview = Boolean(resolvedFileUrl) && !documentPreviewFailed && (!resolvedIsPdf || Boolean(pdfPreviewUrl));
-    const isPreviewLoading = resolvedIsPdf && Boolean(resolvedFileUrl) && isPdfPreviewLoading && !documentPreviewFailed;
+    const canRenderPreview =
+      Boolean(resolvedFileUrl) &&
+      !documentPreviewFailed &&
+      (!resolvedIsPdf || Boolean(pdfPreviewUrl));
+    const isPreviewLoading =
+      resolvedIsPdf &&
+      Boolean(resolvedFileUrl) &&
+      isPdfPreviewLoading &&
+      !documentPreviewFailed;
     const imageClassName =
       options.fit === "contain"
         ? "max-h-[22rem] w-auto max-w-full rounded-lg shadow-sm"
@@ -938,7 +1086,9 @@ export default function ReviewRecordPage() {
           {isPreviewLoading ? (
             <div className="flex min-h-56 w-full flex-col items-center justify-center rounded-xl border border-[#d7e5e1] bg-white px-6 py-10 text-center">
               <Loader2 className="h-8 w-8 animate-spin text-[#00685f]" />
-              <p className="mt-3 text-sm font-semibold text-[#274d48]">Đang tải hồ sơ gốc...</p>
+              <p className="mt-3 text-sm font-semibold text-[#274d48]">
+                Đang tải hồ sơ gốc...
+              </p>
             </div>
           ) : canRenderPreview ? (
             resolvedIsPdf ? (
@@ -951,7 +1101,9 @@ export default function ReviewRecordPage() {
               >
                 <div className="flex min-h-56 w-full flex-col items-center justify-center rounded-xl border border-dashed border-[#b7d8d1] bg-white px-6 py-10 text-center">
                   <FileText className="h-8 w-8 text-[#8aa09c]" />
-                  <p className="mt-3 text-sm font-semibold text-[#274d48]">Không thể hiển thị PDF trong trình duyệt</p>
+                  <p className="mt-3 text-sm font-semibold text-[#274d48]">
+                    Không thể hiển thị PDF trong trình duyệt
+                  </p>
                   <button
                     type="button"
                     onClick={() => setDocumentPreviewFailed(true)}
@@ -962,8 +1114,8 @@ export default function ReviewRecordPage() {
                 </div>
               </object>
             ) : (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
+              <SafeImage
+                raw
                 src={resolvedFileUrl}
                 alt="Hồ sơ gốc"
                 className={`${imageClassName} cursor-zoom-in`}
@@ -974,9 +1126,12 @@ export default function ReviewRecordPage() {
           ) : (
             <div className="flex min-h-56 w-full flex-col items-center justify-center rounded-xl border border-dashed border-[#b7d8d1] bg-white px-6 py-10 text-center">
               <FileText className="h-8 w-8 text-[#8aa09c]" />
-              <p className="mt-3 text-sm font-semibold text-[#274d48]">Không thể mở hồ sơ gốc</p>
+              <p className="mt-3 text-sm font-semibold text-[#274d48]">
+                Không thể mở hồ sơ gốc
+              </p>
               <p className="mt-1 max-w-sm text-xs text-[#6d7a77]">
-                {options.unavailableReason ?? "Tệp gốc không còn khả dụng hoặc bạn chưa có quyền truy cập tệp này."}
+                {options.unavailableReason ??
+                  "Tệp gốc không còn khả dụng hoặc bạn chưa có quyền truy cập tệp này."}
               </p>
             </div>
           )}
@@ -992,7 +1147,9 @@ export default function ReviewRecordPage() {
       </div>
     );
   };
-  const renderFullscreenDocumentModal = (fileUrlValue: string | null | undefined) => {
+  const renderFullscreenDocumentModal = (
+    fileUrlValue: string | null | undefined,
+  ) => {
     const resolvedFileUrl = fileUrlValue?.trim() ?? "";
     if (!showFullDoc || !resolvedFileUrl || documentPreviewFailed) return null;
     const resolvedIsPdf = isPdfFileUrl(resolvedFileUrl);
@@ -1007,7 +1164,10 @@ export default function ReviewRecordPage() {
           className="relative flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
         >
           <div className="flex items-center justify-between border-b border-[#d7e7e3] px-5 py-4">
-            <h3 id="source-document-dialog-title" className="text-base font-bold text-[#005049]">
+            <h3
+              id="source-document-dialog-title"
+              className="text-base font-bold text-[#005049]"
+            >
               Hồ sơ gốc
             </h3>
             <button
@@ -1022,7 +1182,9 @@ export default function ReviewRecordPage() {
             {resolvedIsPdf && !pdfPreviewUrl ? (
               <div className="flex min-h-56 w-full flex-col items-center justify-center rounded-xl bg-white px-6 py-10 text-center shadow-sm">
                 <Loader2 className="h-8 w-8 animate-spin text-[#00685f]" />
-                <p className="mt-3 text-sm font-semibold text-[#274d48]">Đang tải hồ sơ gốc...</p>
+                <p className="mt-3 text-sm font-semibold text-[#274d48]">
+                  Đang tải hồ sơ gốc...
+                </p>
               </div>
             ) : resolvedIsPdf ? (
               <object
@@ -1034,7 +1196,9 @@ export default function ReviewRecordPage() {
               >
                 <div className="flex min-h-56 w-full flex-col items-center justify-center rounded-xl bg-white px-6 py-10 text-center shadow-sm">
                   <FileText className="h-8 w-8 text-[#8aa09c]" />
-                  <p className="mt-3 text-sm font-semibold text-[#274d48]">Không thể hiển thị PDF trong trình duyệt</p>
+                  <p className="mt-3 text-sm font-semibold text-[#274d48]">
+                    Không thể hiển thị PDF trong trình duyệt
+                  </p>
                   <button
                     type="button"
                     onClick={() => setDocumentPreviewFailed(true)}
@@ -1045,8 +1209,8 @@ export default function ReviewRecordPage() {
                 </div>
               </object>
             ) : (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
+              <SafeImage
+                raw
                 src={resolvedFileUrl}
                 alt="Hồ sơ gốc chi tiết"
                 className="max-h-[62vh] max-w-full rounded-lg bg-white object-contain shadow-lg"
@@ -1079,7 +1243,12 @@ export default function ReviewRecordPage() {
       }}
       onInvite={handleInviteRecordShare}
       onClose={() => {
-        if (inviteRecordMutation.isPending || revokeRecordShareMutation.isPending || updateRecordShareAccessMutation.isPending) return;
+        if (
+          inviteRecordMutation.isPending ||
+          revokeRecordShareMutation.isPending ||
+          updateRecordShareAccessMutation.isPending
+        )
+          return;
         setShowRecordShareModal(false);
         setRecordShareEmail("");
         setRecordShareAccessLevel("view");
@@ -1110,14 +1279,20 @@ export default function ReviewRecordPage() {
         <nav className="text-sm font-medium text-[#6d7a77]">
           <div className="flex flex-wrap items-center gap-1">
             <span className="inline-flex items-center gap-1">
-              <Link href="/health-records" className="hover:text-[#00685f] hover:underline">
+              <Link
+                href="/health-records"
+                className="hover:text-[#00685f] hover:underline"
+              >
                 Kết quả khám
               </Link>
               <span>/</span>
             </span>
             <span className="inline-flex items-center gap-1">
               {historyHref ? (
-                <Link href={historyHref} className="text-[#6d7a77] hover:text-[#00685f] hover:underline">
+                <Link
+                  href={historyHref}
+                  className="text-[#6d7a77] hover:text-[#00685f] hover:underline"
+                >
                   Lịch sử khám bệnh
                 </Link>
               ) : (
@@ -1129,7 +1304,9 @@ export default function ReviewRecordPage() {
           </div>
         </nav>
       </div>
-      <div className="mx-auto w-full max-w-[1360px] px-6 pb-10 pt-6">{content}</div>
+      <div className="mx-auto w-full max-w-[1360px] px-6 pb-10 pt-6">
+        {content}
+      </div>
       {renderFullscreenDocumentModal(data?.fileUrl)}
     </main>
   );
@@ -1142,17 +1319,24 @@ export default function ReviewRecordPage() {
           <div className="order-2 lg:order-1 lg:col-span-5 xl:col-span-4">
             {renderOriginalDocumentPreview(data.fileUrl, {
               compact: true,
-              unavailableReason: "Tệp gốc chưa sẵn sàng hoặc quyền truy cập tệp chưa được cấp.",
+              unavailableReason:
+                "Tệp gốc chưa sẵn sàng hoặc quyền truy cập tệp chưa được cấp.",
             })}
           </div>
         ) : null}
-        <div className={data ? "order-1 lg:order-2 lg:col-span-7 xl:col-span-8" : "lg:col-span-12"}>
+        <div
+          className={
+            data
+              ? "order-1 lg:order-2 lg:col-span-7 xl:col-span-8"
+              : "lg:col-span-12"
+          }
+        >
           <LoadingState
             title="Hệ thống đang xử lý OCR"
             description="Quá trình này có thể mất một chút thời gian, vui lòng không đóng trang."
           />
         </div>
-      </div>
+      </div>,
     );
   }
 
@@ -1164,12 +1348,13 @@ export default function ReviewRecordPage() {
         description="Không thể tải kết quả khám. Vui lòng thử lại."
         actionLabel="Thử lại"
         onAction={() => void refetch()}
-      />
+      />,
     );
   }
 
   if (data?.status === "ocr_failed" && !manualMode) {
-    const hasPartialMetrics = (data.metrics?.length ?? 0) > 0 || Boolean(data.hasLowConfidenceMetrics);
+    const hasPartialMetrics =
+      (data.metrics?.length ?? 0) > 0 || Boolean(data.hasLowConfidenceMetrics);
     return renderReviewStateShell(
       "Review kết quả khám",
       <>
@@ -1188,13 +1373,16 @@ export default function ReviewRecordPage() {
           retryUploadError={retryUploadError}
           originalDocumentPreview={renderOriginalDocumentPreview(data.fileUrl, {
             compact: true,
-            unavailableReason: "Tệp gốc không còn khả dụng để đối chiếu sau lỗi OCR.",
+            unavailableReason:
+              "Tệp gốc không còn khả dụng để đối chiếu sau lỗi OCR.",
           })}
           onRetry={() => retryFileInputRef.current?.click()}
-          onManualInput={() => router.push(`/health-records/review/${recordId}?mode=manual`)}
+          onManualInput={() =>
+            router.push(`/health-records/review/${recordId}?mode=manual`)
+          }
           onKeepPartial={handleKeepPartial}
         />
-      </>
+      </>,
     );
   }
 
@@ -1206,12 +1394,15 @@ export default function ReviewRecordPage() {
         description="Kết quả này không còn khả dụng hoặc bạn không có quyền xem."
         actionLabel="Quay lại danh sách"
         onAction={() => router.push("/health-records")}
-      />
+      />,
     );
   }
 
-  const canConfirm = data?.status === "review_required" || (data?.status === "ocr_failed" && manualMode);
-  const canToggleEditResults = data?.status === "done" || (data?.status === "ocr_failed" && manualMode);
+  const canConfirm =
+    data?.status === "review_required" ||
+    (data?.status === "ocr_failed" && manualMode);
+  const canToggleEditResults =
+    data?.status === "done" || (data?.status === "ocr_failed" && manualMode);
   const isOwner = data.isOwner ?? true;
   const canEdit = data.canEdit ?? isOwner;
   const canShareRecord = isOwner && data.status === "done";
@@ -1223,15 +1414,27 @@ export default function ReviewRecordPage() {
   const isDoneView = data.status === "done" && showMetricCards;
   const displayRecordType = recordType?.trim() || "Phiếu khám bệnh";
   const displayExamDate = examDate?.trim() || "Chưa có ngày khám";
-  const displayHospitalName = hospitalName?.trim() || "Chưa cập nhật cơ sở y tế";
-  const abnormalMetrics = metrics.filter((metric) => metric.status === "abnormal").length;
-  const attentionMetrics = metrics.filter((metric) => metric.status === "attention").length;
+  const displayHospitalName =
+    hospitalName?.trim() || "Chưa cập nhật cơ sở y tế";
+  const abnormalMetrics = metrics.filter(
+    (metric) => metric.status === "abnormal",
+  ).length;
+  const attentionMetrics = metrics.filter(
+    (metric) => metric.status === "attention",
+  ).length;
   const overallSummary =
-    abnormalMetrics > 0 ? "Cần theo dõi" : attentionMetrics > 0 ? "Cần chú ý" : "Bình thường";
+    abnormalMetrics > 0
+      ? "Cần theo dõi"
+      : attentionMetrics > 0
+        ? "Cần chú ý"
+        : "Bình thường";
   const profileDisplayName =
     data.profileDisplayName ??
-    (data.profileId ? profiles.find((profile) => profile.id === data.profileId)?.displayName : undefined);
-  const profileOwnerLabel = profileDisplayName ?? (isOwner ? "Tôi" : "Thành viên gia đình");
+    (data.profileId
+      ? profiles.find((profile) => profile.id === data.profileId)?.displayName
+      : undefined);
+  const profileOwnerLabel =
+    profileDisplayName ?? (isOwner ? "Tôi" : "Thành viên gia đình");
 
   if (isDoneView) {
     return (
@@ -1240,14 +1443,20 @@ export default function ReviewRecordPage() {
           <nav className="text-sm font-medium text-[#6d7a77]">
             <div className="flex flex-wrap items-center gap-1">
               <span className="inline-flex items-center gap-1">
-                <Link href="/health-records" className="hover:text-[#00685f] hover:underline">
+                <Link
+                  href="/health-records"
+                  className="hover:text-[#00685f] hover:underline"
+                >
                   Kết quả khám
                 </Link>
                 <span>/</span>
               </span>
               <span className="inline-flex items-center gap-1">
                 {data.profileId ? (
-                  <Link href={`/profiles/${data.profileId}/history`} className="text-[#6d7a77] hover:text-[#00685f] hover:underline">
+                  <Link
+                    href={`/profiles/${data.profileId}/history`}
+                    className="text-[#6d7a77] hover:text-[#00685f] hover:underline"
+                  >
                     Lịch sử khám bệnh
                   </Link>
                 ) : (
@@ -1263,7 +1472,6 @@ export default function ReviewRecordPage() {
         </div>
         <div className="mx-auto w-full max-w-[1360px] px-6 pb-10 pt-6">
           <div className="space-y-6">
-
             <section className="flex flex-col gap-4 rounded-[28px] bg-white p-6 shadow-sm md:flex-row md:items-end md:justify-between">
               <div>
                 <h1 className="text-3xl font-extrabold tracking-tight text-[#121e1c]">
@@ -1274,7 +1482,10 @@ export default function ReviewRecordPage() {
                   {displayHospitalName}
                 </div>
                 <p className="mt-2 text-xs text-[#6d7a77]">
-                  Kết quả khám của: <span className="font-semibold text-[#3d4947]">{profileOwnerLabel}</span>
+                  Kết quả khám của:{" "}
+                  <span className="font-semibold text-[#3d4947]">
+                    {profileOwnerLabel}
+                  </span>
                 </p>
               </div>
               <div className="flex items-center gap-1.5">
@@ -1324,7 +1535,11 @@ export default function ReviewRecordPage() {
                   disabled={isDownloadingPdf}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#e9f6f3] text-[#3d4947] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isDownloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+                  {isDownloadingPdf ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileDown className="h-4 w-4" />
+                  )}
                 </button>
                 {canDeleteRecord ? (
                   <button
@@ -1335,16 +1550,32 @@ export default function ReviewRecordPage() {
                     disabled={isDeletingRecord}
                     className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#ffdad6] text-[#ba1a1a] disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {isDeletingRecord ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    {isDeletingRecord ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
                   </button>
                 ) : null}
               </div>
             </section>
             {deleteRecordError ? (
-              <div className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]">{deleteRecordError}</div>
+              <div
+                role="alert"
+                aria-live="assertive"
+                className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]"
+              >
+                {deleteRecordError}
+              </div>
             ) : null}
             {pdfDownloadError ? (
-              <div className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]">{pdfDownloadError}</div>
+              <div
+                role="alert"
+                aria-live="assertive"
+                className="rounded-xl bg-[#ffdad6] px-4 py-3 text-sm text-[#ba1a1a]"
+              >
+                {pdfDownloadError}
+              </div>
             ) : null}
 
             {/* ── Zone 1: Status Summary (Gradient Card) ── */}
@@ -1355,7 +1586,9 @@ export default function ReviewRecordPage() {
                     <CheckCircle className="h-4 w-4" />
                     {overallSummary}
                   </span>
-                  <h2 className="mt-4 text-2xl font-bold">Tổng quan kết quả xét nghiệm</h2>
+                  <h2 className="mt-4 text-2xl font-bold">
+                    Tổng quan kết quả xét nghiệm
+                  </h2>
                   <p className="mt-2 max-w-2xl text-white/90">
                     {overallSummary === "Bình thường"
                       ? "Các chỉ số chính đang trong ngưỡng an toàn. Tiếp tục duy trì lối sống lành mạnh."
@@ -1371,23 +1604,33 @@ export default function ReviewRecordPage() {
               <section className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-[#00685f]" />
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-[#3d4947]">Khuyến nghị từ AI</h3>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-[#3d4947]">
+                    Khuyến nghị từ AI
+                  </h3>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {recommendationGroups.map((group) => {
                     const GroupIcon = recommendationIcon(group.category);
                     return (
-                      <article key={group.category} className="rounded-2xl border border-[#bcc9c6]/20 bg-white p-5 shadow-sm">
+                      <article
+                        key={group.category}
+                        className="rounded-2xl border border-[#bcc9c6]/20 bg-white p-5 shadow-sm"
+                      >
                         <div className="mb-3 flex items-center gap-2.5">
                           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#e9f6f3]">
                             <GroupIcon className="h-4 w-4 text-[#00685f]" />
                           </div>
-                          <h4 className="text-sm font-bold text-[#121e1c]">{group.title}</h4>
+                          <h4 className="text-sm font-bold text-[#121e1c]">
+                            {group.title}
+                          </h4>
                         </div>
                         <ul className="space-y-2">
                           {group.items.map((item, idx) => (
-                            <li key={idx} className="flex items-start gap-2 text-sm leading-relaxed text-[#3d4947]">
+                            <li
+                              key={idx}
+                              className="flex items-start gap-2 text-sm leading-relaxed text-[#3d4947]"
+                            >
                               <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#00685f]/40" />
                               {item}
                             </li>
@@ -1403,9 +1646,13 @@ export default function ReviewRecordPage() {
                     <ShieldAlert className="h-4 w-4 text-[#92700e]" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-[#92700e]">Lưu ý quan trọng</p>
+                    <p className="text-xs font-bold text-[#92700e]">
+                      Lưu ý quan trọng
+                    </p>
                     <p className="mt-0.5 text-xs leading-relaxed text-[#78650d]">
-                      {recommendationDisclaimerText(recommendationsData.disclaimer)}
+                      {recommendationDisclaimerText(
+                        recommendationsData.disclaimer,
+                      )}
                     </p>
                   </div>
                 </div>
@@ -1414,56 +1661,17 @@ export default function ReviewRecordPage() {
 
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-[#121e1c]">Chỉ số chi tiết</h3>
+                <h3 className="text-xl font-bold text-[#121e1c]">
+                  Chỉ số chi tiết
+                </h3>
                 <span className="rounded-full bg-[#deebe8] px-3 py-1 text-xs font-bold uppercase text-[#00685f]">
                   Tổng {metrics.length}
                 </span>
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {metrics.map((metric, idx) => {
-                  const metricValue = metric.value?.trim() || "--";
-                  const metricUnit = metric.unit?.trim() || "";
-                  const metricRangeText = compactRangeText(metric);
-                  const metricPercent = compactMetricPercent(metric);
-                  const isNormal = (metric.status ?? "no_data") === "normal";
-                  return (
-                    <article
-                      key={`${metric.name}-${idx}`}
-                      role="button"
-                      tabIndex={0}
-                      className="group cursor-pointer rounded-3xl bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:ring-2 hover:ring-[#00685f]/15"
-                      onClick={() => setSelectedMetricIndex(idx)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          setSelectedMetricIndex(idx);
-                        }
-                      }}
-                    >
-                      <div className="mb-5 flex items-start justify-between gap-2">
-                        <span className="line-clamp-2 text-xs font-extrabold uppercase text-[#3d4947]">
-                          {metric.displayNameVi || metric.name}
-                        </span>
-                        <CheckCircle className={`h-4 w-4 shrink-0 ${isNormal ? "text-[#00685f]" : "text-[#6d7a77]"}`} />
-                      </div>
-                      <div className="flex items-end gap-1.5">
-                        <span className="text-[44px] leading-none font-black text-[#121e1c]">{metricValue}</span>
-                        <span className="pb-1 text-2xs font-semibold text-[#3d4947]">{metricUnit}</span>
-                      </div>
-                      <div className="mt-4 h-2 w-full rounded-full bg-[#deebe8]">
-                        <div
-                          className="h-full rounded-full bg-[#008378] transition-all"
-                          style={{ width: `${metricPercent}%` }}
-                        />
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-3 text-xs font-extrabold uppercase">
-                        <span className="truncate text-[#4e6360]">Ngưỡng: {metricRangeText}</span>
-                        <span className={isNormal ? "text-[#00685f]" : "text-[#773215]"}>{recordStatusLabel(metric.status)}</span>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
+              <HealthMetricsGrid
+                metrics={metrics}
+                onSelectMetric={setSelectedMetricIndex}
+              />
             </section>
 
             {selectedMetricIndex !== null && metrics[selectedMetricIndex] ? (
@@ -1480,7 +1688,8 @@ export default function ReviewRecordPage() {
 
             {!canEdit ? (
               <p className="rounded-xl border border-[#d7e5e1] bg-white px-4 py-3 text-sm text-[#4e6360]">
-                Bạn đang xem hồ sơ ở chế độ chia sẻ. Chỉnh sửa và xóa dữ liệu đã bị vô hiệu hóa.
+                Bạn đang xem hồ sơ ở chế độ chia sẻ. Chỉnh sửa và xóa dữ liệu đã
+                bị vô hiệu hóa.
               </p>
             ) : null}
           </div>
@@ -1497,7 +1706,9 @@ export default function ReviewRecordPage() {
     <div className="w-full py-2">
       <header className="mb-8">
         <h1 className="text-3xl font-bold text-[#121e1c]">
-          {isDoneView ? "Chi tiết kết quả đã xác nhận" : "Kiểm tra kết quả trích xuất"}
+          {isDoneView
+            ? "Chi tiết kết quả đã xác nhận"
+            : "Kiểm tra kết quả trích xuất"}
         </h1>
         <p className="mt-2 text-sm text-[#4e6360]">
           {isDoneView
@@ -1516,8 +1727,14 @@ export default function ReviewRecordPage() {
         <div className="lg:col-span-7 xl:col-span-8 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm">
-              <label className="block text-sm font-medium text-[#3d4947]">Ngày khám</label>
+              <label
+                htmlFor="exam-date"
+                className="block text-sm font-medium text-[#3d4947]"
+              >
+                Ngày khám
+              </label>
               <input
+                id="exam-date"
                 type="date"
                 className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378]"
                 value={examDate}
@@ -1526,8 +1743,14 @@ export default function ReviewRecordPage() {
               />
             </div>
             <div className="rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm">
-              <label className="block text-sm font-medium text-[#3d4947]">Loại phiếu (VD: Xét nghiệm máu...)</label>
+              <label
+                htmlFor="record-type"
+                className="block text-sm font-medium text-[#3d4947]"
+              >
+                Loại phiếu (VD: Xét nghiệm máu...)
+              </label>
               <input
+                id="record-type"
                 type="text"
                 placeholder="Loại phiếu khám..."
                 className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378]"
@@ -1539,8 +1762,14 @@ export default function ReviewRecordPage() {
           </div>
 
           <div className="rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm">
-            <label className="block text-sm font-medium text-[#3d4947]">Tên bệnh viện / Phòng khám</label>
+            <label
+              htmlFor="hospital-name"
+              className="block text-sm font-medium text-[#3d4947]"
+            >
+              Tên bệnh viện / Phòng khám
+            </label>
             <input
+              id="hospital-name"
               type="text"
               placeholder="Nhập tên bệnh viện..."
               className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378]"
@@ -1551,8 +1780,14 @@ export default function ReviewRecordPage() {
           </div>
 
           <div className="rounded-2xl border border-[#b7d8d1] bg-white p-6 shadow-sm">
-            <label className="block text-sm font-medium text-[#3d4947]">Chẩn đoán / Kết luận của bác sĩ</label>
+            <label
+              htmlFor="diagnosis"
+              className="block text-sm font-medium text-[#3d4947]"
+            >
+              Chẩn đoán / Kết luận của bác sĩ
+            </label>
             <textarea
+              id="diagnosis"
               rows={3}
               placeholder="Nhập chẩn đoán hoặc kết luận chung..."
               className="mt-2 w-full rounded-xl border border-[#c5dfd9] px-3 py-2 outline-none focus:border-[#008378] resize-none"
@@ -1566,7 +1801,9 @@ export default function ReviewRecordPage() {
             <div className="rounded-2xl border border-[#b7d8d1] bg-white shadow-sm overflow-hidden">
               <div className="border-b border-[#c5dfd9] bg-[#effcf9] px-6 py-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-[#005049]">Danh sách chỉ số và ngưỡng tham chiếu</h3>
+                  <h3 className="text-sm font-semibold text-[#005049]">
+                    Danh sách chỉ số và ngưỡng tham chiếu
+                  </h3>
                   {canToggleEditResults && canEdit ? (
                     <button
                       type="button"
@@ -1602,13 +1839,18 @@ export default function ReviewRecordPage() {
           {showMetricCards && data.status === "done" && recommendationsData ? (
             <div className="rounded-2xl border border-[#b7d8d1] bg-white shadow-sm overflow-hidden">
               <div className="border-b border-[#c5dfd9] bg-[#effcf9] px-6 py-4">
-                <h3 className="text-sm font-semibold text-[#005049]">Khuyến nghị theo nhóm</h3>
+                <h3 className="text-sm font-semibold text-[#005049]">
+                  Khuyến nghị theo nhóm
+                </h3>
               </div>
               <div className="space-y-3 p-6">
                 {recommendationGroups.map((group) => {
                   const GroupIcon = recommendationIcon(group.category);
                   return (
-                    <div key={group.category} className="rounded-xl border border-[#d7e5e1] bg-[#f9fcfb] p-4">
+                    <div
+                      key={group.category}
+                      className="rounded-xl border border-[#d7e5e1] bg-[#f9fcfb] p-4"
+                    >
                       <div className="mb-2 flex items-center gap-2 text-[#005049]">
                         <GroupIcon className="h-4 w-4 shrink-0" />
                         <h4 className="text-sm font-semibold">{group.title}</h4>
@@ -1616,12 +1858,17 @@ export default function ReviewRecordPage() {
                       <div className="space-y-1">
                         {group.items.length ? (
                           group.items.map((item, idx) => (
-                            <p key={`${group.category}-${idx}`} className="text-sm text-[#1d3b36]">
+                            <p
+                              key={`${group.category}-${idx}`}
+                              className="text-sm text-[#1d3b36]"
+                            >
                               - {item}
                             </p>
                           ))
                         ) : (
-                          <p className="text-sm text-[#6d7a77]">Chưa có khuyến nghị cho nhóm này.</p>
+                          <p className="text-sm text-[#6d7a77]">
+                            Chưa có khuyến nghị cho nhóm này.
+                          </p>
                         )}
                       </div>
                     </div>
@@ -1637,7 +1884,9 @@ export default function ReviewRecordPage() {
           {showEditableTable && canEdit && (
             <div className="rounded-2xl border border-[#b7d8d1] bg-white shadow-sm overflow-hidden">
               <div className="flex items-center justify-between border-b border-[#c5dfd9] bg-[#effcf9] px-6 py-4">
-                <h3 className="text-sm font-semibold text-[#005049]">Chỉnh sửa danh sách chỉ số</h3>
+                <h3 className="text-sm font-semibold text-[#005049]">
+                  Chỉnh sửa danh sách chỉ số
+                </h3>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -1666,7 +1915,8 @@ export default function ReviewRecordPage() {
               <div className="overflow-x-auto">
                 {data.hasLowConfidenceMetrics ? (
                   <div className="mx-6 mt-4 rounded-xl border border-[#e6b144] bg-[#fff4dd] px-4 py-3 text-sm font-medium text-[#825500]">
-                    Có chỉ số OCR độ tin cậy thấp. Vui lòng kiểm tra lại trước khi lưu.
+                    Có chỉ số OCR độ tin cậy thấp. Vui lòng kiểm tra lại trước
+                    khi lưu.
                   </div>
                 ) : null}
                 <table className="w-full text-left text-sm text-[#4e6360]">
@@ -1676,8 +1926,12 @@ export default function ReviewRecordPage() {
                       <th className="px-6 py-4 font-semibold">Giá trị</th>
                       <th className="px-6 py-4 font-semibold">Đơn vị</th>
                       <th className="px-6 py-4 font-semibold">Nguồn</th>
-                      {showConfidenceColumn ? <th className="px-6 py-4 font-semibold">Độ tin cậy</th> : null}
-                      <th className="px-6 py-4 font-semibold text-right">Thao tác</th>
+                      {showConfidenceColumn ? (
+                        <th className="px-6 py-4 font-semibold">Độ tin cậy</th>
+                      ) : null}
+                      <th className="px-6 py-4 font-semibold text-right">
+                        Thao tác
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#c5dfd9]">
@@ -1687,19 +1941,29 @@ export default function ReviewRecordPage() {
                       return (
                         <tr
                           key={idx}
-                          className={`hover:bg-gray-50 transition ${metric.confidenceLevel !== "high" ? "bg-[#fff8e8]" : ""
-                            }`}
+                          className={`hover:bg-gray-50 transition ${
+                            metric.confidenceLevel !== "high"
+                              ? "bg-[#fff8e8]"
+                              : ""
+                          }`}
                         >
                           <td className="px-6 py-4">
                             {isEditing ? (
                               <input
                                 className="w-full rounded border border-[#00685f] px-2 py-1"
                                 value={editForm?.name || ""}
-                                onChange={(e) => setEditForm({ ...editForm!, name: e.target.value })}
+                                onChange={(e) =>
+                                  setEditForm({
+                                    ...editForm!,
+                                    name: e.target.value,
+                                  })
+                                }
                                 autoFocus
                               />
                             ) : (
-                              <span className="font-medium text-[#005049]">{metric.name}</span>
+                              <span className="font-medium text-[#005049]">
+                                {metric.name}
+                              </span>
                             )}
                           </td>
                           <td className="px-6 py-4">
@@ -1707,10 +1971,19 @@ export default function ReviewRecordPage() {
                               <input
                                 className="w-full rounded border border-[#00685f] px-2 py-1"
                                 value={editForm?.value || ""}
-                                onChange={(e) => setEditForm({ ...editForm!, value: e.target.value })}
+                                onChange={(e) =>
+                                  setEditForm({
+                                    ...editForm!,
+                                    value: e.target.value,
+                                  })
+                                }
                               />
                             ) : (
-                              <span className={metric.value ? "" : "text-gray-400 italic"}>
+                              <span
+                                className={
+                                  metric.value ? "" : "text-gray-400 italic"
+                                }
+                              >
                                 {metric.value || "Trống"}
                               </span>
                             )}
@@ -1720,29 +1993,43 @@ export default function ReviewRecordPage() {
                               <input
                                 className="w-full rounded border border-[#00685f] px-2 py-1"
                                 value={editForm?.unit || ""}
-                                onChange={(e) => setEditForm({ ...editForm!, unit: e.target.value })}
+                                onChange={(e) =>
+                                  setEditForm({
+                                    ...editForm!,
+                                    unit: e.target.value,
+                                  })
+                                }
                               />
                             ) : (
                               metric.unit || "-"
                             )}
                           </td>
                           <td className="px-6 py-4">
-                            {!isEditing && <SourceBadge source={metric.source} />}
+                            {!isEditing && (
+                              <SourceBadge source={metric.source} />
+                            )}
                           </td>
                           {showConfidenceColumn ? (
                             <td className="px-6 py-4">
                               {!isEditing && (
                                 <span
-                                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${metric.confidenceLevel === "high"
+                                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                                    metric.confidenceLevel === "high"
                                       ? "bg-[#ccfbf1] text-[#0f766e]"
                                       : metric.confidenceLevel === "medium"
                                         ? "bg-[#ffddb3] text-[#825500]"
                                         : "bg-[#ffdad6] text-[#ba1a1a]"
-                                    }`}
+                                  }`}
                                 >
-                                  {metric.confidenceLevel === "high" && <CheckCircle className="h-3 w-3" />}
-                                  {metric.confidenceLevel === "medium" && <AlertTriangle className="h-3 w-3" />}
-                                  {metric.confidenceLevel === "low" && <AlertCircle className="h-3 w-3" />}
+                                  {metric.confidenceLevel === "high" && (
+                                    <CheckCircle className="h-3 w-3" />
+                                  )}
+                                  {metric.confidenceLevel === "medium" && (
+                                    <AlertTriangle className="h-3 w-3" />
+                                  )}
+                                  {metric.confidenceLevel === "low" && (
+                                    <AlertCircle className="h-3 w-3" />
+                                  )}
                                   {metric.confidenceLevel === "high"
                                     ? "Cao"
                                     : metric.confidenceLevel === "medium"
@@ -1755,10 +2042,16 @@ export default function ReviewRecordPage() {
                           <td className="px-6 py-4 text-right">
                             {isEditing ? (
                               <div className="flex justify-end gap-2">
-                                <button onClick={handleSaveEdit} className="text-[#00685f] hover:brightness-110">
+                                <button
+                                  onClick={handleSaveEdit}
+                                  className="text-[#00685f] hover:brightness-110"
+                                >
                                   <Save className="h-5 w-5" />
                                 </button>
-                                <button onClick={handleCancelEdit} className="text-[#ba1a1a] hover:brightness-110">
+                                <button
+                                  onClick={handleCancelEdit}
+                                  className="text-[#ba1a1a] hover:brightness-110"
+                                >
                                   <X className="h-5 w-5" />
                                 </button>
                               </div>
@@ -1786,7 +2079,10 @@ export default function ReviewRecordPage() {
                     })}
                     {metrics.length === 0 && (
                       <tr>
-                        <td colSpan={showConfidenceColumn ? 6 : 5} className="px-6 py-8 text-center text-[#4e6360]">
+                        <td
+                          colSpan={showConfidenceColumn ? 6 : 5}
+                          className="px-6 py-8 text-center text-[#4e6360]"
+                        >
                           Không tìm thấy chỉ số nào từ kết quả OCR.
                         </td>
                       </tr>
@@ -1798,7 +2094,11 @@ export default function ReviewRecordPage() {
           )}
 
           {saveError && (
-            <div className="rounded-xl bg-[#ffdad6] p-4 text-sm text-[#ba1a1a] flex items-center gap-2">
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="rounded-xl bg-[#ffdad6] p-4 text-sm text-[#ba1a1a] flex items-center gap-2"
+            >
               <AlertCircle className="h-5 w-5" />
               {saveError}
             </div>
@@ -1807,22 +2107,30 @@ export default function ReviewRecordPage() {
           {canEdit ? (
             <div className="flex justify-end pt-4 pb-12">
               <button
-                onClick={() => (canConfirm ? setShowConfirmModal(true) : executeSave(false))}
+                onClick={() =>
+                  canConfirm ? setShowConfirmModal(true) : executeSave(false)
+                }
                 disabled={isSaving || (!canConfirm && !isDirty)}
                 className="inline-flex items-center gap-2 rounded-xl bg-[#00685f] px-10 py-4 font-bold text-white shadow-lg transition hover:brightness-110 hover:translate-y-[-2px] disabled:opacity-70 disabled:transform-none"
               >
-                {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
+                {isSaving ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Save className="h-5 w-5" />
+                )}
                 {canConfirm ? "XÁC NHẬN VÀ LƯU HỒ SƠ" : "LƯU CHỈNH SỬA"}
               </button>
             </div>
           ) : (
             <p className="rounded-xl border border-[#d7e5e1] bg-white px-4 py-3 text-sm text-[#4e6360]">
-              Bạn đang xem hồ sơ ở chế độ chia sẻ. Chỉnh sửa và xóa dữ liệu đã bị vô hiệu hóa.
+              Bạn đang xem hồ sơ ở chế độ chia sẻ. Chỉnh sửa và xóa dữ liệu đã
+              bị vô hiệu hóa.
             </p>
           )}
           {!canConfirm && !isDirty && !showEditableTable && canEdit && (
             <p className="text-right text-sm text-[#6d7a77]">
-              Hồ sơ đã xác nhận. Chỉnh sửa thông tin hành chính ở trên hoặc bấm &quot;Chỉnh sửa kết quả&quot; để cập nhật các chỉ số.
+              Hồ sơ đã xác nhận. Chỉnh sửa thông tin hành chính ở trên hoặc bấm
+              &quot;Chỉnh sửa kết quả&quot; để cập nhật các chỉ số.
             </p>
           )}
         </div>
@@ -1836,9 +2144,12 @@ export default function ReviewRecordPage() {
               <div className="h-16 w-16 bg-[#effcf9] text-[#00685f] rounded-full flex items-center justify-center mb-6">
                 <CheckCircle className="h-8 w-8" />
               </div>
-              <h3 className="text-2xl font-bold text-[#005049] mb-2">Hoàn tất kiểm tra?</h3>
+              <h3 className="text-2xl font-bold text-[#005049] mb-2">
+                Hoàn tất kiểm tra?
+              </h3>
               <p className="text-[#4e6360] mb-8">
-                Bạn đã đối chiếu các thông tin với hồ sơ gốc chưa? Kết quả sau khi lưu sẽ được cập nhật vào hồ sơ sức khỏe.
+                Bạn đã đối chiếu các thông tin với hồ sơ gốc chưa? Kết quả sau
+                khi lưu sẽ được cập nhật vào hồ sơ sức khỏe.
               </p>
 
               <div className="flex flex-col w-full gap-3">
@@ -1880,15 +2191,21 @@ export default function ReviewRecordPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-[#3d4947] mb-1.5">
+                <label
+                  htmlFor="add-metric-name"
+                  className="block text-sm font-medium text-[#3d4947] mb-1.5"
+                >
                   Tên chỉ số <span className="text-[#ba1a1a]">*</span>
                 </label>
                 {referenceMetrics.length > 0 ? (
                   <select
+                    id="add-metric-name"
                     className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378] bg-white"
                     value={addForm.name}
                     aria-invalid={addErrorField === "name"}
-                    aria-describedby={addErrorField === "name" ? "add-metric-error" : undefined}
+                    aria-describedby={
+                      addErrorField === "name" ? "add-metric-error" : undefined
+                    }
                     onChange={(e) => handleAddNameChange(e.target.value)}
                   >
                     <option value="">-- Chọn chỉ số --</option>
@@ -1900,6 +2217,7 @@ export default function ReviewRecordPage() {
                   </select>
                 ) : (
                   <input
+                    id="add-metric-name"
                     type="text"
                     placeholder="Nhập tên chỉ số..."
                     className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378]"
@@ -1910,22 +2228,30 @@ export default function ReviewRecordPage() {
                       setAddErrorField(null);
                     }}
                     aria-invalid={addErrorField === "name"}
-                    aria-describedby={addErrorField === "name" ? "add-metric-error" : undefined}
+                    aria-describedby={
+                      addErrorField === "name" ? "add-metric-error" : undefined
+                    }
                   />
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[#3d4947] mb-1.5">
+                <label
+                  htmlFor="add-metric-value"
+                  className="block text-sm font-medium text-[#3d4947] mb-1.5"
+                >
                   Giá trị <span className="text-[#ba1a1a]">*</span>
                 </label>
                 <input
+                  id="add-metric-value"
                   type="text"
                   placeholder="VD: 5.4 hoặc Âm tính"
                   className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378]"
                   value={addForm.value}
                   aria-invalid={addErrorField === "value"}
-                  aria-describedby={addErrorField === "value" ? "add-metric-error" : undefined}
+                  aria-describedby={
+                    addErrorField === "value" ? "add-metric-error" : undefined
+                  }
                   onChange={(e) => {
                     setAddForm((prev) => ({ ...prev, value: e.target.value }));
                     setAddError(null);
@@ -1935,16 +2261,22 @@ export default function ReviewRecordPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[#3d4947] mb-1.5">
+                <label
+                  htmlFor="add-metric-unit"
+                  className="block text-sm font-medium text-[#3d4947] mb-1.5"
+                >
                   Đơn vị <span className="text-[#ba1a1a]">*</span>
                 </label>
                 <input
+                  id="add-metric-unit"
                   type="text"
                   placeholder="VD: mmol/L"
                   className="w-full rounded-xl border border-[#c5dfd9] px-3 py-2.5 text-sm outline-none focus:border-[#008378]"
                   value={addForm.unit}
                   aria-invalid={addErrorField === "unit"}
-                  aria-describedby={addErrorField === "unit" ? "add-metric-error" : undefined}
+                  aria-describedby={
+                    addErrorField === "unit" ? "add-metric-error" : undefined
+                  }
                   onChange={(e) => {
                     setAddForm((prev) => ({ ...prev, unit: e.target.value }));
                     setAddError(null);
@@ -1977,7 +2309,7 @@ export default function ReviewRecordPage() {
       )}
 
       {renderFullscreenDocumentModal(fileUrl)}
-    </div>
+    </div>,
   );
 }
 
@@ -2015,7 +2347,10 @@ function RecordShareModal({
   onAccessLevelChange: (accessLevel: "view" | "edit") => void;
   onInvite: () => void;
   onClose: () => void;
-  onUpdateMemberAccess: (member: HealthRecordSharedMember, accessLevel: "view" | "edit") => void;
+  onUpdateMemberAccess: (
+    member: HealthRecordSharedMember,
+    accessLevel: "view" | "edit",
+  ) => void;
   onAskRevoke: (member: HealthRecordSharedMember) => void;
   onCancelRevoke: () => void;
   onConfirmRevoke: () => void;
@@ -2039,9 +2374,12 @@ function RecordShareModal({
               <UserPlus className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-2xl font-black leading-tight text-[#121e1c]">Chia sẻ kết quả khám</h2>
+              <h2 className="text-2xl font-black leading-tight text-[#121e1c]">
+                Chia sẻ kết quả khám
+              </h2>
               <p className="mt-1 text-sm font-medium text-[#6d7a77]">
-                Người nhận chỉ được cấp quyền trên kết quả này, không áp dụng cho toàn bộ lịch sử hồ sơ.
+                Người nhận chỉ được cấp quyền trên kết quả này, không áp dụng
+                cho toàn bộ lịch sử hồ sơ.
               </p>
             </div>
           </div>
@@ -2049,7 +2387,10 @@ function RecordShareModal({
 
         <div className="space-y-5 overflow-y-auto px-7 pb-6">
           <div>
-            <label className="mb-2 block text-sm font-bold text-[#121e1c]" htmlFor="record-share-email">
+            <label
+              className="mb-2 block text-sm font-bold text-[#121e1c]"
+              htmlFor="record-share-email"
+            >
               Địa chỉ email
             </label>
             <div className="relative">
@@ -2073,7 +2414,10 @@ function RecordShareModal({
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-bold text-[#121e1c]" htmlFor="record-share-access-level">
+            <label
+              className="mb-2 block text-sm font-bold text-[#121e1c]"
+              htmlFor="record-share-access-level"
+            >
               Quyền truy cập <span className="text-[#ba1a1a]">*</span>
             </label>
             <div className="relative">
@@ -2081,7 +2425,11 @@ function RecordShareModal({
               <select
                 id="record-share-access-level"
                 value={accessLevel}
-                onChange={(event) => onAccessLevelChange(event.target.value === "edit" ? "edit" : "view")}
+                onChange={(event) =>
+                  onAccessLevelChange(
+                    event.target.value === "edit" ? "edit" : "view",
+                  )
+                }
                 className="h-12 w-full appearance-none rounded-[28px] border border-[#9ad9cf] bg-[#deebe8] pl-14 pr-12 text-base font-semibold text-[#2d3a38] outline-none focus:border-[#008378]"
               >
                 <option value="view">Chỉ xem</option>
@@ -2091,23 +2439,39 @@ function RecordShareModal({
             </div>
           </div>
 
-          {error ? <p className="text-sm font-medium text-[#ba1a1a]">{error}</p> : null}
+          {error ? (
+            <p
+              role="alert"
+              aria-live="assertive"
+              className="text-sm font-medium text-[#ba1a1a]"
+            >
+              {error}
+            </p>
+          ) : null}
 
           <section className="rounded-2xl border border-[#d6ece7] bg-[#f7fcfa] p-4">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-bold text-[#121e1c]">Người đã được chia sẻ</p>
+              <p className="text-sm font-bold text-[#121e1c]">
+                Người đã được chia sẻ
+              </p>
               {isLoadingMembers || isRevoking || isUpdatingAccess ? (
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#6d7a77]">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  {isRevoking ? "Đang thu hồi..." : isUpdatingAccess ? "Đang cập nhật quyền..." : "Đang tải"}
+                  {isRevoking
+                    ? "Đang thu hồi..."
+                    : isUpdatingAccess
+                      ? "Đang cập nhật quyền..."
+                      : "Đang tải"}
                 </span>
               ) : null}
             </div>
             {members.length === 0 ? (
-              <p className="text-sm text-[#6d7a77]">Chưa có ai được cấp quyền xem kết quả này.</p>
+              <p className="text-sm text-[#6d7a77]">
+                Chưa có ai được cấp quyền xem kết quả này.
+              </p>
             ) : (
               <ul className="max-h-52 space-y-2 overflow-y-auto pr-1">
-                {members.map((member) => (
+                {members.map((member) =>
                   (() => {
                     return (
                       <li
@@ -2115,16 +2479,30 @@ function RecordShareModal({
                         className="flex items-center justify-between gap-3 rounded-xl border border-[#e2efeb] bg-white px-3 py-2.5"
                       >
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-[#23312f]">{member.email}</p>
-                          <p className="text-xs text-[#6d7a77]">{recordShareStatusLabel(member.status)}</p>
+                          <p className="truncate text-sm font-semibold text-[#23312f]">
+                            {member.email}
+                          </p>
+                          <p className="text-xs text-[#6d7a77]">
+                            {recordShareStatusLabel(member.status)}
+                          </p>
                         </div>
                         <div className="ml-auto flex shrink-0 items-center gap-2">
                           <div className="relative">
                             <select
-                              disabled={isUpdatingAccess || isRevoking || member.status === "revoked" || member.status === "expired"}
-                              value={member.accessLevel === "edit" ? "edit" : "view"}
+                              disabled={
+                                isUpdatingAccess ||
+                                isRevoking ||
+                                member.status === "revoked" ||
+                                member.status === "expired"
+                              }
+                              value={
+                                member.accessLevel === "edit" ? "edit" : "view"
+                              }
                               onChange={(event) => {
-                                const nextAction = event.target.value as "view" | "edit" | "revoke";
+                                const nextAction = event.target.value as
+                                  | "view"
+                                  | "edit"
+                                  | "revoke";
                                 if (nextAction === "revoke") {
                                   onAskRevoke(member);
                                   return;
@@ -2135,7 +2513,11 @@ function RecordShareModal({
                             >
                               <option value="view">Chỉ xem</option>
                               <option value="edit">Có thể chỉnh sửa</option>
-                              {member.status === "accepted" ? <option value="revoke">Thu hồi quyền truy cập</option> : null}
+                              {member.status === "accepted" ? (
+                                <option value="revoke">
+                                  Thu hồi quyền truy cập
+                                </option>
+                              ) : null}
                             </select>
                             <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-[#00685f]">
                               ▾
@@ -2144,8 +2526,8 @@ function RecordShareModal({
                         </div>
                       </li>
                     );
-                  })()
-                ))}
+                  })(),
+                )}
               </ul>
             )}
           </section>
@@ -2167,9 +2549,12 @@ function RecordShareModal({
       {pendingRevokeMember ? (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-            <h3 className="text-lg font-black text-[#121e1c]">Xác nhận thu hồi quyền</h3>
+            <h3 className="text-lg font-black text-[#121e1c]">
+              Xác nhận thu hồi quyền
+            </h3>
             <p className="mt-2 text-sm text-[#3d4947]">
-              Thu hồi quyền xem kết quả của <span className="font-bold">{pendingRevokeMember.email}</span>?
+              Thu hồi quyền xem kết quả của{" "}
+              <span className="font-bold">{pendingRevokeMember.email}</span>?
             </p>
             <div className="mt-5 flex items-center justify-end gap-3">
               <button
@@ -2186,7 +2571,9 @@ function RecordShareModal({
                 disabled={isRevoking}
                 className="inline-flex items-center gap-2 rounded-xl bg-[#ba1a1a] px-4 py-2 text-sm font-bold text-white hover:brightness-110 disabled:opacity-70"
               >
-                {isRevoking ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {isRevoking ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : null}
                 Thu hồi
               </button>
             </div>
@@ -2209,12 +2596,15 @@ function SourceBadge({ source }: { source: string }) {
   const isManual = source === "manual";
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${isManual
-          ? "bg-[#e8f4ff] text-[#0055aa]"
-          : "bg-[#f0fdf4] text-[#166534]"
-        }`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+        isManual ? "bg-[#e8f4ff] text-[#0055aa]" : "bg-[#f0fdf4] text-[#166534]"
+      }`}
     >
-      {isManual ? <PenLine className="h-3 w-3" /> : <ScanLine className="h-3 w-3" />}
+      {isManual ? (
+        <PenLine className="h-3 w-3" />
+      ) : (
+        <ScanLine className="h-3 w-3" />
+      )}
       {isManual ? "Nhập tay" : "OCR"}
     </span>
   );
@@ -2241,19 +2631,6 @@ function MetricDetailPopup({
   const metricUnit = metric.unit?.trim() || "";
   const metricPercent = compactMetricPercent(metric);
   const isNormal = (metric.status ?? "no_data") === "normal";
-  const displayReference = metric.referenceRange
-    ? `${metric.referenceRange.min} - ${metric.referenceRange.max} ${metric.referenceRange.unit ?? metric.unit}`
-    : "Không có dữ liệu tham chiếu";
-  const rangeContext = metric.rangeContext;
-  const contextNote =
-    rangeContext && (rangeContext.gender || rangeContext.ageRange)
-      ? `Ngưỡng áp dụng cho: ${[
-          rangeContext.gender === "female" ? "Nữ" : rangeContext.gender === "male" ? "Nam" : null,
-          rangeContext.ageRange ? `${rangeContext.ageRange} tuổi` : null,
-        ]
-          .filter(Boolean)
-          .join(", ")}`
-      : null;
   const staticExplanation = metric.explanation?.trim() || "";
   const explanationText = staticExplanation
     ? toThreeLineExplanation(staticExplanation)
@@ -2276,7 +2653,10 @@ function MetricDetailPopup({
         <div className="relative overflow-hidden bg-gradient-to-br from-[#00685f] to-[#008378] px-6 pb-5 pt-6 text-white">
           <div className="relative z-10">
             <div className="flex items-start justify-between gap-3">
-              <h3 id="metric-detail-title" className="text-lg font-bold leading-snug">
+              <h3
+                id="metric-detail-title"
+                className="text-lg font-bold leading-snug"
+              >
                 {metric.displayNameVi || metric.name}
               </h3>
               <button
@@ -2290,14 +2670,23 @@ function MetricDetailPopup({
             </div>
             <div className="mt-4 flex items-end gap-2">
               <span className="text-4xl font-black">{metricValue}</span>
-              <span className="pb-0.5 text-sm font-semibold text-white/80">{metricUnit}</span>
+              <span className="pb-0.5 text-sm font-semibold text-white/80">
+                {metricUnit}
+              </span>
             </div>
             <div className="mt-3 h-1.5 w-full rounded-full bg-white/20">
-              <div className="h-full rounded-full bg-white/80 transition-all" style={{ width: `${metricPercent}%` }} />
+              <div
+                className="h-full rounded-full bg-white/80 transition-all"
+                style={{ width: `${metricPercent}%` }}
+              />
             </div>
             <div className="mt-2 flex items-center justify-between gap-3 text-xs font-bold">
-              <span className="truncate text-white/70">Ngưỡng: {compactRangeText(metric)}</span>
-              <span className={`rounded-full px-2 py-0.5 ${isNormal ? "bg-white/20 text-white" : "bg-[#ffdad6] text-[#ba1a1a]"}`}>
+              <span className="truncate text-white/70">
+                Ngưỡng: {compactRangeText(metric)}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 ${isNormal ? "bg-white/20 text-white" : "bg-[#ffdad6] text-[#ba1a1a]"}`}
+              >
                 {recordStatusLabel(metric.status)}
               </span>
             </div>
@@ -2305,42 +2694,17 @@ function MetricDetailPopup({
         </div>
 
         <div className="space-y-3 px-6 py-5">
-          <div className="space-y-2.5 rounded-xl bg-[#f7fbfa] p-4 text-sm leading-relaxed text-[#35514c]">
-            <p>
-              <span className="font-semibold">Ngưỡng tham chiếu: </span>
-              {displayReference}
-            </p>
-            {metric.referenceRangeSource && metric.referenceRangeSource !== "none" ? (
-              <p>
-                <span className="font-semibold">Nguồn ngưỡng: </span>
-                {metric.referenceRangeSource === "document" ? "Theo phiếu xét nghiệm" : "Theo hệ thống tham chiếu"}
-              </p>
-            ) : null}
-            {metric.referenceRangeSource === "system" ? (
-              <p>
-                <span className="font-semibold">Ngữ cảnh ngưỡng: </span>
-                {contextNote ?? "Ngưỡng tham chiếu chung"}
-              </p>
-            ) : null}
-            {metric.critical ? (
-              <p className="rounded-lg bg-[#fff2f2] px-3 py-2 text-[#ba1a1a]">
-                Chỉ số có dấu hiệu vượt ngưỡng nguy cấp, nên liên hệ bác sĩ để được tư vấn sớm.
-              </p>
-            ) : null}
-            {isExplanationLoading && !staticExplanation ? (
-              <div className="space-y-2 pt-1">
-                <div className="h-3 w-full animate-pulse rounded bg-[#d4e7e3]" />
-                <div className="h-3 w-4/5 animate-pulse rounded bg-[#d4e7e3]" />
-                <div className="h-3 w-3/5 animate-pulse rounded bg-[#d4e7e3]" />
-              </div>
-            ) : null}
-            {explanationText ? (
-              <p className="whitespace-pre-line">
-                <span className="font-semibold">Giải thích: </span>
-                {explanationText}
-              </p>
-            ) : null}
-          </div>
+          <ReferenceRangeIndicator
+            referenceRange={metric.referenceRange}
+            unit={metric.unit}
+            referenceRangeSource={metric.referenceRangeSource}
+            rangeContext={metric.rangeContext}
+            critical={metric.critical}
+            explanation={explanationText}
+            isExplanationLoading={isExplanationLoading && !staticExplanation}
+            className="space-y-2.5 rounded-xl bg-[#f7fbfa] p-4 text-sm leading-relaxed text-[#35514c]"
+            skeletonLines={3}
+          />
 
           <div className="flex items-center justify-between pt-1">
             <button
@@ -2388,7 +2752,12 @@ function compactMetricPercent(metric: MetricDto): number {
   const numericValue = Number(raw);
   const min = metric.referenceRange?.min;
   const max = metric.referenceRange?.max;
-  if (!Number.isFinite(numericValue) || typeof min !== "number" || typeof max !== "number" || max <= min) {
+  if (
+    !Number.isFinite(numericValue) ||
+    typeof min !== "number" ||
+    typeof max !== "number" ||
+    max <= min
+  ) {
     return 60;
   }
   const ratio = ((numericValue - min) / (max - min)) * 100;
@@ -2404,13 +2773,23 @@ function recordStatusLabel(status?: MetricDto["status"]): string {
 
 function recommendationCategory(item: string): RecommendationCategory {
   const content = item.toLowerCase();
-  if (content.startsWith("chế độ sinh hoạt:") || content.startsWith("sinh hoạt:")) {
+  if (
+    content.startsWith("chế độ sinh hoạt:") ||
+    content.startsWith("sinh hoạt:")
+  ) {
     return "lifestyle";
   }
-  if (content.startsWith("chế độ dinh dưỡng:") || content.startsWith("dinh dưỡng:")) {
+  if (
+    content.startsWith("chế độ dinh dưỡng:") ||
+    content.startsWith("dinh dưỡng:")
+  ) {
     return "nutrition";
   }
-  if (/(ăn|dinh dưỡng|khẩu phần|chất béo|đường|muối|rau|trái cây|thực phẩm)/i.test(content)) {
+  if (
+    /(ăn|dinh dưỡng|khẩu phần|chất béo|đường|muối|rau|trái cây|thực phẩm)/i.test(
+      content,
+    )
+  ) {
     return "nutrition";
   }
   return "lifestyle";

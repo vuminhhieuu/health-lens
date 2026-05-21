@@ -3,24 +3,15 @@
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Info, XCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api/apiClient";
+
 import { ApiPaths } from "@healthlens/shared/constants";
+
+import { apiClient } from "@/lib/api/apiClient";
 import { toThreeLineExplanation } from "@/lib/utils/explanationFormatter";
 
+import { ReferenceRangeIndicator, type RangeContext, type ReferenceRange } from "./ReferenceRangeIndicator";
+
 type MetricStatus = "normal" | "attention" | "abnormal" | "no_data";
-
-type ReferenceRange = {
-  min: number;
-  max: number;
-  attentionMin: number;
-  attentionMax: number;
-  unit?: string;
-};
-
-type RangeContext = {
-  gender?: string | null;
-  ageRange?: string | null;
-};
 
 type HealthMetricCardProps = {
   recordId?: string;
@@ -58,8 +49,6 @@ const STATUS_META: Record<MetricStatus, { label: string; color: string; icon: ty
     icon: Info,
   },
 };
-
-
 
 export function HealthMetricCard({
   recordId,
@@ -102,16 +91,14 @@ export function HealthMetricCard({
       ? toThreeLineExplanation(explanationQuery.data?.explanation)
       : "";
   const showExplanationSkeleton = expanded && !staticExplanation && explanationQuery.isLoading;
-
-  const displayReference = referenceRange
-    ? `${referenceRange.min} - ${referenceRange.max} ${referenceRange.unit ?? unit}`
-    : "Không có dữ liệu tham chiếu";
-  const contextNote = buildRangeContextNote(rangeContext);
+  const detailsId = `health-metric-${metricName.replace(/[^a-zA-Z0-9_-]+/g, "-")}-details`;
 
   return (
     <button
       type="button"
       onClick={() => setExpanded((prev) => !prev)}
+      aria-expanded={expanded}
+      aria-controls={detailsId}
       className="w-full rounded-2xl border border-[#c5dfd9] bg-white p-4 text-left shadow-sm transition hover:border-[#8ec4ba]"
     >
       <div className="flex items-start justify-between gap-3">
@@ -137,67 +124,24 @@ export function HealthMetricCard({
         </div>
       </div>
 
-      <div className={`grid transition-all duration-200 ${expanded ? "grid-rows-[1fr] pt-3" : "grid-rows-[0fr] pt-0"}`}>
+      <div
+        id={detailsId}
+        className={`grid transition-all duration-200 ${expanded ? "grid-rows-[1fr] pt-3" : "grid-rows-[0fr] pt-0"}`}
+      >
         <div className="overflow-hidden">
-          <div className="rounded-xl bg-[#f7fbfa] p-3 text-sm text-[#35514c]">
-            <p>
-              <span className="font-semibold">Ngưỡng tham chiếu: </span>
-              {displayReference}
-            </p>
-            {referenceRangeSource && referenceRangeSource !== "none" ? (
-              <p className="mt-2">
-                <span className="font-semibold">Nguồn ngưỡng: </span>
-                {referenceRangeSource === "document" ? "Theo phiếu xét nghiệm" : "Theo hệ thống tham chiếu"}
-              </p>
-            ) : null}
-            {referenceRangeSource === "system" ? (
-              contextNote ? (
-                <p className="mt-2">
-                  <span className="font-semibold">Ngữ cảnh ngưỡng: </span>
-                  {contextNote}
-                </p>
-              ) : (
-                <p className="mt-2">
-                  <span className="font-semibold">Ngữ cảnh ngưỡng: </span>
-                  Ngưỡng tham chiếu chung
-                </p>
-              )
-            ) : null}
-            {critical ? (
-              <p className="mt-2 rounded-lg bg-[#fff2f2] px-2 py-1 text-[#ba1a1a]">
-                Chỉ số có dấu hiệu vượt ngưỡng nguy cấp, nên liên hệ bác sĩ để được tư vấn sớm.
-              </p>
-            ) : null}
-            {showExplanationSkeleton ? (
-              <div className="mt-2 space-y-2" data-testid="explanation-skeleton">
-                <div className="h-3 w-full animate-pulse rounded bg-[#d4e7e3]" />
-                <div className="h-3 w-4/5 animate-pulse rounded bg-[#d4e7e3]" />
-              </div>
-            ) : null}
-            {explanationText ? (
-              <p className="mt-2 whitespace-pre-line">
-                <span className="font-semibold">Giải thích: </span>
-                {explanationText}
-              </p>
-            ) : null}
-          </div>
+          <ReferenceRangeIndicator
+            referenceRange={referenceRange}
+            unit={unit}
+            referenceRangeSource={referenceRangeSource}
+            rangeContext={rangeContext}
+            critical={critical}
+            explanation={showExplanationSkeleton ? undefined : explanationText}
+            isExplanationLoading={showExplanationSkeleton}
+            className="rounded-xl bg-[#f7fbfa] p-3 text-sm text-[#35514c]"
+            skeletonLines={2}
+          />
         </div>
       </div>
     </button>
   );
-}
-
-function buildRangeContextNote(rangeContext?: RangeContext | null): string | null {
-  if (!rangeContext || (!rangeContext.gender && !rangeContext.ageRange)) {
-    return null;
-  }
-  const genderLabel =
-    rangeContext.gender === "female"
-      ? "Nữ"
-      : rangeContext.gender === "male"
-      ? "Nam"
-      : null;
-  const ageLabel = rangeContext.ageRange ? `${rangeContext.ageRange} tuổi` : null;
-  const parts = [genderLabel, ageLabel].filter(Boolean);
-  return parts.length > 0 ? `Ngưỡng áp dụng cho: ${parts.join(", ")}` : null;
 }

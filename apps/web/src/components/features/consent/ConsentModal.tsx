@@ -218,8 +218,9 @@ export const ConsentModal: React.FC = () => {
           </div>
 
           <div className="mt-6 border-t border-slate-200 pt-6 space-y-4">
-            <label className="flex items-center gap-3 cursor-pointer min-h-[44px] select-none">
+            <label htmlFor="consent-ack-terms" className="flex items-center gap-3 cursor-pointer min-h-[44px] select-none">
               <input
+                id="consent-ack-terms"
                 type="checkbox"
                 className="h-5 w-5 rounded border-slate-300 text-[#00685f] focus:ring-[#00685f]"
                 checked={ackTerms}
@@ -231,8 +232,9 @@ export const ConsentModal: React.FC = () => {
               </span>
             </label>
 
-            <label className="flex items-center gap-3 cursor-pointer min-h-[44px] select-none">
+            <label htmlFor="consent-ack-data" className="flex items-center gap-3 cursor-pointer min-h-[44px] select-none">
               <input
+                id="consent-ack-data"
                 type="checkbox"
                 className="h-5 w-5 rounded border-slate-300 text-[#00685f] focus:ring-[#00685f]"
                 checked={ackData}
@@ -245,8 +247,9 @@ export const ConsentModal: React.FC = () => {
               </span>
             </label>
 
-            <label className="flex items-center gap-3 cursor-pointer min-h-[44px] select-none">
+            <label htmlFor="consent-ack-disclaimer" className="flex items-center gap-3 cursor-pointer min-h-[44px] select-none">
               <input
+                id="consent-ack-disclaimer"
                 type="checkbox"
                 className="h-5 w-5 rounded border-slate-300 text-[#00685f] focus:ring-[#00685f]"
                 checked={ackDisclaimer}

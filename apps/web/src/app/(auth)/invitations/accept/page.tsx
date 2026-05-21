@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
-import { AlertTriangle, Loader2, CircleHelp } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { ApiPaths } from "@healthlens/shared/constants";
 import { apiClient } from "@/lib/api/apiClient";
 import { logoutCurrentUser } from "@/lib/auth/logout";
@@ -27,6 +27,11 @@ import {
   PENDING_PROFILE_INVITATION_TOKEN_KEY,
   profileInvitationLoginRedirectGuardKey,
 } from "@/lib/sharing/profileInvitationStorage";
+import {
+  InvitationErrorState,
+  InvitationFlowShell,
+  InvitationLoadingState,
+} from "@/components/auth/InvitationFlowShell";
 
 type InvitationErrorView =
   | { kind: "email_mismatch"; message: string; token: string }
@@ -59,25 +64,7 @@ async function postAcceptInvitation(token: string): Promise<AcceptProfileInvitat
   return parseAcceptProfileInvitationResult(response.data?.data);
 }
 
-function LoadingState() {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-[#effcf9] px-6">
-      <div className="w-full max-w-lg rounded-3xl border border-white/70 bg-white px-8 py-10 shadow-[0_20px_60px_rgba(0,79,73,0.08)]">
-        <div className="flex flex-col items-center text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e4f3f1] text-[#008378]">
-            <Loader2 className="h-8 w-8 animate-spin" />
-          </div>
-          <h1 className="mt-6 text-2xl font-semibold text-[#1c2b2a]">Đang xử lý lời mời</h1>
-          <p className="mt-3 max-w-md text-sm leading-6 text-[#5f6e6c]">
-            Vui lòng chờ trong giây lát, hệ thống đang xác thực và mở lời mời cho bạn.
-          </p>
-        </div>
-      </div>
-    </main>
-  );
-}
-
-function ErrorState({
+function ProfileInvitationErrorView({
   errorView,
   onSwitchAccount,
   isSwitchingAccount,
@@ -89,18 +76,25 @@ function ErrorState({
   const isEmailMismatch = errorView.kind === "email_mismatch";
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#effcf9] px-6 py-10">
-      <div className="w-full max-w-xl rounded-3xl border border-white/70 bg-white px-8 py-10 shadow-[0_20px_60px_rgba(0,79,73,0.08)]">
+    <InvitationFlowShell maxWidthClassName="max-w-xl">
+      <div className="rounded-3xl border border-white/70 bg-white px-8 py-10 shadow-[0_20px_60px_rgba(0,79,73,0.08)]">
         <div className="flex flex-col items-center text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#d5f0ed] text-[#00766f]">
-            {isEmailMismatch ? <AlertTriangle className="h-8 w-8" /> : <CircleHelp className="h-8 w-8" />}
+          <div
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-[#d5f0ed] text-[#00766f]"
+            aria-hidden="true"
+          >
+            <span className="text-2xl">{isEmailMismatch ? "!" : "?"}</span>
           </div>
-
           <h1 className="mt-6 text-2xl font-semibold text-[#1c2b2a]">
             {isEmailMismatch ? "Email đăng nhập không khớp với lời mời" : "Không thể xử lý lời mời"}
           </h1>
-
-          <p className="mt-3 max-w-lg text-sm leading-6 text-[#5f6e6c]">{errorView.message}</p>
+          <p
+            className="mt-3 max-w-lg text-sm leading-6 text-[#5f6e6c]"
+            role="alert"
+            aria-live="assertive"
+          >
+            {errorView.message}
+          </p>
         </div>
 
         {isEmailMismatch ? (
@@ -118,7 +112,7 @@ function ErrorState({
           >
             {isSwitchingAccount ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                 Đang chuyển tài khoản...
               </>
             ) : (
@@ -127,7 +121,7 @@ function ErrorState({
           </button>
         ) : null}
       </div>
-    </main>
+    </InvitationFlowShell>
   );
 }
 
@@ -298,7 +292,7 @@ function AcceptInvitationContent() {
       errorView.kind === "email_mismatch" ? errorView.token : readStashedInvitationToken();
 
     return (
-      <ErrorState
+      <ProfileInvitationErrorView
         errorView={errorView}
         onSwitchAccount={
           errorView.kind === "email_mismatch" && switchToken
@@ -312,21 +306,31 @@ function AcceptInvitationContent() {
 
   if (authHydrated && !tokenFromUrl && processedToken.current === null) {
     return (
-      <ErrorState
-        errorView={{
-          kind: "generic",
-          message: messageCatalog.sharing.invitationInvalid,
-        }}
+      <InvitationErrorState
+        title="Không thể xử lý lời mời"
+        description={messageCatalog.sharing.invitationInvalid}
       />
     );
   }
 
-  return <LoadingState />;
+  return (
+    <InvitationLoadingState
+      title="Đang xử lý lời mời"
+      description="Vui lòng chờ trong giây lát, hệ thống đang xác thực và mở lời mời cho bạn."
+    />
+  );
 }
 
 export default function AcceptInvitationPage() {
   return (
-    <Suspense fallback={<LoadingState />}>
+    <Suspense
+      fallback={
+        <InvitationLoadingState
+          title="Đang xử lý lời mời"
+          description="Vui lòng chờ trong giây lát, hệ thống đang xác thực và mở lời mời cho bạn."
+        />
+      }
+    >
       <AcceptInvitationContent />
     </Suspense>
   );

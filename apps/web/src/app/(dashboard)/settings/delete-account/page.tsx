@@ -213,8 +213,12 @@ export default function DeleteAccountPage() {
                 </div>
               </div>
 
-              <label className="group flex cursor-pointer items-start gap-4 rounded-xl bg-[#d8e5e2] p-4 transition-colors hover:bg-[#d0ddda]">
+              <label
+                htmlFor="delete-account-ack-consequences"
+                className="group flex cursor-pointer items-start gap-4 rounded-xl bg-[#d8e5e2] p-4 transition-colors hover:bg-[#d0ddda]"
+              >
                 <input
+                  id="delete-account-ack-consequences"
                   type="checkbox"
                   checked={hasReadConsequences}
                   onChange={(e) => setHasReadConsequences(e.target.checked)}
@@ -232,11 +236,11 @@ export default function DeleteAccountPage() {
                   <h3 className="mb-2 text-lg font-bold text-[#121e1c]">
                     Xác nhận danh tính
                   </h3>
-                  <p className="mb-6 text-sm text-[#3d4947]">
-                    Vui lòng nhập mật khẩu của bạn để tiếp tục.
-                  </p>
+                  <label htmlFor="delete-account-password" className="mb-2 block text-sm font-bold text-[#121e1c]">
+                    Mật khẩu hiện tại
+                  </label>
                   <input
-                    id="password"
+                    id="delete-account-password"
                     type="password"
                     autoComplete="current-password"
                     value={password}
@@ -250,7 +254,11 @@ export default function DeleteAccountPage() {
                 </div>
 
                 {(hookError || passwordError) && (
-                  <Callout.Root className="rounded-xl border border-[#ba1a1a]/20 bg-[#ffebee]">
+                  <Callout.Root
+                    role="alert"
+                    aria-live="assertive"
+                    className="rounded-xl border border-[#ba1a1a]/20 bg-[#ffebee]"
+                  >
                     <Callout.Icon>
                       <AlertTriangle size={18} className="text-[#ba1a1a]" />
                     </Callout.Icon>

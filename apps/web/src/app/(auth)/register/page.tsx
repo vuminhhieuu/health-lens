@@ -10,6 +10,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
+import { InlineFieldError } from "@/components/ui/StateComponents";
 import { apiBaseUrl } from "@/lib/api";
 import { AUTH_PUBLIC_FOOTER_LINKS } from "@/lib/authPublicLinks";
 import { messageCatalog, registerErrorMessage } from "@/lib/i18n/messages";
@@ -133,9 +134,11 @@ export default function RegisterPage() {
                 type="text"
                 placeholder="Nguyễn Văn A"
                 {...register("fullName")}
+                aria-invalid={Boolean(errors.fullName)}
+                aria-describedby={errors.fullName ? "register-full-name-error" : undefined}
                 className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
               />
-              {errors.fullName ? <p className="text-sm text-[#ba1a1a]">{errors.fullName.message}</p> : null}
+              <InlineFieldError id="register-full-name-error" message={errors.fullName?.message} />
             </div>
 
             <div className="space-y-2">
@@ -147,9 +150,11 @@ export default function RegisterPage() {
                 type="email"
                 placeholder="email@vi-du.com"
                 {...register("email")}
+                aria-invalid={Boolean(errors.email)}
+                aria-describedby={errors.email ? "register-email-error" : undefined}
                 className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
               />
-              {errors.email ? <p className="text-sm text-[#ba1a1a]">{errors.email.message}</p> : null}
+              <InlineFieldError id="register-email-error" message={errors.email?.message} />
             </div>
 
             <div className="space-y-2">
@@ -160,9 +165,11 @@ export default function RegisterPage() {
                 id="birthDate"
                 type="date"
                 {...register("birthDate")}
+                aria-invalid={Boolean(errors.birthDate)}
+                aria-describedby={errors.birthDate ? "register-birth-date-error" : undefined}
                 className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
               />
-              {errors.birthDate ? <p className="text-sm text-[#ba1a1a]">{errors.birthDate.message}</p> : null}
+              <InlineFieldError id="register-birth-date-error" message={errors.birthDate?.message} />
             </div>
 
             <div className="space-y-2">
@@ -174,13 +181,17 @@ export default function RegisterPage() {
                 type="password"
                 placeholder="••••••••"
                 {...register("password")}
+                aria-invalid={Boolean(errors.password)}
+                aria-describedby={
+                  errors.password ? "register-password-error" : "register-password-hint"
+                }
                 className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
               />
-              <p className="ml-1 flex items-center gap-1 text-xs text-[#3d4947]">
-                <Info className="h-3.5 w-3.5" />
+              <p id="register-password-hint" className="ml-1 flex items-center gap-1 text-xs text-[#3d4947]">
+                <Info className="h-3.5 w-3.5" aria-hidden="true" />
                 Mật khẩu phải có ít nhất 8 ký tự
               </p>
-              {errors.password ? <p className="text-sm text-[#ba1a1a]">{errors.password.message}</p> : null}
+              <InlineFieldError id="register-password-error" message={errors.password?.message} />
             </div>
 
             <div className="space-y-2">
@@ -192,9 +203,14 @@ export default function RegisterPage() {
                 type="password"
                 placeholder="••••••••"
                 {...register("confirmPassword")}
+                aria-invalid={Boolean(errors.confirmPassword)}
+                aria-describedby={errors.confirmPassword ? "register-confirm-password-error" : undefined}
                 className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
               />
-              {errors.confirmPassword ? <p className="text-sm text-[#ba1a1a]">{errors.confirmPassword.message}</p> : null}
+              <InlineFieldError
+                id="register-confirm-password-error"
+                message={errors.confirmPassword?.message}
+              />
             </div>
 
             <div className="flex items-start gap-3 py-1">
@@ -202,6 +218,8 @@ export default function RegisterPage() {
                 id="acceptedTerms"
                 type="checkbox"
                 {...register("acceptedTerms")}
+                aria-invalid={Boolean(errors.acceptedTerms)}
+                aria-describedby={errors.acceptedTerms ? "register-accepted-terms-error" : undefined}
                 className="mt-0.5 h-5 w-5 rounded border-[#6d7a77] text-[#00685f]"
               />
               <p className="text-sm leading-snug text-[#3d4947]">
@@ -213,11 +231,12 @@ export default function RegisterPage() {
                 </Link>
               </p>
             </div>
-            {errors.acceptedTerms ? <p className="text-sm text-[#ba1a1a]">{errors.acceptedTerms.message}</p> : null}
+            <InlineFieldError id="register-accepted-terms-error" message={errors.acceptedTerms?.message} />
 
             {successMessage ? (
               <p
                 role="status"
+                aria-live="polite"
                 className="text-sm font-medium text-[#00685f]"
               >
                 {successMessage}
@@ -227,6 +246,7 @@ export default function RegisterPage() {
             {submitError ? (
               <p
                 role="alert"
+                aria-live="assertive"
                 className="text-sm font-medium text-[#ba1a1a]"
               >
                 {submitError}

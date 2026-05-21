@@ -20,6 +20,8 @@ import { API_ROUTES } from "@/lib/api/routes";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { SettingsDirectContactCard } from "../_components/SettingsDirectContactCard";
 import { notify } from "@/lib/notify";
+import SafeImage from "@/components/ui/SafeImage";
+import { ErrorState, InlineFieldError, LoadingState } from "@/components/ui/StateComponents";
 import {
   updateUserProfileSchema,
   UpdateUserProfileInput,
@@ -244,18 +246,23 @@ export default function ProfileSettingsPage() {
     Boolean(pendingAvatarFile) || isAvatarRemovalPending;
   const isSaving = saveMutation.isPending;
 
-  if (isLoading)
+  if (isLoading) {
     return (
-      <div className="p-8 text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00685f] mx-auto"></div>
-      </div>
+      <LoadingState
+        title="Đang tải thông tin hồ sơ"
+        className="min-h-64 border-none bg-transparent shadow-none"
+      />
     );
-  if (isError)
+  }
+  if (isError) {
     return (
-      <div className="p-8 text-center text-[#ba1a1a]">
-        Không thể tải thông tin hồ sơ.
-      </div>
+      <ErrorState
+        title="Không thể tải thông tin hồ sơ"
+        description="Vui lòng thử tải lại trang sau ít phút."
+        className="min-h-64 border-none bg-transparent shadow-none"
+      />
     );
+  }
 
   return (
     <DashboardPageShell
@@ -274,11 +281,11 @@ export default function ProfileSettingsPage() {
               <div className="relative group">
                 <div className="w-24 h-24 rounded-2xl overflow-hidden ring-4 ring-[#e9f6f3] shadow-md bg-[#d8e5e2] flex items-center justify-center text-2xl font-black text-[#00685f]">
                   {avatarSrc ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
+                    <SafeImage
+                      raw
+                      src={avatarSrc}
                       alt="Ảnh đại diện"
                       className="w-full h-full object-cover"
-                      src={avatarSrc}
                     />
                   ) : initials ? (
                     <span aria-hidden="true">{initials}</span>
@@ -337,6 +344,7 @@ export default function ProfileSettingsPage() {
                   <p
                     className="mt-3 text-sm font-medium text-[#ba1a1a]"
                     role="alert"
+                    aria-live="assertive"
                   >
                     {avatarError}
                   </p>
@@ -349,27 +357,30 @@ export default function ProfileSettingsPage() {
               onSubmit={handleSubmit(onSubmit)}
             >
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#6d7a77]">
+                <label htmlFor="profile-settings-full-name" className="text-sm font-bold text-[#6d7a77]">
                   Họ tên *
                 </label>
                 <input
+                  id="profile-settings-full-name"
                   type="text"
                   {...register("fullName")}
+                  aria-invalid={Boolean(errors.fullName)}
+                  aria-describedby={errors.fullName ? "profile-settings-full-name-error" : undefined}
                   className="h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium w-full text-[#121e1c]"
                   placeholder="Nhập họ và tên"
                 />
-                {errors.fullName && (
-                  <p className="text-sm text-[#ba1a1a]">
-                    {errors.fullName.message}
-                  </p>
-                )}
+                <InlineFieldError
+                  id="profile-settings-full-name-error"
+                  message={errors.fullName?.message}
+                />
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#6d7a77]">
+                <label htmlFor="profile-settings-email" className="text-sm font-bold text-[#6d7a77]">
                   Email (Read-only)
                 </label>
                 <input
+                  id="profile-settings-email"
                   type="email"
                   value={userProfile?.email || ""}
                   readOnly
@@ -378,36 +389,36 @@ export default function ProfileSettingsPage() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#6d7a77]">
+                <label htmlFor="profile-settings-birth-date" className="text-sm font-bold text-[#6d7a77]">
                   Ngày sinh
                 </label>
-                <div>
-                  <input
-                    id="profile-settings-birth-date"
-                    type="date"
-                    {...register("birthDate")}
-                    className="h-12 w-full px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c]"
-                  />
-                </div>
-                {errors.birthDate && (
-                  <p className="text-sm text-[#ba1a1a]">
-                    {errors.birthDate.message}
-                  </p>
-                )}
+                <input
+                  id="profile-settings-birth-date"
+                  type="date"
+                  {...register("birthDate")}
+                  aria-invalid={Boolean(errors.birthDate)}
+                  aria-describedby={errors.birthDate ? "profile-settings-birth-date-error" : undefined}
+                  className="h-12 w-full px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c]"
+                />
+                <InlineFieldError
+                  id="profile-settings-birth-date-error"
+                  message={errors.birthDate?.message}
+                />
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-[#6d7a77]">
-                  Giới tính
-                </label>
+                <fieldset>
+                  <legend className="text-sm font-bold text-[#6d7a77]">Giới tính</legend>
                 <Controller
                   name="gender"
                   control={control}
                   render={({ field }) => (
-                    <div className="flex gap-6 h-12 items-center">
-                      <label className="flex items-center gap-3 cursor-pointer group">
+                    <div className="flex gap-6 h-12 items-center" role="radiogroup" aria-label="Giới tính">
+                      <label htmlFor="profile-settings-gender-male" className="flex items-center gap-3 cursor-pointer group">
                         <input
+                          id="profile-settings-gender-male"
                           type="radio"
+                          name="profile-settings-gender"
                           value="male"
                           checked={field.value === "male"}
                           onChange={() => field.onChange("male")}
@@ -417,9 +428,11 @@ export default function ProfileSettingsPage() {
                           Nam
                         </span>
                       </label>
-                      <label className="flex items-center gap-3 cursor-pointer group">
+                      <label htmlFor="profile-settings-gender-female" className="flex items-center gap-3 cursor-pointer group">
                         <input
+                          id="profile-settings-gender-female"
                           type="radio"
+                          name="profile-settings-gender"
                           value="female"
                           checked={field.value === "female"}
                           onChange={() => field.onChange("female")}
@@ -429,9 +442,11 @@ export default function ProfileSettingsPage() {
                           Nữ
                         </span>
                       </label>
-                      <label className="flex items-center gap-3 cursor-pointer group">
+                      <label htmlFor="profile-settings-gender-other" className="flex items-center gap-3 cursor-pointer group">
                         <input
+                          id="profile-settings-gender-other"
                           type="radio"
+                          name="profile-settings-gender"
                           value="other"
                           checked={field.value === "other"}
                           onChange={() => field.onChange("other")}
@@ -444,11 +459,8 @@ export default function ProfileSettingsPage() {
                     </div>
                   )}
                 />
-                {errors.gender && (
-                  <p className="text-sm text-[#ba1a1a]">
-                    {errors.gender.message}
-                  </p>
-                )}
+                </fieldset>
+                <InlineFieldError id="profile-settings-gender-error" message={errors.gender?.message} />
               </div>
 
               <div className="md:col-span-2 flex justify-end gap-4 mt-4 pt-6 border-t border-[#bcc9c6]/20">

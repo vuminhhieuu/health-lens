@@ -156,7 +156,7 @@ export function ErrorState(props: CommonStateProps) {
   const action = renderAction(props);
 
   return (
-    <div role="alert" className={stateClassName(props.className)}>
+    <div role="alert" aria-live="assertive" className={stateClassName(props.className)}>
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ffdad6] text-[#ba1a1a]">
         <AlertTriangle className="h-7 w-7" aria-hidden="true" />
       </div>
@@ -171,7 +171,7 @@ export function InlineFieldError({ id, message }: { id: string; message?: string
   if (!message) return null;
 
   return (
-    <p id={id} role="alert" className="mt-2 text-sm font-semibold text-[#ba1a1a]">
+    <p id={id} role="alert" aria-live="assertive" className="mt-2 text-sm font-semibold text-[#ba1a1a]">
       {message}
     </p>
   );

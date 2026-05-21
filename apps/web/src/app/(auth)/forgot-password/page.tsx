@@ -172,6 +172,8 @@ export default function ForgotPasswordPage() {
                 id="forgot-email"
                 type="email"
                 autoComplete="email"
+                aria-invalid={Boolean(errors.email)}
+                aria-describedby={errors.email ? "forgot-email-error" : undefined}
                 placeholder="email@vi-du.com"
                 name={emailField.name}
                 onChange={emailField.onChange}
@@ -183,12 +185,14 @@ export default function ForgotPasswordPage() {
                 className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
               />
               {errors.email ? (
-                <p className="text-sm text-[#ba1a1a]">{errors.email.message}</p>
+                <p id="forgot-email-error" role="alert" aria-live="assertive" className="text-sm text-[#ba1a1a]">
+                  {errors.email.message}
+                </p>
               ) : null}
             </div>
 
             {submitError || isCooldownActive ? (
-              <p id="forgot-submit-error" role="alert" className="text-center text-sm font-medium text-[#ba1a1a]">
+              <p id="forgot-submit-error" role="alert" aria-live="assertive" className="text-center text-sm font-medium text-[#ba1a1a]">
                 {submitError ||
                   messageCatalog.auth.forgotPasswordCooldown(cooldownSeconds)}
               </p>

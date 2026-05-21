@@ -6,6 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { X, UserPlus, Info, Loader2 } from "lucide-react";
 import { CreateProfileInput, createProfileSchema } from "@healthlens/shared";
 
+import { InlineFieldError } from "@/components/ui/StateComponents";
+
 interface CreateProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -86,42 +88,53 @@ export function CreateProfileModal({
           <form id="create-profile-form" onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
             
             <div className="space-y-2">
-              <label className="text-sm font-bold text-[#6d7a77] ml-1">Họ tên / Tên hiển thị *</label>
-              <input 
+              <label htmlFor="create-profile-display-name" className="text-sm font-bold text-[#6d7a77] ml-1">
+                Họ tên / Tên hiển thị *
+              </label>
+              <input
+                id="create-profile-display-name"
                 {...register("displayName")}
+                aria-invalid={Boolean(errors.displayName)}
+                aria-describedby={errors.displayName ? "create-profile-display-name-error" : undefined}
                 placeholder="Ví dụ: Bố, Mẹ, Anh Hai..."
                 className="w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all placeholder:text-[#bcc9c6]"
               />
-              {errors.displayName && (
-                <p className="text-xs font-bold text-[#ba1a1a] ml-1">{errors.displayName.message}</p>
-              )}
+              <InlineFieldError
+                id="create-profile-display-name-error"
+                message={errors.displayName?.message}
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-bold text-[#6d7a77] ml-1">Ngày sinh</label>
-                <div>
-                  <input
-                    id="create-profile-birth-date"
-                    type="date"
-                    {...register("birthDate")}
-                    className="w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all"
-                  />
-                </div>
-                {errors.birthDate && (
-                  <p className="text-xs font-bold text-[#ba1a1a] ml-1">{errors.birthDate.message}</p>
-                )}
+                <label htmlFor="create-profile-birth-date" className="text-sm font-bold text-[#6d7a77] ml-1">
+                  Ngày sinh
+                </label>
+                <input
+                  id="create-profile-birth-date"
+                  type="date"
+                  {...register("birthDate")}
+                  aria-invalid={Boolean(errors.birthDate)}
+                  aria-describedby={errors.birthDate ? "create-profile-birth-date-error" : undefined}
+                  className="w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all"
+                />
+                <InlineFieldError id="create-profile-birth-date-error" message={errors.birthDate?.message} />
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-[#6d7a77] ml-1">Giới tính</label>
+                <label htmlFor="create-profile-gender" className="text-sm font-bold text-[#6d7a77] ml-1">
+                  Giới tính
+                </label>
                 <Controller
                   name="gender"
                   control={control}
                   render={({ field }) => (
-                    <select 
+                    <select
+                      id="create-profile-gender"
                       {...field}
                       value={field.value ?? ""}
+                      aria-invalid={Boolean(errors.gender)}
+                      aria-describedby={errors.gender ? "create-profile-gender-error" : undefined}
                       className="w-full h-12 px-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all appearance-none cursor-pointer"
                     >
                       <option value="male">Nam</option>
@@ -130,20 +143,24 @@ export function CreateProfileModal({
                     </select>
                   )}
                 />
+                <InlineFieldError id="create-profile-gender-error" message={errors.gender?.message} />
               </div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-bold text-[#6d7a77] ml-1">Ghi chú thêm</label>
-              <textarea 
+              <label htmlFor="create-profile-notes" className="text-sm font-bold text-[#6d7a77] ml-1">
+                Ghi chú thêm
+              </label>
+              <textarea
+                id="create-profile-notes"
                 {...register("notes")}
+                aria-invalid={Boolean(errors.notes)}
+                aria-describedby={errors.notes ? "create-profile-notes-error" : undefined}
                 placeholder="Mối quan hệ, tình trạng sức khỏe chung..."
                 rows={3}
                 className="w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all resize-none placeholder:text-[#bcc9c6]"
               />
-              {errors.notes && (
-                <p className="text-xs font-bold text-[#ba1a1a] ml-1">{errors.notes.message}</p>
-              )}
+              <InlineFieldError id="create-profile-notes-error" message={errors.notes?.message} />
             </div>
 
             <div className="flex items-start gap-3 p-4 bg-[#e4f1ee] rounded-2xl text-[#005049]">
