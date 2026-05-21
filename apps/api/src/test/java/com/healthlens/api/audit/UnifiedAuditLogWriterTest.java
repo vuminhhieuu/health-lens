@@ -18,6 +18,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -95,5 +96,40 @@ class UnifiedAuditLogWriterTest {
         assertThat(row.getOutcome()).isEqualTo(AuditOutcome.FAILURE);
         assertThat(row.getNewValueJson()).isNull();
         assertThat(row.getMetadataJson()).isEqualTo("{\"purpose\":\"metric_explanation\"}");
+    }
+
+    @Test
+    void recordWithoutActor_persistsRowWithNoActor() {
+        UnifiedAuditLogWriter writer = new UnifiedAuditLogWriter(auditLogRepository, entityManager);
+        writer.recordWithoutActor(
+                AuditActions.LOGIN_FAILED,
+                AuditResourceTypes.AUTH,
+                null,
+                null,
+                "{\"email\":\"anon@example.com\",\"reason\":\"bad_credentials\"}"
+        );
+
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+        AuditLog row = captor.getValue();
+        assertThat(row.getActor()).isNull();
+        assertThat(row.getAction()).isEqualTo(AuditActions.LOGIN_FAILED);
+        assertThat(row.getOutcome()).isEqualTo(AuditOutcome.FAILURE);
+        assertThat(row.getNewValueJson()).contains("anon@example.com");
+    }
+
+    @Test
+    void record_withoutActorIdOrSecurityContext_skipsPersist() {
+        UnifiedAuditLogWriter writer = new UnifiedAuditLogWriter(auditLogRepository, entityManager);
+        writer.record(
+                null,
+                AuditActions.UPDATE_REFERENCE_METRIC,
+                AuditResourceTypes.REFERENCE_DATA,
+                UUID.randomUUID(),
+                null,
+                null
+        );
+
+        verify(auditLogRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 }

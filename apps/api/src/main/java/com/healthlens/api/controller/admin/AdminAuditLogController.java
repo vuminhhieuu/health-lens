@@ -78,6 +78,7 @@ public class AdminAuditLogController {
         StreamingResponseBody body = os -> {
             try (OutputStreamWriter writer =
                     new OutputStreamWriter(os, StandardCharsets.UTF_8)) {
+                // UTF-8 BOM for Excel (Windows) Vietnamese column display; reference-data import strips BOM on upload.
                 writer.write('\uFEFF');
                 adminAuditLogService.writeCsv(
                         resourceType,

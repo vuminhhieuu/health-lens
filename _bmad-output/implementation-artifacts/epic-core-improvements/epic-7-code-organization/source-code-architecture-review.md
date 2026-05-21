@@ -218,7 +218,7 @@ Evidence:
 Largest route pages:
 
 - `health-records/review/[recordId]/page.tsx`: around 2,446 lines.
-- `admin/audit-log/page.tsx`: around 1,813 lines.
+- `admin/audit-log/page.tsx`: around 1,813 lines *(pre-refactor; **~133** compose-only as of 2026-05-21 — see story 6.4 / 7.5)*.
 - `admin/reference-data/approvals/page.tsx`: around 1,098 lines.
 - `admin/reference-data/page.tsx`: around 1,035 lines.
 

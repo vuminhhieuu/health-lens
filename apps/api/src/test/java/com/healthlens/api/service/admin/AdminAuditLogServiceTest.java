@@ -11,6 +11,15 @@ import com.healthlens.api.entity.ReferenceMetric;
 import com.healthlens.api.persistence.json.PostgreSqlJsonPathExpressions;
 import com.healthlens.api.repository.AuditLogRepository;
 import com.healthlens.api.repository.ReferenceMetricRepository;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Fetch;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,6 +27,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -34,12 +45,18 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class AdminAuditLogServiceTest {
 
     @Mock
@@ -48,6 +65,9 @@ class AdminAuditLogServiceTest {
     @Mock
     private ReferenceMetricRepository referenceMetricRepository;
 
+    @Mock
+    private PostgreSqlJsonPathExpressions jsonPathExpressions;
+
     private AdminAuditLogService adminAuditLogService;
 
     @BeforeEach
@@ -55,7 +75,7 @@ class AdminAuditLogServiceTest {
         adminAuditLogService = new AdminAuditLogService(
                 auditLogRepository,
                 referenceMetricRepository,
-                new PostgreSqlJsonPathExpressions(),
+                jsonPathExpressions,
                 new ObjectMapper()
         );
     }
@@ -353,6 +373,165 @@ class AdminAuditLogServiceTest {
         actor.setEmail(marker + "@healthlens.vn");
         row.setActor(actor);
         return row;
+    }
+
+    @Test
+    @DisplayName("query với actorEmail — OR actor join + email trong new/old/metadata JSON, chuẩn hóa lowercase")
+    void query_withActorEmailFilter_matchesActorJoinAndJsonEmailPaths() {
+        ArgumentCaptor<Specification<AuditLog>> specCaptor = ArgumentCaptor.forClass(Specification.class);
+        Root<AuditLog> root = mockCriteriaRoot();
+        CriteriaQuery<AuditLog> query = mockCriteriaQuery();
+        CriteriaBuilder cb = mockCriteriaBuilder();
+        stubActorEmailSpecMocks(root, query, cb);
+
+        when(auditLogRepository.findAll(specCaptor.capture(), any(Pageable.class)))
+                .thenAnswer(invocation -> {
+                    specCaptor.getValue().toPredicate(root, query, cb);
+                    return new PageImpl<>(List.of());
+                });
+
+        adminAuditLogService.query(
+                null,
+                null,
+                "  Admin@Example.COM  ",
+                null,
+                null,
+                null,
+                0,
+                20
+        );
+
+        verify(jsonPathExpressions).extractPathText(root, cb, "newValueJson", "email");
+        verify(jsonPathExpressions).extractPathText(root, cb, "oldValueJson", "email");
+        verify(jsonPathExpressions).extractPathText(root, cb, "metadataJson", "email");
+        verify(cb, atLeast(4)).equal(any(Expression.class), eq("admin@example.com"));
+    }
+
+    @Test
+    @DisplayName("query không có actorEmail — không dựng predicate JSON email")
+    void query_withoutActorEmailFilter_skipsJsonEmailPaths() {
+        when(auditLogRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        adminAuditLogService.query(null, null, null, null, null, null, 0, 20);
+
+        verify(jsonPathExpressions, never()).extractPathText(any(), any(), anyString(), eq("email"));
+    }
+
+    @Test
+    @DisplayName("writeCsv với actorEmail — cùng predicate email như query")
+    void writeCsv_withActorEmailFilter_appliesJsonEmailPaths() throws Exception {
+        ArgumentCaptor<Specification<AuditLog>> specCaptor = ArgumentCaptor.forClass(Specification.class);
+        Root<AuditLog> root = mockCriteriaRoot();
+        CriteriaQuery<AuditLog> query = mockCriteriaQuery();
+        CriteriaBuilder cb = mockCriteriaBuilder();
+        stubActorEmailSpecMocks(root, query, cb);
+
+        when(referenceMetricRepository.findAllByOrderByNameAsc()).thenReturn(List.of());
+        when(auditLogRepository.findAll(specCaptor.capture(), any(Pageable.class)))
+                .thenAnswer(invocation -> {
+                    specCaptor.getValue().toPredicate(root, query, cb);
+                    return new PageImpl<>(List.of());
+                });
+
+        StringWriter writer = new StringWriter();
+        adminAuditLogService.writeCsv(
+                null,
+                null,
+                "anon@example.com",
+                null,
+                null,
+                null,
+                null,
+                writer,
+                100
+        );
+
+        verify(jsonPathExpressions).extractPathText(root, cb, "newValueJson", "email");
+        verify(jsonPathExpressions).extractPathText(root, cb, "oldValueJson", "email");
+        verify(jsonPathExpressions).extractPathText(root, cb, "metadataJson", "email");
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private Root<AuditLog> mockCriteriaRoot() {
+        return mock(Root.class);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private CriteriaQuery<AuditLog> mockCriteriaQuery() {
+        CriteriaQuery<AuditLog> query = mock(CriteriaQuery.class);
+        when(query.getResultType()).thenReturn(AuditLog.class);
+        return query;
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void stubActorEmailSpecMocks(Root<AuditLog> root, CriteriaQuery<AuditLog> query, CriteriaBuilder cb) {
+        Join actorJoin = mock(Join.class);
+        Path emailPath = mock(Path.class);
+        Expression<String> lowerExpr = mock(Expression.class);
+        Predicate leafPredicate = mock(Predicate.class);
+        Predicate orPredicate = mock(Predicate.class);
+        Predicate conjunction = mock(Predicate.class);
+
+        when(root.fetch("actor", JoinType.LEFT)).thenReturn(mock(Fetch.class));
+        when(root.join("actor", JoinType.LEFT)).thenReturn(actorJoin);
+        when(actorJoin.get("email")).thenReturn(emailPath);
+        when(cb.lower(any(Expression.class))).thenReturn(lowerExpr);
+        when(cb.equal(any(), any())).thenReturn(leafPredicate);
+        when(cb.or(any(Predicate[].class))).thenReturn(orPredicate);
+        when(cb.conjunction()).thenReturn(conjunction);
+        doReturn(lowerExpr).when(jsonPathExpressions).extractPathText(any(), any(), eq("newValueJson"), eq("email"));
+        doReturn(lowerExpr).when(jsonPathExpressions).extractPathText(any(), any(), eq("oldValueJson"), eq("email"));
+        doReturn(lowerExpr).when(jsonPathExpressions).extractPathText(any(), any(), eq("metadataJson"), eq("email"));
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private CriteriaBuilder mockCriteriaBuilder() {
+        return mock(CriteriaBuilder.class);
+    }
+
+    @Test
+    @DisplayName("writeCsv với correlationId và maxRows nhỏ chỉ ghi tối đa maxRows dòng dữ liệu")
+    void writeCsv_respectsMaxRowsCapAndCorrelationFilter() throws Exception {
+        Instant base = Instant.parse("2026-05-01T12:00:00Z");
+        List<AuditLog> batch = IntStream.range(0, 20)
+                .mapToObj(i -> auditRow(base.minusSeconds(i), "cap-" + i))
+                .toList();
+
+        when(referenceMetricRepository.findAllByOrderByNameAsc()).thenReturn(List.of());
+        when(auditLogRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(batch));
+
+        StringWriter writer = new StringWriter();
+        adminAuditLogService.writeCsv(
+                null,
+                null,
+                null,
+                null,
+                "corr-export-1",
+                null,
+                null,
+                writer,
+                5
+        );
+
+        long dataLines = writer.toString().lines().filter(line -> line.contains("cap-")).count();
+        assertThat(dataLines).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("writeCsv không có dữ liệu vẫn ghi header CSV")
+    void writeCsv_emptyResult_writesHeaderOnly() throws Exception {
+        when(referenceMetricRepository.findAllByOrderByNameAsc()).thenReturn(List.of());
+        when(auditLogRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        StringWriter writer = new StringWriter();
+        adminAuditLogService.writeCsv(null, null, null, null, null, null, null, writer, 100);
+
+        String csv = writer.toString();
+        assertThat(csv).contains("actorEmail");
+        assertThat(csv.lines().filter(line -> line.contains("@healthlens.vn")).count()).isZero();
     }
 
     @Test

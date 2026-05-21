@@ -197,10 +197,10 @@ Các gap theo v2 cần kiểm chứng kỹ:
 
 ### 7.1 Epic 7 (Reference data)
 
-Hiện trạng web:
+Hiện trạng web (cập nhật 2026-05-21):
 - Admin dashboard stub: [admin/page.tsx](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/apps/web/src/app/admin/page.tsx)
-- Audit log viewer stub: [admin/audit-log/page.tsx](/home/vmhieu/Workspace/UIT/IE303/Project/health-lens/apps/web/src/app/admin/audit-log/page.tsx)
-- Reference data page có nhưng cần đối chiếu “approval workflow + import + audit log viewer”.
+- **Audit log viewer:** shipped — compose-only route + `components/admin/audit-log/` (remaining-6-4, core-7-5); không còn placeholder.
+- Reference data page có nhưng cần đối chiếu “approval workflow + import”.
 
 Production must-have:
 - Không có đường “bypass approval” (nếu approval là requirement).
