@@ -64,7 +64,8 @@ export function NotificationDropdown({
   return (
     <div
       id={panelId}
-      role="region"
+      role="dialog"
+      aria-modal="false"
       aria-labelledby={titleId}
       className="animate-in fade-in zoom-in-95 absolute right-0 z-[60] mt-2 w-[min(360px,calc(100vw-24px))] origin-top-right overflow-hidden rounded-2xl border border-[#bcc9c6]/25 bg-white shadow-xl duration-100"
     >

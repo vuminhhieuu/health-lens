@@ -64,7 +64,7 @@ export function NotificationBell() {
         title="Mở thông báo"
         aria-label="Mở thông báo"
         aria-expanded={isOpen}
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-controls={panelId}
         onClick={togglePanel}
         className="relative rounded-full p-2 text-[#3d4947] transition-colors hover:bg-[#e9f6f3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00685f]"

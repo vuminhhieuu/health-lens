@@ -94,7 +94,7 @@ type AcceptHealthRecordInvitationResult = {
 export default function HealthRecordsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { markAsRead } = useNotificationInbox();
+  const { markAsReadAsync } = useNotificationInbox();
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [invitingProfileId, setInvitingProfileId] = useState<string | null>(null);
   useEffect(() => {
@@ -174,8 +174,10 @@ export default function HealthRecordsPage() {
       }
       return result;
     },
-    onSuccess: (result, { invitationId }) => {
-      markAsRead(`HEALTH_RECORD_INVITATION:${invitationId}`);
+    onMutate: async ({ invitationId }) => {
+      await markAsReadAsync(`HEALTH_RECORD_INVITATION:${invitationId}`);
+    },
+    onSuccess: (result) => {
       void queryClient.invalidateQueries({
         queryKey: ["health-record-invitations-incoming"],
       });

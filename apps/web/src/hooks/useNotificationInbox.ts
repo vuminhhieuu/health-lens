@@ -97,6 +97,14 @@ export function useNotificationInbox(enabled = true) {
     markAsReadMutation.mutate(itemId);
   };
 
+  const markAsReadAsync = async (itemId: string) => {
+    const item = items.find((entry) => entry.id === itemId);
+    if (item?.read) {
+      return;
+    }
+    await markAsReadMutation.mutateAsync(itemId);
+  };
+
   const markAllAsRead = () => {
     if (unreadCount === 0) {
       return;
@@ -109,6 +117,7 @@ export function useNotificationInbox(enabled = true) {
     items,
     unreadCount,
     markAsRead,
+    markAsReadAsync,
     markAllAsRead,
     isMarkingRead: markAsReadMutation.isPending,
     isMarkingAllRead: markAllAsReadMutation.isPending,

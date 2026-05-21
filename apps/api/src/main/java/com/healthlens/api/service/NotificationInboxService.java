@@ -54,12 +54,12 @@ public class NotificationInboxService {
         readStateRepository
                 .findByUserIdAndInboxItemId(userId, itemId)
                 .ifPresentOrElse(
-                        existing -> applySnapshot(existing, item),
+                        existing -> applySnapshot(existing, item, Instant.now()),
                         () -> {
                             NotificationInboxReadState state = new NotificationInboxReadState();
                             state.setUserId(userId);
                             state.setInboxItemId(itemId);
-                            applySnapshot(state, item);
+                            applySnapshot(state, item, Instant.now());
                             readStateRepository.save(state);
                         });
     }
@@ -83,8 +83,7 @@ public class NotificationInboxService {
             NotificationInboxReadState state = new NotificationInboxReadState();
             state.setUserId(userId);
             state.setInboxItemId(item.id());
-            state.setReadAt(now);
-            applySnapshot(state, item);
+            applySnapshot(state, item, now);
             readStateRepository.save(state);
             newlyMarked++;
         }
@@ -128,7 +127,12 @@ public class NotificationInboxService {
     }
 
     private static void applySnapshot(NotificationInboxReadState state, NotificationInboxItemResponse item) {
-        state.setReadAt(Instant.now());
+        applySnapshot(state, item, Instant.now());
+    }
+
+    private static void applySnapshot(
+            NotificationInboxReadState state, NotificationInboxItemResponse item, Instant readAt) {
+        state.setReadAt(readAt);
         state.setItemType(item.type().name());
         state.setTitle(item.title());
         state.setBody(item.body());

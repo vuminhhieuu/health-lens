@@ -69,7 +69,7 @@ function extractApiDetail(error: unknown, fallback: string): string {
 export default function ProfilesPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { markAsRead } = useNotificationInbox();
+  const { markAsReadAsync } = useNotificationInbox();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
@@ -152,9 +152,10 @@ export default function ProfilesPage() {
       }
       return result;
     },
-    onSuccess: (result, { invitationId }) => {
-      markAsRead(`PROFILE_INVITATION:${invitationId}`);
-
+    onMutate: async ({ invitationId }) => {
+      await markAsReadAsync(`PROFILE_INVITATION:${invitationId}`);
+    },
+    onSuccess: (result) => {
       void queryClient.invalidateQueries({
         queryKey: ["profile-invitations-incoming"],
       });
