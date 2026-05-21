@@ -3,6 +3,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { authenticatedContentShell } from "@/lib/layout/shell";
+
 type BreadcrumbItem = {
   label: string;
   href?: string;
@@ -23,15 +25,18 @@ export function DashboardPageShell({
   breadcrumbs = [],
   actions,
   children,
-  maxWidthClassName = "max-w-7xl",
+  maxWidthClassName = "",
 }: DashboardPageShellProps) {
   const hasBreadcrumbs = breadcrumbs.length > 0;
+  const contentShellClassName = maxWidthClassName
+    ? `mx-auto w-full ${maxWidthClassName} px-6`
+    : authenticatedContentShell;
 
   return (
     <main className="min-h-screen w-full bg-[#effcf9]">
       {hasBreadcrumbs ? (
-        <div className="sticky top-16 z-30 border-b border-[#bcc9c6]/25 bg-[#effcf9]/95 px-6 py-3 backdrop-blur">
-          <nav className="text-sm font-medium text-[#6d7a77]">
+        <div className="sticky top-16 z-30 border-b border-[#bcc9c6]/25 bg-[#effcf9]/95 backdrop-blur">
+          <nav className={`${contentShellClassName} py-3 text-sm font-medium text-[#6d7a77]`}>
             <div className="flex flex-wrap items-center gap-1">
               {breadcrumbs.map((item, index) => (
                 <span key={`${item.label}-${index}`} className="inline-flex items-center gap-1">
@@ -50,7 +55,7 @@ export function DashboardPageShell({
         </div>
       ) : null}
 
-      <div className={`mx-auto w-full ${maxWidthClassName} px-6 pb-10 ${hasBreadcrumbs ? "pt-6" : "pt-10"}`}>
+      <div className={`${contentShellClassName} pb-10 ${hasBreadcrumbs ? "pt-6" : "pt-10"}`}>
         <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <h1 className="text-3xl font-bold tracking-tight text-[#121e1c] lg:text-4xl">{title}</h1>

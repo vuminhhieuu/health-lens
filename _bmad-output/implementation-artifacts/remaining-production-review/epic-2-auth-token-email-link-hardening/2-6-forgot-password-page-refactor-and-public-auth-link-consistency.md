@@ -1,6 +1,6 @@
 # Story 2.6: Forgot Password Page Refactor And Public Auth Link Consistency
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 
@@ -26,34 +26,41 @@ so that I can recover safely and reach privacy, terms, and help information with
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 - Define a shared public auth link map (AC: #4-#6)
-  - [ ] Add constants/helper for public auth footer/header links such as `/privacy`, `/terms`, and `/help` or `/support`.
-  - [ ] Verify each target route exists; create minimal public pages if product wants public legal/help pages.
-  - [ ] Do not point unauthenticated auth pages at dashboard-only `/help` unless that route is made public.
-- [ ] Task 2 - Refactor login footer and auth header help actions (AC: #4, #6, #7)
-  - [ ] Replace `href="#"` in `apps/web/src/app/(auth)/login/page.tsx`.
-  - [ ] Make `CircleHelp` controls actual `Link`s or accessible buttons with implemented navigation.
-  - [ ] Keep Vietnamese labels exactly aligned: `Quy định bảo mật`, `Điều khoản sử dụng`, `Trợ giúp`.
-- [ ] Task 3 - Refactor forgot-password page for consistency and accessibility (AC: #1-#3)
-  - [ ] Remove decorative fixed blobs and oversized/rounded visual treatment that diverges from login/register.
-  - [ ] Keep form and success state within a stable auth layout.
-  - [ ] Add `role="status"` / `aria-live` for pending and success, and `role="alert"` for errors.
-  - [ ] Ensure resend-request path preserves entered email when possible and does not mutate auth store.
-- [ ] Task 4 - Align forgot-password error semantics with backend contract (AC: #2, #3)
-  - [ ] Continue enumeration-safe success copy for existing and non-existing emails.
-  - [ ] Map `429` using `retryAfterMinutes`; map unknown server failure to generic retry copy.
-  - [ ] Avoid exposing whether the email exists.
-- [ ] Task 5 - Add focused tests and route smoke checks (AC: #1-#7)
-  - [ ] Test login/footer links are not `#` and target existing public routes.
-  - [ ] Test forgot-password success, network error, generic server error, `429`, and resend/edit-email behavior.
-  - [ ] Test public auth pages do not contain missing `/contact` links unless `/contact` is implemented.
+- [x] Task 1 - Define a shared public auth link map (AC: #4-#6)
+  - [x] Add constants/helper for public auth footer/header links such as `/privacy`, `/terms`, and `/help` or `/support`.
+  - [x] Verify each target route exists; create minimal public pages if product wants public legal/help pages.
+  - [x] Do not point unauthenticated auth pages at dashboard-only `/help` unless that route is made public.
+- [x] Task 2 - Refactor login footer and auth header help actions (AC: #4, #6, #7)
+  - [x] Replace `href="#"` in `apps/web/src/app/(auth)/login/page.tsx`.
+  - [x] Make `CircleHelp` controls actual `Link`s or accessible buttons with implemented navigation.
+  - [x] Keep Vietnamese labels exactly aligned: `Quy định bảo mật`, `Điều khoản sử dụng`, `Trợ giúp`.
+- [x] Task 3 - Refactor forgot-password page for consistency and accessibility (AC: #1-#3)
+  - [x] Remove decorative fixed blobs and oversized/rounded visual treatment that diverges from login/register.
+  - [x] Keep form and success state within a stable auth layout.
+  - [x] Add `role="status"` / `aria-live` for pending and success, and `role="alert"` for errors.
+  - [x] Ensure resend-request path preserves entered email when possible and does not mutate auth store.
+- [x] Task 4 - Align forgot-password error semantics with backend contract (AC: #2, #3)
+  - [x] Continue enumeration-safe success copy for existing and non-existing emails.
+  - [x] Map `429` using `retryAfterMinutes`; map unknown server failure to generic retry copy.
+  - [x] Avoid exposing whether the email exists.
+- [x] Task 5 - Add focused tests and route smoke checks (AC: #1-#7)
+  - [x] Test login/footer links are not `#` and target existing public routes.
+  - [x] Test forgot-password success, network error, generic server error, `429`, and resend/edit-email behavior.
+  - [x] Test public auth pages do not contain missing `/contact` links unless `/contact` is implemented.
 
 ### Review Findings
 
-- [ ] [Review][Patch] Login footer legal/help links are visible but use `href="#"`, so production users cannot access privacy, terms, or support content.
-- [ ] [Review][Patch] Forgot-password currently links to `/privacy`, `/terms`, and `/contact`, but only `/terms` directory exists and it has no page file; `/privacy` and `/contact` are missing.
-- [ ] [Review][Patch] Auth header help icons on login/register/forgot/reset render as buttons without implemented action.
-- [ ] [Review][UX] Forgot-password visual treatment diverges from the login/register auth layout and includes decorative background blobs that the frontend guidance discourages.
+- [x] [Review][Patch] Login footer legal/help links are visible but use `href="#"`, so production users cannot access privacy, terms, or support content.
+- [x] [Review][Patch] Forgot-password currently links to `/privacy`, `/terms`, and `/contact`, but only `/terms` directory exists and it has no page file; `/privacy` and `/contact` are missing.
+- [x] [Review][UX] Auth header help icons on login/register/forgot/reset render as buttons without implemented action.
+- [x] [Review][UX] Forgot-password visual treatment diverges from the login/register auth layout and includes decorative background blobs that the frontend guidance discourages.
+
+#### Code review (2026-05-21)
+
+- [x] [Review][Patch] Trùng nội dung thành công trên forgot-password (`FORGOT_SUCCESS_COPY` + `messageCatalog.auth.forgotPasswordSent`) — gây lặp cho người dùng và screen reader [`apps/web/src/app/(auth)/forgot-password/page.tsx:19-97`]
+- [x] [Review][Patch] Sau "gửi lại yêu cầu" không focus lại ô email — keyboard/SR dễ mất ngữ cảnh [`apps/web/src/app/(auth)/forgot-password/page.tsx:64-70`]
+- [x] [Review][Patch] Smoke test chỉ tìm chuỗi `footer` — dễ false positive, nên assert prop `footer` trên `AuthPageShell` [`apps/web/src/app/(auth)/public-auth-pages.test.ts:40`]
+- [x] [Review][Defer] Nút ngôn ngữ trên login vẫn không có hành động — tồn tại trước story này [`apps/web/src/app/(auth)/login/page.tsx:129-135`]
 
 ## Dev Notes
 
@@ -105,20 +112,36 @@ so that I can recover safely and reach privacy, terms, and help information with
 
 ### Agent Model Used
 
-TBD
+Composer
 
 ### Debug Log References
 
-TBD
+- `pnpm test` in `apps/web` — 53 tests passed
 
 ### Completion Notes List
 
-TBD
+- Added `authPublicLinks` map targeting public marketing routes `/privacy`, `/terms`, `/help` (not dashboard `/help`).
+- Introduced `AuthPageHeader`, `AuthPageFooter`, and `AuthPageShell` for consistent auth chrome across login, register, forgot-password, and reset-password.
+- Refactored forgot-password to login-aligned card layout, removed decorative blobs, unified form/success in one shell, and added accessible status/alert regions plus email preservation on resend.
+- Wired header help icons as links to `/help`; replaced login `href="#"` footer placeholders and removed `/contact` from forgot-password.
+- Added source smoke tests and RTL tests for forgot-password success, network/server/429 errors, and resend behavior.
 
 ### File List
 
-TBD
+- `apps/web/src/lib/authPublicLinks.ts`
+- `apps/web/src/lib/authPublicLinks.test.ts`
+- `apps/web/src/components/auth/AuthPageHeader.tsx`
+- `apps/web/src/components/auth/AuthPageFooter.tsx`
+- `apps/web/src/components/auth/AuthPageShell.tsx`
+- `apps/web/src/app/(auth)/login/page.tsx`
+- `apps/web/src/app/(auth)/register/page.tsx`
+- `apps/web/src/app/(auth)/forgot-password/page.tsx`
+- `apps/web/src/app/(auth)/reset-password/page.tsx`
+- `apps/web/src/app/(auth)/public-auth-pages.test.ts`
+- `apps/web/src/app/(auth)/forgot-password/forgot-password-page.test.tsx`
 
 ### Change Log
 
 - 2026-05-19: Created story for forgot-password auth-page refactor and public legal/help link consistency.
+- 2026-05-21: Implemented shared auth public links, auth page shell, forgot-password UX/accessibility alignment, and tests.
+- 2026-05-21: Code review batch-fix — deduplicated success copy, resend email focus, stricter footer smoke test.

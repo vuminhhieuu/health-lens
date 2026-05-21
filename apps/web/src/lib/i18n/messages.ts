@@ -21,6 +21,10 @@ export const messageCatalog = {
       "Đã gửi hướng dẫn khôi phục mật khẩu đến email của bạn.",
     forgotPasswordRateLimited: (minutes: number) =>
       `Bạn đã gửi yêu cầu quá nhiều. Vui lòng thử lại sau ${minutes} phút.`,
+    forgotPasswordCooldown: (seconds: number) =>
+      seconds >= 60
+        ? `Bạn vừa gửi yêu cầu. Vui lòng thử lại sau ${Math.ceil(seconds / 60)} phút.`
+        : `Bạn vừa gửi yêu cầu. Vui lòng thử lại sau ${seconds} giây.`,
     genericRetry: "Đã có lỗi xảy ra. Vui lòng thử lại sau.",
     resetTokenInvalid: "Token không hợp lệ hoặc đã hết hạn.",
     resetPasswordSuccess: "Mật khẩu của bạn đã được cập nhật thành công.",

@@ -3,13 +3,15 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { registerSchema } from "@healthlens/shared/schemas/auth";
 import axios from "axios";
-import { CircleHelp, Info, ShieldCheck } from "lucide-react";
+import { Info, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { AuthPageShell } from "@/components/auth/AuthPageShell";
 import { apiBaseUrl } from "@/lib/api";
+import { AUTH_PUBLIC_FOOTER_LINKS } from "@/lib/authPublicLinks";
 import { messageCatalog, registerErrorMessage } from "@/lib/i18n/messages";
 
 const POST_REGISTER_RETURN_URL_KEY = "post-register-return-url";
@@ -99,26 +101,19 @@ export default function RegisterPage() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-[#effcf9] via-[#e9f6f3] to-[#d8e5e2] text-[#121e1c]">
-      <header className="fixed top-0 z-50 w-full border-b border-[#d8e5e2] bg-[#effcf9]/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-6">
-          <Link href="/" className="text-2xl font-bold tracking-tight text-[#005049]">
-            HealthLens
-          </Link>
-          <button
-            type="button"
-            aria-label="Trợ giúp"
-            className="rounded-full p-2 text-[#3f6560] transition hover:bg-[#d8e5e2]"
-          >
-            <CircleHelp className="h-5 w-5" />
-          </button>
-        </div>
-      </header>
+  const termsLink = AUTH_PUBLIC_FOOTER_LINKS.find((link) => link.href === "/terms");
 
-      <main className="mx-auto flex min-h-screen w-full max-w-7xl items-center justify-center px-4 pb-12 pt-24">
-        <section className="w-full max-w-[500px] rounded-xl bg-white p-8 shadow-[0_8px_32px_rgba(18,30,28,0.08)] md:p-10">
-          <div className="mb-10 text-center">
+  return (
+    <AuthPageShell
+      footer
+      cardClassName="w-full max-w-[500px] rounded-xl bg-white p-8 shadow-[0_8px_32px_rgba(18,30,28,0.08)] md:p-10"
+      decoration={
+        <div className="pointer-events-none fixed bottom-0 right-0 hidden p-8 opacity-10 lg:block">
+          <ShieldCheck className="h-56 w-56 text-[#00685f]" />
+        </div>
+      }
+    >
+      <div className="mb-10 text-center">
             <h1 className="mb-2 text-3xl font-extrabold tracking-tight text-[#121e1c]">Tạo Tài Khoản</h1>
             <p className="text-base text-[#3d4947]">Bắt đầu quản lý sức khỏe của bạn</p>
             {inviteToken ? (
@@ -211,9 +206,9 @@ export default function RegisterPage() {
               />
               <span className="text-sm leading-snug text-[#3d4947]">
                 Tôi đã đọc và chấp nhận{" "}
-                <button type="button" className="font-semibold text-[#00685f] hover:underline">
+                <Link href={termsLink?.href ?? "/terms"} className="font-semibold text-[#00685f] hover:underline">
                   Điều khoản sử dụng
-                </button>
+                </Link>
               </span>
             </label>
             {errors.acceptedTerms ? <p className="text-sm text-[#ba1a1a]">{errors.acceptedTerms.message}</p> : null}
@@ -256,12 +251,6 @@ export default function RegisterPage() {
               </a>
             </p>
           </div>
-        </section>
-      </main>
-
-      <div className="pointer-events-none fixed bottom-0 right-0 hidden p-8 opacity-10 lg:block">
-        <ShieldCheck className="h-56 w-56 text-[#00685f]" />
-      </div>
-    </div>
+    </AuthPageShell>
   );
 }
