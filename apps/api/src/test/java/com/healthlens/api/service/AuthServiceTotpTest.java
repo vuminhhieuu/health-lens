@@ -27,6 +27,7 @@ import org.springframework.data.redis.core.ValueOperations;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -36,7 +37,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import java.util.concurrent.TimeUnit;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTotpTest {

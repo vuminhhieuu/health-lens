@@ -119,6 +119,7 @@ class UserTotpServiceTest {
 
         assertThat(response.secret()).isEqualTo("JBSWY3DPEHPK3PXP");
         assertThat(response.otpauthUri()).contains("otpauth://totp/");
+        assertThat(response.otpauthUri()).contains("user%40example.com");
         assertThat(response.backupCodes()).hasSize(10);
     }
 

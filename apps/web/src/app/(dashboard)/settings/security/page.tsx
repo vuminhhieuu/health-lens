@@ -235,10 +235,14 @@ export default function SecuritySettingsPage() {
     }
   };
 
-  const copyBackupCodes = () => {
+  const copyBackupCodes = async () => {
     if (!setupData?.backupCodes?.length) return;
-    void navigator.clipboard.writeText(setupData.backupCodes.join("\n"));
-    notify.success("Đã sao chép mã dự phòng.");
+    try {
+      await navigator.clipboard.writeText(setupData.backupCodes.join("\n"));
+      notify.success("Đã sao chép mã dự phòng.");
+    } catch {
+      notify.error("Không thể sao chép mã dự phòng. Vui lòng thử lại.");
+    }
   };
 
   const isEnabled = status?.enabled === true;

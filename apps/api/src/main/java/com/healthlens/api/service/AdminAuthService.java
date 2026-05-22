@@ -227,11 +227,14 @@ public class AdminAuthService {
         totpSecretRepository.save(totpSecret);
 
         // Build QR code URL (otpauth:// URI format)
-        String qrCodeUrl = String.format("otpauth://totp/%s:%s?secret=%s&issuer=%s",
-                URLEncoder.encode(ISSUER, StandardCharsets.UTF_8).replace("+", "%20"),
-                user.getEmail(), // Do not URL encode the email, authenticators handle it better
+        String encodedIssuer = encodeOtpauthComponent(ISSUER);
+        String encodedEmail = encodeOtpauthComponent(user.getEmail());
+        String qrCodeUrl = String.format(
+                "otpauth://totp/%s:%s?secret=%s&issuer=%s",
+                encodedIssuer,
+                encodedEmail,
                 secret,
-                URLEncoder.encode(ISSUER, StandardCharsets.UTF_8).replace("+", "%20"));
+                encodedIssuer);
 
         log.info("TOTP setup initiated for admin user: {}", userId);
         auditEventRecorder.recordEvent(
@@ -334,5 +337,9 @@ public class AdminAuthService {
         } catch (Exception e) {
             log.warn("Failed to blacklist admin access token on logout", e);
         }
+    }
+
+    private static String encodeOtpauthComponent(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 }

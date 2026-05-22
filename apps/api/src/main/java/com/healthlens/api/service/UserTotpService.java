@@ -136,7 +136,7 @@ public class UserTotpService {
         String otpauthUri = buildOtpauthUri(user.getEmail(), plainSecret);
 
         log.info("User TOTP setup initiated for user: {}", userId);
-        return new UserTotpSetupResponse(plainSecret, otpauthUri, otpauthUri, backupCodesPlain);
+        return new UserTotpSetupResponse(plainSecret, otpauthUri, backupCodesPlain);
     }
 
     @Transactional
@@ -339,12 +339,18 @@ public class UserTotpService {
     }
 
     private String buildOtpauthUri(String email, String secret) {
+        String encodedIssuer = encodeOtpauthComponent(ISSUER);
+        String encodedEmail = encodeOtpauthComponent(email);
         return String.format(
                 "otpauth://totp/%s:%s?secret=%s&issuer=%s",
-                URLEncoder.encode(ISSUER, StandardCharsets.UTF_8).replace("+", "%20"),
-                email,
+                encodedIssuer,
+                encodedEmail,
                 secret,
-                URLEncoder.encode(ISSUER, StandardCharsets.UTF_8).replace("+", "%20"));
+                encodedIssuer);
+    }
+
+    private static String encodeOtpauthComponent(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private User requireNonAdminUser(UUID userId) {
