@@ -48,6 +48,10 @@ public final class AuditActions {
     public static final String ADMIN_TOTP_SETUP = "ADMIN_TOTP_SETUP";
     public static final String ADMIN_TOTP_VERIFY = "ADMIN_TOTP_VERIFY";
 
+    public static final String USER_TOTP_ENABLED = "USER_TOTP_ENABLED";
+    public static final String USER_TOTP_DISABLED = "USER_TOTP_DISABLED";
+    public static final String USER_TOTP_VERIFY_FAILED = "USER_TOTP_VERIFY_FAILED";
+
     public static final String UPDATE_USER = "UPDATE_USER";
     public static final String REQUEST_ACCOUNT_DELETION = "REQUEST_ACCOUNT_DELETION";
     public static final String CANCEL_ACCOUNT_DELETION = "CANCEL_ACCOUNT_DELETION";

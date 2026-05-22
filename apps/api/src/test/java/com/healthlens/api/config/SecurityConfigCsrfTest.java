@@ -103,4 +103,24 @@ class SecurityConfigCsrfTest {
                         .with(csrf()))
                 .andExpect(status().isNoContent());
     }
+
+    @Test
+    void totpVerify_rejectsRequestWhenCsrfTokenIsMissing() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/totp/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"preAuthToken\":\"token\",\"code\":\"123456\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void totpVerify_allowsRequestWhenCsrfTokenIsPresent() throws Exception {
+        when(authService.verifyLoginTotp(any()))
+                .thenThrow(new BadCredentialsException("invalid totp"));
+
+        mockMvc.perform(post("/api/v1/auth/totp/verify")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"preAuthToken\":\"token\",\"code\":\"123456\"}"))
+                .andExpect(status().isUnauthorized());
+    }
 }

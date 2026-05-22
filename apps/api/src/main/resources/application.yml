@@ -155,6 +155,11 @@ admin:
   totp:
     encryption-key: ${ADMIN_TOTP_ENCRYPTION_KEY:dev-totp-aes-key-32-chars-long!!}
 
+user:
+  totp:
+    encryption-key: ${USER_TOTP_ENCRYPTION_KEY:${ADMIN_TOTP_ENCRYPTION_KEY:dev-totp-aes-key-32-chars-long!!}}
+    pre-auth-ttl: 300000  # 5 minutes in ms
+
 springdoc:
   api-docs:
     path: /v3/api-docs

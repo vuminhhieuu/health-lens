@@ -524,30 +524,16 @@ export default function ProfileSettingsPage() {
                   </span>
                 </div>
               </Link>
-              <div
-                className="flex items-center justify-between py-2"
-                aria-describedby="profile-2fa-coming-soon-hint"
-              >
+              <Link href="/settings/security" className="flex items-center justify-between group py-2">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-[#e9f6f3]">
+                  <div className="p-2 rounded-lg bg-[#e9f6f3] group-hover:bg-[#008378] group-hover:text-white transition-colors">
                     <Shield className="w-4 h-4" />
                   </div>
-                  <span className="font-medium text-[#3d4947]">
+                  <span className="font-medium text-[#3d4947] group-hover:text-[#00685f] transition-colors">
                     Xác thực hai yếu tố (2FA)
                   </span>
                 </div>
-                <Link
-                  href="/settings"
-                  className="text-xs font-bold uppercase tracking-wide text-[#6d7a77] bg-[#e9f6f3] px-3 py-1 rounded-full hover:bg-[#c2ebe3] hover:text-[#00685f] transition-colors"
-                  title="Xác thực hai yếu tố sẽ có trong bản cập nhật tiếp theo"
-                >
-                  Sắp có
-                </Link>
-                <span id="profile-2fa-coming-soon-hint" className="sr-only">
-                  Tính năng đang được chuẩn bị. Bạn sẽ bật xác thực hai yếu tố tại
-                  trang cài đặt khi ra mắt.
-                </span>
-              </div>
+              </Link>
               <div className="pt-6 border-t border-[#bcc9c6]/20">
                 <Link
                   href="/settings/delete-account"

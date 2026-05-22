@@ -37,6 +37,7 @@ public final class ApiRoutes {
     public static final String AUTH_CHANGE_PASSWORD = AUTH_BASE + "/change-password";
     public static final String AUTH_FORGOT_PASSWORD = AUTH_BASE + "/forgot-password";
     public static final String AUTH_RESET_PASSWORD = AUTH_BASE + "/reset-password";
+    public static final String AUTH_TOTP_VERIFY = AUTH_BASE + "/totp/verify";
 
     // =========================================
     // Dev Paths (Frontend: ApiPaths.DEV)
@@ -52,6 +53,9 @@ public final class ApiRoutes {
     public static final String USERS_ME_AVATAR = USERS_ME + "/avatar";
     public static final String USERS_ME_CONSENT = USERS_ME + "/consent";
     public static final String USERS_ME_NOTIFICATION_PREFERENCES = USERS_ME + "/notification-preferences";
+    public static final String USERS_ME_TOTP_BASE = USERS_ME + "/totp";
+    public static final String USERS_ME_TOTP_SETUP = USERS_ME_TOTP_BASE + "/setup";
+    public static final String USERS_ME_TOTP_VERIFY = USERS_ME_TOTP_BASE + "/verify";
     public static final String USERS_ME_REL = "/me";
     public static final String USERS_ME_AVATAR_REL = USERS_ME_REL + "/avatar";
     public static final String USERS_ME_NOTIFICATION_PREFERENCES_REL = USERS_ME_REL + "/notification-preferences";

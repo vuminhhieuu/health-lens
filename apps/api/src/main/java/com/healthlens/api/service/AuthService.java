@@ -1,6 +1,7 @@
 package com.healthlens.api.service;
 
 import com.healthlens.api.dto.request.LoginRequest;
+import com.healthlens.api.dto.request.UserAuthTotpVerifyRequest;
 import com.healthlens.api.dto.request.RegisterRequest;
 import com.healthlens.api.dto.response.LoginResponse;
 import com.healthlens.api.dto.response.RefreshResponse;
@@ -68,6 +69,9 @@ public class AuthService {
     private final ConsentService consentService;
     private final UserNotificationPreferenceService notificationPreferenceService;
     private final AuditEventRecorder auditEventRecorder;
+    private final UserTotpService userTotpService;
+
+    private static final String PRE_AUTH_USED_PREFIX = "pre_auth_used:";
     private final UserActivityService userActivityService;
 
     public AuthService(
@@ -85,6 +89,7 @@ public class AuthService {
             ConsentService consentService,
             UserNotificationPreferenceService notificationPreferenceService,
             AuditEventRecorder auditEventRecorder,
+            UserTotpService userTotpService,
             UserActivityService userActivityService
     ) {
         this.userRepository = userRepository;
@@ -101,6 +106,7 @@ public class AuthService {
         this.consentService = consentService;
         this.notificationPreferenceService = notificationPreferenceService;
         this.auditEventRecorder = auditEventRecorder;
+        this.userTotpService = userTotpService;
         this.userActivityService = userActivityService;
     }
 
@@ -260,6 +266,11 @@ public class AuthService {
         // Reset rate limiter on success
         rateLimiter.resetAttempts(normalizedEmail);
 
+        if (userTotpService.isVerifiedEnabled(user.getId())) {
+            String preAuthToken = jwtUtil.generatePreAuthToken(user);
+            return LoginResult.totpPending(preAuthToken, (int) jwtUtil.getPreAuthTtlSeconds());
+        }
+
         // Generate access token
         String accessToken = jwtUtil.generateAccessToken(user);
 
@@ -286,7 +297,68 @@ public class AuthService {
                 Map.of("email", user.getEmail(), "role", user.getRole().name())
         );
 
-        return new LoginResult(response, rawRefreshToken);
+        return LoginResult.completed(response, rawRefreshToken);
+    }
+
+    /**
+     * Complete login after password step when TOTP is enabled.
+     */
+    @Transactional
+    public LoginResult verifyLoginTotp(UserAuthTotpVerifyRequest request) {
+        UUID userId;
+        String jti;
+        try {
+            userId = jwtUtil.extractPreAuthUserId(request.preAuthToken());
+            jti = jwtUtil.extractPreAuthJti(request.preAuthToken());
+        } catch (Exception e) {
+            throw new BadCredentialsException("Phiên xác thực không hợp lệ hoặc đã hết hạn.");
+        }
+
+        String usedKey = PRE_AUTH_USED_PREFIX + jti;
+        long ttlMs = jwtUtil.getRemainingExpiry(request.preAuthToken());
+        Boolean reserved = redisTemplate.opsForValue().setIfAbsent(
+                usedKey, "1", ttlMs > 0 ? ttlMs : 1, TimeUnit.MILLISECONDS);
+        if (!Boolean.TRUE.equals(reserved)) {
+            throw new BadCredentialsException("Phiên xác thực không hợp lệ hoặc đã hết hạn.");
+        }
+
+        User user;
+        try {
+            user = userTotpService.validateLoginTotp(userId, request.code());
+        } catch (RuntimeException ex) {
+            redisTemplate.delete(usedKey);
+            throw ex;
+        }
+
+        if (user.getAccountStatus() == AccountStatus.PENDING_DELETION) {
+            redisTemplate.delete(usedKey);
+            throw new AccountPendingDeletionException();
+        }
+
+        String accessToken = jwtUtil.generateAccessToken(user);
+        String rawRefreshToken = jwtUtil.generateRefreshToken();
+        String tokenHash = sha256(rawRefreshToken);
+
+        RefreshToken refreshToken = new RefreshToken();
+        refreshToken.setUserId(user.getId());
+        refreshToken.setSessionFamilyId(UUID.randomUUID());
+        refreshToken.setTokenHash(tokenHash);
+        refreshToken.setExpiresAt(Instant.now().plusMillis(jwtUtil.getRefreshTtl()));
+        refreshTokenRepository.save(refreshToken);
+
+        LoginResponse response = new LoginResponse(
+                accessToken,
+                new LoginResponse.UserInfo(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName()));
+
+        auditEventRecorder.recordEvent(
+                user.getId(),
+                AuditActions.LOGIN,
+                AuditResourceTypes.AUTH,
+                user.getId(),
+                Map.of("email", user.getEmail(), "role", user.getRole().name(), "via", "totp")
+        );
+
+        return LoginResult.completed(response, rawRefreshToken);
     }
 
     /**
@@ -348,7 +420,7 @@ public class AuthService {
                 Map.of("email", user.getEmail())
         );
 
-        return new LoginResult(response, rotated.rawRefreshToken());
+        return LoginResult.completed(response, rotated.rawRefreshToken());
     }
 
     private RotatedRefreshToken rotateRefreshToken(String rawRefreshToken) {
@@ -607,7 +679,20 @@ public class AuthService {
     private record RotatedRefreshToken(User user, String rawRefreshToken) {
     }
 
-    public record LoginResult(LoginResponse response, String rawRefreshToken) {
+    public record LoginResult(
+            LoginResponse response,
+            String rawRefreshToken,
+            boolean totpRequired,
+            String preAuthToken,
+            int expiresInSeconds
+    ) {
+        public static LoginResult completed(LoginResponse response, String rawRefreshToken) {
+            return new LoginResult(response, rawRefreshToken, false, null, 0);
+        }
+
+        public static LoginResult totpPending(String preAuthToken, int expiresInSeconds) {
+            return new LoginResult(null, null, true, preAuthToken, expiresInSeconds);
+        }
     }
 
     /**

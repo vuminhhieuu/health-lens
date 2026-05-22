@@ -24,6 +24,10 @@
 
 - Sprint status includes unrelated `core-7-9-confirm-and-document-event-driven-architecture` status movement at `_bmad-output/implementation-artifacts/sprint-status.yaml:226`. Deferred because it appears to belong to the prior Story 7.9 workflow rather than the Story 7.10 email delivery implementation.
 
+## Deferred from: code review of 11-2-user-two-factor-authentication-totp.md (2026-05-22)
+
+- Thiếu audit `USER_TOTP_SETUP` khi bắt đầu setup (admin có `ADMIN_TOTP_SETUP`) — cải thiện observability, không chặn AC.
+
 ## Deferred from: code review of pae-2-marketing-route-group-and-root-routing.md (2026-05-20)
 
 - Trùng lặp logic `logout` và query `currentUser` giữa `MarketingHeader` và `(dashboard)/layout` — tech debt nhỏ sau refactor header; có thể gom hook dùng chung sau.

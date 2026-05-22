@@ -5,6 +5,7 @@ import com.healthlens.api.constants.SecurityConstants;
 import com.healthlens.api.dto.request.ChangePasswordRequest;
 import com.healthlens.api.dto.request.ForgotPasswordRequest;
 import com.healthlens.api.dto.request.LoginRequest;
+import com.healthlens.api.dto.request.UserAuthTotpVerifyRequest;
 import com.healthlens.api.dto.request.RegisterRequest;
 import com.healthlens.api.dto.request.ResetPasswordRequest;
 import com.healthlens.api.dto.request.VerifyEmailRequest;
@@ -113,7 +114,51 @@ public class AuthController {
 
         AuthService.LoginResult result = authService.login(request);
 
+        if (result.totpRequired()) {
+            Map<String, Object> body = Map.of(
+                    "data", Map.of(
+                            "totpRequired", true,
+                            "preAuthToken", result.preAuthToken(),
+                            "expiresInSeconds", result.expiresInSeconds()
+                    ),
+                    "meta", Map.of(
+                            "timestamp", Instant.now().toString(),
+                            "requestId", UUID.randomUUID().toString()
+                    )
+            );
+            return ResponseEntity.ok(body);
+        }
+
         // Set refresh token as HttpOnly cookie
+        setRefreshTokenCookie(response, result.rawRefreshToken());
+
+        Map<String, Object> body = Map.of(
+                "data", Map.of(
+                        "accessToken", result.response().accessToken(),
+                        "user", Map.of(
+                                "id", result.response().user().id(),
+                                "email", result.response().user().email(),
+                                "role", result.response().user().role()
+                        )
+                ),
+                "meta", Map.of(
+                        "timestamp", Instant.now().toString(),
+                        "requestId", UUID.randomUUID().toString()
+                )
+        );
+
+        return ResponseEntity.ok(body);
+    }
+
+    /**
+     * POST /api/v1/auth/totp/verify — complete login when user TOTP is enabled.
+     */
+    @PostMapping("/totp/verify")
+    public ResponseEntity<Map<String, Object>> verifyLoginTotp(
+            @Valid @RequestBody UserAuthTotpVerifyRequest request,
+            HttpServletResponse response) {
+
+        AuthService.LoginResult result = authService.verifyLoginTotp(request);
         setRefreshTokenCookie(response, result.rawRefreshToken());
 
         Map<String, Object> body = Map.of(

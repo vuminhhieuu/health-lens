@@ -157,6 +157,7 @@ public class SecurityConfig {
             path = path.substring(contextPath.length());
         }
         if (ApiRoutes.AUTH_LOGIN.equals(path)
+                || ApiRoutes.AUTH_TOTP_VERIFY.equals(path)
                 || ApiRoutes.AUTH_LOGOUT.equals(path)
                 || (ApiRoutes.AUTH_REFRESH.equals(path) && hasRefreshTokenCookie(request))) {
             return true;

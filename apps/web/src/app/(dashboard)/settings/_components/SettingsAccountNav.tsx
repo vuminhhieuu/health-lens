@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Bell, Info, KeyRound, Shield, UserRound } from "lucide-react";
+import { Bell, Info, KeyRound, Shield, ShieldCheck, UserRound } from "lucide-react";
 import Link from "next/link";
 
 export type SettingsAccountNavActive =
@@ -7,7 +7,8 @@ export type SettingsAccountNavActive =
   | "privacy"
   | "profile"
   | "notifications"
-  | "about";
+  | "about"
+  | "security";
 
 type NavItemProps = {
   href?: string;
@@ -66,6 +67,12 @@ export function SettingsAccountNav({ active }: SettingsAccountNavProps) {
         active={active === "change-password"}
       />
       <NavItem
+        href="/settings/security"
+        icon={ShieldCheck}
+        label="Bảo mật & 2FA"
+        active={active === "security"}
+      />
+      <NavItem
         href="/settings/privacy"
         icon={Shield}
         label="Quyền riêng tư"
@@ -89,7 +96,6 @@ export function SettingsAccountNav({ active }: SettingsAccountNavProps) {
         label="Giới thiệu"
         active={active === "about"}
       />
-      <NavItem icon={Shield} label="Xác thực hai yếu tố (sắp có)" disabled />
     </nav>
   );
 }

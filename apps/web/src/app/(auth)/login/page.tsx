@@ -52,6 +52,9 @@ function LoginContent() {
   const setAuth = useAuthStore((s) => s.setAuth);
   const setConsentState = useAuthStore((s) => s.setConsentState);
 
+  const [loginStep, setLoginStep] = useState<"credentials" | "totp">("credentials");
+  const [preAuthToken, setPreAuthToken] = useState("");
+  const [totpCode, setTotpCode] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isPendingDeletionBlocked, setIsPendingDeletionBlocked] = useState(
@@ -74,42 +77,64 @@ function LoginContent() {
     },
   });
 
+  const finishLogin = async (accessToken: string, user: { id: string | number; email: string; role: string; fullName?: string }) => {
+    setAuth(
+      { id: String(user.id), email: user.email, role: user.role, fullName: user.fullName ?? undefined },
+      accessToken,
+    );
+
+    try {
+      await syncActiveConsentVersion().catch(() => {});
+      const consentRes = await apiClient.get<{
+        consentGiven?: boolean;
+        consentVersion?: string | null;
+      }>(ApiPaths.CONSENT.ME);
+      const body = consentRes.data;
+      const cg = body?.consentGiven ?? false;
+      const cv =
+        body?.consentVersion === undefined || body?.consentVersion === null
+          ? null
+          : String(body.consentVersion);
+      setConsentState(cg, cv);
+    } catch {
+      // Keep consent reset from setAuth until next refresh/bootstrap.
+    }
+
+    const returnUrl = safeInternalReturnUrl(searchParams.get("returnUrl"));
+    router.push(returnUrl === "/" ? "/home" : returnUrl);
+  };
+
   const onSubmit = async (data: LoginInput) => {
     setSubmitError("");
     setIsPendingDeletionBlocked(false);
 
     try {
-      const response = await apiClient.post(API_ROUTES.AUTH.LOGIN, {
+      const response = await apiClient.post<{
+        data: {
+          accessToken?: string;
+          user?: { id: string | number; email: string; role: string; fullName?: string };
+          totpRequired?: boolean;
+          preAuthToken?: string;
+        };
+      }>(API_ROUTES.AUTH.LOGIN, {
         email: data.email,
         password: data.password,
       });
 
-      const { accessToken, user } = response.data.data;
+      const payload = response.data.data;
 
-      setAuth(
-        { id: String(user.id), email: user.email, role: user.role, fullName: user.fullName ?? undefined },
-        accessToken,
-      );
-
-      try {
-        await syncActiveConsentVersion().catch(() => {});
-        const consentRes = await apiClient.get<{
-          consentGiven?: boolean;
-          consentVersion?: string | null;
-        }>(ApiPaths.CONSENT.ME);
-        const body = consentRes.data;
-        const cg = body?.consentGiven ?? false;
-        const cv =
-          body?.consentVersion === undefined || body?.consentVersion === null
-            ? null
-            : String(body.consentVersion);
-        setConsentState(cg, cv);
-      } catch {
-        // Keep consent reset from setAuth until next refresh/bootstrap.
+      if (payload.totpRequired && payload.preAuthToken) {
+        setPreAuthToken(payload.preAuthToken);
+        setLoginStep("totp");
+        return;
       }
 
-      const returnUrl = safeInternalReturnUrl(searchParams.get("returnUrl"));
-      router.push(returnUrl === "/" ? "/home" : returnUrl);
+      if (!payload.accessToken || !payload.user) {
+        setSubmitError("Đăng nhập thất bại. Vui lòng thử lại.");
+        return;
+      }
+
+      await finishLogin(payload.accessToken, payload.user);
     } catch (error: unknown) {
       const errorCode = getApiErrorCode(error);
       const message = authErrorMessage(error);
@@ -120,6 +145,30 @@ function LoginContent() {
       } else {
         setSubmitError(message);
       }
+    }
+  };
+
+  const onTotpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitError("");
+
+    if (!totpCode.trim() || totpCode.trim().length < 6) {
+      setSubmitError("Nhập mã 6 chữ số hoặc mã dự phòng.");
+      return;
+    }
+
+    try {
+      const response = await apiClient.post<{
+        data: { accessToken: string; user: { id: string | number; email: string; role: string; fullName?: string } };
+      }>(ApiPaths.AUTH.TOTP_VERIFY, {
+        preAuthToken,
+        code: totpCode.trim(),
+      });
+
+      const { accessToken, user } = response.data.data;
+      await finishLogin(accessToken, user);
+    } catch (error: unknown) {
+      setSubmitError(authErrorMessage(error));
     }
   };
 
@@ -182,6 +231,52 @@ function LoginContent() {
             </div>
           ) : null}
 
+          {loginStep === "totp" ? (
+            <form className="space-y-6" onSubmit={onTotpSubmit} noValidate>
+              <p className="text-center text-sm text-[#3d4947]">
+                Tài khoản của bạn có bật xác thực hai yếu tố. Nhập mã từ ứng dụng xác thực hoặc mã dự phòng.
+              </p>
+              <div className="space-y-2">
+                <label htmlFor="login-totp" className="ml-1 block text-sm font-semibold text-[#3d4947]">
+                  Mã xác thực
+                </label>
+                <input
+                  id="login-totp"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value)}
+                  placeholder="000000"
+                  className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 text-center text-lg tracking-widest text-[#121e1c] outline-none transition focus:border-[#00685f]"
+                />
+              </div>
+              {submitError ? (
+                <p role="alert" className="text-center text-sm font-medium text-[#ba1a1a]">
+                  {submitError}
+                </p>
+              ) : null}
+              <button
+                type="submit"
+                className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-[#00685f] to-[#008378] text-lg font-bold text-white shadow-lg transition hover:brightness-110"
+              >
+                <ShieldCheck className="h-5 w-5" />
+                Xác nhận
+              </button>
+              <button
+                type="button"
+                className="w-full text-sm font-semibold text-[#00685f] hover:underline"
+                onClick={() => {
+                  setLoginStep("credentials");
+                  setPreAuthToken("");
+                  setTotpCode("");
+                  setSubmitError("");
+                }}
+              >
+                Quay lại đăng nhập
+              </button>
+            </form>
+          ) : (
           <form
             className="space-y-6"
             onSubmit={handleSubmit(onSubmit)}
@@ -288,6 +383,7 @@ function LoginContent() {
               )}
             </button>
           </form>
+          )}
 
           {/* Register link */}
           <div className="mt-8 border-t border-[#d8e5e2] pt-6 text-center">

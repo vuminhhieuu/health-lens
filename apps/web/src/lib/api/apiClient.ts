@@ -63,6 +63,7 @@ function isUnsafeAuthCookieEndpoint(url?: string, method?: string): boolean {
 
   return Boolean(
     url?.includes(API_ROUTES.AUTH.LOGIN) ||
+      url?.includes(API_ROUTES.AUTH.TOTP_VERIFY) ||
       url?.includes(API_ROUTES.AUTH.REFRESH) ||
       url?.includes(API_ROUTES.AUTH.LOGOUT),
   );
