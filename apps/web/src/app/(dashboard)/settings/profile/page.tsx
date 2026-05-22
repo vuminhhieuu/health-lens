@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { apiClient } from "@/lib/api/apiClient";
+import { normalizeOptionalTextField } from "@/lib/forms/normalizeOptionalTextField";
 import { API_ROUTES } from "@/lib/api/routes";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { SettingsDirectContactCard } from "../_components/SettingsDirectContactCard";
@@ -49,14 +50,6 @@ type ProfileSettingsInput = UpdateUserProfileInput & UpdateHealthContextInput;
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 const ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
-
-function normalizeOptionalTextField(value?: string | null): string | null {
-  if (value == null) {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
 
 function getInitials(name?: string | null) {
   const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
@@ -197,9 +190,6 @@ export default function ProfileSettingsPage() {
         error instanceof Error && error.message.includes("thông tin sức khỏe")
           ? error.message
           : "Đã xảy ra lỗi khi cập nhật.";
-      if (!message.includes("thông tin sức khỏe")) {
-        setAvatarError("Không thể lưu ảnh đại diện. Vui lòng thử lại.");
-      }
       notify.error(message);
     },
   });

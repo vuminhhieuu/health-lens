@@ -8,14 +8,7 @@ import { UpdateProfileInput, updateProfileSchema } from "@healthlens/shared";
 import type { ProfileGender } from "@healthlens/shared";
 
 import { InlineFieldError } from "@/components/ui/StateComponents";
-
-function normalizeOptionalTextField(value?: string | null): string | null {
-  if (value == null) {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
+import { normalizeOptionalTextField } from "@/lib/forms/normalizeOptionalTextField";
 
 type EditableProfile = {
   id: string;

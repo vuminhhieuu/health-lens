@@ -38,6 +38,9 @@ class UserServiceTest {
     private ProfileRepository profileRepository;
 
     @Mock
+    private ProfileService profileService;
+
+    @Mock
     private AuditEventRecorder auditEventRecorder;
 
     @Mock
@@ -112,11 +115,13 @@ class UserServiceTest {
 
     @Test
     void updateCurrentUser_PartialUpdate_Success() {
+        testUser.setPersonalDescription("Giữ mô tả");
+        testUser.setPersonalNotes("Giữ ghi chú");
         when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
         when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
         when(profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)).thenReturn(Optional.empty());
 
-        // Update only full name
+        // Update only full name — personal fields omitted (null) must not wipe existing data
         UpdateUserRequest request = new UpdateUserRequest("Just Name", null, null, null, null);
 
         UserResponse response = userService.updateCurrentUser(userId, request);
@@ -124,6 +129,8 @@ class UserServiceTest {
         assertThat(response.fullName()).isEqualTo("Just Name");
         assertThat(response.birthDate()).isEqualTo(LocalDate.of(1990, 1, 1)); // unchanged
         assertThat(response.gender()).isEqualTo("male"); // unchanged
+        assertThat(testUser.getPersonalDescription()).isEqualTo("Giữ mô tả");
+        assertThat(testUser.getPersonalNotes()).isEqualTo("Giữ ghi chú");
 
         verify(userRepository).save(testUser);
     }
@@ -284,7 +291,7 @@ class UserServiceTest {
                 null,
                 null,
                 "",
-                "   ");
+                "   "); // empty string clears via normalize
 
         UserResponse response = userService.updateCurrentUser(userId, request);
 
@@ -309,7 +316,7 @@ class UserServiceTest {
         when(profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)).thenReturn(Optional.of(defaultProfile));
         when(profileRepository.save(any(Profile.class))).thenAnswer(i -> i.getArgument(0));
 
-        UpdateHealthContextRequest request = new UpdateHealthContextRequest("", "  ", null);
+        UpdateHealthContextRequest request = new UpdateHealthContextRequest("", "  ", "");
 
         UserResponse response = userService.updateHealthContext(userId, request);
 
@@ -319,6 +326,27 @@ class UserServiceTest {
         assertThat(response.chronicConditions()).isNull();
         assertThat(response.currentMedications()).isNull();
         assertThat(response.allergies()).isNull();
+    }
+
+    @Test
+    void updateHealthContext_UsesProfileServiceEnsureDefaultWhenMissing() {
+        Profile defaultProfile = new Profile();
+        defaultProfile.setId(UUID.randomUUID());
+        defaultProfile.setUser(testUser);
+        defaultProfile.setDisplayName("Old Name");
+        defaultProfile.setDefault(true);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
+        when(profileRepository.findFirstByUserIdAndIsDefaultTrue(userId))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(defaultProfile));
+        when(profileRepository.save(any(Profile.class))).thenAnswer(i -> i.getArgument(0));
+
+        userService.updateHealthContext(
+                userId,
+                new UpdateHealthContextRequest("Đái tháo đường", null, null));
+
+        verify(profileService).ensureDefaultProfile(userId);
     }
 
     @Test

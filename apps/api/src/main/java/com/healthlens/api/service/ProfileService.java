@@ -386,9 +386,15 @@ public class ProfileService {
         profile.setBirthDate(request.birthDate());
         profile.setGender(normalizeOptionalText(request.gender()));
         profile.setNotes(normalizedNotes);
-        profile.setChronicConditions(normalizeClinicalText(request.chronicConditions(), "Bệnh nền"));
-        profile.setCurrentMedications(normalizeClinicalText(request.currentMedications(), "Thuốc đang dùng"));
-        profile.setAllergies(normalizeClinicalText(request.allergies(), "Dị ứng"));
+        if (request.chronicConditions() != null) {
+            profile.setChronicConditions(normalizeClinicalText(request.chronicConditions(), "Bệnh nền"));
+        }
+        if (request.currentMedications() != null) {
+            profile.setCurrentMedications(normalizeClinicalText(request.currentMedications(), "Thuốc đang dùng"));
+        }
+        if (request.allergies() != null) {
+            profile.setAllergies(normalizeClinicalText(request.allergies(), "Dị ứng"));
+        }
 
         // Sync with User entity if this is a default profile
         if (profile.isDefault()) {

@@ -284,6 +284,37 @@ class ProfileServiceTest {
         }
 
         @Test
+        void updateProfile_PreservesClinicalFieldsOnPartialUpdate() {
+                UUID profileId = UUID.randomUUID();
+                Profile profile = new Profile();
+                profile.setId(profileId);
+                profile.setUser(testUser);
+                profile.setDisplayName("Mẹ");
+                profile.setChronicConditions("Cao huyết áp");
+                profile.setCurrentMedications("Amlodipine");
+                profile.setAllergies("Penicillin");
+                profile.setDefault(false);
+
+                when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+                when(profileRepository.save(any(Profile.class))).thenAnswer(i -> i.getArgument(0));
+
+                UpdateProfileRequest request = new UpdateProfileRequest(
+                                "Mẹ đổi tên",
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null);
+
+                profileService.updateProfile(userId, profileId, request);
+
+                assertThat(profile.getChronicConditions()).isEqualTo("Cao huyết áp");
+                assertThat(profile.getCurrentMedications()).isEqualTo("Amlodipine");
+                assertThat(profile.getAllergies()).isEqualTo("Penicillin");
+        }
+
+        @Test
         void updateProfile_ClearsClinicalFieldsWhenEmpty() {
                 UUID profileId = UUID.randomUUID();
                 Profile profile = new Profile();
@@ -305,7 +336,7 @@ class ProfileServiceTest {
                                 null,
                                 "",
                                 "  ",
-                                null);
+                                "");
 
                 ProfileResponse response = profileService.updateProfile(userId, profileId, request);
 

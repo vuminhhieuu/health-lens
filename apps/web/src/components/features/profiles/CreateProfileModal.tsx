@@ -7,14 +7,7 @@ import { X, UserPlus, Info, Loader2 } from "lucide-react";
 import { CreateProfileInput, createProfileSchema } from "@healthlens/shared";
 
 import { InlineFieldError } from "@/components/ui/StateComponents";
-
-function normalizeOptionalTextField(value?: string | null): string | null {
-  if (value == null) {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
+import { normalizeOptionalTextField } from "@/lib/forms/normalizeOptionalTextField";
 
 interface CreateProfileModalProps {
   isOpen: boolean;

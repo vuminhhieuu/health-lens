@@ -44,17 +44,20 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final ProfileRepository profileRepository;
+    private final ProfileService profileService;
     private final AuditEventRecorder auditEventRecorder;
     private final StorageService storageService;
 
     public UserService(
             UserRepository userRepository,
             ProfileRepository profileRepository,
+            ProfileService profileService,
             AuditEventRecorder auditEventRecorder,
             StorageService storageService
     ) {
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
+        this.profileService = profileService;
         this.auditEventRecorder = auditEventRecorder;
         this.storageService = storageService;
     }
@@ -163,10 +166,14 @@ public class UserService {
         if (request.gender() != null) {
             user.setGender(normalizeGender(request.gender()));
         }
-        user.setPersonalDescription(
-                normalizePersonalText(request.personalDescription(), MAX_PERSONAL_TEXT_LENGTH, "Mô tả cá nhân"));
-        user.setPersonalNotes(
-                normalizePersonalText(request.personalNotes(), MAX_PERSONAL_TEXT_LENGTH, "Ghi chú cá nhân"));
+        if (request.personalDescription() != null) {
+            user.setPersonalDescription(
+                    normalizePersonalText(request.personalDescription(), MAX_PERSONAL_TEXT_LENGTH, "Mô tả cá nhân"));
+        }
+        if (request.personalNotes() != null) {
+            user.setPersonalNotes(
+                    normalizePersonalText(request.personalNotes(), MAX_PERSONAL_TEXT_LENGTH, "Ghi chú cá nhân"));
+        }
 
         user = userRepository.save(user);
         syncDefaultProfile(userId, user);
@@ -190,12 +197,11 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
+        if (profileRepository.findFirstByUserIdAndIsDefaultTrue(userId).isEmpty()) {
+            profileService.ensureDefaultProfile(userId);
+        }
         Profile defaultProfile = profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)
-                .orElseGet(() -> {
-                    ensureDefaultProfileExists(userId, user);
-                    return profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)
-                            .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hồ sơ mặc định"));
-                });
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hồ sơ mặc định"));
 
         defaultProfile.setChronicConditions(
                 normalizeClinicalText(request.chronicConditions(), "Bệnh nền"));
@@ -213,23 +219,6 @@ public class UserService {
                 Map.of("action", "health_context_update"));
 
         return mapToResponse(user);
-    }
-
-    private void ensureDefaultProfileExists(UUID userId, User user) {
-        if (profileRepository.findFirstByUserIdAndIsDefaultTrue(userId).isPresent()) {
-            return;
-        }
-        Profile profile = new Profile();
-        profile.setUser(user);
-        String displayName = user.getFullName() != null ? user.getFullName().trim() : "Hồ sơ của tôi";
-        if (displayName.length() > 100) {
-            displayName = displayName.substring(0, 100);
-        }
-        profile.setDisplayName(displayName);
-        profile.setBirthDate(user.getBirthDate());
-        profile.setGender(user.getGender());
-        profile.setDefault(true);
-        profileRepository.save(profile);
     }
 
     private void syncDefaultProfile(UUID userId, User user) {
