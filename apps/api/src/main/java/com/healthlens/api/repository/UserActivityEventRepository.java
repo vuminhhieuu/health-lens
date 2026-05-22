@@ -83,4 +83,46 @@ public interface UserActivityEventRepository extends JpaRepository<UserActivityE
     int insertAuthEventIfAbsent(
             @Param("id") UUID id,
             @Param("userId") UUID userId);
+
+    /**
+     * Immediate INSERT for product analytics (story 4.1). Unlike {@code save()}, executes in the
+     * current round-trip so constraint errors are catchable without deferring to commit flush.
+     */
+    @Modifying
+    @Query(value = """
+        INSERT INTO user_activity_events (
+            id, user_id, event_type, is_retry, profile_id, record_id,
+            file_type, provider, confidence, has_low_confidence_metrics,
+            failure_reason, created_at
+        ) VALUES (
+            :id, :userId, :eventType, :isRetry, :profileId, :recordId,
+            :fileType, :provider, :confidence, :hasLowConfidenceMetrics,
+            :failureReason, :createdAt
+        )
+        """, nativeQuery = true)
+    int insertProductEvent(
+            @Param("id") UUID id,
+            @Param("userId") UUID userId,
+            @Param("eventType") String eventType,
+            @Param("isRetry") boolean isRetry,
+            @Param("profileId") UUID profileId,
+            @Param("recordId") UUID recordId,
+            @Param("fileType") String fileType,
+            @Param("provider") String provider,
+            @Param("confidence") Double confidence,
+            @Param("hasLowConfidenceMetrics") Boolean hasLowConfidenceMetrics,
+            @Param("failureReason") String failureReason,
+            @Param("createdAt") Instant createdAt);
+
+    @Query(value = """
+        SELECT COUNT(*)
+        FROM user_activity_events
+        WHERE event_type = :eventType
+          AND created_at >= :from
+          AND created_at < :toExclusive
+        """, nativeQuery = true)
+    long countProductEvents(
+            @Param("eventType") String eventType,
+            @Param("from") Instant from,
+            @Param("toExclusive") Instant toExclusive);
 }

@@ -70,6 +70,7 @@ class AuthServiceTest {
     @Mock private ConsentService consentService;
     @Mock private UserNotificationPreferenceService notificationPreferenceService;
     @Mock private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
+    @Mock private UserActivityService userActivityService;
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private StreamOperations<String, Object, Object> streamOperations;
 
@@ -81,7 +82,8 @@ class AuthServiceTest {
                 userRepository, tokenRepository, passwordResetTokenRepository,
                 refreshTokenRepository, passwordEncoder, emailEventPublisher,
                 jwtUtil, rateLimiter, forgotPasswordRateLimiter, verifyEmailRateLimiter,
-                redisTemplate, consentService, notificationPreferenceService, auditEventRecorder
+                redisTemplate, consentService, notificationPreferenceService, auditEventRecorder,
+                userActivityService
         );
     }
 
@@ -102,6 +104,7 @@ class AuthServiceTest {
 
         verify(notificationPreferenceService).createDefaultPreferences(user.getId());
         verify(emailEventPublisher).publishVerification(eq(user), anyString());
+        verify(userActivityService).recordUserRegistered(user.getId());
     }
 
     @Test

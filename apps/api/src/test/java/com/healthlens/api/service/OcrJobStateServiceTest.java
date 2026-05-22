@@ -144,7 +144,7 @@ class OcrJobStateServiceTest {
         existing.setFileKey("health-records/%s/%s/%s/original.jpg".formatted(actorId, profileId, recordId));
         when(jobRepository.findByIdempotencyKey("idem")).thenReturn(Optional.of(existing));
 
-        service.completeSucceeded(recordId, "{}", null, false, "idem");
+        service.completeSucceeded(recordId, "{}", null, false, "idem", "easyocr", 0.9f);
 
         verify(auditEventRecorder).recordEvent(
                 eq(actorId),

@@ -112,8 +112,10 @@ public class OcrJobConsumer {
 
     private boolean handleRecordWithCorrelation(MapRecord<String, Object, Object> record) {
         Map<String, Object> payload = normalizePayload(record.getValue());
-        String correlationId = valueAsString(payload.get("correlationId"));
-        CorrelationContext.ensureForJob(correlationId.isBlank() ? record.getId().getValue() : correlationId);
+        String payloadCorrelationId = valueAsString(payload.get("correlationId"));
+        String jobCorrelationFallback =
+                payloadCorrelationId.isBlank() ? record.getId().getValue() : payloadCorrelationId;
+        CorrelationContext.ensureForJob(CorrelationContext.resolveCorrelationIdForJob(jobCorrelationFallback));
         try {
             return handlePayload(record, payload);
         } finally {
@@ -178,8 +180,11 @@ public class OcrJobConsumer {
                     recordId,
                     fileKey,
                     mimeType);
-            return persistTerminalFailure(recordId, idempotencyKey,
-                    mimeType.isBlank() ? "missing_mime_type" : "unsupported_mime_type");
+            return persistTerminalFailure(
+                    recordId,
+                    idempotencyKey,
+                    mimeType.isBlank() ? "missing_mime_type" : "unsupported_mime_type",
+                    null);
         }
 
         String downloadUrl = storageService.generateInternalDownloadUrl(fileKey, Duration.ofMinutes(5));
@@ -194,9 +199,9 @@ public class OcrJobConsumer {
                 processingResult = ocrService.processDocument(downloadUrl, mimeType);
             }
         } catch (ResourceAccessException ex) {
-            return persistRetryableFailure(recordId, idempotencyKey, "provider_timeout");
+            return persistRetryableFailure(recordId, idempotencyKey, "provider_timeout", null);
         } catch (Exception ex) {
-            return persistRetryableFailure(recordId, idempotencyKey, "provider_transient_error");
+            return persistRetryableFailure(recordId, idempotencyKey, "provider_transient_error", null);
         }
 
         try {
@@ -204,7 +209,7 @@ public class OcrJobConsumer {
         } catch (Exception ex) {
             log.warn("[OcrJobConsumer] Post-provider OCR persistence failed. recordId={} jobId={} correlationId={}",
                     recordId, jobId, correlationId, ex);
-            return persistRetryableFailure(recordId, idempotencyKey, "persistence_error");
+            return persistRetryableFailure(recordId, idempotencyKey, "persistence_error", processingResult.provider());
         }
     }
 
@@ -229,10 +234,14 @@ public class OcrJobConsumer {
         float failureThreshold = normalizedFailureThreshold();
         float reviewThreshold = normalizedReviewThreshold();
         if ("all-providers-failed".equals(result.getSource())) {
-            return persistRetryableFailure(recordId, idempotencyKey, resolveFailureReason(result, processingResult));
+            return persistRetryableFailure(
+                    recordId,
+                    idempotencyKey,
+                    resolveFailureReason(result, processingResult),
+                    processingResult.provider());
         }
         if (result.getConfidence() < failureThreshold) {
-            return persistTerminalFailure(recordId, idempotencyKey, "low_confidence");
+            return persistTerminalFailure(recordId, idempotencyKey, "low_confidence", processingResult.provider());
         }
 
         OcrService.OcrExtractionResult parsedData = ocrService.parseMetrics(result.getOrderedTextForParser(),
@@ -261,16 +270,27 @@ public class OcrJobConsumer {
         } catch (Exception ex) {
             throw new IllegalStateException("Cannot serialize OCR payload", ex);
         }
-        ocrJobStateService.completeSucceeded(recordId, rawOcrJson, parsedData, hasLowConfidenceMetrics, idempotencyKey);
+        ocrJobStateService.completeSucceeded(
+                recordId,
+                rawOcrJson,
+                parsedData,
+                hasLowConfidenceMetrics,
+                idempotencyKey,
+                processingResult.provider(),
+                result.getConfidence());
         return true;
     }
 
-    private boolean persistRetryableFailure(UUID recordId, String idempotencyKey, String reason) {
+    private boolean persistRetryableFailure(
+            UUID recordId,
+            String idempotencyKey,
+            String reason,
+            String providerIfKnown) {
         OcrJobStateService.RetryDecision retryDecision = ocrJobStateService.markRetryableOrDeadLetter(idempotencyKey,
                 reason);
         if (retryDecision.deadLettered()) {
             try {
-                healthRecordService.markOcrFailed(recordId, reason);
+                healthRecordService.markOcrFailed(recordId, reason, providerIfKnown);
             } catch (Exception ex) {
                 log.warn(
                         "[OcrJobConsumer] OCR job is DLQ'd but health record failure reason could not be updated. recordId={}",
@@ -280,8 +300,12 @@ public class OcrJobConsumer {
         return true;
     }
 
-    private boolean persistTerminalFailure(UUID recordId, String idempotencyKey, String reason) {
-        healthRecordService.markOcrFailed(recordId, reason);
+    private boolean persistTerminalFailure(
+            UUID recordId,
+            String idempotencyKey,
+            String reason,
+            String providerIfKnown) {
+        healthRecordService.markOcrFailed(recordId, reason, providerIfKnown);
         ocrJobStateService.markTerminal(idempotencyKey, reason);
         return true;
     }

@@ -1,5 +1,6 @@
 package com.healthlens.api.service;
 
+import com.healthlens.api.activity.UserActivityEventType;
 import com.healthlens.api.support.PostgresTestContainerBase;
 import com.healthlens.api.dto.request.RegisterRequest;
 import com.healthlens.api.entity.RefreshToken;
@@ -7,6 +8,7 @@ import com.healthlens.api.entity.User;
 import com.healthlens.api.entity.UserRole;
 import com.healthlens.api.repository.EmailVerificationTokenRepository;
 import com.healthlens.api.repository.RefreshTokenRepository;
+import com.healthlens.api.repository.UserActivityEventRepository;
 import com.healthlens.api.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import org.junit.jupiter.api.condition.EnabledIf;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -42,6 +45,7 @@ import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @Transactional
+@EnabledIf("com.healthlens.api.support.PostgresTestContainerBase#isDockerAvailable")
 class AuthServiceIntegrationTest extends PostgresTestContainerBase {
 
     @Autowired
@@ -58,6 +62,9 @@ class AuthServiceIntegrationTest extends PostgresTestContainerBase {
 
     @Autowired
     private RefreshTokenRepository refreshTokenRepository;
+
+    @Autowired
+    private UserActivityEventRepository userActivityEventRepository;
 
     @MockitoBean
     private EmailService emailService;
@@ -89,6 +96,12 @@ class AuthServiceIntegrationTest extends PostgresTestContainerBase {
         assertThat(tokenRepository.findAll())
                 .anySatisfy(token -> assertThat(token.getUser().getId()).isEqualTo(saved.getId()));
         verify(emailService, never()).sendVerificationEmail(any(User.class), any(String.class));
+
+        Instant now = Instant.now();
+        assertThat(userActivityEventRepository.countProductEvents(
+                UserActivityEventType.USER_REGISTERED,
+                now.minus(1, ChronoUnit.DAYS),
+                now.plus(1, ChronoUnit.HOURS))).isEqualTo(1);
     }
 
     @Test

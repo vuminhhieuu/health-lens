@@ -1,6 +1,6 @@
 # Story 4.1: Product Event Instrumentation For Admin Analytics
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 
@@ -23,11 +23,11 @@ so that analytics charts reflect real usage.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 - Define product event schema and retention assumptions (AC: #1, #2, #3)
-- [ ] Task 2 - Persist event records in queryable storage (AC: #3)
-- [ ] Task 3 - Instrument registration, upload, and OCR lifecycle paths (AC: #1, #2)
-- [ ] Task 4 - Add non-blocking write/error telemetry behavior (AC: #4)
-- [ ] Task 5 - Add tests for emitted events and queryability (AC: #1-#4)
+- [x] Task 1 - Define product event schema and retention assumptions (AC: #1, #2, #3)
+- [x] Task 2 - Persist event records in queryable storage (AC: #3)
+- [x] Task 3 - Instrument registration, upload, and OCR lifecycle paths (AC: #1, #2)
+- [x] Task 4 - Add non-blocking write/error telemetry behavior (AC: #4)
+- [x] Task 5 - Add tests for emitted events and queryability (AC: #1-#4)
 
 ## Dev Notes
 
@@ -54,10 +54,40 @@ so that analytics charts reflect real usage.
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Composer
 
 ### Debug Log References
 
+- Extended `user_activity_events` (V047) with product dimensions; retention aligned to 90-day admin activity window (documented in migration).
+- `REQUIRES_NEW` for register/upload-started; `MANDATORY` for confirm/OCR in caller transaction; failures logged, never propagated.
+
 ### Completion Notes List
 
+- Added event types `USER_REGISTERED`, `UPLOAD_STARTED`, extended `UPLOAD_CONFIRMED`, `OCR_COMPLETED`, `OCR_FAILED` on `user_activity_events`.
+- Instrumented `AuthService.register`, `HealthRecordService.createUploadUrl` / `confirmUpload`, `markOcrCompleted` / `markOcrFailed`, OCR consumer → `OcrJobStateService.completeSucceeded` with provider/confidence.
+- Repository `countProductEvents` supports SQL aggregation for story 4.2.
+- Unit tests cover emit paths; Postgres integration test gated on Docker availability.
+- **Code review fixes:** `USER_REGISTERED` uses `MANDATORY` tx (FK-safe); upload events use profile owner `user_id`; `OCR_FAILED` deduped when already terminal; `OCR_COMPLETED` only from `processing`; `FailureReasonNormalizer` shared helper.
+
 ### File List
+
+- `apps/api/src/main/resources/db/migration/V047__extend_user_activity_events_product_dimensions.sql`
+- `apps/api/src/main/java/com/healthlens/api/activity/FailureReasonNormalizer.java`
+- `apps/api/src/main/java/com/healthlens/api/activity/UserActivityEventType.java`
+- `apps/api/src/main/java/com/healthlens/api/entity/UserActivityEvent.java`
+- `apps/api/src/main/java/com/healthlens/api/repository/UserActivityEventRepository.java`
+- `apps/api/src/main/java/com/healthlens/api/service/UserActivityService.java`
+- `apps/api/src/main/java/com/healthlens/api/service/AuthService.java`
+- `apps/api/src/main/java/com/healthlens/api/service/HealthRecordService.java`
+- `apps/api/src/main/java/com/healthlens/api/service/OcrJobStateService.java`
+- `apps/api/src/main/java/com/healthlens/api/service/OcrJobConsumer.java`
+- `apps/api/src/main/java/com/healthlens/api/correlation/CorrelationContext.java`
+- `apps/api/src/test/java/com/healthlens/api/service/UserActivityServiceTest.java`
+- `apps/api/src/test/java/com/healthlens/api/repository/UserActivityEventRepositoryIntegrationTest.java`
+- `apps/api/src/test/java/com/healthlens/api/activity/FailureReasonNormalizerTest.java`
+- `apps/api/src/test/java/com/healthlens/api/service/AuthServiceTest.java`
+- `apps/api/src/test/java/com/healthlens/api/service/AuthServiceIntegrationTest.java`
+- `apps/api/src/test/java/com/healthlens/api/service/HealthRecordServiceTest.java`
+- `apps/api/src/test/java/com/healthlens/api/service/OcrJobStateServiceTest.java`
+- `apps/api/src/test/java/com/healthlens/api/service/OcrJobConsumerTest.java`
+- `apps/api/src/test/java/com/healthlens/api/support/PostgresTestContainerBase.java`

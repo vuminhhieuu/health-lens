@@ -11,6 +11,14 @@ import org.testcontainers.containers.PostgreSQLContainer;
  */
 public abstract class PostgresTestContainerBase {
 
+    public static boolean isDockerAvailable() {
+        try {
+            return org.testcontainers.DockerClientFactory.instance().isDockerAvailable();
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
     @SuppressWarnings("resource")
     private static final PostgreSQLContainer<?> POSTGRES = startPostgres();
 

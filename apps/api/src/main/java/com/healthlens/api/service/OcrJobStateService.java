@@ -109,9 +109,17 @@ public class OcrJobStateService {
             String rawOcrJson,
             OcrService.OcrExtractionResult parsedData,
             boolean hasLowConfidenceMetrics,
-            String idempotencyKey
+            String idempotencyKey,
+            String provider,
+            float confidence
     ) {
-        healthRecordService.markOcrCompleted(recordId, rawOcrJson, parsedData, hasLowConfidenceMetrics);
+        healthRecordService.markOcrCompleted(
+                recordId,
+                rawOcrJson,
+                parsedData,
+                hasLowConfidenceMetrics,
+                provider,
+                confidence);
         OcrJobExecution job = loadJob(idempotencyKey);
         job.setState(OcrJobState.SUCCEEDED);
         job.setLastFailureReason(null);
