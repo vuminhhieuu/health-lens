@@ -26,10 +26,32 @@ public interface FollowUpReminderRepository extends JpaRepository<FollowUpRemind
     @EntityGraph(attributePaths = {"profile", "profile.user"})
     Optional<FollowUpReminder> findWithProfileAndUserById(UUID id);
 
+    @EntityGraph(attributePaths = {"profile"})
+    @Query("""
+            SELECT reminder
+            FROM FollowUpReminder reminder
+            WHERE reminder.profile.user.id = :userId
+              AND (
+                  (reminder.reminderDate >= :today AND reminder.reminderDate <= :horizon)
+                  OR (
+                      reminder.reminderDate < :today
+                      AND reminder.emailSentAt IS NULL
+                      AND reminder.emailSkippedOptOutAt IS NULL
+                  )
+              )
+            ORDER BY reminder.reminderDate ASC, reminder.createdAt ASC
+            """)
+    List<FollowUpReminder> findActiveRemindersForInbox(
+            @Param("userId") UUID userId,
+            @Param("today") LocalDate today,
+            @Param("horizon") LocalDate horizon
+    );
+
     @Query("""
             SELECT reminder.id
             FROM FollowUpReminder reminder
             WHERE reminder.emailSentAt IS NULL
+              AND reminder.emailSkippedOptOutAt IS NULL
               AND reminder.reminderDate <= :today
               AND reminder.profile.user.accountStatus = :activeStatus
               AND (reminder.emailClaimedAt IS NULL OR reminder.emailClaimedAt < :claimCutoff)
@@ -42,12 +64,31 @@ public interface FollowUpReminderRepository extends JpaRepository<FollowUpRemind
             Pageable pageable
     );
 
+    @Query("""
+            SELECT reminder.id
+            FROM FollowUpReminder reminder
+            WHERE reminder.profile.user.id = :userId
+              AND reminder.emailSentAt IS NULL
+              AND reminder.emailSkippedOptOutAt IS NULL
+              AND reminder.reminderDate <= :today
+              AND reminder.profile.user.accountStatus = :activeStatus
+              AND (reminder.emailClaimedAt IS NULL OR reminder.emailClaimedAt < :claimCutoff)
+            ORDER BY reminder.reminderDate ASC, reminder.createdAt ASC
+            """)
+    List<UUID> findDueReminderIdsForUser(
+            @Param("userId") UUID userId,
+            @Param("today") LocalDate today,
+            @Param("claimCutoff") Instant claimCutoff,
+            @Param("activeStatus") AccountStatus activeStatus
+    );
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE FollowUpReminder reminder
             SET reminder.emailClaimedAt = :claimedAt
             WHERE reminder.id = :reminderId
               AND reminder.emailSentAt IS NULL
+              AND reminder.emailSkippedOptOutAt IS NULL
               AND reminder.reminderDate <= :today
               AND (reminder.emailClaimedAt IS NULL OR reminder.emailClaimedAt < :claimCutoff)
               AND reminder.id IN (
@@ -87,6 +128,35 @@ public interface FollowUpReminderRepository extends JpaRepository<FollowUpRemind
             """)
     int releaseEmailClaim(
             @Param("reminderId") UUID reminderId
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE FollowUpReminder reminder
+            SET reminder.emailSkippedOptOutAt = :skippedAt,
+                reminder.emailClaimedAt = NULL
+            WHERE reminder.id = :reminderId
+              AND reminder.emailSentAt IS NULL
+              AND reminder.emailSkippedOptOutAt IS NULL
+            """)
+    int markEmailSkippedOptOut(
+            @Param("reminderId") UUID reminderId,
+            @Param("skippedAt") Instant skippedAt
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE FollowUpReminder reminder
+            SET reminder.emailSkippedOptOutAt = NULL,
+                reminder.emailClaimedAt = NULL
+            WHERE reminder.emailSentAt IS NULL
+              AND reminder.emailSkippedOptOutAt IS NOT NULL
+              AND reminder.reminderDate <= :today
+              AND reminder.profile.user.id = :userId
+            """)
+    int clearEmailSkippedOptOutForUser(
+            @Param("userId") UUID userId,
+            @Param("today") LocalDate today
     );
 
     @Modifying

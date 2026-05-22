@@ -66,6 +66,7 @@ public class AuthService {
     private final VerifyEmailRateLimiter verifyEmailRateLimiter;
     private final StringRedisTemplate redisTemplate;
     private final ConsentService consentService;
+    private final UserNotificationPreferenceService notificationPreferenceService;
     private final AuditEventRecorder auditEventRecorder;
 
     public AuthService(
@@ -81,6 +82,7 @@ public class AuthService {
             VerifyEmailRateLimiter verifyEmailRateLimiter,
             StringRedisTemplate redisTemplate,
             ConsentService consentService,
+            UserNotificationPreferenceService notificationPreferenceService,
             AuditEventRecorder auditEventRecorder
     ) {
         this.userRepository = userRepository;
@@ -95,6 +97,7 @@ public class AuthService {
         this.verifyEmailRateLimiter = verifyEmailRateLimiter;
         this.redisTemplate = redisTemplate;
         this.consentService = consentService;
+        this.notificationPreferenceService = notificationPreferenceService;
         this.auditEventRecorder = auditEventRecorder;
     }
 
@@ -130,6 +133,8 @@ public class AuthService {
         token.setToken(tokenValue);
         token.setExpiresAt(Instant.now().plus(24, ChronoUnit.HOURS));
         tokenRepository.save(token);
+
+        notificationPreferenceService.createDefaultPreferences(savedUser.getId());
 
         emailEventPublisher.publishVerification(savedUser, tokenValue);
 

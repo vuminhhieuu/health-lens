@@ -68,6 +68,7 @@ class AuthServiceTest {
     @Mock private VerifyEmailRateLimiter verifyEmailRateLimiter;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ConsentService consentService;
+    @Mock private UserNotificationPreferenceService notificationPreferenceService;
     @Mock private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private StreamOperations<String, Object, Object> streamOperations;
@@ -80,7 +81,7 @@ class AuthServiceTest {
                 userRepository, tokenRepository, passwordResetTokenRepository,
                 refreshTokenRepository, passwordEncoder, emailEventPublisher,
                 jwtUtil, rateLimiter, forgotPasswordRateLimiter, verifyEmailRateLimiter,
-                redisTemplate, consentService, auditEventRecorder
+                redisTemplate, consentService, notificationPreferenceService, auditEventRecorder
         );
     }
 
@@ -99,6 +100,7 @@ class AuthServiceTest {
         when(userRepository.saveAndFlush(any(User.class))).thenReturn(user);
         authService.register(request);
 
+        verify(notificationPreferenceService).createDefaultPreferences(user.getId());
         verify(emailEventPublisher).publishVerification(eq(user), anyString());
     }
 

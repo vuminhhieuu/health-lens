@@ -7,6 +7,7 @@ import com.healthlens.api.entity.FollowUpReminder;
 import com.healthlens.api.entity.Profile;
 import com.healthlens.api.events.email.EmailEventPublisher;
 import com.healthlens.api.exception.ResourceNotFoundException;
+import com.healthlens.api.notification.NotificationEmailCategory;
 import com.healthlens.api.repository.FollowUpReminderRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +48,7 @@ public class FollowUpReminderService {
     private final FollowUpReminderRepository reminderRepository;
     private final ProfileRepository profileRepository;
     private final EmailEventPublisher emailEventPublisher;
+    private final UserNotificationPreferenceService notificationPreferenceService;
 
     @Autowired
     @Lazy
@@ -55,15 +57,18 @@ public class FollowUpReminderService {
     public FollowUpReminderService(
             FollowUpReminderRepository reminderRepository,
             ProfileRepository profileRepository,
-            EmailEventPublisher emailEventPublisher
+            EmailEventPublisher emailEventPublisher,
+            UserNotificationPreferenceService notificationPreferenceService
     ) {
         this.reminderRepository = reminderRepository;
         this.profileRepository = profileRepository;
         this.emailEventPublisher = emailEventPublisher;
+        this.notificationPreferenceService = notificationPreferenceService;
     }
 
     @Transactional(readOnly = true)
     public List<FollowUpReminderResponse> list(UUID userId, UUID profileId) {
+        dispatchDueReminderEmailsIfEnabled(userId);
         requireOwnedProfile(userId, profileId);
         return reminderRepository.findAllByProfileIdOrderByReminderDateAscCreatedAtAsc(profileId)
                 .stream()
@@ -97,6 +102,7 @@ public class FollowUpReminderService {
         applyRequest(reminder, request);
         if (!reminder.getReminderDate().equals(previousDate)) {
             reminder.setEmailSentAt(null);
+            reminder.setEmailSkippedOptOutAt(null);
         }
 
         FollowUpReminder savedReminder = reminderRepository.save(reminder);
@@ -157,6 +163,22 @@ public class FollowUpReminderService {
         if (today == null) {
             throw new IllegalArgumentException("Ngày nhắc là bắt buộc");
         }
+
+        FollowUpReminder reminder = reminderRepository.findWithProfileAndUserById(reminderId).orElse(null);
+        if (reminder == null || !isDeliverable(reminder, today)) {
+            return false;
+        }
+
+        UUID ownerId = reminder.getProfile().getUser().getId();
+        if (!notificationPreferenceService.isEmailEnabledForUser(
+                ownerId, NotificationEmailCategory.FOLLOW_UP_REMINDER)) {
+            log.info(
+                    "Skipping follow-up reminder email publish; followUpReminder disabled for user {}",
+                    ownerId);
+            transactionalSelf().markEmailSkippedOptOut(reminderId, Instant.now());
+            return false;
+        }
+
         Instant claimedAt = Instant.now();
         Instant claimCutoff = claimedAt.minus(EMAIL_CLAIM_TIMEOUT);
 
@@ -165,8 +187,49 @@ public class FollowUpReminderService {
             return false;
         }
 
-        emailEventPublisher.publishFollowUpReminder(reminderId);
-        return true;
+        try {
+            emailEventPublisher.publishFollowUpReminder(reminderId);
+            return true;
+        } catch (RuntimeException ex) {
+            log.error(
+                    "Failed to publish follow-up reminder email event for reminder {}; releasing claim",
+                    reminderId,
+                    ex);
+            transactionalSelf().releaseEmailClaim(reminderId);
+            return false;
+        }
+    }
+
+    /**
+     * Clears stale skip/claim state and re-publishes due reminder emails when the user has not opted out.
+     * Uses a new transaction so callers in read-only flows (inbox, reminder list) can still dispatch.
+     */
+    public void dispatchDueReminderEmailsIfEnabled(UUID userId) {
+        if (!notificationPreferenceService.isEmailEnabledForUser(
+                userId, NotificationEmailCategory.FOLLOW_UP_REMINDER)) {
+            return;
+        }
+        transactionalSelf().retryDueReminderEmailsForUser(userId);
+    }
+
+    /**
+     * Re-attempts email dispatch for due reminders after prefs change or stale skip/claim state.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int retryDueReminderEmailsForUser(UUID userId) {
+        LocalDate today = LocalDate.now(VN_ZONE);
+        reminderRepository.clearEmailSkippedOptOutForUser(userId, today);
+        Instant claimCutoff = Instant.now().minus(EMAIL_CLAIM_TIMEOUT);
+        List<UUID> dueReminderIds = reminderRepository.findDueReminderIdsForUser(
+                userId, today, claimCutoff, AccountStatus.ACTIVE);
+        int dispatched = 0;
+        for (UUID reminderId : dueReminderIds) {
+            transactionalSelf().releaseEmailClaim(reminderId);
+            if (transactionalSelf().publishClaimedReminderEmail(reminderId, today)) {
+                dispatched++;
+            }
+        }
+        return dispatched;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -195,21 +258,32 @@ public class FollowUpReminderService {
         reminderRepository.releaseEmailClaim(reminderId);
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markEmailSkippedOptOut(UUID reminderId, Instant skippedAt) {
+        reminderRepository.markEmailSkippedOptOut(reminderId, skippedAt);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int clearEmailSkippedOptOutForUser(UUID userId, LocalDate today) {
+        return reminderRepository.clearEmailSkippedOptOutForUser(userId, today);
+    }
+
     private Profile requireOwnedProfile(UUID userId, UUID profileId) {
         return profileRepository.findByIdAndUserId(profileId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hồ sơ"));
     }
 
     private void sendAfterCommitIfDue(FollowUpReminder reminder) {
-        if (reminder.getEmailSentAt() != null) {
+        LocalDate today = LocalDate.now(VN_ZONE);
+        if (reminder.getEmailSentAt() != null || reminder.getEmailSkippedOptOutAt() != null) {
             return;
         }
-        LocalDate today = LocalDate.now(VN_ZONE);
-        if (reminder.getReminderDate().isAfter(today)) {
+        if (reminder.getReminderDate() == null || reminder.getReminderDate().isAfter(today)) {
             return;
         }
 
-        Runnable sendEmail = () -> transactionalSelf().publishClaimedReminderEmail(reminder.getId(), LocalDate.now(VN_ZONE));
+        UUID reminderId = reminder.getId();
+        Runnable sendEmail = () -> transactionalSelf().publishClaimedReminderEmail(reminderId, today);
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
@@ -265,6 +339,21 @@ public class FollowUpReminderService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    private static boolean isDeliverable(FollowUpReminder reminder, LocalDate today) {
+        if (reminder.getEmailSentAt() != null || reminder.getEmailSkippedOptOutAt() != null) {
+            return false;
+        }
+        if (reminder.getReminderDate() == null || reminder.getReminderDate().isAfter(today)) {
+            return false;
+        }
+        if (reminder.getProfile() == null
+                || reminder.getProfile().getUser() == null
+                || reminder.getProfile().getUser().getAccountStatus() != AccountStatus.ACTIVE) {
+            return false;
+        }
+        return true;
+    }
+
     private FollowUpReminderResponse mapToResponse(FollowUpReminder reminder) {
         return new FollowUpReminderResponse(
                 reminder.getId(),
@@ -273,6 +362,7 @@ public class FollowUpReminderService {
                 reminder.getReminderType(),
                 reminder.getNote(),
                 reminder.getEmailSentAt(),
+                reminder.getEmailSkippedOptOutAt(),
                 reminder.getCreatedAt(),
                 reminder.getUpdatedAt()
         );

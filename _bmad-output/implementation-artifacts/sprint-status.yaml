@@ -308,7 +308,7 @@ development_status:
   pae-9-profile-settings-stub-cleanup: done
   pae-10-notification-inbox-aggregate-api: done
   pae-11-notification-center-ui-and-bell-wiring: done
-  pae-12-notification-email-preferences: backlog
+  pae-12-notification-email-preferences: done
   public-account-experience-retrospective: optional
 
 # =====================================================

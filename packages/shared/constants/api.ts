@@ -43,6 +43,7 @@ export const ApiPaths = {
   USERS: {
     ME: `/api/${API_VERSION}/users/me`,
     ME_AVATAR: `/api/${API_VERSION}/users/me/avatar`,
+    ME_NOTIFICATION_PREFERENCES: `/api/${API_VERSION}/users/me/notification-preferences`,
     DELETION_REQUEST: `/api/${API_VERSION}/users/me/deletion-request`,
     CANCEL_DELETION: `/api/${API_VERSION}/users/deletion-requests/cancel`,
   },

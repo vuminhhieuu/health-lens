@@ -43,6 +43,7 @@ export const API_ROUTES = {
   USERS: {
     ME: ApiPaths.USERS.ME,
     ME_AVATAR: ApiPaths.USERS.ME_AVATAR,
+    ME_NOTIFICATION_PREFERENCES: ApiPaths.USERS.ME_NOTIFICATION_PREFERENCES,
     DELETION_REQUEST: ApiPaths.USERS.DELETION_REQUEST,
     /** Public cancel (no JWT): `DELETE` + query `token` from email — path is `/users/deletion-requests/...`, not `/users/me/...`. */
     CANCEL_DELETION: ApiPaths.USERS.CANCEL_DELETION,

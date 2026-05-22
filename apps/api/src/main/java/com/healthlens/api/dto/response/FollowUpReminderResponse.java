@@ -11,6 +11,7 @@ public record FollowUpReminderResponse(
         String reminderType,
         String note,
         Instant emailSentAt,
+        Instant emailSkippedOptOutAt,
         Instant createdAt,
         Instant updatedAt
 ) {

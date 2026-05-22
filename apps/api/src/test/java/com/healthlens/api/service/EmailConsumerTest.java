@@ -8,6 +8,7 @@ import com.healthlens.api.entity.User;
 import com.healthlens.api.events.ApplicationStreamPublisher;
 import com.healthlens.api.events.RedisStreamConsumerSupport;
 import com.healthlens.api.events.email.EmailEvent;
+import com.healthlens.api.notification.NotificationEmailCategory;
 import com.healthlens.api.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -50,6 +52,9 @@ class EmailConsumerTest {
     private UserRepository userRepository;
 
     @Mock
+    private UserNotificationPreferenceService notificationPreferenceService;
+
+    @Mock
     private FollowUpReminderService followUpReminderService;
 
     @Mock
@@ -66,6 +71,7 @@ class EmailConsumerTest {
                 redisTemplate,
                 emailService,
                 userRepository,
+                notificationPreferenceService,
                 followUpReminderService,
                 streamConsumerSupport,
                 streamPublisher,
@@ -74,6 +80,8 @@ class EmailConsumerTest {
                 "email-consumers",
                 "test-email-consumer"
         );
+        lenient().when(notificationPreferenceService.isEmailEnabledForRecipient(any(), any())).thenReturn(true);
+        lenient().when(notificationPreferenceService.isEmailEnabledForUser(any(), any())).thenReturn(true);
     }
 
     @Test
@@ -312,6 +320,22 @@ class EmailConsumerTest {
     }
 
     @Test
+    void handleRecord_profileInvitation_skipsWhenShareInviteDisabled() {
+        when(notificationPreferenceService.isEmailEnabledForRecipient(
+                "invitee@healthlens.vn", NotificationEmailCategory.SHARE_INVITE)).thenReturn(false);
+
+        consumer.handleRecord(record(Map.of(
+                "eventType", EmailEvent.Type.PROFILE_INVITATION.streamValue(),
+                "userId", UUID.randomUUID().toString(),
+                "email", "invitee@healthlens.vn",
+                "inviterName", "Owner",
+                "invitationLink", "http://localhost:3000/invitations/accept?token=abc"
+        )));
+
+        verify(emailService, never()).sendProfileInvitationEmail(any(), any(), any());
+    }
+
+    @Test
     void handleRecord_profileInvitation_inviterUserDoesNotCarryRecipientEmail() {
         UUID inviterId = UUID.randomUUID();
 
@@ -333,6 +357,26 @@ class EmailConsumerTest {
         assertThat(capturedInviter.getId()).isEqualTo(inviterId);
         assertThat(capturedInviter.getFullName()).isEqualTo("Inviter Name");
         assertThat(capturedInviter.getEmail()).isNull();
+    }
+
+    @Test
+    void handleRecord_followUpReminder_optOut_marksSkippedNotSent() {
+        UUID reminderId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        FollowUpReminder reminder = reminder(reminderId);
+        reminder.getProfile().getUser().setId(userId);
+        when(followUpReminderService.findReminderForEmail(reminderId)).thenReturn(Optional.of(reminder));
+        when(notificationPreferenceService.isEmailEnabledForUser(
+                userId, NotificationEmailCategory.FOLLOW_UP_REMINDER)).thenReturn(false);
+
+        consumer.handleRecord(record(Map.of(
+                "eventType", EmailEvent.Type.FOLLOW_UP_REMINDER.streamValue(),
+                "reminderId", reminderId.toString()
+        )));
+
+        verify(followUpReminderService).markEmailSkippedOptOut(eq(reminderId), any(Instant.class));
+        verify(followUpReminderService, never()).markEmailSent(any(UUID.class), any(Instant.class));
+        verify(emailService, never()).sendFollowUpReminderEmail(any());
     }
 
     @Test

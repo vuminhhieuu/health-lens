@@ -168,6 +168,9 @@ public class RedisEmailEventPublisher implements EmailEventPublisher {
                         )
                 );
             }
+            throw new IllegalStateException(
+                    "Failed to publish email event: " + emailEvent.eventType(),
+                    ex);
         }
     }
 

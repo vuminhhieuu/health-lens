@@ -8,6 +8,7 @@ import com.healthlens.api.entity.Profile;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.events.email.EmailEventPublisher;
 import com.healthlens.api.exception.ResourceNotFoundException;
+import com.healthlens.api.notification.NotificationEmailCategory;
 import com.healthlens.api.repository.FollowUpReminderRepository;
 import com.healthlens.api.repository.ProfileRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -47,6 +49,9 @@ class FollowUpReminderServiceTest {
     @Mock
     private EmailEventPublisher emailEventPublisher;
 
+    @Mock
+    private UserNotificationPreferenceService notificationPreferenceService;
+
     private FollowUpReminderService service;
     private UUID userId;
     private UUID profileId;
@@ -54,7 +59,8 @@ class FollowUpReminderServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new FollowUpReminderService(reminderRepository, profileRepository, emailEventPublisher);
+        service = new FollowUpReminderService(
+                reminderRepository, profileRepository, emailEventPublisher, notificationPreferenceService);
         userId = UUID.randomUUID();
         profileId = UUID.randomUUID();
         User user = new User();
@@ -66,6 +72,20 @@ class FollowUpReminderServiceTest {
         profile.setId(profileId);
         profile.setUser(user);
         profile.setDisplayName("Hồ sơ của tôi");
+    }
+
+    @Test
+    void list_shouldDispatchDueEmailsWhenPreferenceEnabled() {
+        when(profileRepository.findByIdAndUserId(profileId, userId)).thenReturn(Optional.of(profile));
+        when(notificationPreferenceService.isEmailEnabledForUser(
+                eq(userId), eq(NotificationEmailCategory.FOLLOW_UP_REMINDER))).thenReturn(true);
+        when(reminderRepository.findAllByProfileIdOrderByReminderDateAscCreatedAtAsc(profileId))
+                .thenReturn(List.of());
+
+        service.list(userId, profileId);
+
+        verify(notificationPreferenceService).isEmailEnabledForUser(
+                eq(userId), eq(NotificationEmailCategory.FOLLOW_UP_REMINDER));
     }
 
     @Test
@@ -100,6 +120,8 @@ class FollowUpReminderServiceTest {
     void create_shouldSendEmailImmediatelyWhenReminderDateIsToday() {
         AtomicReference<FollowUpReminder> savedReminder = new AtomicReference<>();
         when(profileRepository.findByIdAndUserId(profileId, userId)).thenReturn(Optional.of(profile));
+        when(notificationPreferenceService.isEmailEnabledForUser(
+                eq(userId), eq(NotificationEmailCategory.FOLLOW_UP_REMINDER))).thenReturn(true);
         when(reminderRepository.save(any(FollowUpReminder.class))).thenAnswer(invocation -> {
             FollowUpReminder reminder = invocation.getArgument(0);
             if (reminder.getId() == null) {
@@ -110,6 +132,8 @@ class FollowUpReminderServiceTest {
             savedReminder.set(reminder);
             return reminder;
         });
+        when(reminderRepository.findWithProfileAndUserById(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.ofNullable(savedReminder.get()));
         when(reminderRepository.claimDueReminderForEmail(
                 any(UUID.class),
                 any(LocalDate.class),
@@ -127,6 +151,28 @@ class FollowUpReminderServiceTest {
         assertThat(response.profileId()).isEqualTo(profileId);
         verify(emailEventPublisher).publishFollowUpReminder(any(UUID.class));
         verify(reminderRepository, never()).markEmailSent(any(UUID.class), any(Instant.class));
+    }
+
+    @Test
+    void create_whenFollowUpEmailDisabled_marksSkippedWithoutPublishing() {
+        AtomicReference<FollowUpReminder> savedReminder = new AtomicReference<>();
+        LocalDate today = LocalDate.now(VN_ZONE);
+        when(profileRepository.findByIdAndUserId(profileId, userId)).thenReturn(Optional.of(profile));
+        when(notificationPreferenceService.isEmailEnabledForUser(
+                eq(userId), eq(NotificationEmailCategory.FOLLOW_UP_REMINDER))).thenReturn(false);
+        when(reminderRepository.save(any(FollowUpReminder.class))).thenAnswer(invocation -> {
+            FollowUpReminder reminder = invocation.getArgument(0);
+            reminder.setId(UUID.randomUUID());
+            savedReminder.set(reminder);
+            return reminder;
+        });
+        when(reminderRepository.findWithProfileAndUserById(any(UUID.class)))
+                .thenAnswer(invocation -> Optional.ofNullable(savedReminder.get()));
+
+        service.create(userId, profileId, new FollowUpReminderRequest(today, "Tái khám", null));
+
+        verify(emailEventPublisher, never()).publishFollowUpReminder(any(UUID.class));
+        verify(reminderRepository).markEmailSkippedOptOut(any(UUID.class), any(Instant.class));
     }
 
     @Test
@@ -196,9 +242,36 @@ class FollowUpReminderServiceTest {
     }
 
     @Test
+    void publishClaimedReminderEmail_whenPublishFails_releasesClaim() {
+        UUID reminderId = UUID.randomUUID();
+        FollowUpReminder reminder = existingReminder(reminderId);
+        reminder.setReminderDate(LocalDate.now(VN_ZONE));
+        when(reminderRepository.findWithProfileAndUserById(reminderId)).thenReturn(Optional.of(reminder));
+        when(notificationPreferenceService.isEmailEnabledForUser(
+                eq(userId), eq(NotificationEmailCategory.FOLLOW_UP_REMINDER))).thenReturn(true);
+        when(reminderRepository.claimDueReminderForEmail(
+                any(UUID.class),
+                any(LocalDate.class),
+                any(Instant.class),
+                any(Instant.class),
+                any(AccountStatus.class))).thenReturn(1);
+        doThrow(new IllegalStateException("redis down"))
+                .when(emailEventPublisher).publishFollowUpReminder(reminderId);
+
+        boolean published = service.publishClaimedReminderEmail(reminderId, LocalDate.now(VN_ZONE));
+
+        assertThat(published).isFalse();
+        verify(reminderRepository).releaseEmailClaim(reminderId);
+    }
+
+    @Test
     void sendDueReminderEmails_shouldMarkSentOnlyAfterEmailSuccess() {
         FollowUpReminder first = existingReminder(UUID.randomUUID());
         FollowUpReminder second = existingReminder(UUID.randomUUID());
+        when(notificationPreferenceService.isEmailEnabledForUser(
+                eq(userId), eq(NotificationEmailCategory.FOLLOW_UP_REMINDER))).thenReturn(true);
+        when(reminderRepository.findWithProfileAndUserById(first.getId())).thenReturn(Optional.of(first));
+        when(reminderRepository.findWithProfileAndUserById(second.getId())).thenReturn(Optional.of(second));
         when(reminderRepository.findDueReminderIdsForEmail(
                 any(LocalDate.class),
                 any(Instant.class),

@@ -325,9 +325,10 @@ public class EmailService {
         String displayName = user.getFullName() == null || user.getFullName().isBlank()
                 ? "bạn"
                 : HtmlUtils.htmlEscape(user.getFullName());
-        String profileName = profile.getDisplayName() == null || profile.getDisplayName().isBlank()
+        String profileLabel = profile.getDisplayName() == null || profile.getDisplayName().isBlank()
                 ? "hồ sơ sức khỏe"
-                : HtmlUtils.htmlEscape(profile.getDisplayName());
+                : profile.getDisplayName().trim();
+        String profileName = HtmlUtils.htmlEscape(profileLabel);
         String reminderType = HtmlUtils.htmlEscape(reminder.getReminderType());
         String reminderDate = DateTimeFormatter.ofPattern("dd/MM/yyyy").format(reminder.getReminderDate());
         String remindersUrl = HtmlUtils.htmlEscape(frontendBaseUrl + "/follow-up-reminders?profileId=" + profile.getId());
@@ -366,7 +367,10 @@ public class EmailService {
             MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
             helper.setFrom(fromAddress);
             helper.setTo(recipient);
-            helper.setSubject("[HealthLens] Nhắc lịch tái khám hôm nay");
+            String subject = profile.isDefault()
+                    ? "[HealthLens] Nhắc lịch tái khám hôm nay"
+                    : "[HealthLens] Nhắc lịch tái khám cho " + profileLabel + " hôm nay";
+            helper.setSubject(subject);
             helper.setText(htmlContent, true);
             mailSender.send(message);
             log.info("[EmailService] Follow-up reminder email sent successfully to: {}", recipient);
