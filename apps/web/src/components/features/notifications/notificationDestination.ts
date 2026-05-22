@@ -22,6 +22,11 @@ export function notificationDestination(
       return hubPath("/profiles", itemId);
     case "HEALTH_RECORD_INVITATION":
       return hubPath("/health-records", itemId);
+    case "REMINDER_UPCOMING":
+      if (typeof itemOrType !== "string" && itemOrType.actionUrl) {
+        return itemOrType.actionUrl;
+      }
+      return "/follow-up-reminders";
     default:
       return "/settings/notifications";
   }

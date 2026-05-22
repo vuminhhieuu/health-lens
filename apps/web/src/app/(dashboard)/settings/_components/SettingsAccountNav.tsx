@@ -42,11 +42,7 @@ function NavItem({ href, icon: Icon, label, active, disabled }: NavItemProps) {
   );
 
   if (disabled || !href) {
-    return (
-      <div role="listitem" aria-disabled="true">
-        {content}
-      </div>
-    );
+    return <div>{content}</div>;
   }
 
   return (

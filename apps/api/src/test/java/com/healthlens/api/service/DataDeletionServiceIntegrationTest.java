@@ -1,12 +1,14 @@
 package com.healthlens.api.service;
 
 import com.healthlens.api.support.PostgresTestContainerBase;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -40,6 +42,15 @@ class DataDeletionServiceIntegrationTest extends PostgresTestContainerBase {
 
     @MockitoBean
     private StreamOperations<String, Object, Object> streamOperations;
+
+    @MockitoBean
+    private ValueOperations<String, String> valueOperations;
+
+    @BeforeEach
+    void stubRedisTemplate() {
+        when(redisTemplate.opsForStream()).thenReturn(streamOperations);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+    }
 
     @Test
     @DisplayName("executeDataDeletion cleans FK graph, invitee emails, dead letters, and retains audit logs")

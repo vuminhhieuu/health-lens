@@ -43,6 +43,7 @@ type FollowUpReminder = {
   reminderType: ReminderType;
   note?: string | null;
   emailSentAt?: string | null;
+  emailSkippedOptOutAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -578,6 +579,10 @@ function FollowUpReminderWorkspace({
                       {reminder.emailSentAt ? (
                         <p className="mt-2 text-xs font-semibold text-[#00685f]">
                           Email nhắc lịch đã được gửi.
+                        </p>
+                      ) : reminder.emailSkippedOptOutAt ? (
+                        <p className="mt-2 text-xs font-semibold text-[#6d7a77]">
+                          Email nhắc lịch đã tắt trong Cài đặt → Thông báo. Bật lại &quot;Nhắc tái khám&quot; để nhận email.
                         </p>
                       ) : null}
                     </div>

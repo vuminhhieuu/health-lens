@@ -6,6 +6,7 @@ import com.healthlens.api.entity.User;
 import com.healthlens.api.events.ApplicationStreamPublisher;
 import com.healthlens.api.events.RedisStreamConsumerSupport;
 import com.healthlens.api.events.email.EmailEvent;
+import com.healthlens.api.notification.NotificationEmailCategory;
 import com.healthlens.api.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,7 @@ public class EmailConsumer {
     private final StringRedisTemplate redisTemplate;
     private final EmailService emailService;
     private final UserRepository userRepository;
+    private final UserNotificationPreferenceService notificationPreferenceService;
     private final FollowUpReminderService followUpReminderService;
     private final RedisStreamConsumerSupport streamConsumerSupport;
     private final ApplicationStreamPublisher streamPublisher;
@@ -43,6 +45,7 @@ public class EmailConsumer {
             StringRedisTemplate redisTemplate,
             EmailService emailService,
             UserRepository userRepository,
+            UserNotificationPreferenceService notificationPreferenceService,
             @Lazy FollowUpReminderService followUpReminderService,
             RedisStreamConsumerSupport streamConsumerSupport,
             ApplicationStreamPublisher streamPublisher,
@@ -53,6 +56,7 @@ public class EmailConsumer {
         this.redisTemplate = redisTemplate;
         this.emailService = emailService;
         this.userRepository = userRepository;
+        this.notificationPreferenceService = notificationPreferenceService;
         this.followUpReminderService = followUpReminderService;
         this.streamConsumerSupport = streamConsumerSupport;
         this.streamPublisher = streamPublisher;
@@ -158,17 +162,30 @@ public class EmailConsumer {
         }
 
         if (EmailEvent.Type.PROFILE_INVITATION.streamValue().equals(eventType)) {
+            String inviteeEmail = required(value, "email");
+            if (!notificationPreferenceService.isEmailEnabledForRecipient(
+                    inviteeEmail, NotificationEmailCategory.SHARE_INVITE)) {
+                log.info("[EmailConsumer] Skipping profile invitation email; shareInvite disabled for {}", inviteeEmail);
+                return;
+            }
             emailService.sendProfileInvitationEmail(
                     inviterUser(value),
-                    required(value, "email"),
+                    inviteeEmail,
                     required(value, "invitationLink")
             );
             return;
         }
 
         if (EmailEvent.Type.PROFILE_SHARE_ACCEPTED.streamValue().equals(eventType)) {
+            User owner = eventUser(value);
+            if (owner.getId() != null
+                    && !notificationPreferenceService.isEmailEnabledForUser(
+                            owner.getId(), NotificationEmailCategory.SHARE_ACCEPTED)) {
+                log.info("[EmailConsumer] Skipping share accepted email; shareAccepted disabled for user {}", owner.getId());
+                return;
+            }
             emailService.sendProfileShareAcceptedEmail(
-                    eventUser(value),
+                    owner,
                     stringVal(value.get("viewerName")),
                     stringVal(value.get("profileDisplayName")),
                     required(value, "profilesLink")
@@ -177,9 +194,15 @@ public class EmailConsumer {
         }
 
         if (EmailEvent.Type.HEALTH_RECORD_INVITATION.streamValue().equals(eventType)) {
+            String inviteeEmail = required(value, "email");
+            if (!notificationPreferenceService.isEmailEnabledForRecipient(
+                    inviteeEmail, NotificationEmailCategory.SHARE_INVITE)) {
+                log.info("[EmailConsumer] Skipping health record invitation email; shareInvite disabled for {}", inviteeEmail);
+                return;
+            }
             emailService.sendHealthRecordInvitationEmail(
                     inviterUser(value),
-                    required(value, "email"),
+                    inviteeEmail,
                     required(value, "invitationLink")
             );
             return;
@@ -231,13 +254,20 @@ public class EmailConsumer {
     private void sendClaimedReminderEmail(UUID reminderId) {
         FollowUpReminder reminder = followUpReminderService.findReminderForEmail(reminderId)
                 .orElse(null);
-        if (reminder == null || reminder.getEmailSentAt() != null) {
+        if (reminder == null || reminder.getEmailSentAt() != null || reminder.getEmailSkippedOptOutAt() != null) {
             return;
         }
         if (reminder.getProfile() == null || reminder.getProfile().getUser() == null
                 || reminder.getProfile().getUser().getAccountStatus() != com.healthlens.api.entity.AccountStatus.ACTIVE) {
             followUpReminderService.releaseEmailClaim(reminderId);
             throw new InvalidEmailEventException("reminder_not_deliverable");
+        }
+        UUID recipientUserId = reminder.getProfile().getUser().getId();
+        if (!notificationPreferenceService.isEmailEnabledForUser(
+                recipientUserId, NotificationEmailCategory.FOLLOW_UP_REMINDER)) {
+            log.info("[EmailConsumer] Skipping follow-up reminder email; followUpReminder disabled for user {}", recipientUserId);
+            followUpReminderService.markEmailSkippedOptOut(reminderId, Instant.now());
+            return;
         }
         boolean sent = emailService.sendFollowUpReminderEmail(reminder);
         if (!sent) {

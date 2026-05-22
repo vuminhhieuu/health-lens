@@ -44,6 +44,9 @@ public class FollowUpReminder {
     @Column(name = "email_sent_at")
     private Instant emailSentAt;
 
+    @Column(name = "email_skipped_opt_out_at")
+    private Instant emailSkippedOptOutAt;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 

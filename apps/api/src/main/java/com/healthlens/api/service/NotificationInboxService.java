@@ -4,10 +4,15 @@ import com.healthlens.api.dto.response.IncomingHealthRecordInvitationResponse;
 import com.healthlens.api.dto.response.IncomingProfileInvitationResponse;
 import com.healthlens.api.dto.response.NotificationInboxItemResponse;
 import com.healthlens.api.dto.response.NotificationInboxItemType;
+import com.healthlens.api.entity.FollowUpReminder;
 import com.healthlens.api.entity.NotificationInboxReadState;
 import com.healthlens.api.exception.ResourceNotFoundException;
+import com.healthlens.api.repository.FollowUpReminderRepository;
 import com.healthlens.api.repository.NotificationInboxReadStateRepository;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -15,6 +20,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,22 +28,33 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationInboxService {
 
     static final int MAX_ITEMS = 50;
+    private static final ZoneId VN_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final DateTimeFormatter REMINDER_DATE_FORMAT =
+            DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final int UPCOMING_REMINDER_HORIZON_DAYS = 90;
 
     private final ProfileShareService profileShareService;
     private final HealthRecordShareService healthRecordShareService;
+    private final FollowUpReminderRepository followUpReminderRepository;
     private final NotificationInboxReadStateRepository readStateRepository;
+    private final FollowUpReminderService followUpReminderService;
 
     public NotificationInboxService(
             ProfileShareService profileShareService,
             HealthRecordShareService healthRecordShareService,
-            NotificationInboxReadStateRepository readStateRepository) {
+            FollowUpReminderRepository followUpReminderRepository,
+            NotificationInboxReadStateRepository readStateRepository,
+            @Lazy FollowUpReminderService followUpReminderService) {
         this.profileShareService = profileShareService;
         this.healthRecordShareService = healthRecordShareService;
+        this.followUpReminderRepository = followUpReminderRepository;
         this.readStateRepository = readStateRepository;
+        this.followUpReminderService = followUpReminderService;
     }
 
     @Transactional(readOnly = true)
     public List<NotificationInboxItemResponse> listInbox(UUID userId) {
+        followUpReminderService.dispatchDueReminderEmailsIfEnabled(userId);
         List<NotificationInboxItemResponse> activeItems = applyReadState(userId, buildSortedInbox(userId));
         List<NotificationInboxItemResponse> archivedReadItems = loadArchivedReadItems(userId, activeItems);
         return mergeAndCap(activeItems, archivedReadItems);
@@ -150,6 +167,9 @@ public class NotificationInboxService {
                 healthRecordShareService.listIncomingInvitations(userId)) {
             items.add(mapHealthRecordInvitation(invitation));
         }
+        for (FollowUpReminder reminder : listUpcomingReminders(userId)) {
+            items.add(mapUpcomingReminder(reminder));
+        }
 
         return items.stream()
                 .sorted(Comparator.comparing(NotificationInboxItemResponse::createdAt).reversed())
@@ -210,7 +230,51 @@ public class NotificationInboxService {
                 false);
     }
 
-    private static String inboxItemId(NotificationInboxItemType type, UUID invitationId) {
-        return type.name() + ":" + invitationId;
+    private List<FollowUpReminder> listUpcomingReminders(UUID userId) {
+        LocalDate today = LocalDate.now(VN_ZONE);
+        return followUpReminderRepository.findActiveRemindersForInbox(
+                userId, today, today.plusDays(UPCOMING_REMINDER_HORIZON_DAYS));
+    }
+
+    private static NotificationInboxItemResponse mapUpcomingReminder(FollowUpReminder reminder) {
+        LocalDate today = LocalDate.now(VN_ZONE);
+        String profileName = reminder.getProfile() != null
+                        && reminder.getProfile().getDisplayName() != null
+                        && !reminder.getProfile().getDisplayName().isBlank()
+                ? reminder.getProfile().getDisplayName().trim()
+                : "Hồ sơ sức khỏe";
+        String reminderType = reminder.getReminderType() != null && !reminder.getReminderType().isBlank()
+                ? reminder.getReminderType().trim()
+                : "Tái khám";
+        String formattedDate = REMINDER_DATE_FORMAT.format(reminder.getReminderDate());
+
+        String body;
+        if (reminder.getReminderDate().isBefore(today)) {
+            body = "Quá hạn từ ngày " + formattedDate + ": nhắc " + reminderType + " cho \"" + profileName + "\".";
+        } else if (reminder.getReminderDate().isEqual(today)) {
+            body = "Hôm nay: nhắc " + reminderType + " cho \"" + profileName + "\".";
+        } else {
+            body = "Ngày " + formattedDate + ": nhắc " + reminderType + " cho \"" + profileName + "\".";
+        }
+
+        UUID profileId = reminder.getProfile() != null ? reminder.getProfile().getId() : null;
+        String actionUrl = profileId != null
+                ? "/follow-up-reminders?profileId=" + profileId
+                : "/follow-up-reminders";
+
+        Instant createdAt = reminder.getUpdatedAt() != null ? reminder.getUpdatedAt() : reminder.getCreatedAt();
+
+        return new NotificationInboxItemResponse(
+                inboxItemId(NotificationInboxItemType.REMINDER_UPCOMING, reminder.getId()),
+                NotificationInboxItemType.REMINDER_UPCOMING,
+                "Nhắc lịch tái khám",
+                body,
+                createdAt,
+                actionUrl,
+                false);
+    }
+
+    private static String inboxItemId(NotificationInboxItemType type, UUID entityId) {
+        return type.name() + ":" + entityId;
     }
 }

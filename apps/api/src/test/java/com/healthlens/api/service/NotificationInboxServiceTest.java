@@ -5,13 +5,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.healthlens.api.dto.response.IncomingHealthRecordInvitationResponse;
 import com.healthlens.api.dto.response.IncomingProfileInvitationResponse;
 import com.healthlens.api.dto.response.NotificationInboxItemType;
+import com.healthlens.api.entity.FollowUpReminder;
 import com.healthlens.api.entity.NotificationInboxReadState;
+import com.healthlens.api.entity.Profile;
+import com.healthlens.api.repository.FollowUpReminderRepository;
 import com.healthlens.api.repository.NotificationInboxReadStateRepository;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -36,10 +42,24 @@ class NotificationInboxServiceTest {
     private HealthRecordShareService healthRecordShareService;
 
     @Mock
+    private FollowUpReminderRepository followUpReminderRepository;
+
+    @Mock
     private NotificationInboxReadStateRepository readStateRepository;
+
+    @Mock
+    private FollowUpReminderService followUpReminderService;
 
     @InjectMocks
     private NotificationInboxService notificationInboxService;
+
+    @BeforeEach
+    void stubRemindersEmptyByDefault() {
+        lenient()
+                .when(followUpReminderRepository.findActiveRemindersForInbox(
+                        any(UUID.class), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of());
+    }
 
     @Test
     @DisplayName("listInbox merges invitations, sorts by createdAt desc, uses typed ids")
@@ -76,6 +96,7 @@ class NotificationInboxServiceTest {
 
         var items = notificationInboxService.listInbox(userId);
 
+        verify(followUpReminderService).dispatchDueReminderEmailsIfEnabled(userId);
         assertThat(items).hasSize(2);
         assertThat(items.get(0).type()).isEqualTo(NotificationInboxItemType.HEALTH_RECORD_INVITATION);
         assertThat(items.get(0).createdAt()).isEqualTo(newer);
@@ -84,6 +105,44 @@ class NotificationInboxServiceTest {
         assertThat(items.get(1).type()).isEqualTo(NotificationInboxItemType.PROFILE_INVITATION);
         assertThat(items.get(1).id()).isEqualTo("PROFILE_INVITATION:" + profileInviteId);
         assertThat(items.get(1).actionUrl()).contains("/invitations/accept");
+    }
+
+    @Test
+    @DisplayName("listInbox includes upcoming follow-up reminders")
+    void listInbox_includesUpcomingReminders() {
+        UUID userId = UUID.randomUUID();
+        UUID reminderId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        Instant createdAt = Instant.parse("2026-05-20T08:00:00Z");
+
+        Profile profile = new Profile();
+        profile.setId(profileId);
+        profile.setDisplayName("Ba");
+
+        FollowUpReminder reminder = new FollowUpReminder();
+        reminder.setId(reminderId);
+        reminder.setProfile(profile);
+        reminder.setReminderDate(LocalDate.of(2026, 5, 25));
+        reminder.setReminderType("Tái khám");
+        reminder.setCreatedAt(createdAt);
+        reminder.setUpdatedAt(createdAt);
+
+        when(followUpReminderRepository.findActiveRemindersForInbox(
+                        eq(userId), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(reminder));
+        when(profileShareService.listIncomingInvitations(userId)).thenReturn(List.of());
+        when(healthRecordShareService.listIncomingInvitations(userId)).thenReturn(List.of());
+        when(readStateRepository.findReadInboxItemIds(eq(userId), any())).thenReturn(List.of());
+
+        var items = notificationInboxService.listInbox(userId);
+
+        assertThat(items).hasSize(1);
+        assertThat(items.get(0).type()).isEqualTo(NotificationInboxItemType.REMINDER_UPCOMING);
+        assertThat(items.get(0).id()).isEqualTo("REMINDER_UPCOMING:" + reminderId);
+        assertThat(items.get(0).title()).isEqualTo("Nhắc lịch tái khám");
+        assertThat(items.get(0).body()).contains("Tái khám");
+        assertThat(items.get(0).body()).contains("Ba");
+        assertThat(items.get(0).actionUrl()).isEqualTo("/follow-up-reminders?profileId=" + profileId);
     }
 
     @Test

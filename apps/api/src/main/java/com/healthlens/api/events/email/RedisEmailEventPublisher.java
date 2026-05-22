@@ -168,6 +168,11 @@ public class RedisEmailEventPublisher implements EmailEventPublisher {
                         )
                 );
             }
+            if (EmailEvent.Type.FOLLOW_UP_REMINDER.streamValue().equals(emailEvent.eventType())) {
+                throw new IllegalStateException(
+                        "Failed to publish email event: " + emailEvent.eventType(),
+                        ex);
+            }
         }
     }
 
