@@ -4,7 +4,10 @@ import { marketingShell } from "@/lib/marketing/layout";
 import {
   authenticatedContentShell,
   authenticatedHeaderInnerClassName,
+  authenticatedHeaderOffsetClass,
   authenticatedHeaderSurfaceClassName,
+  authenticatedStickyBelowHeaderClass,
+  dashboardBreadcrumbNavClassName,
 } from "@/lib/layout/shell";
 
 describe("authenticated layout shell (/home standard)", () => {
@@ -17,5 +20,12 @@ describe("authenticated layout shell (/home standard)", () => {
 
   it("aliases marketingShell to the same content shell as /home", () => {
     expect(marketingShell).toBe(authenticatedContentShell);
+  });
+
+  it("reserves space below header for breadcrumb sticky offset", () => {
+    expect(authenticatedHeaderOffsetClass).toContain("pt-[4.5rem]");
+    expect(authenticatedStickyBelowHeaderClass).toContain("top-[4.5rem]");
+    expect(dashboardBreadcrumbNavClassName).toContain("text-base");
+    expect(dashboardBreadcrumbNavClassName).toContain("py-4");
   });
 });

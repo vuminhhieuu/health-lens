@@ -28,6 +28,7 @@ import { UploadButton } from "@/components/features/upload/UploadButton";
 import { apiClient } from "@/lib/api/apiClient";
 import { notify } from "@/lib/notify";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { breadcrumbForProfileHistory } from "@/lib/layout/dashboardBreadcrumbTrails";
 import { DeleteRecordModal } from "@/components/features/health-records/DeleteRecordModal";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui";
 import {
@@ -255,10 +256,7 @@ export default function ProfileHistoryPage() {
       <DashboardPageShell
         title="Lịch sử khám bệnh"
         subtitle="Xem diễn tiến sức khỏe theo thời gian, mới nhất ở trên cùng."
-        breadcrumbs={[
-          { label: "Kết quả khám", href: "/health-records" },
-          { label: currentProfileName },
-        ]}
+        breadcrumbs={breadcrumbForProfileHistory(currentProfileName)}
       >
         <ErrorState
           title="Không tải được lịch sử khám bệnh"
@@ -274,10 +272,7 @@ export default function ProfileHistoryPage() {
     <DashboardPageShell
       title="Lịch sử khám bệnh"
       subtitle="Xem diễn tiến sức khỏe theo thời gian, mới nhất ở trên cùng."
-      breadcrumbs={[
-        { label: "Kết quả khám", href: "/health-records" },
-        { label: currentProfileName },
-      ]}
+      breadcrumbs={breadcrumbForProfileHistory(currentProfileName)}
     >
       {allItems.length === 0 ? (
         <EmptyState

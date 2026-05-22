@@ -23,6 +23,7 @@ import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { AuthenticatedTopHeader } from "@/components/layout/AuthenticatedTopHeader";
 import { LoadingState } from "@/components/ui";
+import { authenticatedHeaderOffsetClass } from "@/lib/layout/shell";
 
 type CurrentUser = {
   id?: string;
@@ -170,23 +171,18 @@ export default function DashboardLayout({
     return `flex flex-col items-center gap-1 ${isActive ? "text-[#00685f]" : "text-[#6d7a77]"}`;
   };
 
-  const topHeaderNavItems = navItems.slice(0, 3).map((item) => ({
-    name: item.name,
-    href: item.href,
-    isActive: isNavItemActive(item),
-  }));
-
   return (
     <div className="bg-[#effcf9] text-[#121e1c] min-h-screen">
       <AuthenticatedTopHeader
-        navItems={topHeaderNavItems}
         avatarInitial={avatarInitial}
         avatarUrl={avatarUrl}
         brandHref="/"
         onLogout={logout}
       />
 
-      <div className="flex pt-16 min-h-screen print:block print:pt-0">
+      <div
+        className={`flex min-h-screen print:block print:pt-0 ${authenticatedHeaderOffsetClass}`}
+      >
         {/* Sidebar Navigation */}
         <aside className="hidden md:flex h-screen w-72 flex-col fixed left-0 bg-gradient-to-b from-[#e9f6f3] to-transparent p-6 gap-2 border-r border-[#bcc9c6]/20 print:hidden">
           <div className="mb-8 px-2">

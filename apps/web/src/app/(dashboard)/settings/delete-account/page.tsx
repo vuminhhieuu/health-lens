@@ -20,8 +20,9 @@ import {
   UserRound,
 } from "lucide-react";
 
+import { DashboardBreadcrumbBar } from "@/components/layout/DashboardBreadcrumbBar";
+import { breadcrumbFromSettings } from "@/lib/layout/dashboardBreadcrumbTrails";
 import { useAccountDeletion } from "@/hooks/useAccountDeletion";
-import { authenticatedContentShell } from "@/lib/layout/shell";
 import { useAuthStore } from "@/stores/authStore";
 
 /**
@@ -100,30 +101,7 @@ export default function DeleteAccountPage() {
 
   return (
     <div className="relative flex min-h-screen flex-col bg-[#effcf9] text-[#121e1c]">
-      <div className="sticky top-16 z-30 border-b border-[#bcc9c6]/25 bg-[#effcf9]/95 backdrop-blur">
-        <nav
-          className={`${authenticatedContentShell} py-3 text-sm font-medium text-[#6d7a77]`}
-          aria-label="Breadcrumb"
-        >
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="inline-flex items-center gap-1">
-              <Link href="/home" className="hover:text-[#00685f] hover:underline">
-                Trang chủ
-              </Link>
-              <span>/</span>
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <Link href="/settings" className="hover:text-[#00685f] hover:underline">
-                Cài đặt
-              </Link>
-              <span>/</span>
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="text-[#3d4947]">Xóa tài khoản</span>
-            </span>
-          </div>
-        </nav>
-      </div>
+      <DashboardBreadcrumbBar items={breadcrumbFromSettings("Xóa tài khoản")} />
 
       <main
         className={

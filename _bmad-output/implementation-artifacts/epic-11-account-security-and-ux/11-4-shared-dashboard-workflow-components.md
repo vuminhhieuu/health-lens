@@ -13,7 +13,7 @@ so that UI nhất quán và dễ bảo trì.
 1. **Given** `follow-up-reminders` và `visit-summary`, **When** refactor xong, **Then** cả hai dùng `ProfileScopeSelector` từ `@/components/features/profiles/ProfileScopeSelector`.
 2. **Given** props `profiles`, `value`, `onChange`, `label`, `id`, **When** render, **Then** có `htmlFor`/`id` khớp, `aria-label` khi không có visible label.
 3. **Given** URL `?profileId=`, **When** mount page, **Then** selector ưu tiên query → default profile → first profile (giữ logic hiện tại).
-4. **Given** `/profiles` page search và header search input (story 11.1), **When** refactor, **Then** dùng `PageSearchField` — controlled component, className override cho rounded-full header vs rounded-xl page.
+4. **Given** cần search cục bộ profiles, **When** triển khai 11.4, **Then** có thể thêm `PageSearchField` — **hiện tại** Story 11.1 đã **gỡ** search/sắp xếp trên `/profiles`; 11.4 chỉ áp dụng nếu product yêu cầu bật lại.
 5. **Given** refactor, **When** `pnpm test` + `pnpm lint`, **Then** pass; không đổi hành vi mutation/query keys.
 6. **Given** hoàn thành, **When** cập nhật `docs/component-inventory.md`, **Then** có mục mới với import path và consumers.
 
@@ -28,10 +28,10 @@ so that UI nhất quán và dễ bảo trì.
   - [ ] `visit-summary/page.tsx`
   - [ ] (Optional) `health-records/page.tsx` nếu có pattern select tương tự
 - [ ] Task 3 — `PageSearchField` (AC: #4)
-  - [ ] Props: `value`, `onChange`, `placeholder`, `ariaLabel`, `variant: 'header' | 'page'`
+  - [ ] Props: `value`, `onChange`, `placeholder`, `ariaLabel` (variant `page` only — Story 11.1 đã gỡ header search)
   - [ ] Icon Search từ lucide; keyboard accessible
   - [ ] Refactor `profiles/page.tsx` local search
-  - [ ] Chuẩn bị cho `AuthenticatedTopHeader` (story 11.1 có thể dùng hoặc mở palette trực tiếp)
+  - [ ] Chỉ `/profiles` — không gắn `AuthenticatedTopHeader` (story `11-1-refactor-dashboard-header`)
 - [ ] Task 4 — (Optional P2) `DashboardFormSection` 
   - [ ] Header icon + title + description — extract nếu ≥3 chỗ giống follow-up form header
   - [ ] Chỉ làm nếu diff rõ ràng; không bắt buộc AC
@@ -52,9 +52,7 @@ Cùng pattern:
 - `useMemo` chọn default/first
 - `<select>` với class `min-h-12 w-full rounded-xl border border-[#b7e8e0]...`
 
-**Search input** — hai kiểu:
-- Header: `AuthenticatedTopHeader` — `rounded-full`, `w-64`
-- Profiles page: inline search với `Search` icon + state `searchQuery`
+**Search input** — Story 11.1 đã gỡ search trên `/profiles`. Nếu 11.4 cần search lại, extract `PageSearchField` khi product chốt.
 
 ### Component API đề xuất
 
@@ -98,7 +96,7 @@ export function PageSearchField({
 
 ### Thứ tự với epic 11 khác
 
-- **Nên làm trước** `11-1` (header dùng `PageSearchField` hoặc wrapper).
+- **Làm sau** `11-1-refactor-dashboard-header` (header không còn search; chỉ refactor `/profiles` local search).
 - **Song song** `11-3` (modals có thể dùng `DashboardFormSection` nếu extract).
 
 ### Architecture compliance

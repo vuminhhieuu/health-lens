@@ -8,7 +8,6 @@ import {
   useState,
   useRef,
 } from "react";
-import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
@@ -62,6 +61,11 @@ import {
   messageCatalog,
   retryAfterMinutes,
 } from "@/lib/i18n/messages";
+import { DashboardBreadcrumbBar } from "@/components/layout/DashboardBreadcrumbBar";
+import {
+  breadcrumbForHealthRecordReview,
+  reviewPageContentShell,
+} from "@/lib/layout/dashboardBreadcrumbTrails";
 import { recommendationDisclaimerText } from "@/lib/utils/medicalDisclaimer";
 import { toThreeLineExplanation } from "@/lib/utils/explanationFormatter";
 
@@ -1275,38 +1279,11 @@ export default function ReviewRecordPage() {
 
   const renderReviewStateShell = (currentLabel: string, content: ReactNode) => (
     <main className="min-h-screen w-full bg-[#effcf9]">
-      <div className="sticky top-16 z-30 border-b border-[#bcc9c6]/25 bg-[#effcf9]/95 px-6 py-3 backdrop-blur">
-        <nav className="text-sm font-medium text-[#6d7a77]">
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="inline-flex items-center gap-1">
-              <Link
-                href="/health-records"
-                className="hover:text-[#00685f] hover:underline"
-              >
-                Kết quả khám
-              </Link>
-              <span>/</span>
-            </span>
-            <span className="inline-flex items-center gap-1">
-              {historyHref ? (
-                <Link
-                  href={historyHref}
-                  className="text-[#6d7a77] hover:text-[#00685f] hover:underline"
-                >
-                  Lịch sử khám bệnh
-                </Link>
-              ) : (
-                <span className="text-[#6d7a77]">Lịch sử khám bệnh</span>
-              )}
-              <span>/</span>
-            </span>
-            <span className="text-[#3d4947]">{currentLabel}</span>
-          </div>
-        </nav>
-      </div>
-      <div className="mx-auto w-full max-w-[1360px] px-6 pb-10 pt-6">
-        {content}
-      </div>
+      <DashboardBreadcrumbBar
+        items={breadcrumbForHealthRecordReview(currentLabel, { historyHref })}
+        contentShellClassName={reviewPageContentShell}
+      />
+      <div className={`${reviewPageContentShell} pb-10 pt-8`}>{content}</div>
       {renderFullscreenDocumentModal(data?.fileUrl)}
     </main>
   );
@@ -1439,38 +1416,18 @@ export default function ReviewRecordPage() {
   if (isDoneView) {
     return (
       <main className="min-h-screen w-full bg-[#effcf9]">
-        <div className="sticky top-16 z-30 border-b border-[#bcc9c6]/25 bg-[#effcf9]/95 px-6 py-3 backdrop-blur">
-          <nav className="text-sm font-medium text-[#6d7a77]">
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="inline-flex items-center gap-1">
-                <Link
-                  href="/health-records"
-                  className="hover:text-[#00685f] hover:underline"
-                >
-                  Kết quả khám
-                </Link>
-                <span>/</span>
-              </span>
-              <span className="inline-flex items-center gap-1">
-                {data.profileId ? (
-                  <Link
-                    href={`/profiles/${data.profileId}/history`}
-                    className="text-[#6d7a77] hover:text-[#00685f] hover:underline"
-                  >
-                    Lịch sử khám bệnh
-                  </Link>
-                ) : (
-                  <span className="text-[#6d7a77]">Lịch sử khám bệnh</span>
-                )}
-                <span>/</span>
-              </span>
-              <span className="text-[#3d4947]">
-                {displayRecordType} - {displayExamDate}
-              </span>
-            </div>
-          </nav>
-        </div>
-        <div className="mx-auto w-full max-w-[1360px] px-6 pb-10 pt-6">
+        <DashboardBreadcrumbBar
+          items={breadcrumbForHealthRecordReview(
+            `${displayRecordType} - ${displayExamDate}`,
+            {
+              historyHref: data.profileId
+                ? `/profiles/${data.profileId}/history`
+                : null,
+            },
+          )}
+          contentShellClassName={reviewPageContentShell}
+        />
+        <div className={`${reviewPageContentShell} pb-10 pt-8`}>
           <div className="space-y-6">
             <section className="flex flex-col gap-4 rounded-[28px] bg-white p-6 shadow-sm md:flex-row md:items-end md:justify-between">
               <div>

@@ -19,6 +19,7 @@ import {
 import { ApiPaths } from "@healthlens/shared/constants";
 
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { breadcrumbFromHome } from "@/lib/layout/dashboardBreadcrumbTrails";
 import { ErrorState, LoadingState } from "@/components/ui";
 import { apiClient } from "@/lib/api/apiClient";
 
@@ -65,10 +66,7 @@ function VisitSummaryFallback() {
     <DashboardPageShell
       title="Tóm tắt đi khám"
       subtitle="Chuẩn bị thông tin chính để trao đổi với bác sĩ khi bạn đi khám trực tiếp."
-      breadcrumbs={[
-        { label: "Trang chủ", href: "/home" },
-        { label: "Tóm tắt đi khám" },
-      ]}
+      breadcrumbs={breadcrumbFromHome("Tóm tắt đi khám")}
     >
       <LoadingState
         title="Đang tải tóm tắt đi khám"
@@ -141,10 +139,7 @@ function VisitSummaryPageContent() {
     <DashboardPageShell
       title="Tóm tắt đi khám"
       subtitle="Chuẩn bị thông tin chính để trao đổi với bác sĩ khi bạn đi khám trực tiếp."
-      breadcrumbs={[
-        { label: "Trang chủ", href: "/home" },
-        { label: "Tóm tắt đi khám" },
-      ]}
+      breadcrumbs={breadcrumbFromHome("Tóm tắt đi khám")}
       actions={
         <button
           type="button"
