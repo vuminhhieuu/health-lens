@@ -179,7 +179,7 @@ class AuthControllerTest {
                 LoginResponse response = new LoginResponse(
                                 "eyJhbGciOiJIUzI1NiJ9.test",
                                 new LoginResponse.UserInfo(userId, "user@example.com", "ROLE_USER", "Test User"));
-                AuthService.LoginResult result = new AuthService.LoginResult(response, "refresh-token-value");
+                AuthService.LoginResult result = AuthService.LoginResult.completed(response, "refresh-token-value");
 
                 when(authService.login(any(LoginRequest.class))).thenReturn(result);
 

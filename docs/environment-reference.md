@@ -106,6 +106,7 @@ Reindex procedure when changing `EMBEDDING_MODEL`, `EMBEDDING_BASE_URL`, or `QDR
 | `JWT_SECRET` | API | JWT signing secret |
 | `APP_COOKIE_SECURE` | API | Secure cookie flag |
 | `ADMIN_TOTP_ENCRYPTION_KEY` | API | Encrypt admin TOTP secrets |
+| `USER_TOTP_ENCRYPTION_KEY` | API | Encrypt end-user TOTP secrets (defaults to `ADMIN_TOTP_ENCRYPTION_KEY` if unset) |
 
 ## Runtime Profiles
 

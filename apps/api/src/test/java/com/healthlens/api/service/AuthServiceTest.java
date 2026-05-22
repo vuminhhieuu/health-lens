@@ -70,6 +70,7 @@ class AuthServiceTest {
     @Mock private ConsentService consentService;
     @Mock private UserNotificationPreferenceService notificationPreferenceService;
     @Mock private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
+    @Mock private UserTotpService userTotpService;
     @Mock private UserActivityService userActivityService;
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private StreamOperations<String, Object, Object> streamOperations;
@@ -83,6 +84,7 @@ class AuthServiceTest {
                 refreshTokenRepository, passwordEncoder, emailEventPublisher,
                 jwtUtil, rateLimiter, forgotPasswordRateLimiter, verifyEmailRateLimiter,
                 redisTemplate, consentService, notificationPreferenceService, auditEventRecorder,
+                userTotpService,
                 userActivityService
         );
     }
@@ -235,6 +237,7 @@ class AuthServiceTest {
         when(jwtUtil.generateAccessToken(user)).thenReturn("access-token");
         when(jwtUtil.generateRefreshToken()).thenReturn("refresh-token");
         when(jwtUtil.getRefreshTtl()).thenReturn(604800000L);
+        when(userTotpService.isVerifiedEnabled(user.getId())).thenReturn(false);
 
         AuthService.LoginResult result = authService.login(request);
 

@@ -129,11 +129,11 @@ export function authErrorMessage(error: unknown): string {
   }
 
   if (code === "INVALID_CREDENTIALS" || status === 401) {
-    return messageCatalog.auth.emailOrPasswordInvalid;
+    return payload?.detail ?? messageCatalog.auth.emailOrPasswordInvalid;
   }
 
   if (status === 403 || status === 423) {
-    return messageCatalog.auth.loginUnavailable;
+    return payload?.detail ?? messageCatalog.auth.loginUnavailable;
   }
 
   return status ? messageCatalog.auth.loginFailed : messageCatalog.auth.networkError;

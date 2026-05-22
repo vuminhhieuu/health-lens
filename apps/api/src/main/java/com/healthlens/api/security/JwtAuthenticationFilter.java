@@ -79,6 +79,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         var claims = jwtUtil.extractClaims(token);
 
+        if ("pre_auth".equals(claims.get("tokenType", String.class))) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         // Set SecurityContext with authenticated user
         String userId = jwtUtil.extractSubject(token);
         String role = claims.get("role", String.class);

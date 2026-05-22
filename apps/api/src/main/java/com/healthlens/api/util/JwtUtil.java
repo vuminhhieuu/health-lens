@@ -22,17 +22,20 @@ public class JwtUtil {
     private final long accessTtl;
     private final long refreshTtl;
     private final long adminAccessTtl;
+    private final long preAuthTtl;
 
     public JwtUtil(
             @Value("${jwt.secret}") String secret,
             @Value("${jwt.access-ttl}") long accessTtl,
             @Value("${jwt.refresh-ttl}") long refreshTtl,
-            @Value("${jwt.admin-access-ttl:900000}") long adminAccessTtl
+            @Value("${jwt.admin-access-ttl:900000}") long adminAccessTtl,
+            @Value("${user.totp.pre-auth-ttl:300000}") long preAuthTtl
     ) {
         this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTtl = accessTtl;
         this.refreshTtl = refreshTtl;
         this.adminAccessTtl = adminAccessTtl;
+        this.preAuthTtl = preAuthTtl;
     }
 
     /**
@@ -149,5 +152,39 @@ public class JwtUtil {
 
     public long getAdminAccessTtl() {
         return adminAccessTtl;
+    }
+
+    /**
+     * Short-lived token after password login when user TOTP is required.
+     * Claim tokenType=pre_auth — not valid for API access.
+     */
+    public String generatePreAuthToken(User user) {
+        Date now = new Date();
+        Date expiry = new Date(now.getTime() + preAuthTtl);
+        return Jwts.builder()
+                .subject(user.getId().toString())
+                .claim("email", user.getEmail())
+                .claim("tokenType", "pre_auth")
+                .id(UUID.randomUUID().toString())
+                .issuedAt(now)
+                .expiration(expiry)
+                .signWith(signingKey)
+                .compact();
+    }
+
+    public UUID extractPreAuthUserId(String token) {
+        Claims claims = extractClaims(token);
+        if (!"pre_auth".equals(claims.get("tokenType", String.class))) {
+            throw new JwtException("Invalid pre-auth token type");
+        }
+        return UUID.fromString(claims.getSubject());
+    }
+
+    public String extractPreAuthJti(String token) {
+        return extractClaims(token).getId();
+    }
+
+    public long getPreAuthTtlSeconds() {
+        return preAuthTtl / 1000;
     }
 }

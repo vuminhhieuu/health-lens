@@ -25,6 +25,7 @@ export const ApiPaths = {
     CHANGE_PASSWORD: `/api/${API_VERSION}/auth/change-password`,
     FORGOT_PASSWORD: `/api/${API_VERSION}/auth/forgot-password`,
     RESET_PASSWORD: `/api/${API_VERSION}/auth/reset-password`,
+    TOTP_VERIFY: `/api/${API_VERSION}/auth/totp/verify`,
   },
 
   /** Consent (requires authenticated session for all routes below) */
@@ -44,6 +45,9 @@ export const ApiPaths = {
     ME: `/api/${API_VERSION}/users/me`,
     ME_AVATAR: `/api/${API_VERSION}/users/me/avatar`,
     ME_NOTIFICATION_PREFERENCES: `/api/${API_VERSION}/users/me/notification-preferences`,
+    ME_TOTP: `/api/${API_VERSION}/users/me/totp`,
+    ME_TOTP_SETUP: `/api/${API_VERSION}/users/me/totp/setup`,
+    ME_TOTP_VERIFY: `/api/${API_VERSION}/users/me/totp/verify`,
     DELETION_REQUEST: `/api/${API_VERSION}/users/me/deletion-request`,
     CANCEL_DELETION: `/api/${API_VERSION}/users/deletion-requests/cancel`,
   },
