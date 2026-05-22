@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import type { ComponentProps } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Callout } from "@radix-ui/themes";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -135,10 +134,10 @@ export default function DeleteAccountPage() {
           {!requestSent ? (
             <form onSubmit={handleSubmit} className="space-y-8">
               <div className="rounded-xl border-l-4 border-[#ba1a1a] bg-[#ffdad6]/30 p-6">
-                <div className="flex gap-4">
-                  <AlertTriangle className="h-5 w-5 text-[#ba1a1a]" />
+                <div className="flex items-start gap-4">
+                  <AlertTriangle className="mt-1 h-6 w-6 shrink-0 text-[#ba1a1a]" />
                   <div>
-                    <h2 className="mb-2 text-lg font-bold text-[#93000a]">
+                    <h2 className="mb-2 text-lg font-bold leading-6 text-[#93000a]">
                       Cảnh báo quan trọng
                     </h2>
                     <ul className="list-disc space-y-2 pl-4 text-sm leading-relaxed text-[#93000a]">
@@ -232,18 +231,16 @@ export default function DeleteAccountPage() {
                 </div>
 
                 {(hookError || passwordError) && (
-                  <Callout.Root
+                  <div
                     role="alert"
                     aria-live="assertive"
-                    className="rounded-xl border border-[#ba1a1a]/20 bg-[#ffebee]"
+                    className="flex items-center gap-3 rounded-xl border border-[#ba1a1a]/20 bg-[#ffebee] p-4 text-[#ba1a1a]"
                   >
-                    <Callout.Icon>
-                      <AlertTriangle size={18} className="text-[#ba1a1a]" />
-                    </Callout.Icon>
-                    <Callout.Text className="text-[#ba1a1a]">
+                    <AlertTriangle className="h-5 w-5 shrink-0" />
+                    <p className="text-sm font-semibold leading-5">
                       {hookError || passwordError}
-                    </Callout.Text>
-                  </Callout.Root>
+                    </p>
+                  </div>
                 )}
 
                 <div className="flex flex-col gap-4 pt-4 md:flex-row">
