@@ -33,7 +33,7 @@ export function DashboardBreadcrumbBar({
       className={`${authenticatedStickyBelowHeaderClass} ${dashboardBreadcrumbBarSurfaceClassName}`}
     >
       <nav
-        aria-label="Breadcrumb"
+        aria-label="Đường dẫn"
         className={`${contentShellClassName} ${dashboardBreadcrumbNavClassName}`}
       >
         <ol className="flex flex-wrap items-center gap-2">

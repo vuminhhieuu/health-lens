@@ -73,7 +73,7 @@ export function AuthenticatedTopHeader({
               className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#89f5e7] bg-[#d8e5e2] text-sm font-black text-[#00685f] transition-all focus:outline-none focus:ring-2 focus:ring-[#00685f]/50"
               aria-label="Mở menu tài khoản"
               aria-expanded={isAvatarMenuOpen}
-              aria-haspopup="menu"
+              aria-haspopup="true"
             >
               {avatarUrl ? (
                 <SafeImage
@@ -90,13 +90,9 @@ export function AuthenticatedTopHeader({
             </button>
 
             {isAvatarMenuOpen ? (
-              <div
-                role="menu"
-                className="animate-in fade-in zoom-in-95 absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-2xl border border-[#bcc9c6]/20 bg-white py-2 shadow-xl duration-100"
-              >
+              <div className="animate-in fade-in zoom-in-95 absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-2xl border border-[#bcc9c6]/20 bg-white py-2 shadow-xl duration-100">
                 <Link
                   href="/home"
-                  role="menuitem"
                   onClick={() => setIsAvatarMenuOpen(false)}
                   className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#3d4947] transition-colors hover:bg-[#e9f6f3]"
                 >
@@ -105,7 +101,6 @@ export function AuthenticatedTopHeader({
                 </Link>
                 <Link
                   href="/settings/profile"
-                  role="menuitem"
                   onClick={() => setIsAvatarMenuOpen(false)}
                   className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#3d4947] transition-colors hover:bg-[#e9f6f3]"
                 >
@@ -114,7 +109,6 @@ export function AuthenticatedTopHeader({
                 </Link>
                 <Link
                   href="/settings"
-                  role="menuitem"
                   onClick={() => setIsAvatarMenuOpen(false)}
                   className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#3d4947] transition-colors hover:bg-[#e9f6f3]"
                 >
@@ -124,7 +118,6 @@ export function AuthenticatedTopHeader({
                 <div className="my-1 h-px bg-[#bcc9c6]/20" aria-hidden="true" />
                 <button
                   type="button"
-                  role="menuitem"
                   onClick={() => {
                     setIsAvatarMenuOpen(false);
                     void onLogout();
