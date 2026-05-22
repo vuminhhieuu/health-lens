@@ -7,7 +7,12 @@ export {
   type ChangePasswordInput,
   passwordSchema,
 } from "./auth";
-export { updateUserProfileSchema, type UpdateUserProfileInput } from "./user";
+export {
+  updateUserProfileSchema,
+  updateHealthContextSchema,
+  type UpdateUserProfileInput,
+  type UpdateHealthContextInput,
+} from "./user";
 export * from "./profile";
 
 export const userSchema = z.object({

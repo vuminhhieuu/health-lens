@@ -8,6 +8,7 @@ import { UpdateProfileInput, updateProfileSchema } from "@healthlens/shared";
 import type { ProfileGender } from "@healthlens/shared";
 
 import { InlineFieldError } from "@/components/ui/StateComponents";
+import { normalizeOptionalTextField } from "@/lib/forms/normalizeOptionalTextField";
 
 type EditableProfile = {
   id: string;
@@ -15,6 +16,9 @@ type EditableProfile = {
   birthDate?: string;
   gender?: string | null;
   notes?: string;
+  chronicConditions?: string;
+  currentMedications?: string;
+  allergies?: string;
 };
 
 const isGender = (value: unknown): value is ProfileGender =>
@@ -60,6 +64,9 @@ export function EditProfileModal({
       birthDate: "",
       gender: "other",
       notes: "",
+      chronicConditions: "",
+      currentMedications: "",
+      allergies: "",
     },
   });
 
@@ -73,6 +80,9 @@ export function EditProfileModal({
       birthDate: profile.birthDate || "",
       gender: normalizeGender(profile.gender),
       notes: profile.notes || "",
+      chronicConditions: profile.chronicConditions || "",
+      currentMedications: profile.currentMedications || "",
+      allergies: profile.allergies || "",
     });
   }, [profile, reset]);
 
@@ -85,7 +95,10 @@ export function EditProfileModal({
       ...data,
       birthDate: data.birthDate || null,
       gender: data.gender || null,
-      notes: data.notes || null,
+      notes: normalizeOptionalTextField(data.notes),
+      chronicConditions: normalizeOptionalTextField(data.chronicConditions),
+      currentMedications: normalizeOptionalTextField(data.currentMedications),
+      allergies: normalizeOptionalTextField(data.allergies),
     };
 
     onSubmit(profile.id, formattedData);
@@ -191,6 +204,57 @@ export function EditProfileModal({
                 />
                 <InlineFieldError id="edit-profile-gender-error" message={errors.gender?.message} />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="edit-profile-chronic" className="text-sm font-bold text-[#6d7a77] ml-1">
+                Bệnh nền / tình trạng lâu dài
+              </label>
+              <textarea
+                id="edit-profile-chronic"
+                {...register("chronicConditions")}
+                readOnly={isReadOnly}
+                aria-invalid={Boolean(errors.chronicConditions)}
+                aria-describedby={errors.chronicConditions ? "edit-profile-chronic-error" : undefined}
+                placeholder="Ví dụ: Tiểu đường type 2..."
+                rows={2}
+                className={`w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all resize-none placeholder:text-[#bcc9c6] ${isReadOnly ? "cursor-default" : ""}`}
+              />
+              <InlineFieldError id="edit-profile-chronic-error" message={errors.chronicConditions?.message} />
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="edit-profile-medications" className="text-sm font-bold text-[#6d7a77] ml-1">
+                Thuốc đang dùng
+              </label>
+              <textarea
+                id="edit-profile-medications"
+                {...register("currentMedications")}
+                readOnly={isReadOnly}
+                aria-invalid={Boolean(errors.currentMedications)}
+                aria-describedby={errors.currentMedications ? "edit-profile-medications-error" : undefined}
+                placeholder="Ví dụ: Metformin 500mg..."
+                rows={2}
+                className={`w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all resize-none placeholder:text-[#bcc9c6] ${isReadOnly ? "cursor-default" : ""}`}
+              />
+              <InlineFieldError id="edit-profile-medications-error" message={errors.currentMedications?.message} />
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="edit-profile-allergies" className="text-sm font-bold text-[#6d7a77] ml-1">
+                Dị ứng đã biết
+              </label>
+              <textarea
+                id="edit-profile-allergies"
+                {...register("allergies")}
+                readOnly={isReadOnly}
+                aria-invalid={Boolean(errors.allergies)}
+                aria-describedby={errors.allergies ? "edit-profile-allergies-error" : undefined}
+                placeholder="Ví dụ: Penicillin..."
+                rows={2}
+                className={`w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all resize-none placeholder:text-[#bcc9c6] ${isReadOnly ? "cursor-default" : ""}`}
+              />
+              <InlineFieldError id="edit-profile-allergies-error" message={errors.allergies?.message} />
             </div>
 
             <div className="space-y-2">

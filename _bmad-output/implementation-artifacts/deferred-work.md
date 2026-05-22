@@ -66,6 +66,11 @@
 - Test chỉ đọc source tĩnh, không mock API/React Query — pattern giống các story PAE khác; bổ sung khi có harness component test dùng chung.
 - Lặp cấu hình `DashboardPageShell` 3 lần (loading/error/success) — có thể extract helper sau khi ổn định UI settings.
 
+## Deferred from: code review of 11-3-personal-and-family-health-context-fields.md (2026-05-22)
+
+- `notes` max 1000 (create) vs 500 (update) vẫn lệch giữa Zod/backend — pre-existing; story chỉ yêu cầu thống nhất `displayName`.
+- Thiếu `UserController` WebMvc test cho `PUT /me/health-context` — coverage gap, không chặn AC.
+
 ## Deferred from: code review of pae-12-notification-email-preferences.md (2026-05-22)
 
 - AC5 ghi `EmailService`/`FollowUpReminderScheduler` nhưng preference check nằm ở `EmailConsumer` (đường gửi email thực tế qua Redis stream). Chức năng đạt; có thể thêm guard trong `EmailService` nếu sau này có gọi SMTP trực tiếp.

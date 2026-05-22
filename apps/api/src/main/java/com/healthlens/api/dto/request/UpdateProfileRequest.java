@@ -30,6 +30,15 @@ public record UpdateProfileRequest(
         String gender,
 
         @Size(max = 500, message = "Ghi chú tối đa 500 ký tự")
-        String notes
+        String notes,
+
+        @Size(max = 1000, message = "Bệnh nền tối đa 1000 ký tự")
+        String chronicConditions,
+
+        @Size(max = 1000, message = "Thuốc đang dùng tối đa 1000 ký tự")
+        String currentMedications,
+
+        @Size(max = 1000, message = "Dị ứng tối đa 1000 ký tự")
+        String allergies
 ) {
 }

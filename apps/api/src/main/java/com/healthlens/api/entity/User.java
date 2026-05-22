@@ -37,6 +37,12 @@ public class User {
     @Column(length = 10)
     private String gender;
 
+    @Column(name = "personal_description", columnDefinition = "TEXT")
+    private String personalDescription;
+
+    @Column(name = "personal_notes", columnDefinition = "TEXT")
+    private String personalNotes;
+
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 

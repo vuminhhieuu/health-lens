@@ -2,6 +2,7 @@ package com.healthlens.api.controller;
 
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.DeleteAccountRequest;
+import com.healthlens.api.dto.request.UpdateHealthContextRequest;
 import com.healthlens.api.dto.request.UpdateUserRequest;
 import com.healthlens.api.dto.response.CancelDeletionResponse;
 import com.healthlens.api.dto.response.DeleteAccountResponse;
@@ -59,6 +60,15 @@ public class UserController {
         
         UUID userId = extractUserId(authentication);
         UserResponse response = userService.updateCurrentUser(userId, request);
+        return ResponseEntity.ok(buildResponseBody(response));
+    }
+
+    @PutMapping(ApiRoutes.USERS_ME_HEALTH_CONTEXT_REL)
+    public ResponseEntity<Map<String, Object>> updateHealthContext(
+            Authentication authentication,
+            @Valid @RequestBody UpdateHealthContextRequest request) {
+        UUID userId = extractUserId(authentication);
+        UserResponse response = userService.updateHealthContext(userId, request);
         return ResponseEntity.ok(buildResponseBody(response));
     }
 
