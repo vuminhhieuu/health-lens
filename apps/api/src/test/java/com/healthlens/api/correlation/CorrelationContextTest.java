@@ -32,4 +32,17 @@ class CorrelationContextTest {
         assertThatThrownBy(() -> CorrelationContext.resolveCorrelationIdForJob(null))
                 .isInstanceOf(NullPointerException.class);
     }
+
+    @Test
+    void resolveCorrelationIdForJob_rejectsBlankJobIdWhenContextMissing() {
+        assertThatThrownBy(() -> CorrelationContext.resolveCorrelationIdForJob("   "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("blank");
+    }
+
+    @Test
+    void resolveCorrelationIdForJob_trimsJobIdFallback() {
+        assertThat(CorrelationContext.resolveCorrelationIdForJob("  job-trimmed  "))
+                .isEqualTo("job-trimmed");
+    }
 }

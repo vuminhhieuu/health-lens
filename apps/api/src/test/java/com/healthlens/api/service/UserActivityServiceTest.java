@@ -6,17 +6,20 @@ import com.healthlens.api.repository.UserActivityEventRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -45,10 +48,20 @@ class UserActivityServiceTest {
         UUID userId = UUID.randomUUID();
         userActivityService.recordUserRegistered(userId);
 
-        ArgumentCaptor<UserActivityEvent> captor = ArgumentCaptor.forClass(UserActivityEvent.class);
-        verify(userActivityEventRepository).save(captor.capture());
-        assertThat(captor.getValue().getEventType()).isEqualTo(UserActivityEventType.USER_REGISTERED);
-        assertThat(captor.getValue().getUserId()).isEqualTo(userId);
+        verify(userActivityEventRepository)
+                .insertProductEvent(
+                        any(UUID.class),
+                        eq(userId),
+                        eq(UserActivityEventType.USER_REGISTERED),
+                        eq(false),
+                        isNull(),
+                        isNull(),
+                        isNull(),
+                        isNull(),
+                        isNull(),
+                        isNull(),
+                        isNull(),
+                        any(Instant.class));
     }
 
     @Test
@@ -60,13 +73,20 @@ class UserActivityServiceTest {
 
         userActivityService.recordUploadStarted(profileOwnerId, profileId, recordId, "PDF");
 
-        ArgumentCaptor<UserActivityEvent> captor = ArgumentCaptor.forClass(UserActivityEvent.class);
-        verify(userActivityEventRepository).save(captor.capture());
-        UserActivityEvent event = captor.getValue();
-        assertThat(event.getEventType()).isEqualTo(UserActivityEventType.UPLOAD_STARTED);
-        assertThat(event.getProfileId()).isEqualTo(profileId);
-        assertThat(event.getRecordId()).isEqualTo(recordId);
-        assertThat(event.getFileType()).isEqualTo("pdf");
+        verify(userActivityEventRepository)
+                .insertProductEvent(
+                        any(UUID.class),
+                        eq(profileOwnerId),
+                        eq(UserActivityEventType.UPLOAD_STARTED),
+                        eq(false),
+                        eq(profileId),
+                        eq(recordId),
+                        eq("pdf"),
+                        isNull(),
+                        isNull(),
+                        isNull(),
+                        isNull(),
+                        any(Instant.class));
     }
 
     @Test
@@ -78,14 +98,47 @@ class UserActivityServiceTest {
 
         userActivityService.recordUploadConfirmed(profileOwnerId, profileId, recordId, "jpg", true);
 
-        ArgumentCaptor<UserActivityEvent> captor = ArgumentCaptor.forClass(UserActivityEvent.class);
-        verify(userActivityEventRepository).save(captor.capture());
-        UserActivityEvent event = captor.getValue();
-        assertThat(event.getEventType()).isEqualTo(UserActivityEventType.UPLOAD_CONFIRMED);
-        assertThat(event.isRetry()).isTrue();
-        assertThat(event.getProfileId()).isEqualTo(profileId);
-        assertThat(event.getRecordId()).isEqualTo(recordId);
-        assertThat(event.getFileType()).isEqualTo("jpg");
+        verify(userActivityEventRepository)
+                .insertProductEvent(
+                        any(UUID.class),
+                        eq(profileOwnerId),
+                        eq(UserActivityEventType.UPLOAD_CONFIRMED),
+                        eq(true),
+                        eq(profileId),
+                        eq(recordId),
+                        eq("jpg"),
+                        isNull(),
+                        isNull(),
+                        isNull(),
+                        isNull(),
+                        any(Instant.class));
+    }
+
+    @Test
+    @DisplayName("recordUploadConfirmed skips persist when required dimensions are missing")
+    void recordUploadConfirmed_skipsWhenDimensionsMissing() {
+        UUID profileOwnerId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+
+        userActivityService.recordUploadConfirmed(null, profileId, recordId, "jpg", false);
+        userActivityService.recordUploadConfirmed(profileOwnerId, null, recordId, "jpg", false);
+        userActivityService.recordUploadConfirmed(profileOwnerId, profileId, null, "jpg", false);
+
+        verify(userActivityEventRepository, never())
+                .insertProductEvent(
+                        any(),
+                        any(),
+                        any(),
+                        anyBoolean(),
+                        any(),
+                        any(),
+                        any(),
+                        any(),
+                        any(),
+                        any(),
+                        any(),
+                        any());
     }
 
     @Test
@@ -97,13 +150,22 @@ class UserActivityServiceTest {
 
         userActivityService.recordOcrCompleted(userId, profileId, recordId, "easyocr", 0.92f, true);
 
-        ArgumentCaptor<UserActivityEvent> captor = ArgumentCaptor.forClass(UserActivityEvent.class);
-        verify(userActivityEventRepository).save(captor.capture());
-        UserActivityEvent event = captor.getValue();
-        assertThat(event.getEventType()).isEqualTo(UserActivityEventType.OCR_COMPLETED);
-        assertThat(event.getProvider()).isEqualTo("easyocr");
-        assertThat(event.getConfidence()).isCloseTo(0.92, org.assertj.core.data.Offset.offset(0.0001));
-        assertThat(event.getHasLowConfidenceMetrics()).isTrue();
+        verify(userActivityEventRepository)
+                .insertProductEvent(
+                        any(UUID.class),
+                        eq(userId),
+                        eq(UserActivityEventType.OCR_COMPLETED),
+                        eq(false),
+                        eq(profileId),
+                        eq(recordId),
+                        isNull(),
+                        eq("easyocr"),
+                        org.mockito.ArgumentMatchers.argThat(
+                                confidence ->
+                                        confidence != null && Math.abs(confidence - 0.92) < 0.0001),
+                        eq(true),
+                        isNull(),
+                        any(Instant.class));
     }
 
     @Test
@@ -115,22 +177,57 @@ class UserActivityServiceTest {
 
         userActivityService.recordOcrFailed(userId, profileId, recordId, "processing_error", "textract");
 
-        ArgumentCaptor<UserActivityEvent> captor = ArgumentCaptor.forClass(UserActivityEvent.class);
-        verify(userActivityEventRepository).save(captor.capture());
-        UserActivityEvent event = captor.getValue();
-        assertThat(event.getEventType()).isEqualTo(UserActivityEventType.OCR_FAILED);
-        assertThat(event.getFailureReason()).isEqualTo("api_error");
-        assertThat(event.getProvider()).isEqualTo("textract");
+        verify(userActivityEventRepository)
+                .insertProductEvent(
+                        any(UUID.class),
+                        eq(userId),
+                        eq(UserActivityEventType.OCR_FAILED),
+                        eq(false),
+                        eq(profileId),
+                        eq(recordId),
+                        isNull(),
+                        eq("textract"),
+                        isNull(),
+                        isNull(),
+                        eq("api_error"),
+                        any(Instant.class));
     }
 
     @Test
     @DisplayName("failed product event write does not propagate")
     void recordUserRegistered_swallowsPersistenceFailure() {
-        doThrow(new RuntimeException("db down")).when(userActivityEventRepository).save(any());
+        doThrow(new RuntimeException("db down"))
+                .when(userActivityEventRepository)
+                .insertProductEvent(
+                        any(),
+                        any(),
+                        any(),
+                        anyBoolean(),
+                        any(),
+                        any(),
+                        any(),
+                        any(),
+                        any(),
+                        any(),
+                        any(),
+                        any());
 
         userActivityService.recordUserRegistered(UUID.randomUUID());
 
-        verify(userActivityEventRepository).save(any());
+        verify(userActivityEventRepository)
+                .insertProductEvent(
+                        any(),
+                        any(),
+                        any(),
+                        anyBoolean(),
+                        any(),
+                        any(),
+                        any(),
+                        any(),
+                        any(),
+                        any(),
+                        any(),
+                        any());
     }
 
     @Test

@@ -82,7 +82,7 @@ public class UserActivityService {
             UUID recordId,
             String fileType,
             boolean isRetry) {
-        if (profileOwnerId == null) {
+        if (profileOwnerId == null || profileId == null || recordId == null) {
             return;
         }
         UserActivityEvent event = baseEvent(profileOwnerId, UserActivityEventType.UPLOAD_CONFIRMED);
@@ -193,9 +193,32 @@ public class UserActivityService {
         return event;
     }
 
+    /**
+     * Best-effort write: native INSERT runs immediately (same pattern as
+     * {@link UserActivityEventRepository#insertAuthEventIfAbsent}) so DB errors surface here,
+     * not at caller commit flush.
+     */
     private void persistSafely(UserActivityEvent event, String telemetryContext) {
+        if (event.getId() == null) {
+            event.setId(UUID.randomUUID());
+        }
+        if (event.getCreatedAt() == null) {
+            event.setCreatedAt(Instant.now());
+        }
         try {
-            userActivityEventRepository.save(event);
+            userActivityEventRepository.insertProductEvent(
+                    event.getId(),
+                    event.getUserId(),
+                    event.getEventType(),
+                    event.isRetry(),
+                    event.getProfileId(),
+                    event.getRecordId(),
+                    event.getFileType(),
+                    event.getProvider(),
+                    event.getConfidence(),
+                    event.getHasLowConfidenceMetrics(),
+                    event.getFailureReason(),
+                    event.getCreatedAt());
         } catch (Exception e) {
             log.warn("Failed to record product activity event. context={}", telemetryContext, e);
         }

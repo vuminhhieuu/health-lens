@@ -1,6 +1,6 @@
 # Story 4.1: Product Event Instrumentation For Admin Analytics
 
-Status: review
+Status: done
 
 ## Execution Scope
 

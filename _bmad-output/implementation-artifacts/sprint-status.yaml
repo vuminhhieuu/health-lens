@@ -270,7 +270,7 @@ development_status:
 
   # Epic 4: Admin Analytics Instrumentation
   remaining-4-admin-analytics-instrumentation: in-progress
-  remaining-4-1-product-event-instrumentation-for-admin-analytics: ready-for-dev
+  remaining-4-1-product-event-instrumentation-for-admin-analytics: done
   remaining-4-2-admin-analytics-dashboard-db-backed-charts: ready-for-dev
   remaining-4-retrospective: optional
 

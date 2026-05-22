@@ -112,8 +112,10 @@ public class OcrJobConsumer {
 
     private boolean handleRecordWithCorrelation(MapRecord<String, Object, Object> record) {
         Map<String, Object> payload = normalizePayload(record.getValue());
-        String correlationId = valueAsString(payload.get("correlationId"));
-        CorrelationContext.ensureForJob(correlationId.isBlank() ? record.getId().getValue() : correlationId);
+        String payloadCorrelationId = valueAsString(payload.get("correlationId"));
+        String jobCorrelationFallback =
+                payloadCorrelationId.isBlank() ? record.getId().getValue() : payloadCorrelationId;
+        CorrelationContext.ensureForJob(CorrelationContext.resolveCorrelationIdForJob(jobCorrelationFallback));
         try {
             return handlePayload(record, payload);
         } finally {

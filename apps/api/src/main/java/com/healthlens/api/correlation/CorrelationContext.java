@@ -52,15 +52,19 @@ public final class CorrelationContext {
     }
 
     /**
-     * Resolves correlation id for async OCR/email jobs: prefer inbound HTTP context, else job id.
+     * Resolves correlation id for async OCR/email jobs: prefer inbound HTTP context, else a stable
+     * non-blank {@code jobIdFallback} (trimmed, max 120 chars). Does not synthesize a random id.
      */
     public static String resolveCorrelationIdForJob(String jobIdFallback) {
-        Objects.requireNonNull(jobIdFallback, "jobId");
         String inbound = getCorrelationId();
         if (inbound != null && !inbound.isBlank()) {
-            return inbound.trim().length() > 120 ? inbound.trim().substring(0, 120) : inbound.trim();
+            return normalizeTrimmed(inbound);
         }
-        return normalizeOrGenerate(jobIdFallback);
+        Objects.requireNonNull(jobIdFallback, "jobId");
+        if (jobIdFallback.isBlank()) {
+            throw new IllegalArgumentException("jobId must not be blank when correlation context is absent");
+        }
+        return normalizeTrimmed(jobIdFallback);
     }
 
     public static void set(Values values) {
@@ -82,6 +86,10 @@ public final class CorrelationContext {
         if (value == null || value.isBlank()) {
             return UUID.randomUUID().toString();
         }
+        return normalizeTrimmed(value);
+    }
+
+    private static String normalizeTrimmed(String value) {
         String trimmed = value.trim();
         return trimmed.length() > 120 ? trimmed.substring(0, 120) : trimmed;
     }
