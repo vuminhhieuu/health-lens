@@ -34,7 +34,6 @@ export function EmailPreferencesForm({
 
   const handleSave = () => {
     onSave(draftPrefs);
-    setIsDirty(false);
   };
 
   return (

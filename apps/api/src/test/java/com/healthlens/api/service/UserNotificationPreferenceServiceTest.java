@@ -48,7 +48,7 @@ class UserNotificationPreferenceServiceTest {
     @Test
     void getPreferences_createsDefaultsWhenMissing() {
         when(preferenceRepository.findById(userId)).thenReturn(Optional.empty());
-        when(preferenceRepository.save(any(UserNotificationPreference.class))).thenAnswer(invocation -> {
+        when(preferenceRepository.saveAndFlush(any(UserNotificationPreference.class))).thenAnswer(invocation -> {
             UserNotificationPreference preference = invocation.getArgument(0);
             return preference;
         });

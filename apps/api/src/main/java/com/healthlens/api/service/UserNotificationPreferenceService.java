@@ -7,18 +7,15 @@ import com.healthlens.api.notification.NotificationEmailCategory;
 import com.healthlens.api.repository.UserNotificationPreferenceRepository;
 import com.healthlens.api.repository.UserRepository;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.Locale;
 import java.util.UUID;
 
 @Service
 public class UserNotificationPreferenceService {
-
-    private static final ZoneId VN_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final UserNotificationPreferenceRepository preferenceRepository;
     private final UserRepository userRepository;
@@ -62,9 +59,7 @@ public class UserNotificationPreferenceService {
         if (preferenceRepository.existsById(userId)) {
             return;
         }
-        UserNotificationPreference preference = new UserNotificationPreference();
-        preference.setUserId(userId);
-        preferenceRepository.save(preference);
+        insertDefaultRow(userId);
     }
 
     @Transactional(readOnly = true)
@@ -97,11 +92,18 @@ public class UserNotificationPreferenceService {
 
     private UserNotificationPreference ensureRow(UUID userId) {
         return preferenceRepository.findById(userId)
-                .orElseGet(() -> {
-                    UserNotificationPreference preference = new UserNotificationPreference();
-                    preference.setUserId(userId);
-                    return preferenceRepository.save(preference);
-                });
+                .orElseGet(() -> insertDefaultRow(userId));
+    }
+
+    private UserNotificationPreference insertDefaultRow(UUID userId) {
+        try {
+            UserNotificationPreference preference = new UserNotificationPreference();
+            preference.setUserId(userId);
+            return preferenceRepository.saveAndFlush(preference);
+        } catch (DataIntegrityViolationException ex) {
+            return preferenceRepository.findById(userId)
+                    .orElseThrow(() -> ex);
+        }
     }
 
     private static NotificationPreferenceResponse toResponse(UserNotificationPreference preference) {
