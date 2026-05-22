@@ -35,6 +35,15 @@ public class Profile {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
+    @Column(name = "chronic_conditions", columnDefinition = "TEXT")
+    private String chronicConditions;
+
+    @Column(name = "current_medications", columnDefinition = "TEXT")
+    private String currentMedications;
+
+    @Column(name = "allergies", columnDefinition = "TEXT")
+    private String allergies;
+
     @Column(name = "date_of_birth")
     private LocalDate birthDate;
 

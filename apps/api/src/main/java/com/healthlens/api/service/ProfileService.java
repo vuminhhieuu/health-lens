@@ -43,6 +43,7 @@ public class ProfileService {
 
     private static final Logger log = LoggerFactory.getLogger(ProfileService.class);
     private static final int MAX_PROFILES_PER_USER = 10;
+    private static final int MAX_CLINICAL_TEXT_LENGTH = 1000;
 
     private final ProfileRepository profileRepository;
     private final ProfileShareRepository profileShareRepository;
@@ -143,7 +144,10 @@ public class ProfileService {
                     profile.getLastRecordAt(),
                     profile.getBirthDate(),
                     profile.getGender(),
-                    profile.getNotes()));
+                    profile.getNotes(),
+                    profile.getChronicConditions(),
+                    profile.getCurrentMedications(),
+                    profile.getAllergies()));
         }
         return responses;
     }
@@ -285,8 +289,8 @@ public class ProfileService {
         }
 
         String displayName = user.getFullName() != null ? user.getFullName().trim() : "Hồ sơ của tôi";
-        if (displayName.length() > 50) {
-            displayName = displayName.substring(0, 50);
+        if (displayName.length() > 100) {
+            displayName = displayName.substring(0, 100);
         }
 
         try {
@@ -296,6 +300,9 @@ public class ProfileService {
             profile.setBirthDate(user.getBirthDate());
             profile.setGender(user.getGender());
             profile.setNotes(null);
+            profile.setChronicConditions(null);
+            profile.setCurrentMedications(null);
+            profile.setAllergies(null);
             profile.setDefault(true);
             profile = profileRepository.save(profile);
             return mapToResponse(profile);
@@ -323,6 +330,9 @@ public class ProfileService {
         profile.setBirthDate(request.birthDate());
         profile.setGender(request.gender());
         profile.setNotes(request.notes() != null ? request.notes().trim() : null);
+        profile.setChronicConditions(normalizeClinicalText(request.chronicConditions(), "Bệnh nền"));
+        profile.setCurrentMedications(normalizeClinicalText(request.currentMedications(), "Thuốc đang dùng"));
+        profile.setAllergies(normalizeClinicalText(request.allergies(), "Dị ứng"));
         profile.setDefault(false);
 
         profile = profileRepository.save(profile);
@@ -376,6 +386,9 @@ public class ProfileService {
         profile.setBirthDate(request.birthDate());
         profile.setGender(normalizeOptionalText(request.gender()));
         profile.setNotes(normalizedNotes);
+        profile.setChronicConditions(normalizeClinicalText(request.chronicConditions(), "Bệnh nền"));
+        profile.setCurrentMedications(normalizeClinicalText(request.currentMedications(), "Thuốc đang dùng"));
+        profile.setAllergies(normalizeClinicalText(request.allergies(), "Dị ứng"));
 
         // Sync with User entity if this is a default profile
         if (profile.isDefault()) {
@@ -407,6 +420,14 @@ public class ProfileService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    private String normalizeClinicalText(String value, String fieldLabel) {
+        String normalized = normalizeOptionalText(value);
+        if (normalized != null && normalized.length() > MAX_CLINICAL_TEXT_LENGTH) {
+            throw new IllegalArgumentException(fieldLabel + " tối đa " + MAX_CLINICAL_TEXT_LENGTH + " ký tự");
+        }
+        return normalized;
+    }
+
     private ProfileResponse mapToResponse(Profile profile) {
         return mapToResponse(profile, null);
     }
@@ -418,6 +439,9 @@ public class ProfileService {
                 profile.getBirthDate(),
                 profile.getGender(),
                 profile.getNotes(),
+                profile.getChronicConditions(),
+                profile.getCurrentMedications(),
+                profile.getAllergies(),
                 profile.isDefault(),
                 latestRecord != null ? resolveLatestProfileStatus(latestRecord, profile) : null,
                 profile.getLastRecordAt(),

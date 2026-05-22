@@ -59,6 +59,8 @@ public final class ApiRoutes {
     public static final String USERS_ME_REL = "/me";
     public static final String USERS_ME_AVATAR_REL = USERS_ME_REL + "/avatar";
     public static final String USERS_ME_NOTIFICATION_PREFERENCES_REL = USERS_ME_REL + "/notification-preferences";
+    public static final String USERS_ME_HEALTH_CONTEXT = USERS_ME + "/health-context";
+    public static final String USERS_ME_HEALTH_CONTEXT_REL = USERS_ME_REL + "/health-context";
 
     // =========================================
     // Profile Paths (Frontend: ApiPaths.PROFILES)

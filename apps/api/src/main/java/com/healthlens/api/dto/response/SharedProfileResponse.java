@@ -12,6 +12,9 @@ public record SharedProfileResponse(
         Instant lastRecordAt,
         java.time.LocalDate birthDate,
         String gender,
-        String notes
+        String notes,
+        String chronicConditions,
+        String currentMedications,
+        String allergies
 ) {
 }

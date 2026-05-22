@@ -4,6 +4,9 @@ export type Profile = {
   birthDate?: string;
   gender?: string;
   notes?: string;
+  chronicConditions?: string;
+  currentMedications?: string;
+  allergies?: string;
   isDefault: boolean;
   createdAt: string;
   updatedAt: string;
@@ -34,6 +37,9 @@ export type SharedProfile = {
   birthDate?: string;
   gender?: string;
   notes?: string;
+  chronicConditions?: string;
+  currentMedications?: string;
+  allergies?: string;
 };
 
 export type HistoryItem = {
@@ -156,6 +162,9 @@ export function mapProfilesResponse(value: unknown): Profile[] {
         birthDate: asOptionalString(item.birthDate),
         gender: asOptionalString(item.gender),
         notes: asOptionalString(item.notes),
+        chronicConditions: asOptionalString(item.chronicConditions),
+        currentMedications: asOptionalString(item.currentMedications),
+        allergies: asOptionalString(item.allergies),
         lastRecordAt: asOptionalString(item.lastRecordAt),
         latestStatus: asOptionalString(item.latestStatus),
       },
@@ -228,6 +237,9 @@ export function mapSharedProfilesResponse(value: unknown): SharedProfile[] {
         birthDate: asOptionalString(item.birthDate),
         gender: asOptionalString(item.gender),
         notes: asOptionalString(item.notes),
+        chronicConditions: asOptionalString(item.chronicConditions),
+        currentMedications: asOptionalString(item.currentMedications),
+        allergies: asOptionalString(item.allergies),
       },
     ];
   });

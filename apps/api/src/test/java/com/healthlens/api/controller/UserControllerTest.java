@@ -88,6 +88,11 @@ class UserControllerTest {
                 "female",
                 true,
                 false,
-                avatarUrl);
+                avatarUrl,
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 }

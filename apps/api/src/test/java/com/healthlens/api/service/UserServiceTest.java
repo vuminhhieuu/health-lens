@@ -1,6 +1,7 @@
 package com.healthlens.api.service;
 
 import com.healthlens.api.audit.AuditEventRecorder;
+import com.healthlens.api.dto.request.UpdateHealthContextRequest;
 import com.healthlens.api.dto.request.UpdateUserRequest;
 import com.healthlens.api.dto.response.UserResponse;
 import com.healthlens.api.entity.Profile;
@@ -96,7 +97,9 @@ class UserServiceTest {
         UpdateUserRequest request = new UpdateUserRequest(
                 "New Name  ",
                 LocalDate.of(1995, 5, 5),
-                "other");
+                "other",
+                null,
+                null);
 
         UserResponse response = userService.updateCurrentUser(userId, request);
 
@@ -114,7 +117,7 @@ class UserServiceTest {
         when(profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)).thenReturn(Optional.empty());
 
         // Update only full name
-        UpdateUserRequest request = new UpdateUserRequest("Just Name", null, null);
+        UpdateUserRequest request = new UpdateUserRequest("Just Name", null, null, null, null);
 
         UserResponse response = userService.updateCurrentUser(userId, request);
 
@@ -129,7 +132,7 @@ class UserServiceTest {
     void updateCurrentUser_NotFound_ThrowsException() {
         when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
-        UpdateUserRequest request = new UpdateUserRequest("Name", LocalDate.of(1995, 5, 5), "other");
+        UpdateUserRequest request = new UpdateUserRequest("Name", LocalDate.of(1995, 5, 5), "other", null, null);
 
         assertThatThrownBy(() -> userService.updateCurrentUser(userId, request))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -245,6 +248,104 @@ class UserServiceTest {
         verify(storageService).deleteObject("avatars/%s/old.png".formatted(userId));
         assertThat(testUser.getAvatarStorageKey()).startsWith("avatars/" + userId + "/");
         assertThat(testUser.getAvatarContentType()).isEqualTo("image/webp");
+    }
+
+    @Test
+    void updateCurrentUser_PersistsPersonalDescriptionAndNotes() {
+        when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)).thenReturn(Optional.empty());
+
+        UpdateUserRequest request = new UpdateUserRequest(
+                "New Name",
+                null,
+                null,
+                "  Mô tả cá nhân  ",
+                "  Ghi chú cá nhân  ");
+
+        UserResponse response = userService.updateCurrentUser(userId, request);
+
+        assertThat(testUser.getPersonalDescription()).isEqualTo("Mô tả cá nhân");
+        assertThat(testUser.getPersonalNotes()).isEqualTo("Ghi chú cá nhân");
+        assertThat(response.personalDescription()).isEqualTo("Mô tả cá nhân");
+        assertThat(response.personalNotes()).isEqualTo("Ghi chú cá nhân");
+    }
+
+    @Test
+    void updateCurrentUser_ClearsPersonalFieldsWhenEmpty() {
+        testUser.setPersonalDescription("Old description");
+        testUser.setPersonalNotes("Old notes");
+        when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)).thenReturn(Optional.empty());
+
+        UpdateUserRequest request = new UpdateUserRequest(
+                "New Name",
+                null,
+                null,
+                "",
+                "   ");
+
+        UserResponse response = userService.updateCurrentUser(userId, request);
+
+        assertThat(testUser.getPersonalDescription()).isNull();
+        assertThat(testUser.getPersonalNotes()).isNull();
+        assertThat(response.personalDescription()).isNull();
+        assertThat(response.personalNotes()).isNull();
+    }
+
+    @Test
+    void updateHealthContext_ClearsClinicalFieldsWhenEmpty() {
+        Profile defaultProfile = new Profile();
+        defaultProfile.setId(UUID.randomUUID());
+        defaultProfile.setUser(testUser);
+        defaultProfile.setDisplayName("Old Name");
+        defaultProfile.setDefault(true);
+        defaultProfile.setChronicConditions("Tiểu đường");
+        defaultProfile.setCurrentMedications("Metformin");
+        defaultProfile.setAllergies("Penicillin");
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
+        when(profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)).thenReturn(Optional.of(defaultProfile));
+        when(profileRepository.save(any(Profile.class))).thenAnswer(i -> i.getArgument(0));
+
+        UpdateHealthContextRequest request = new UpdateHealthContextRequest("", "  ", null);
+
+        UserResponse response = userService.updateHealthContext(userId, request);
+
+        assertThat(defaultProfile.getChronicConditions()).isNull();
+        assertThat(defaultProfile.getCurrentMedications()).isNull();
+        assertThat(defaultProfile.getAllergies()).isNull();
+        assertThat(response.chronicConditions()).isNull();
+        assertThat(response.currentMedications()).isNull();
+        assertThat(response.allergies()).isNull();
+    }
+
+    @Test
+    void updateHealthContext_UpdatesDefaultProfileClinicalFields() {
+        Profile defaultProfile = new Profile();
+        defaultProfile.setId(UUID.randomUUID());
+        defaultProfile.setUser(testUser);
+        defaultProfile.setDisplayName("Old Name");
+        defaultProfile.setDefault(true);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
+        when(profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)).thenReturn(Optional.of(defaultProfile));
+        when(profileRepository.save(any(Profile.class))).thenAnswer(i -> i.getArgument(0));
+
+        UpdateHealthContextRequest request = new UpdateHealthContextRequest(
+                "  Tiểu đường  ",
+                "  Metformin  ",
+                "  Penicillin  ");
+
+        UserResponse response = userService.updateHealthContext(userId, request);
+
+        assertThat(defaultProfile.getChronicConditions()).isEqualTo("Tiểu đường");
+        assertThat(defaultProfile.getCurrentMedications()).isEqualTo("Metformin");
+        assertThat(defaultProfile.getAllergies()).isEqualTo("Penicillin");
+        assertThat(response.chronicConditions()).isEqualTo("Tiểu đường");
+        assertThat(response.currentMedications()).isEqualTo("Metformin");
+        assertThat(response.allergies()).isEqualTo("Penicillin");
     }
 
     @Test

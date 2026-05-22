@@ -3,6 +3,7 @@ package com.healthlens.api.service;
 import com.healthlens.api.audit.AuditActions;
 import com.healthlens.api.audit.AuditEventRecorder;
 import com.healthlens.api.audit.AuditResourceTypes;
+import com.healthlens.api.dto.request.UpdateHealthContextRequest;
 import com.healthlens.api.dto.request.UpdateUserRequest;
 import com.healthlens.api.dto.response.UserResponse;
 import com.healthlens.api.entity.Profile;
@@ -32,6 +33,8 @@ import java.util.UUID;
 public class UserService {
 
     public static final long MAX_AVATAR_BYTES = 2L * 1024L * 1024L;
+    private static final int MAX_PERSONAL_TEXT_LENGTH = 500;
+    private static final int MAX_CLINICAL_TEXT_LENGTH = 1000;
     private static final Duration AVATAR_URL_TTL = Duration.ofMinutes(15);
     private static final Set<String> ALLOWED_AVATAR_CONTENT_TYPES = Set.of(
             "image/jpeg",
@@ -160,6 +163,10 @@ public class UserService {
         if (request.gender() != null) {
             user.setGender(normalizeGender(request.gender()));
         }
+        user.setPersonalDescription(
+                normalizePersonalText(request.personalDescription(), MAX_PERSONAL_TEXT_LENGTH, "Mô tả cá nhân"));
+        user.setPersonalNotes(
+                normalizePersonalText(request.personalNotes(), MAX_PERSONAL_TEXT_LENGTH, "Ghi chú cá nhân"));
 
         user = userRepository.save(user);
         syncDefaultProfile(userId, user);
@@ -178,6 +185,53 @@ public class UserService {
         return mapToResponse(user);
     }
 
+    @Transactional
+    public UserResponse updateHealthContext(UUID userId, UpdateHealthContextRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
+
+        Profile defaultProfile = profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)
+                .orElseGet(() -> {
+                    ensureDefaultProfileExists(userId, user);
+                    return profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)
+                            .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hồ sơ mặc định"));
+                });
+
+        defaultProfile.setChronicConditions(
+                normalizeClinicalText(request.chronicConditions(), "Bệnh nền"));
+        defaultProfile.setCurrentMedications(
+                normalizeClinicalText(request.currentMedications(), "Thuốc đang dùng"));
+        defaultProfile.setAllergies(normalizeClinicalText(request.allergies(), "Dị ứng"));
+
+        profileRepository.save(defaultProfile);
+
+        auditEventRecorder.recordEvent(
+                userId,
+                AuditActions.UPDATE_PROFILE,
+                AuditResourceTypes.PROFILE,
+                defaultProfile.getId(),
+                Map.of("action", "health_context_update"));
+
+        return mapToResponse(user);
+    }
+
+    private void ensureDefaultProfileExists(UUID userId, User user) {
+        if (profileRepository.findFirstByUserIdAndIsDefaultTrue(userId).isPresent()) {
+            return;
+        }
+        Profile profile = new Profile();
+        profile.setUser(user);
+        String displayName = user.getFullName() != null ? user.getFullName().trim() : "Hồ sơ của tôi";
+        if (displayName.length() > 100) {
+            displayName = displayName.substring(0, 100);
+        }
+        profile.setDisplayName(displayName);
+        profile.setBirthDate(user.getBirthDate());
+        profile.setGender(user.getGender());
+        profile.setDefault(true);
+        profileRepository.save(profile);
+    }
+
     private void syncDefaultProfile(UUID userId, User user) {
         profileRepository.findFirstByUserIdAndIsDefaultTrue(userId)
                 .ifPresent(profile -> applyUserIdentityToProfile(profile, user));
@@ -185,8 +239,8 @@ public class UserService {
 
     private void applyUserIdentityToProfile(Profile profile, User user) {
         String displayName = user.getFullName() != null ? user.getFullName().trim() : "Hồ sơ của tôi";
-        if (displayName.length() > 50) {
-            displayName = displayName.substring(0, 50);
+        if (displayName.length() > 100) {
+            displayName = displayName.substring(0, 100);
         }
         profile.setDisplayName(displayName);
         profile.setBirthDate(user.getBirthDate());
@@ -288,7 +342,32 @@ public class UserService {
         }
     }
 
+    private String normalizePersonalText(String value, int maxLength, String fieldLabel) {
+        String normalized = normalizeOptionalText(value);
+        if (normalized != null && normalized.length() > maxLength) {
+            throw new IllegalArgumentException(fieldLabel + " tối đa " + maxLength + " ký tự");
+        }
+        return normalized;
+    }
+
+    private String normalizeClinicalText(String value, String fieldLabel) {
+        String normalized = normalizeOptionalText(value);
+        if (normalized != null && normalized.length() > MAX_CLINICAL_TEXT_LENGTH) {
+            throw new IllegalArgumentException(fieldLabel + " tối đa " + MAX_CLINICAL_TEXT_LENGTH + " ký tự");
+        }
+        return normalized;
+    }
+
+    private String normalizeOptionalText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     private UserResponse mapToResponse(User user) {
+        Profile defaultProfile = profileRepository.findFirstByUserIdAndIsDefaultTrue(user.getId()).orElse(null);
         return new UserResponse(
                 user.getId(),
                 user.getEmail(),
@@ -297,7 +376,12 @@ public class UserService {
                 user.getGender(),
                 user.isEmailVerified(),
                 false, // consentGiven is currently not persisted so we just return false
-                buildAvatarUrl(user.getAvatarStorageKey())
+                buildAvatarUrl(user.getAvatarStorageKey()),
+                user.getPersonalDescription(),
+                user.getPersonalNotes(),
+                defaultProfile != null ? defaultProfile.getChronicConditions() : null,
+                defaultProfile != null ? defaultProfile.getCurrentMedications() : null,
+                defaultProfile != null ? defaultProfile.getAllergies() : null
         );
     }
 

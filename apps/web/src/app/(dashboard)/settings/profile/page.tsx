@@ -24,7 +24,9 @@ import SafeImage from "@/components/ui/SafeImage";
 import { ErrorState, InlineFieldError, LoadingState } from "@/components/ui/StateComponents";
 import {
   updateUserProfileSchema,
+  updateHealthContextSchema,
   UpdateUserProfileInput,
+  UpdateHealthContextInput,
 } from "@healthlens/shared";
 
 type UserProfile = {
@@ -35,10 +37,26 @@ type UserProfile = {
   gender: string;
   emailVerified: boolean;
   avatarUrl?: string | null;
+  personalDescription?: string | null;
+  personalNotes?: string | null;
+  chronicConditions?: string | null;
+  currentMedications?: string | null;
+  allergies?: string | null;
 };
+
+const profileSettingsSchema = updateUserProfileSchema.merge(updateHealthContextSchema);
+type ProfileSettingsInput = UpdateUserProfileInput & UpdateHealthContextInput;
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 const ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+function normalizeOptionalTextField(value?: string | null): string | null {
+  if (value == null) {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
 function getInitials(name?: string | null) {
   const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
@@ -67,8 +85,8 @@ export default function ProfileSettingsPage() {
     control,
     reset,
     formState: { errors, isValid, isDirty },
-  } = useForm<UpdateUserProfileInput>({
-    resolver: zodResolver(updateUserProfileSchema),
+  } = useForm<ProfileSettingsInput>({
+    resolver: zodResolver(profileSettingsSchema),
     mode: "onBlur",
   });
 
@@ -92,6 +110,11 @@ export default function ProfileSettingsPage() {
         fullName: userProfile.fullName || "",
         birthDate: userProfile.birthDate || "",
         gender: userProfile.gender || "",
+        personalDescription: userProfile.personalDescription || "",
+        personalNotes: userProfile.personalNotes || "",
+        chronicConditions: userProfile.chronicConditions || "",
+        currentMedications: userProfile.currentMedications || "",
+        allergies: userProfile.allergies || "",
       });
     }
   }, [userProfile, reset]);
@@ -105,13 +128,36 @@ export default function ProfileSettingsPage() {
   }, [avatarPreviewUrl]);
 
   const saveMutation = useMutation({
-    mutationFn: async (data: UpdateUserProfileInput) => {
-      const payload = {
-        ...data,
+    mutationFn: async (data: ProfileSettingsInput) => {
+      const userPayload = {
+        fullName: data.fullName,
         birthDate: data.birthDate ? data.birthDate : null,
         gender: data.gender ? data.gender : null,
+        personalDescription: normalizeOptionalTextField(data.personalDescription),
+        personalNotes: normalizeOptionalTextField(data.personalNotes),
       };
-      const profileResponse = await apiClient.put(API_ROUTES.USERS.ME, payload);
+      const healthPayload = {
+        chronicConditions: normalizeOptionalTextField(data.chronicConditions),
+        currentMedications: normalizeOptionalTextField(data.currentMedications),
+        allergies: normalizeOptionalTextField(data.allergies),
+      };
+      await apiClient.put(API_ROUTES.USERS.ME, userPayload);
+      let latestUserPayload;
+      try {
+        const healthResponse = await apiClient.put(
+          API_ROUTES.USERS.ME_HEALTH_CONTEXT,
+          healthPayload,
+        );
+        latestUserPayload = healthResponse.data;
+      } catch (healthError) {
+        await queryClient.invalidateQueries({ queryKey: ["currentUser"] });
+        throw Object.assign(
+          new Error(
+            "Đã lưu thông tin cơ bản nhưng không thể lưu thông tin sức khỏe. Vui lòng thử lại.",
+          ),
+          { cause: healthError },
+        );
+      }
 
       if (pendingAvatarFile) {
         const formData = new FormData();
@@ -130,7 +176,7 @@ export default function ProfileSettingsPage() {
         return avatarResponse.data;
       }
 
-      return profileResponse.data;
+      return latestUserPayload;
     },
     onSuccess: (payload) => {
       setAvatarError(null);
@@ -147,13 +193,18 @@ export default function ProfileSettingsPage() {
     },
     onError: (error) => {
       console.error("Failed to update profile", error);
-      // user-facing feedback below; error handling/telemetry can be added later if needed
-      setAvatarError("Không thể lưu ảnh đại diện. Vui lòng thử lại.");
-      notify.error("Đã xảy ra lỗi khi cập nhật.");
+      const message =
+        error instanceof Error && error.message.includes("thông tin sức khỏe")
+          ? error.message
+          : "Đã xảy ra lỗi khi cập nhật.";
+      if (!message.includes("thông tin sức khỏe")) {
+        setAvatarError("Không thể lưu ảnh đại diện. Vui lòng thử lại.");
+      }
+      notify.error(message);
     },
   });
 
-  const onSubmit = (data: UpdateUserProfileInput) => {
+  const onSubmit = (data: ProfileSettingsInput) => {
     saveMutation.mutate(data);
   };
 
@@ -303,7 +354,7 @@ export default function ProfileSettingsPage() {
                   <Pencil className="w-4 h-4" />
                 </button>
                 {avatarPreviewUrl ||
-                (userProfile?.avatarUrl && !isAvatarRemovalPending) ? (
+                  (userProfile?.avatarUrl && !isAvatarRemovalPending) ? (
                   <button
                     type="button"
                     aria-label="Gỡ ảnh đại diện"
@@ -409,58 +460,163 @@ export default function ProfileSettingsPage() {
               <div className="flex flex-col gap-2">
                 <fieldset>
                   <legend className="text-sm font-bold text-[#6d7a77]">Giới tính</legend>
-                <Controller
-                  name="gender"
-                  control={control}
-                  render={({ field }) => (
-                    <div className="flex gap-6 h-12 items-center" role="radiogroup" aria-label="Giới tính">
-                      <label htmlFor="profile-settings-gender-male" className="flex items-center gap-3 cursor-pointer group">
-                        <input
-                          id="profile-settings-gender-male"
-                          type="radio"
-                          name="profile-settings-gender"
-                          value="male"
-                          checked={field.value === "male"}
-                          onChange={() => field.onChange("male")}
-                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]"
-                        />
-                        <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">
-                          Nam
-                        </span>
-                      </label>
-                      <label htmlFor="profile-settings-gender-female" className="flex items-center gap-3 cursor-pointer group">
-                        <input
-                          id="profile-settings-gender-female"
-                          type="radio"
-                          name="profile-settings-gender"
-                          value="female"
-                          checked={field.value === "female"}
-                          onChange={() => field.onChange("female")}
-                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]"
-                        />
-                        <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">
-                          Nữ
-                        </span>
-                      </label>
-                      <label htmlFor="profile-settings-gender-other" className="flex items-center gap-3 cursor-pointer group">
-                        <input
-                          id="profile-settings-gender-other"
-                          type="radio"
-                          name="profile-settings-gender"
-                          value="other"
-                          checked={field.value === "other"}
-                          onChange={() => field.onChange("other")}
-                          className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]"
-                        />
-                        <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">
-                          Khác
-                        </span>
-                      </label>
-                    </div>
-                  )}
-                />
+                  <Controller
+                    name="gender"
+                    control={control}
+                    render={({ field }) => (
+                      <div className="flex gap-6 h-12 items-center" role="radiogroup" aria-label="Giới tính">
+                        <label htmlFor="profile-settings-gender-male" className="flex items-center gap-3 cursor-pointer group">
+                          <input
+                            id="profile-settings-gender-male"
+                            type="radio"
+                            name="profile-settings-gender"
+                            value="male"
+                            checked={field.value === "male"}
+                            onChange={() => field.onChange("male")}
+                            className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]"
+                          />
+                          <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">
+                            Nam
+                          </span>
+                        </label>
+                        <label htmlFor="profile-settings-gender-female" className="flex items-center gap-3 cursor-pointer group">
+                          <input
+                            id="profile-settings-gender-female"
+                            type="radio"
+                            name="profile-settings-gender"
+                            value="female"
+                            checked={field.value === "female"}
+                            onChange={() => field.onChange("female")}
+                            className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]"
+                          />
+                          <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">
+                            Nữ
+                          </span>
+                        </label>
+                        <label htmlFor="profile-settings-gender-other" className="flex items-center gap-3 cursor-pointer group">
+                          <input
+                            id="profile-settings-gender-other"
+                            type="radio"
+                            name="profile-settings-gender"
+                            value="other"
+                            checked={field.value === "other"}
+                            onChange={() => field.onChange("other")}
+                            className="w-5 h-5 text-[#00685f] border-[#bcc9c6] bg-[#e9f6f3] focus:ring-[#00685f]"
+                          />
+                          <span className="text-[#121e1c] font-medium group-hover:text-[#00685f] transition-colors">
+                            Khác
+                          </span>
+                        </label>
+                      </div>
+                    )}
+                  />
                 </fieldset>
                 <InlineFieldError id="profile-settings-gender-error" message={errors.gender?.message} />
+              </div>
+
+              <div className="md:col-span-2 space-y-6 pt-6 border-t border-[#bcc9c6]/20">
+                <div>
+                  <h3 className="text-lg font-bold text-[#121e1c] mb-1">
+                    Mô tả & ghi chú cá nhân
+                  </h3>
+                  <p className="text-sm text-[#6d7a77] mb-4">
+                    Ghi chú tài khoản.
+                  </p>
+                  <div className="grid grid-cols-1 gap-6">
+                    <div className="flex flex-col gap-2">
+                      <label htmlFor="profile-settings-personal-description" className="text-sm font-bold text-[#6d7a77]">
+                        Mô tả ngắn về bạn
+                      </label>
+                      <textarea
+                        id="profile-settings-personal-description"
+                        {...register("personalDescription")}
+                        rows={3}
+                        aria-invalid={Boolean(errors.personalDescription)}
+                        aria-describedby={errors.personalDescription ? "profile-settings-personal-description-error" : undefined}
+                        className="w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] resize-none"
+                        placeholder="Ví dụ: Tôi thường đi khám định kỳ 6 tháng/lần..."
+                      />
+                      <InlineFieldError
+                        id="profile-settings-personal-description-error"
+                        message={errors.personalDescription?.message}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label htmlFor="profile-settings-personal-notes" className="text-sm font-bold text-[#6d7a77]">
+                        Ghi chú cá nhân (không thay thế hồ sơ y tế)
+                      </label>
+                      <textarea
+                        id="profile-settings-personal-notes"
+                        {...register("personalNotes")}
+                        rows={3}
+                        aria-invalid={Boolean(errors.personalNotes)}
+                        aria-describedby={errors.personalNotes ? "profile-settings-personal-notes-error" : undefined}
+                        className="w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] resize-none"
+                        placeholder="Ghi chú riêng về bạn"
+                      />
+                      <InlineFieldError
+                        id="profile-settings-personal-notes-error"
+                        message={errors.personalNotes?.message}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-bold text-[#121e1c] mb-1">
+                    Thông tin sức khỏe của tôi
+                  </h3>
+                  <p className="text-sm text-[#6d7a77] mb-4">
+                    Bệnh nền, thuốc và dị ứng.
+                  </p>
+                  <div className="grid grid-cols-1 gap-6">
+                    <div className="flex flex-col gap-2">
+                      <label htmlFor="profile-settings-chronic" className="text-sm font-bold text-[#6d7a77]">
+                        Bệnh nền / tình trạng lâu dài
+                      </label>
+                      <textarea
+                        id="profile-settings-chronic"
+                        {...register("chronicConditions")}
+                        rows={2}
+                        aria-invalid={Boolean(errors.chronicConditions)}
+                        aria-describedby={errors.chronicConditions ? "profile-settings-chronic-error" : undefined}
+                        className="w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] resize-none"
+                      />
+                      <InlineFieldError id="profile-settings-chronic-error" message={errors.chronicConditions?.message} />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label htmlFor="profile-settings-medications" className="text-sm font-bold text-[#6d7a77]">
+                        Thuốc đang dùng
+                      </label>
+                      <textarea
+                        id="profile-settings-medications"
+                        {...register("currentMedications")}
+                        rows={2}
+                        aria-invalid={Boolean(errors.currentMedications)}
+                        aria-describedby={errors.currentMedications ? "profile-settings-medications-error" : undefined}
+                        className="w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] resize-none"
+                      />
+                      <InlineFieldError id="profile-settings-medications-error" message={errors.currentMedications?.message} />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label htmlFor="profile-settings-allergies" className="text-sm font-bold text-[#6d7a77]">
+                        Dị ứng đã biết
+                      </label>
+                      <textarea
+                        id="profile-settings-allergies"
+                        {...register("allergies")}
+                        rows={2}
+                        aria-invalid={Boolean(errors.allergies)}
+                        aria-describedby={errors.allergies ? "profile-settings-allergies-error" : undefined}
+                        className="w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] resize-none"
+                      />
+                      <InlineFieldError id="profile-settings-allergies-error" message={errors.allergies?.message} />
+                    </div>
+                  </div>
+                  <p className="mt-4 text-xs text-[#6d7a77]">
+                    Thông tin tham khảo — trao đổi với bác sĩ trước khi quyết định điều trị.
+                  </p>
+                </div>
               </div>
 
               <div className="md:col-span-2 flex justify-end gap-4 mt-4 pt-6 border-t border-[#bcc9c6]/20">
@@ -490,8 +646,7 @@ export default function ProfileSettingsPage() {
               </h2>
             </div>
             <p className="text-sm text-[#6d7a77] mb-6 leading-relaxed">
-              Bệnh nền, thuốc và dị ứng được quản lý theo từng hồ sơ gia đình — không
-              nhập tại trang cài đặt tài khoản.
+              Bệnh nền, thuốc và dị ứng của người thân được quản lý theo từng hồ sơ gia đình.
             </p>
             <Link
               href="/profiles"

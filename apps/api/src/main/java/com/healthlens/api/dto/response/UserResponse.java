@@ -11,5 +11,10 @@ public record UserResponse(
                 String gender,
                 boolean emailVerified,
                 Boolean consentGiven,
-                String avatarUrl) {
+                String avatarUrl,
+                String personalDescription,
+                String personalNotes,
+                String chronicConditions,
+                String currentMedications,
+                String allergies) {
 }

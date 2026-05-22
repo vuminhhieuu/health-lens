@@ -239,13 +239,80 @@ class ProfileServiceTest {
                                 "  Member Name  ",
                                 LocalDate.of(1990, 1, 1),
                                 "male",
-                                "  Some notes  ");
+                                "  Some notes  ",
+                                "  Tiểu đường  ",
+                                "  Aspirin  ",
+                                "  Hải sản  ");
 
                 ProfileResponse response = profileService.createProfile(userId, request);
 
                 assertThat(response.displayName()).isEqualTo("Member Name");
                 assertThat(response.notes()).isEqualTo("Some notes");
+                assertThat(response.chronicConditions()).isEqualTo("Tiểu đường");
+                assertThat(response.currentMedications()).isEqualTo("Aspirin");
+                assertThat(response.allergies()).isEqualTo("Hải sản");
                 verify(profileRepository).save(any(Profile.class));
+        }
+
+        @Test
+        void updateProfile_PersistsClinicalFields() {
+                UUID profileId = UUID.randomUUID();
+                Profile profile = new Profile();
+                profile.setId(profileId);
+                profile.setUser(testUser);
+                profile.setDisplayName("Mẹ");
+                profile.setDefault(false);
+
+                when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+                when(profileRepository.save(any(Profile.class))).thenAnswer(i -> i.getArgument(0));
+
+                UpdateProfileRequest request = new UpdateProfileRequest(
+                                "Mẹ",
+                                LocalDate.of(1960, 3, 3),
+                                "female",
+                                "Ghi chú chung",
+                                "Cao huyết áp",
+                                "Amlodipine",
+                                "Penicillin");
+
+                ProfileResponse response = profileService.updateProfile(userId, profileId, request);
+
+                assertThat(profile.getChronicConditions()).isEqualTo("Cao huyết áp");
+                assertThat(profile.getCurrentMedications()).isEqualTo("Amlodipine");
+                assertThat(profile.getAllergies()).isEqualTo("Penicillin");
+                assertThat(response.chronicConditions()).isEqualTo("Cao huyết áp");
+        }
+
+        @Test
+        void updateProfile_ClearsClinicalFieldsWhenEmpty() {
+                UUID profileId = UUID.randomUUID();
+                Profile profile = new Profile();
+                profile.setId(profileId);
+                profile.setUser(testUser);
+                profile.setDisplayName("Mẹ");
+                profile.setChronicConditions("Cao huyết áp");
+                profile.setCurrentMedications("Amlodipine");
+                profile.setAllergies("Penicillin");
+                profile.setDefault(false);
+
+                when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+                when(profileRepository.save(any(Profile.class))).thenAnswer(i -> i.getArgument(0));
+
+                UpdateProfileRequest request = new UpdateProfileRequest(
+                                "Mẹ",
+                                null,
+                                null,
+                                null,
+                                "",
+                                "  ",
+                                null);
+
+                ProfileResponse response = profileService.updateProfile(userId, profileId, request);
+
+                assertThat(profile.getChronicConditions()).isNull();
+                assertThat(profile.getCurrentMedications()).isNull();
+                assertThat(profile.getAllergies()).isNull();
+                assertThat(response.chronicConditions()).isNull();
         }
 
         @Test
@@ -256,6 +323,9 @@ class ProfileServiceTest {
                                 "Extra Member",
                                 LocalDate.of(1990, 1, 1),
                                 "other",
+                                null,
+                                null,
+                                null,
                                 null);
 
                 assertThatThrownBy(() -> profileService.createProfile(userId, request))
@@ -272,6 +342,9 @@ class ProfileServiceTest {
                                 "Member Name",
                                 LocalDate.of(1990, 1, 1),
                                 "male",
+                                null,
+                                null,
+                                null,
                                 null);
 
                 assertThatThrownBy(() -> profileService.createProfile(userId, request))

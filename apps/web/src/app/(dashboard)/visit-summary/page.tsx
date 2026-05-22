@@ -22,11 +22,14 @@ import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { breadcrumbFromHome } from "@/lib/layout/dashboardBreadcrumbTrails";
 import { ErrorState, LoadingState } from "@/components/ui";
 import { apiClient } from "@/lib/api/apiClient";
+import { mapProfilesResponse } from "@/lib/profileMappings";
 
 type Profile = {
   id: string;
   displayName: string;
   isDefault: boolean;
+  currentMedications?: string;
+  allergies?: string;
 };
 
 type HealthRecord = {
@@ -47,11 +50,22 @@ const doctorQuestions = [
 ];
 
 const patientPrepFields = [
-  "Mục tiêu buổi khám",
-  "Triệu chứng hoặc điều làm tôi lo nhất",
-  "Thuốc/thực phẩm chức năng đang dùng",
-  "Dị ứng hoặc phản ứng thuốc đã biết",
+  { label: "Mục tiêu buổi khám" },
+  { label: "Triệu chứng hoặc điều làm tôi lo nhất" },
+  { label: "Thuốc/thực phẩm chức năng đang dùng", profileField: "currentMedications" as const },
+  { label: "Dị ứng hoặc phản ứng thuốc đã biết", profileField: "allergies" as const },
 ];
+
+function profileFieldHint(
+  profile: Profile | undefined,
+  field: (typeof patientPrepFields)[number],
+): string | null {
+  if (!profile || !("profileField" in field) || !field.profileField) {
+    return null;
+  }
+  const value = profile[field.profileField];
+  return value?.trim() ? value.trim() : null;
+}
 
 export default function VisitSummaryPage() {
   return (
@@ -88,7 +102,7 @@ function VisitSummaryPageContent() {
     queryKey: ["visit-summary-profiles"],
     queryFn: async () => {
       const response = await apiClient.get(ApiPaths.PROFILES.BASE);
-      return (response.data?.data ?? []) as Profile[];
+      return mapProfilesResponse(response.data?.data);
     },
   });
 
@@ -322,18 +336,27 @@ function VisitSummaryPageContent() {
               </div>
 
               <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-                {patientPrepFields.map((field) => (
-                  <div key={field} className="rounded-xl border border-[#d8e4e1] p-4">
-                    <h3 className="text-sm font-bold text-[#121e1c]">{field}</h3>
+                {patientPrepFields.map((field) => {
+                  const hint = profileFieldHint(selectedProfile, field);
+                  return (
+                  <div key={field.label} className="rounded-xl border border-[#d8e4e1] p-4">
+                    <h3 className="text-sm font-bold text-[#121e1c]">{field.label}</h3>
                     <div
                       className="mt-4 h-16 rounded-lg border border-dashed border-[#9fb3ae]"
                       aria-hidden="true"
                     />
-                    <p className="mt-2 text-xs text-[#6d7a77]">
-                      Người dùng tự điền trước hoặc trong buổi khám.
-                    </p>
+                    {hint ? (
+                      <p className="mt-2 text-xs text-[#6d7a77]">
+                        Gợi ý từ hồ sơ (tham khảo): {hint}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-xs text-[#6d7a77]">
+                        Người dùng tự điền trước hoặc trong buổi khám.
+                      </p>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="mt-5 rounded-xl border border-[#d8e4e1] p-4">

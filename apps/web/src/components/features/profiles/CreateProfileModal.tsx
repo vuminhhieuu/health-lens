@@ -8,6 +8,14 @@ import { CreateProfileInput, createProfileSchema } from "@healthlens/shared";
 
 import { InlineFieldError } from "@/components/ui/StateComponents";
 
+function normalizeOptionalTextField(value?: string | null): string | null {
+  if (value == null) {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 interface CreateProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -34,6 +42,9 @@ export function CreateProfileModal({
       birthDate: "",
       gender: "other",
       notes: "",
+      chronicConditions: "",
+      currentMedications: "",
+      allergies: "",
     },
   });
 
@@ -48,7 +59,10 @@ export function CreateProfileModal({
       ...data,
       birthDate: data.birthDate || null,
       gender: data.gender || null,
-      notes: data.notes || null,
+      notes: normalizeOptionalTextField(data.notes),
+      chronicConditions: normalizeOptionalTextField(data.chronicConditions),
+      currentMedications: normalizeOptionalTextField(data.currentMedications),
+      allergies: normalizeOptionalTextField(data.allergies),
     };
     onSubmit(formattedData);
   };
@@ -145,6 +159,54 @@ export function CreateProfileModal({
                 />
                 <InlineFieldError id="create-profile-gender-error" message={errors.gender?.message} />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="create-profile-chronic" className="text-sm font-bold text-[#6d7a77] ml-1">
+                Bệnh nền / tình trạng lâu dài
+              </label>
+              <textarea
+                id="create-profile-chronic"
+                {...register("chronicConditions")}
+                aria-invalid={Boolean(errors.chronicConditions)}
+                aria-describedby={errors.chronicConditions ? "create-profile-chronic-error" : undefined}
+                placeholder="Ví dụ: Tiểu đường type 2, cao huyết áp..."
+                rows={2}
+                className="w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all resize-none placeholder:text-[#bcc9c6]"
+              />
+              <InlineFieldError id="create-profile-chronic-error" message={errors.chronicConditions?.message} />
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="create-profile-medications" className="text-sm font-bold text-[#6d7a77] ml-1">
+                Thuốc đang dùng
+              </label>
+              <textarea
+                id="create-profile-medications"
+                {...register("currentMedications")}
+                aria-invalid={Boolean(errors.currentMedications)}
+                aria-describedby={errors.currentMedications ? "create-profile-medications-error" : undefined}
+                placeholder="Ví dụ: Metformin 500mg, Amlodipine..."
+                rows={2}
+                className="w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all resize-none placeholder:text-[#bcc9c6]"
+              />
+              <InlineFieldError id="create-profile-medications-error" message={errors.currentMedications?.message} />
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="create-profile-allergies" className="text-sm font-bold text-[#6d7a77] ml-1">
+                Dị ứng đã biết
+              </label>
+              <textarea
+                id="create-profile-allergies"
+                {...register("allergies")}
+                aria-invalid={Boolean(errors.allergies)}
+                aria-describedby={errors.allergies ? "create-profile-allergies-error" : undefined}
+                placeholder="Ví dụ: Penicillin, hải sản..."
+                rows={2}
+                className="w-full p-4 rounded-xl bg-[#e9f6f3] border-none focus:ring-2 focus:ring-[#00685f]/20 font-medium text-[#121e1c] outline-none transition-all resize-none placeholder:text-[#bcc9c6]"
+              />
+              <InlineFieldError id="create-profile-allergies-error" message={errors.allergies?.message} />
             </div>
 
             <div className="space-y-2">

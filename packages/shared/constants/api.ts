@@ -48,6 +48,7 @@ export const ApiPaths = {
     ME_TOTP: `/api/${API_VERSION}/users/me/totp`,
     ME_TOTP_SETUP: `/api/${API_VERSION}/users/me/totp/setup`,
     ME_TOTP_VERIFY: `/api/${API_VERSION}/users/me/totp/verify`,
+    ME_HEALTH_CONTEXT: `/api/${API_VERSION}/users/me/health-context`,
     DELETION_REQUEST: `/api/${API_VERSION}/users/me/deletion-request`,
     CANCEL_DELETION: `/api/${API_VERSION}/users/deletion-requests/cancel`,
   },
