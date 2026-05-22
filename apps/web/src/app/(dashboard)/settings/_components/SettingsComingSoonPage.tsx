@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { breadcrumbFromSettings } from "@/lib/layout/dashboardBreadcrumbTrails";
 
 import { SettingsPageCard, SettingsPageIntro } from "./SettingsPageCard";
 
@@ -20,11 +21,7 @@ export function SettingsComingSoonPage({
     <DashboardPageShell
       title={title}
       subtitle={description}
-      breadcrumbs={[
-        { label: "Trang chủ", href: "/home" },
-        { label: "Cài đặt", href: "/settings" },
-        { label: title },
-      ]}
+      breadcrumbs={breadcrumbFromSettings(title)}
     >
       <div className="mx-auto w-full max-w-3xl">
         <SettingsPageCard>

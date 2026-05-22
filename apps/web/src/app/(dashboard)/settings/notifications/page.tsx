@@ -3,6 +3,7 @@
 import { Bell, Mail } from "lucide-react";
 
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { breadcrumbFromSettings } from "@/lib/layout/dashboardBreadcrumbTrails";
 import { NotificationInboxList } from "@/components/features/notifications/NotificationInboxList";
 import { useNotificationEmailPreferences } from "@/hooks/useNotificationEmailPreferences";
 import { useNotificationInbox } from "@/hooks/useNotificationInbox";
@@ -37,11 +38,7 @@ export default function NotificationSettingsPage() {
     <DashboardPageShell
       title="Thông báo"
       subtitle="Quản lý thông báo trong app và email bạn muốn nhận."
-      breadcrumbs={[
-        { label: "Trang chủ", href: "/home" },
-        { label: "Cài đặt", href: "/settings" },
-        { label: "Thông báo" },
-      ]}
+      breadcrumbs={breadcrumbFromSettings("Thông báo")}
     >
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
         <div className="space-y-8 lg:col-span-2">

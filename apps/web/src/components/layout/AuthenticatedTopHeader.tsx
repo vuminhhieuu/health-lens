@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { HelpCircle, LogOut, Search, Settings, User } from "lucide-react";
+import { HelpCircle, Home, LogOut, Settings, User } from "lucide-react";
 
 import { NotificationBell } from "@/components/features/notifications/NotificationBell";
 
@@ -12,14 +12,7 @@ import {
 } from "@/lib/layout/shell";
 import SafeImage from "@/components/ui/SafeImage";
 
-type HeaderNavItem = {
-  name: string;
-  href: string;
-  isActive: boolean;
-};
-
 type AuthenticatedTopHeaderProps = {
-  navItems: HeaderNavItem[];
   avatarInitial: string;
   avatarUrl?: string | null;
   brandHref?: string;
@@ -29,7 +22,6 @@ type AuthenticatedTopHeaderProps = {
 };
 
 export function AuthenticatedTopHeader({
-  navItems,
   avatarInitial,
   avatarUrl,
   brandHref = "/",
@@ -57,45 +49,14 @@ export function AuthenticatedTopHeader({
   return (
     <header className={className}>
       <div className={innerClassName}>
-        <div className="flex items-center gap-8">
-          <Link
-            href={brandHref}
-            className="text-2xl font-bold tracking-tight text-[#005049]"
-          >
-            HealthLens
-          </Link>
-          <nav className="hidden items-center gap-6 md:flex">
-            {navItems.map((item) =>
-              item.isActive ? (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className="rounded-lg bg-white/50 px-3 py-1 font-semibold text-[#00685f]"
-                >
-                  {item.name}
-                </Link>
-              ) : (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className="rounded-lg px-3 py-1 font-medium text-[#6d7a77] transition-colors hover:bg-[#e9f6f3]/50"
-                >
-                  {item.name}
-                </Link>
-              ),
-            )}
-          </nav>
-        </div>
+        <Link
+          href={brandHref}
+          className="text-2xl font-bold tracking-tight text-[#005049]"
+        >
+          HealthLens
+        </Link>
 
-        <div className="flex items-center gap-4">
-          <div className="relative hidden sm:block">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6d7a77]" />
-            <input
-              type="text"
-              placeholder="Tìm kiếm..."
-              className="w-64 rounded-full bg-[#e9f6f3] py-2 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-[#00685f]/20"
-            />
-          </div>
+        <div className="flex shrink-0 items-center gap-4">
           <NotificationBell />
           <Link
             href="/questions"
@@ -107,16 +68,21 @@ export function AuthenticatedTopHeader({
           </Link>
           <div className="relative" ref={avatarMenuRef}>
             <button
+              type="button"
               onClick={() => setIsAvatarMenuOpen((value) => !value)}
-              className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border-2 border-[#89f5e7] bg-[#d8e5e2] text-sm font-black text-[#00685f] transition-all focus:outline-none focus:ring-2 focus:ring-[#00685f]/50"
+              className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#89f5e7] bg-[#d8e5e2] text-sm font-black text-[#00685f] transition-all focus:outline-none focus:ring-2 focus:ring-[#00685f]/50"
               aria-label="Mở menu tài khoản"
+              aria-expanded={isAvatarMenuOpen}
+              aria-haspopup="menu"
             >
               {avatarUrl ? (
                 <SafeImage
                   raw
                   src={avatarUrl}
                   alt="Ảnh đại diện"
-                  className="h-full w-full object-cover"
+                  width={44}
+                  height={44}
+                  className="h-11 w-11 object-cover"
                 />
               ) : (
                 <span aria-hidden="true">{avatarInitial}</span>
@@ -124,9 +90,22 @@ export function AuthenticatedTopHeader({
             </button>
 
             {isAvatarMenuOpen ? (
-              <div className="animate-in fade-in zoom-in-95 absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-2xl border border-[#bcc9c6]/20 bg-white py-2 shadow-xl duration-100">
+              <div
+                role="menu"
+                className="animate-in fade-in zoom-in-95 absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-2xl border border-[#bcc9c6]/20 bg-white py-2 shadow-xl duration-100"
+              >
+                <Link
+                  href="/home"
+                  role="menuitem"
+                  onClick={() => setIsAvatarMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#3d4947] transition-colors hover:bg-[#e9f6f3]"
+                >
+                  <Home className="h-4 w-4" />
+                  Trang chủ
+                </Link>
                 <Link
                   href="/settings/profile"
+                  role="menuitem"
                   onClick={() => setIsAvatarMenuOpen(false)}
                   className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#3d4947] transition-colors hover:bg-[#e9f6f3]"
                 >
@@ -135,14 +114,17 @@ export function AuthenticatedTopHeader({
                 </Link>
                 <Link
                   href="/settings"
+                  role="menuitem"
                   onClick={() => setIsAvatarMenuOpen(false)}
                   className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#3d4947] transition-colors hover:bg-[#e9f6f3]"
                 >
                   <Settings className="h-4 w-4" />
                   Cài đặt
                 </Link>
-                <div className="my-1 h-px bg-[#bcc9c6]/20"></div>
+                <div className="my-1 h-px bg-[#bcc9c6]/20" aria-hidden="true" />
                 <button
+                  type="button"
+                  role="menuitem"
                   onClick={() => {
                     setIsAvatarMenuOpen(false);
                     void onLogout();

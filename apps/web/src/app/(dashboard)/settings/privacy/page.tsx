@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { breadcrumbFromSettings } from "@/lib/layout/dashboardBreadcrumbTrails";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { useAuthStore } from "@/stores/authStore";
@@ -257,11 +258,7 @@ export default function PrivacySettingsPage() {
     <DashboardPageShell
       title="Quyền riêng tư"
       subtitle="Xem trạng thái đồng thuận xử lý dữ liệu sức khỏe và các tài liệu pháp lý."
-      breadcrumbs={[
-        { label: "Trang chủ", href: "/home" },
-        { label: "Cài đặt", href: "/settings" },
-        { label: "Riêng tư" },
-      ]}
+      breadcrumbs={breadcrumbFromSettings("Riêng tư")}
     >
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
         <div className="space-y-8 lg:col-span-2">

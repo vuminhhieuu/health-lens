@@ -11,7 +11,7 @@ source: user-request-via-bmad-create-story
 
 ## Mục tiêu Epic
 
-Bổ sung các tính năng còn thiếu sau Phase 1 MVP: tìm kiếm toàn cục, xác thực hai yếu tố cho người dùng, quản lý ghi chú/mô tả và ngữ cảnh sức khỏe theo đúng ranh giới tài khoản vs hồ sơ gia đình, và tái sử dụng component cho các luồng dashboard lặp lại.
+Bổ sung các tính năng còn thiếu sau Phase 1 MVP: refactor header dashboard (gỡ search toàn cục), xác thực hai yếu tố cho người dùng, quản lý ghi chú/mô tả và ngữ cảnh sức khỏe theo đúng ranh giới tài khoản vs hồ sơ gia đình, và tái sử dụng component cho các luồng dashboard lặp lại.
 
 ## Phân tách phạm vi (theo yêu cầu sản phẩm)
 
@@ -19,25 +19,27 @@ Bổ sung các tính năng còn thiếu sau Phase 1 MVP: tìm kiếm toàn cục
 |------|-------|---------|---------|
 | Hồ sơ cá nhân (chủ tài khoản) | `/settings/profile` | `User.personalNotes`, `User.personalDescription`; ngữ cảnh y tế chủ sở hữu gắn **default profile** | Không nhập bệnh nền/thuốc/dị ứng chung cho cả tài khoản |
 | Hồ sơ gia đình | `/profiles` | `Profile.notes` + `chronicConditions`, `currentMedications`, `allergies` | **Loại trừ** `isDefault=true` (hồ sơ chủ) khỏi danh sách |
-| Tìm kiếm toàn cục | Header dashboard (`AuthenticatedTopHeader`) | Command palette | Giữ tìm kiếm cục bộ trên `/profiles` và `/profiles/[id]/history` |
+| Header dashboard | `AuthenticatedTopHeader` | Logo + actions; Trang chủ trong menu avatar | Sidebar/bottom nav điều hướng chính; `/profiles` không còn search toolbar |
 | 2FA người dùng | `/settings/security` (mới) hoặc tab trong settings | TOTP user (tách admin MFA) | Tái sử dụng pattern `AdminTotpSecret` |
 
 ## Stories
 
-### Story 11.1: Tìm kiếm toàn cục — Header & Command Palette
+### Story 11.1: Refactor thanh header dashboard
+
+**Story key:** `11-1-refactor-dashboard-header`  
+**File:** `11-1-refactor-dashboard-header.md`
 
 As a người dùng đã đăng nhập,
-I want tìm nhanh hồ sơ, kết quả khám và điều hướng từ thanh search trên header,
-so that tôi không phải mở từng trang để tra cứu.
+I want thanh header dashboard gọn, nhất quán và tập trung vào điều hướng + hành động tài khoản,
+so that tôi biết rõ mình đang ở đâu trong app và không bị phân tán bởi search toàn cục trên header.
 
-**Acceptance Criteria:**
+**Acceptance Criteria (tóm tắt — chi tiết trong story file):**
 
-1. **Given** người dùng ở bất kỳ trang dashboard nào, **When** focus vào ô search header hoặc nhấn `Ctrl/Cmd+K`, **Then** mở command palette với placeholder tiếng Việt rõ ràng.
-2. **Given** người dùng gõ từ khóa ≥2 ký tự, **When** debounce 300ms, **Then** hiển thị nhóm kết quả: Hồ sơ (owned + shared), Kết quả khám gần đây, Điều hướng nhanh (Trang chủ, Kết quả khám, Hồ sơ gia đình, Cài đặt).
-3. **Given** chọn một hồ sơ, **When** Enter/click, **Then** điều hướng đúng (`/profiles/{id}/history` hoặc hub tương ứng).
-4. **Given** không có kết quả, **When** hiển thị empty state, **Then** gợi ý thử từ khóa khác; không crash.
-5. **Given** API search lỗi, **When** hiển thị lỗi, **Then** dùng `ErrorState`/`notify` theo pattern `core-6-4`; ô search header vẫn hoạt động cho điều hướng tĩnh.
-6. **Given** trang `/profiles`, **When** dùng search cục bộ trang, **Then** hành vi lọc danh sách gia đình **không bị thay đổi** (header search ≠ local filter).
+1. `AuthenticatedTopHeader`: brand + nav (desktop) + actions — **không** ô search, palette, `Cmd/Ctrl+K`.
+2. Giữ logic `isNavItemActive`, design token `shell.ts`, touch target a11y.
+3. `(dashboard)/layout.tsx`: gỡ wiring palette/global search.
+4. Dọn legacy `ApiRoutes.SEARCH`, `ApiPaths.SEARCH`, `GlobalSearch*` nếu còn.
+5. `/profiles` local search **không đổi**.
 
 **Phụ thuộc:** Không. **Ưu tiên:** P1.
 
@@ -90,7 +92,7 @@ so that UI nhất quán và dễ bảo trì.
 **Acceptance Criteria:**
 
 1. **Given** `follow-up-reminders` và `visit-summary`, **When** refactor, **Then** dùng `ProfileScopeSelector` chung (props: profiles, value, onChange, label, emptyHint).
-2. **Given** `/profiles` và header search, **When** refactor, **Then** dùng `PageSearchField` chung (controlled value, debounce optional, aria-label).
+2. **Given** `/profiles` page local search, **When** refactor, **Then** dùng `PageSearchField` (variant `page` only — không gắn header).
 3. **Given** thay đổi, **When** chạy test, **Then** không regression hành vi chọn hồ sơ từ query `?profileId=`.
 4. **Given** hoàn thành, **When** cập nhật docs, **Then** `docs/component-inventory.md` liệt kê component mới + nơi dùng.
 5. **Given** accessibility, **When** audit nhanh, **Then** label/`htmlFor`/`aria-*` giữ chuẩn `remaining-6-2`.
@@ -99,17 +101,18 @@ so that UI nhất quán và dễ bảo trì.
 
 ## Thứ tự đề xuất triển khai
 
-1. `11-4` (nền component) — có thể song song đầu sprint
-2. `11-3` (domain model + forms)
-3. `11-1` (search — dùng component từ 11-4)
+1. `11-1-refactor-dashboard-header` (refactor header + gỡ legacy search)
+2. `11-4` (`PageSearchField` tại `/profiles` — sau 11.1)
+3. `11-3` (domain model + forms)
 4. `11-2` (2FA — độc lập backend)
 
-## BMad Help — Vị trí thanh search
+## BMad Help — Header & search
 
-**Khuyến nghị (đã chốt trong story 11.1):**
+**Đã chốt (story 11.1):**
 
-- **Chính:** `AuthenticatedTopHeader` trên mọi trang `(dashboard)` — đúng UX-DR7 (Web: header + sidebar).
-- **Phụ:** Giữ search cục bộ tại `/profiles` (lọc thẻ gia đình) và `/profiles/[id]/history` (lọc kết quả khám).
-- **Không đặt** search toàn cục tại `/settings/*` hoặc trang marketing.
+- **Header:** logo, bell, help, avatar — **Trang chủ** trong menu avatar; không nav/search trên header.
+- **Breadcrumb hub:** không hiển thị tại `/health-records`, `/profiles`, `/settings`, `/settings/profile`.
+- **Breadcrumb settings con:** `Cài đặt › trang`.
+- **Không** search tại `/settings/*` hoặc marketing.
 
-**Bước tiếp theo sau create-story:** `bmad-dev-story` cho `11-4` hoặc `11-3` tùy ưu tiên team.
+**Bước tiếp theo:** `bmad-dev-story` cho `11-1-refactor-dashboard-header`.

@@ -3,13 +3,7 @@
 import React, { Suspense, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import {
-  Plus,
-  Search,
-  Filter,
-  AlertCircle,
-  Mail,
-} from "lucide-react";
+import { Plus, AlertCircle, Mail } from "lucide-react";
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
@@ -73,8 +67,6 @@ export default function ProfilesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-
   const {
     data: otherProfiles = [],
     isLoading: isProfilesLoading,
@@ -281,10 +273,8 @@ export default function ProfilesPage() {
       gender: profile.gender,
     }));
 
-    return [...sharedProfileCards, ...familyProfiles].filter((profile) =>
-      profile.displayName.toLowerCase().includes(searchQuery.toLowerCase()),
-    );
-  }, [otherProfiles, searchQuery, sharedProfiles]);
+    return [...sharedProfileCards, ...familyProfiles];
+  }, [otherProfiles, sharedProfiles]);
 
   const editingProfile = useMemo(
     () =>
@@ -432,26 +422,6 @@ export default function ProfilesPage() {
           </div>
         </div>
       ) : null}
-
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row">
-        <div className="relative grow">
-          <Search className="absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 text-[#6d7a77]" />
-          <input
-            type="text"
-            placeholder="Tìm kiếm hồ sơ..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-14 w-full rounded-2xl border-2 border-transparent bg-white/60 pr-4 pl-12 font-medium text-[#121e1c] transition-all outline-none focus:border-[#00685f]/20 focus:bg-white"
-          />
-        </div>
-        <button
-          type="button"
-          className="flex h-14 items-center gap-2 rounded-2xl border-2 border-transparent bg-white/60 px-6 font-bold text-[#3d4947] transition-all hover:border-[#bcc9c6]/20 hover:bg-white"
-        >
-          <Filter size={18} />
-          Sắp xếp
-        </button>
-      </div>
 
       {allProfiles.length > 0 ? (
         <div className="grid grid-cols-1 gap-6 duration-500 animate-in slide-in-from-bottom-4 sm:grid-cols-2 lg:grid-cols-3">

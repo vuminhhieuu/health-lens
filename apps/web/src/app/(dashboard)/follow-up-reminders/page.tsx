@@ -17,6 +17,7 @@ import {
 import { ApiPaths } from "@healthlens/shared/constants";
 
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { breadcrumbFromHome } from "@/lib/layout/dashboardBreadcrumbTrails";
 import { apiClient } from "@/lib/api/apiClient";
 import { notify } from "@/lib/notify";
 import { EmptyState, ErrorState, InlineFieldError, LoadingState } from "@/components/ui";
@@ -137,10 +138,7 @@ export default function FollowUpRemindersPage() {
     <DashboardPageShell
       title="Nhắc lịch tái khám"
       subtitle="Lưu lời nhắc cá nhân để bạn chủ động kiểm tra lại khi cần. HealthLens chưa đặt lịch trực tiếp với bệnh viện."
-      breadcrumbs={[
-        { label: "Trang chủ", href: "/home" },
-        { label: "Nhắc lịch tái khám" },
-      ]}
+      breadcrumbs={breadcrumbFromHome("Nhắc lịch tái khám")}
     >
       {isLoading ? (
         <LoadingState

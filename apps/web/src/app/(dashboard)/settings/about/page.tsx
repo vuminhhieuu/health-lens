@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { breadcrumbFromSettings } from "@/lib/layout/dashboardBreadcrumbTrails";
 import { APP_DISPLAY_NAME, getAppBuildLabel, getAppVersionLabel } from "@/lib/appVersion";
 import { PUBLIC_SUPPORT_HREF } from "@/lib/supportContact";
 
@@ -32,13 +33,17 @@ function ResourceLinkRow({
   description,
   icon: Icon,
   openInNewTab = false,
+  trailingIcon,
 }: {
   href: string;
   label: string;
   description: string;
   icon: LucideIcon;
   openInNewTab?: boolean;
+  /** Mặc định: external khi mở tab mới, chevron khi điều hướng trong app */
+  trailingIcon?: "external" | "chevron";
 }) {
+  const resolvedTrailingIcon = trailingIcon ?? (openInNewTab ? "external" : "chevron");
   const rowClassName =
     "group flex gap-4 rounded-xl bg-[#e9f6f3] p-4 transition hover:bg-[#d8ebe6]";
 
@@ -53,7 +58,7 @@ function ResourceLinkRow({
             {label}
             {openInNewTab ? <span className="sr-only"> (mở trong tab mới)</span> : null}
           </span>
-          {openInNewTab ? (
+          {resolvedTrailingIcon === "external" ? (
             <ExternalLink
               className="mt-0.5 h-4 w-4 shrink-0 text-[#00685f] opacity-70 group-hover:opacity-100"
               aria-hidden="true"
@@ -93,11 +98,7 @@ export default function AboutSettingsPage() {
     <DashboardPageShell
       title="Giới thiệu"
       subtitle="Phiên bản ứng dụng, tài liệu pháp lý và kênh hỗ trợ khi bạn cần trợ giúp."
-      breadcrumbs={[
-        { label: "Trang chủ", href: "/home" },
-        { label: "Cài đặt", href: "/settings" },
-        { label: "Giới thiệu" },
-      ]}
+      breadcrumbs={breadcrumbFromSettings("Giới thiệu")}
     >
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
         <div className="space-y-8 lg:col-span-2">
@@ -129,8 +130,8 @@ export default function AboutSettingsPage() {
               <h2 className="text-xl font-bold text-[#121e1c]">Tài liệu & trợ giúp công khai</h2>
             </div>
             <p className="mb-6 text-sm leading-6 text-[#6d7a77]">
-              Chính sách và điều khoản mở tab mới; trung tâm trợ giúp mở trong cùng ứng dụng để bạn
-              quay lại Cài đặt dễ hơn.
+              Chính sách và điều khoản mở tab mới. Trung tâm trợ giúp mở trong ứng dụng — cùng kiểu
+              liên kết tài liệu bên dưới.
             </p>
             <ul className="space-y-3">
               <ResourceLinkRow
@@ -152,6 +153,7 @@ export default function AboutSettingsPage() {
                 label="Trung tâm trợ giúp"
                 description="Hướng dẫn nhanh, FAQ và kênh liên hệ khi gặp sự cố."
                 icon={HelpCircle}
+                trailingIcon="external"
               />
             </ul>
           </section>

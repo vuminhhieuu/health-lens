@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useForm, type UseFormRegisterReturn } from "react-hook-form";
 
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { breadcrumbFromSettings } from "@/lib/layout/dashboardBreadcrumbTrails";
 import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { changePasswordErrorMessage } from "@/lib/i18n/messages";
@@ -128,11 +129,7 @@ export default function ChangePasswordPage() {
     <DashboardPageShell
       title="Bảo mật"
       subtitle="Đổi mật khẩu và quản lý các thiết lập bảo vệ tài khoản."
-      breadcrumbs={[
-        { label: "Trang chủ", href: "/home" },
-        { label: "Cài đặt", href: "/settings" },
-        { label: "Đổi mật khẩu" },
-      ]}
+      breadcrumbs={breadcrumbFromSettings("Đổi mật khẩu")}
     >
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
         {/* Cột chính (2/3) — form đổi mật khẩu */}

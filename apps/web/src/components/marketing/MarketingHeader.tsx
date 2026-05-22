@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import { useAuthBootstrap } from "@/hooks/useAuthBootstrap";
@@ -24,7 +24,6 @@ type CurrentUser = {
 
 export function MarketingHeader() {
   const router = useRouter();
-  const pathname = usePathname();
   const isLoading = useAuthBootstrap();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
@@ -44,16 +43,6 @@ export function MarketingHeader() {
   const displayName = user?.fullName?.trim() || user?.email || "Người dùng";
   const avatarInitial = displayName[0]?.toUpperCase() ?? "U";
   const avatarUrl = currentUser?.avatarUrl ?? null;
-  const topHeaderNavItems = [
-    { name: "Trang chủ", href: "/home", isActive: pathname === "/home" },
-    {
-      name: "Kết quả khám",
-      href: "/health-records",
-      isActive: pathname === "/health-records" || pathname?.startsWith("/health-records/"),
-    },
-    { name: "Hồ sơ của tôi", href: "/settings/profile", isActive: pathname === "/settings/profile" },
-  ];
-
   const logout = async () => {
     try {
       await apiClient.post(API_ROUTES.AUTH.LOGOUT);
@@ -82,7 +71,6 @@ export function MarketingHeader() {
   if (isAuthenticated) {
     return (
       <AuthenticatedTopHeader
-        navItems={topHeaderNavItems}
         avatarInitial={avatarInitial}
         avatarUrl={avatarUrl}
         brandHref="/"

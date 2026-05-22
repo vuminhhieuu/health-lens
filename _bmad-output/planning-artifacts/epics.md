@@ -872,17 +872,17 @@ _(Trước đây: Story 5.5 — file story: `9-3-auto-sync-when-back-online.md`)
 
 ## Epic 11: Bảo Mật Tài Khoản & Nâng Cao UX Làm Việc (2026-05-22)
 
-Goal: Tìm kiếm toàn cục, 2FA người dùng, ghi chú/ngữ cảnh sức khỏe đúng ranh giới tài khoản vs hồ sơ gia đình, component dashboard dùng chung.
+Goal: Refactor header dashboard, 2FA người dùng, ghi chú/ngữ cảnh sức khỏe đúng ranh giới tài khoản vs hồ sơ gia đình, component dashboard dùng chung.
 
 **Nền tảng:** Web — **Số story:** 4  
 **Planning chi tiết:** `account-security-and-ux-enhancements-epics-and-stories.md`  
 **Story files:** `_bmad-output/implementation-artifacts/epic-11-account-security-and-ux/`
 
-### Story 11.1: Tìm kiếm toàn cục — Header & Command Palette
+### Story 11.1: Refactor thanh header dashboard
 
-As a người dùng đã đăng nhập, I want tìm nhanh từ header, So that tra cứu xuyên suốt app.
+As a người dùng đã đăng nhập, I want header gọn và tập trung điều hướng, So that không bị phân tán bởi search toàn cục.
 
-_(File: `11-1-global-search-header-and-command-palette.md`)_
+_(File: `11-1-refactor-dashboard-header.md`)_
 
 ### Story 11.2: Xác thực hai yếu tố (2FA) cho người dùng
 
