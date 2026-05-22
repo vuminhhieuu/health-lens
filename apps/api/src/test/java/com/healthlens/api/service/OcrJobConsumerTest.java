@@ -101,7 +101,7 @@ class OcrJobConsumerTest {
 
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecordWithCorrelation", mapRecord);
 
-                verify(healthRecordService).markOcrFailed(recordId, "low_confidence");
+                verify(healthRecordService).markOcrFailed(recordId, "low_confidence", "easyocr");
                 verify(healthRecordService, never()).markOcrCompleted(any(), any(), any(), anyBoolean());
         }
 
@@ -127,7 +127,7 @@ class OcrJobConsumerTest {
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecordWithCorrelation", mapRecord);
 
                 verify(ocrJobStateService).completeSucceeded(eq(recordId), any(String.class),
-                                any(OcrService.OcrExtractionResult.class), eq(true), anyString());
+                                any(OcrService.OcrExtractionResult.class), eq(true), anyString(), eq("easyocr"), eq(0.50f));
         }
 
         @Test
@@ -152,7 +152,7 @@ class OcrJobConsumerTest {
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecordWithCorrelation", mapRecord);
 
                 verify(ocrJobStateService).completeSucceeded(eq(recordId), any(String.class),
-                                any(OcrService.OcrExtractionResult.class), eq(false), anyString());
+                                any(OcrService.OcrExtractionResult.class), eq(false), anyString(), eq("easyocr"), eq(0.85f));
         }
 
         @Test
@@ -176,7 +176,7 @@ class OcrJobConsumerTest {
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecordWithCorrelation", mapRecord);
 
                 verify(ocrJobStateService).markRetryableOrDeadLetter(anyString(), eq("provider_timeout"));
-                verify(healthRecordService, never()).markOcrFailed(eq(recordId), anyString());
+                verify(healthRecordService, never()).markOcrFailed(eq(recordId), anyString(), any());
         }
 
         @Test
@@ -202,9 +202,9 @@ class OcrJobConsumerTest {
 
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecordWithCorrelation", mapRecord);
 
-                verify(healthRecordService, never()).markOcrFailed(recordId, "low_confidence");
+                verify(healthRecordService, never()).markOcrFailed(recordId, "low_confidence", "easyocr");
                 verify(ocrJobStateService).completeSucceeded(eq(recordId), any(String.class),
-                                any(OcrService.OcrExtractionResult.class), eq(true), anyString());
+                                any(OcrService.OcrExtractionResult.class), eq(true), anyString(), eq("easyocr"), eq(0.60f));
         }
 
         @Test
@@ -240,7 +240,7 @@ class OcrJobConsumerTest {
                                                 && json.contains("\"provider\":\"easyocr\"")
                                                 && json.contains("\"jobId\":\"job-1\"")
                                                 && json.contains("\"correlationId\":\"corr-1\"")),
-                                any(OcrService.OcrExtractionResult.class), eq(false), anyString());
+                                any(OcrService.OcrExtractionResult.class), eq(false), anyString(), eq("easyocr"), eq(0.91f));
         }
 
         @Test
@@ -274,7 +274,7 @@ class OcrJobConsumerTest {
                                 argThat(json -> json.contains("\"mimeType\":\"application/pdf\"")
                                                 && json.contains("\"route\":\"pdf-document\"")
                                                 && json.contains("\"pages\"")),
-                                any(OcrService.OcrExtractionResult.class), eq(false), anyString());
+                                any(OcrService.OcrExtractionResult.class), eq(false), anyString(), eq("textract"), eq(0.90f));
         }
 
         @Test
@@ -302,7 +302,7 @@ class OcrJobConsumerTest {
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecordWithCorrelation", mapRecord);
 
                 verify(ocrJobStateService).markRetryableOrDeadLetter(anyString(), eq("pdf_processing_failed"));
-                verify(healthRecordService, never()).markOcrFailed(eq(recordId), anyString());
+                verify(healthRecordService, never()).markOcrFailed(eq(recordId), anyString(), any());
         }
 
         @Test
@@ -314,7 +314,7 @@ class OcrJobConsumerTest {
 
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecordWithCorrelation", mapRecord);
 
-                verify(healthRecordService).markOcrFailed(recordId, "unsupported_mime_type");
+                verify(healthRecordService).markOcrFailed(recordId, "unsupported_mime_type", null);
                 verify(storageService, never()).generateInternalDownloadUrl(any(), any(Duration.class));
                 verifyNoInteractions(ocrService);
         }
@@ -328,7 +328,7 @@ class OcrJobConsumerTest {
 
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecordWithCorrelation", mapRecord);
 
-                verify(healthRecordService).markOcrFailed(recordId, "unsupported_mime_type");
+                verify(healthRecordService).markOcrFailed(recordId, "unsupported_mime_type", null);
                 verify(storageService, never()).generateInternalDownloadUrl(any(), any(Duration.class));
                 verifyNoInteractions(ocrService);
         }
@@ -342,7 +342,7 @@ class OcrJobConsumerTest {
 
                 ReflectionTestUtils.invokeMethod(consumer, "handleRecordWithCorrelation", mapRecord);
 
-                verify(healthRecordService).markOcrFailed(recordId, "missing_mime_type");
+                verify(healthRecordService).markOcrFailed(recordId, "missing_mime_type", null);
                 verify(storageService, never()).generateInternalDownloadUrl(any(), any(Duration.class));
                 verifyNoInteractions(ocrService);
         }
@@ -371,7 +371,7 @@ class OcrJobConsumerTest {
                                 new OcrService.OcrExtractionResult(null, null, null, null, java.util.List.of()));
                 doThrow(new RuntimeException("db down")).when(ocrJobStateService)
                                 .completeSucceeded(eq(recordId), anyString(), any(OcrService.OcrExtractionResult.class),
-                                                eq(false), anyString());
+                                                eq(false), anyString(), anyString(), eq(0.90f));
 
                 consumer.consume();
 

@@ -185,6 +185,8 @@ public class HealthRecordService {
 
         persistUploadReservation(recordId, userId, targetProfileId, fileKey, uploadFormat.contentType());
 
+        userActivityService.recordUploadStarted(profileOwnerId, targetProfileId, recordId, uploadFormat.extension());
+
         return new UploadUrlResponse(uploadUrl, recordId, fileKey);
     }
 
@@ -257,7 +259,12 @@ public class HealthRecordService {
             );
         }
 
-        userActivityService.recordUploadConfirmed(userId, !isNewRecord);
+        userActivityService.recordUploadConfirmed(
+                record.getUserId(),
+                reservation.profileId(),
+                recordId,
+                UserActivityService.fileTypeFromFileKey(reservation.fileKey()),
+                !isNewRecord);
 
         return new ConfirmUploadResponse(recordId, STATUS_PROCESSING);
     }
@@ -921,18 +928,34 @@ public class HealthRecordService {
 
     @Transactional
     public void markOcrCompleted(UUID recordId, String rawOcrJson, OcrService.OcrExtractionResult parsedData) {
-        markOcrCompleted(recordId, rawOcrJson, parsedData, false);
+        markOcrCompleted(recordId, rawOcrJson, parsedData, false, null, null);
     }
 
     @Transactional
-    public void markOcrCompleted(UUID recordId, String rawOcrJson, OcrService.OcrExtractionResult parsedData, boolean hasLowConfidenceMetrics) {
+    public void markOcrCompleted(
+            UUID recordId,
+            String rawOcrJson,
+            OcrService.OcrExtractionResult parsedData,
+            boolean hasLowConfidenceMetrics) {
+        markOcrCompleted(recordId, rawOcrJson, parsedData, hasLowConfidenceMetrics, null, null);
+    }
+
+    @Transactional
+    public void markOcrCompleted(
+            UUID recordId,
+            String rawOcrJson,
+            OcrService.OcrExtractionResult parsedData,
+            boolean hasLowConfidenceMetrics,
+            String provider,
+            Float confidence) {
         HealthRecord record = healthRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("Kết quả khám không tồn tại"));
-        if ("done".equals(record.getStatus())) {
+        String statusBeforeUpdate = record.getStatus();
+        if ("done".equals(statusBeforeUpdate)) {
             log.info("Skip OCR completion replay for confirmed health record {}", recordId);
             return;
         }
-        if ("review_required".equals(record.getStatus()) && record.getRawOcrResult() != null
+        if ("review_required".equals(statusBeforeUpdate) && record.getRawOcrResult() != null
                 && !record.getRawOcrResult().isBlank()) {
             log.info("Skip OCR completion replay for existing review-required health record {}", recordId);
             return;
@@ -963,39 +986,52 @@ public class HealthRecordService {
         }
         healthRecordRepository.save(record);
         updateProfileLastRecordAt(record.getProfileId());
+
+        if (provider != null
+                && confidence != null
+                && "processing".equals(statusBeforeUpdate)) {
+            userActivityService.recordOcrCompleted(
+                    record.getUserId(),
+                    record.getProfileId(),
+                    recordId,
+                    provider,
+                    confidence,
+                    hasLowConfidenceMetrics);
+        }
     }
 
     @Transactional
     public void markOcrFailed(UUID recordId) {
-        markOcrFailed(recordId, "processing_error");
+        markOcrFailed(recordId, "processing_error", null);
     }
 
     @Transactional
     public void markOcrFailed(UUID recordId, String reason) {
+        markOcrFailed(recordId, reason, null);
+    }
+
+    @Transactional
+    public void markOcrFailed(UUID recordId, String reason, String providerIfKnown) {
         HealthRecord record = healthRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("Kết quả khám không tồn tại"));
+        boolean alreadyTerminalFailure = "ocr_failed".equals(record.getStatus());
         String normalizedReason = normalizeFailureReasonForStorage(reason);
         record.setStatus("ocr_failed");
         record.setFailureReason(normalizedReason);
         record.setRawOcrResult(buildFailurePayload(normalizedReason));
         healthRecordRepository.save(record);
+        if (!alreadyTerminalFailure) {
+            userActivityService.recordOcrFailed(
+                    record.getUserId(),
+                    record.getProfileId(),
+                    recordId,
+                    normalizedReason,
+                    providerIfKnown);
+        }
     }
 
     static String normalizeFailureReasonForStorage(String reason) {
-        if (reason == null || reason.isBlank()) {
-            return "api_error";
-        }
-        String normalized = reason.trim().toLowerCase(Locale.ROOT);
-        if ("processing_error".equals(normalized)) {
-            return "api_error";
-        }
-        if ("timeout".equals(normalized)
-                || "low_confidence".equals(normalized)
-                || "api_error".equals(normalized)
-                || "invalid_file".equals(normalized)) {
-            return normalized;
-        }
-        return "api_error";
+        return com.healthlens.api.activity.FailureReasonNormalizer.normalizeForStorage(reason);
     }
 
     private void persistUploadReservation(UUID recordId, UUID userId, UUID profileId, String fileKey, String mimeType) {

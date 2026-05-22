@@ -29,6 +29,26 @@ public class UserActivityEvent {
     @Column(name = "is_retry", nullable = false)
     private boolean retry;
 
+    @Column(name = "profile_id")
+    private UUID profileId;
+
+    @Column(name = "record_id")
+    private UUID recordId;
+
+    @Column(name = "file_type", length = 20)
+    private String fileType;
+
+    @Column(length = 50)
+    private String provider;
+
+    private Double confidence;
+
+    @Column(name = "has_low_confidence_metrics")
+    private Boolean hasLowConfidenceMetrics;
+
+    @Column(name = "failure_reason", length = 50)
+    private String failureReason;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 

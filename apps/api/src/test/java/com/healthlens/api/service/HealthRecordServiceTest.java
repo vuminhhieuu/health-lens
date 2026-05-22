@@ -54,6 +54,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -61,6 +62,7 @@ import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -151,6 +153,7 @@ class HealthRecordServiceTest {
                 assertThat(response.fileKey()).contains("health-records/" + userId + "/" + profileId + "/");
                 assertThat(response.fileKey()).endsWith("/original.pdf");
                 verify(valueOperations).set(any(), any(), any(Duration.class));
+                verify(userActivityService).recordUploadStarted(userId, profileId, response.recordId(), "pdf");
         }
 
         @Test
@@ -202,6 +205,27 @@ class HealthRecordServiceTest {
                 assertThat(response.fileKey())
                                 .contains("health-records/" + userId + "/" + profileId + "/" + retryRecordId + "/");
                 verify(valueOperations).set(any(), any(), any(Duration.class));
+                verify(userActivityService).recordUploadStarted(userId, profileId, retryRecordId, "pdf");
+        }
+
+        @Test
+        @DisplayName("markOcrFailed khong ghi trung OCR_FAILED khi record da ocr_failed")
+        void markOcrFailed_alreadyTerminal_skipsDuplicateProductEvent() {
+                UUID userId = UUID.randomUUID();
+                UUID profileId = UUID.randomUUID();
+                UUID recordId = UUID.randomUUID();
+                HealthRecord record = new HealthRecord();
+                record.setId(recordId);
+                record.setUserId(userId);
+                record.setProfileId(profileId);
+                record.setStatus("ocr_failed");
+                record.setFailureReason("api_error");
+                when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+                when(healthRecordRepository.save(record)).thenReturn(record);
+
+                healthRecordService.markOcrFailed(recordId, "timeout", "easyocr");
+
+                verify(userActivityService, never()).recordOcrFailed(any(), any(), any(), any(), any());
         }
 
         @Test
@@ -259,7 +283,12 @@ class HealthRecordServiceTest {
                 assertThat(payload.get("mimeType")).isEqualTo("image/jpeg");
                 assertThat(payload.get("correlationId")).isEqualTo(payload.get("jobId"));
                 verify(publicEndpointRateLimiter).consumeOcrTrigger(userId.toString(), recordId.toString());
-            verify(userActivityService).recordUploadConfirmed(userId, false);
+            verify(userActivityService).recordUploadConfirmed(
+                    eq(userId),
+                    eq(profileId),
+                    eq(recordId),
+                    eq("jpg"),
+                    eq(false));
     }
 
         @Test
@@ -362,6 +391,53 @@ class HealthRecordServiceTest {
                 assertThat(record.getRawOcrResult()).isEqualTo("{\"text\":\"existing\"}");
                 assertThat(record.getDiagnosis()).isEqualTo("user edit");
                 verify(healthRecordRepository, never()).save(record);
+                verifyNoInteractions(userActivityService);
+        }
+
+        @Test
+        @DisplayName("markOcrCompleted with provider records OCR_COMPLETED product event")
+        void markOcrCompleted_withProvider_recordsProductEvent() {
+                UUID userId = UUID.randomUUID();
+                UUID profileId = UUID.randomUUID();
+                UUID recordId = UUID.randomUUID();
+                HealthRecord record = new HealthRecord();
+                record.setId(recordId);
+                record.setUserId(userId);
+                record.setProfileId(profileId);
+                record.setStatus("processing");
+                when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+                when(healthRecordRepository.save(record)).thenReturn(record);
+
+                healthRecordService.markOcrCompleted(
+                        recordId,
+                        "{\"text\":\"x\"}",
+                        new OcrService.OcrExtractionResult(null, null, null, null, List.of()),
+                        false,
+                        "easyocr",
+                        0.88f);
+
+                verify(userActivityService).recordOcrCompleted(
+                        eq(userId), eq(profileId), eq(recordId), eq("easyocr"), eq(0.88f), eq(false));
+        }
+
+        @Test
+        @DisplayName("markOcrFailed records OCR_FAILED product event")
+        void markOcrFailed_recordsProductEvent() {
+                UUID userId = UUID.randomUUID();
+                UUID profileId = UUID.randomUUID();
+                UUID recordId = UUID.randomUUID();
+                HealthRecord record = new HealthRecord();
+                record.setId(recordId);
+                record.setUserId(userId);
+                record.setProfileId(profileId);
+                record.setStatus("processing");
+                when(healthRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
+                when(healthRecordRepository.save(record)).thenReturn(record);
+
+                healthRecordService.markOcrFailed(recordId, "timeout", "textract");
+
+                verify(userActivityService).recordOcrFailed(
+                        eq(userId), eq(profileId), eq(recordId), eq("timeout"), eq("textract"));
         }
 
         @Test

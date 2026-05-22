@@ -83,4 +83,16 @@ public interface UserActivityEventRepository extends JpaRepository<UserActivityE
     int insertAuthEventIfAbsent(
             @Param("id") UUID id,
             @Param("userId") UUID userId);
+
+    @Query(value = """
+        SELECT COUNT(*)
+        FROM user_activity_events
+        WHERE event_type = :eventType
+          AND created_at >= :from
+          AND created_at < :toExclusive
+        """, nativeQuery = true)
+    long countProductEvents(
+            @Param("eventType") String eventType,
+            @Param("from") Instant from,
+            @Param("toExclusive") Instant toExclusive);
 }

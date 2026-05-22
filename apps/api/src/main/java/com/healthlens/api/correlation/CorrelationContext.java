@@ -51,6 +51,18 @@ public final class CorrelationContext {
         return ensure(correlationId, null, null);
     }
 
+    /**
+     * Resolves correlation id for async OCR/email jobs: prefer inbound HTTP context, else job id.
+     */
+    public static String resolveCorrelationIdForJob(String jobIdFallback) {
+        Objects.requireNonNull(jobIdFallback, "jobId");
+        String inbound = getCorrelationId();
+        if (inbound != null && !inbound.isBlank()) {
+            return inbound.trim().length() > 120 ? inbound.trim().substring(0, 120) : inbound.trim();
+        }
+        return normalizeOrGenerate(jobIdFallback);
+    }
+
     public static void set(Values values) {
         Values safeValues = Objects.requireNonNull(values, "values");
         CURRENT.set(safeValues);

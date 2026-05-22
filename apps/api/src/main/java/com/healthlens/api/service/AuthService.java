@@ -68,6 +68,7 @@ public class AuthService {
     private final ConsentService consentService;
     private final UserNotificationPreferenceService notificationPreferenceService;
     private final AuditEventRecorder auditEventRecorder;
+    private final UserActivityService userActivityService;
 
     public AuthService(
             UserRepository userRepository,
@@ -83,7 +84,8 @@ public class AuthService {
             StringRedisTemplate redisTemplate,
             ConsentService consentService,
             UserNotificationPreferenceService notificationPreferenceService,
-            AuditEventRecorder auditEventRecorder
+            AuditEventRecorder auditEventRecorder,
+            UserActivityService userActivityService
     ) {
         this.userRepository = userRepository;
         this.tokenRepository = tokenRepository;
@@ -99,6 +101,7 @@ public class AuthService {
         this.consentService = consentService;
         this.notificationPreferenceService = notificationPreferenceService;
         this.auditEventRecorder = auditEventRecorder;
+        this.userActivityService = userActivityService;
     }
 
     @Transactional
@@ -145,6 +148,8 @@ public class AuthService {
                 savedUser.getId(),
                 Map.of("email", normalizedEmail)
         );
+
+        userActivityService.recordUserRegistered(savedUser.getId());
 
         return savedUser.getId();
     }
