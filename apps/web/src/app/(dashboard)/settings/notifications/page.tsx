@@ -1,27 +1,16 @@
 "use client";
 
 import { Bell, Mail } from "lucide-react";
-import { useEffect, useState } from "react";
 
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { NotificationInboxList } from "@/components/features/notifications/NotificationInboxList";
-import {
-  useNotificationEmailPreferences,
-  type NotificationEmailPreferences,
-} from "@/hooks/useNotificationEmailPreferences";
+import { useNotificationEmailPreferences } from "@/hooks/useNotificationEmailPreferences";
 import { useNotificationInbox } from "@/hooks/useNotificationInbox";
 
 import { SettingsAccountNav } from "../_components/SettingsAccountNav";
 import { SettingsPageCard, SettingsPageIntro } from "../_components/SettingsPageCard";
 import { settingsCardClassName } from "../_components/settingsStyles";
-import { EmailPreferenceToggle } from "./_components/EmailPreferenceToggle";
-
-const DEFAULT_EMAIL_PREFS: NotificationEmailPreferences = {
-  shareInvite: true,
-  shareAccepted: true,
-  followUpReminder: true,
-  security: true,
-};
+import { EmailPreferencesForm } from "./_components/EmailPreferencesForm";
 
 export default function NotificationSettingsPage() {
   const {
@@ -43,25 +32,6 @@ export default function NotificationSettingsPage() {
     savePreferences,
     isSaving,
   } = useNotificationEmailPreferences();
-
-  const [draftPrefs, setDraftPrefs] = useState<NotificationEmailPreferences>(DEFAULT_EMAIL_PREFS);
-  const [isDirty, setIsDirty] = useState(false);
-
-  useEffect(() => {
-    if (preferences) {
-      setDraftPrefs(preferences);
-      setIsDirty(false);
-    }
-  }, [preferences]);
-
-  const updateDraft = (patch: Partial<NotificationEmailPreferences>) => {
-    setDraftPrefs((current) => ({ ...current, ...patch }));
-    setIsDirty(true);
-  };
-
-  const handleSaveEmailPrefs = () => {
-    savePreferences(draftPrefs);
-  };
 
   return (
     <DashboardPageShell
@@ -129,50 +99,13 @@ export default function NotificationSettingsPage() {
                   Thử lại
                 </button>
               </div>
-            ) : (
-              <div className="mt-6 space-y-4">
-                <EmailPreferenceToggle
-                  id="shareInvite"
-                  label="Lời mời chia sẻ"
-                  description="Email khi ai đó mời bạn xem hồ sơ hoặc kết quả khám."
-                  checked={draftPrefs.shareInvite}
-                  onChange={(checked) => updateDraft({ shareInvite: checked })}
-                />
-                <EmailPreferenceToggle
-                  id="shareAccepted"
-                  label="Chấp nhận lời mời"
-                  description="Email khi người được mời đã chấp nhận chia sẻ hồ sơ của bạn."
-                  checked={draftPrefs.shareAccepted}
-                  onChange={(checked) => updateDraft({ shareAccepted: checked })}
-                />
-                <EmailPreferenceToggle
-                  id="followUpReminder"
-                  label="Nhắc tái khám"
-                  description="Email nhắc vào ngày đã lưu (không gửi ngay khi tạo nhắc cho ngày tương lai). Cần bật để nhận email."
-                  checked={draftPrefs.followUpReminder}
-                  onChange={(checked) => updateDraft({ followUpReminder: checked })}
-                />
-                <EmailPreferenceToggle
-                  id="security"
-                  label="Bảo mật tài khoản"
-                  description="Xác minh email, đặt lại mật khẩu và thông báo liên quan đến tài khoản."
-                  checked={true}
-                  disabled
-                  onChange={() => undefined}
-                />
-
-                <div className="flex justify-end border-t border-[#bcc9c6]/20 pt-4">
-                  <button
-                    type="button"
-                    disabled={!isDirty || isSaving}
-                    onClick={handleSaveEmailPrefs}
-                    className="rounded-xl bg-gradient-to-r from-[#00685f] to-[#008378] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-[#00685f]/20 transition disabled:opacity-60"
-                  >
-                    {isSaving ? "Đang lưu..." : "Lưu tùy chọn email"}
-                  </button>
-                </div>
-              </div>
-            )}
+            ) : preferences ? (
+              <EmailPreferencesForm
+                preferences={preferences}
+                onSave={savePreferences}
+                isSaving={isSaving}
+              />
+            ) : null}
           </section>
 
           <p className="text-sm leading-6 text-[#4e6360]">

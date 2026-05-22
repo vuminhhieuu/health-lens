@@ -869,3 +869,35 @@ So that lịch sử luôn cập nhật mà không cần thao tác thủ công.
 **And** hiển thị trạng thái đồng bộ thành công hoặc lỗi retry rõ ràng.
 
 _(Trước đây: Story 5.5 — file story: `9-3-auto-sync-when-back-online.md`)_
+
+## Epic 11: Bảo Mật Tài Khoản & Nâng Cao UX Làm Việc (2026-05-22)
+
+Goal: Tìm kiếm toàn cục, 2FA người dùng, ghi chú/ngữ cảnh sức khỏe đúng ranh giới tài khoản vs hồ sơ gia đình, component dashboard dùng chung.
+
+**Nền tảng:** Web — **Số story:** 4  
+**Planning chi tiết:** `account-security-and-ux-enhancements-epics-and-stories.md`  
+**Story files:** `_bmad-output/implementation-artifacts/epic-11-account-security-and-ux/`
+
+### Story 11.1: Tìm kiếm toàn cục — Header & Command Palette
+
+As a người dùng đã đăng nhập, I want tìm nhanh từ header, So that tra cứu xuyên suốt app.
+
+_(File: `11-1-global-search-header-and-command-palette.md`)_
+
+### Story 11.2: Xác thực hai yếu tố (2FA) cho người dùng
+
+As a người dùng, I want bật TOTP, So that tài khoản an toàn hơn.
+
+_(File: `11-2-user-two-factor-authentication-totp.md`)_
+
+### Story 11.3: Ghi chú cá nhân & ngữ cảnh sức khỏe theo hồ sơ
+
+As a người dùng, I want mô tả/ghi chú tại hồ sơ cá nhân và bệnh nền/thuốc/dị ứng theo từng hồ sơ gia đình, So that không nhầm dữ liệu chủ tài khoản vs người thân.
+
+_(File: `11-3-personal-and-family-health-context-fields.md`)_
+
+### Story 11.4: Component dùng chung cho luồng dashboard lặp lại
+
+As a developer, I want `ProfileScopeSelector` và `PageSearchField`, So that UI nhất quán.
+
+_(File: `11-4-shared-dashboard-workflow-components.md`)_

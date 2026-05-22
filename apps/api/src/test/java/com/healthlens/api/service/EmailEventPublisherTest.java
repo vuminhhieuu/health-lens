@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -147,5 +148,22 @@ class EmailEventPublisherTest {
                         && "IllegalStateException".equals(payload.get("failureClass"))
                         && "publish".equals(payload.get("stage")))
         );
+    }
+
+    @Test
+    void publishFollowUpReminderFailureRethrowsAfterAudit() {
+        ApplicationStreamPublisher streamPublisher = mock(ApplicationStreamPublisher.class);
+        AuditEventRecorder auditEventRecorder = mock(AuditEventRecorder.class);
+        org.mockito.Mockito.doThrow(new IllegalStateException("redis down"))
+                .when(streamPublisher).publish(eq("email.events"), org.mockito.ArgumentMatchers.any(Map.class));
+
+        RedisEmailEventPublisher publisher = new RedisEmailEventPublisher(streamPublisher, auditEventRecorder, "email.events");
+        UUID reminderId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> publisher.publishFollowUpReminder(reminderId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("follow_up_reminder");
+
+        verifyNoInteractions(auditEventRecorder);
     }
 }
