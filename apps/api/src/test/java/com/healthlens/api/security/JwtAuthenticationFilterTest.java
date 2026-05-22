@@ -23,6 +23,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -55,6 +56,15 @@ class JwtAuthenticationFilterTest {
         SecurityContextHolder.clearContext();
     }
 
+    private Claims stubAccessTokenClaims(String role) {
+        Claims claims = mock(Claims.class);
+        doReturn(null).when(claims).get("tokenType", String.class);
+        doReturn(role).when(claims).get("role", String.class);
+        doReturn("user@example.com").when(claims).get("email", String.class);
+        doReturn(null).when(claims).get("totpVerified", Boolean.class);
+        return claims;
+    }
+
     @Test
     @DisplayName("AC #3: PENDING_DELETION account is blocked with 403 and cannot authenticate")
     void blocksPendingDeletionAccount() throws Exception {
@@ -66,13 +76,12 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer " + token);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
+        Claims claims = stubAccessTokenClaims("ROLE_USER");
         when(jwtUtil.validateToken(token)).thenReturn(true);
         when(jwtUtil.extractJti(token)).thenReturn("jti-1");
         when(redisTemplate.hasKey(anyString())).thenReturn(false);
-        when(jwtUtil.extractSubject(token)).thenReturn(userId.toString());
-        Claims claims = mock(Claims.class);
-        when(claims.get("role", String.class)).thenReturn("ROLE_USER");
         when(jwtUtil.extractClaims(token)).thenReturn(claims);
+        when(jwtUtil.extractSubject(token)).thenReturn(userId.toString());
         when(accountStatusCache.getStatus(userId)).thenReturn(Optional.of(AccountStatus.PENDING_DELETION));
 
         filter.doFilter(request, response, filterChain);
@@ -94,13 +103,12 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer " + token);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
+        Claims claims = stubAccessTokenClaims("ROLE_USER");
         when(jwtUtil.validateToken(token)).thenReturn(true);
         when(jwtUtil.extractJti(token)).thenReturn("jti-2");
         when(redisTemplate.hasKey(anyString())).thenReturn(false);
-        when(jwtUtil.extractSubject(token)).thenReturn(userId.toString());
-        Claims claims = mock(Claims.class);
-        when(claims.get("role", String.class)).thenReturn("ROLE_USER");
         when(jwtUtil.extractClaims(token)).thenReturn(claims);
+        when(jwtUtil.extractSubject(token)).thenReturn(userId.toString());
         when(accountStatusCache.getStatus(userId)).thenReturn(Optional.of(AccountStatus.DELETED));
 
         filter.doFilter(request, response, filterChain);
@@ -122,13 +130,12 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer " + token);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
+        Claims claims = stubAccessTokenClaims("ROLE_USER");
         when(jwtUtil.validateToken(token)).thenReturn(true);
         when(jwtUtil.extractJti(token)).thenReturn("jti-3");
         when(redisTemplate.hasKey(anyString())).thenReturn(false);
-        when(jwtUtil.extractSubject(token)).thenReturn(userId.toString());
-        Claims claims = mock(Claims.class);
-        when(claims.get("role", String.class)).thenReturn("ROLE_USER");
         when(jwtUtil.extractClaims(token)).thenReturn(claims);
+        when(jwtUtil.extractSubject(token)).thenReturn(userId.toString());
         when(accountStatusCache.getStatus(userId)).thenReturn(Optional.of(AccountStatus.ACTIVE));
 
         filter.doFilter(request, response, filterChain);
