@@ -157,13 +157,7 @@ public interface UserActivityEventRepository extends JpaRepository<UserActivityE
                        WHEN :granularity = 'week' THEN DATE_TRUNC('week', created_at AT TIME ZONE 'UTC')
                        ELSE DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
                    END AS DATE) AS bucket_date,
-               CASE
-                   WHEN COALESCE(NULLIF(TRIM(failure_reason), ''), '') = '' THEN 'api_error'
-                   WHEN LOWER(TRIM(failure_reason)) = 'processing_error' THEN 'api_error'
-                   WHEN LOWER(TRIM(failure_reason)) IN ('timeout', 'low_confidence', 'api_error', 'invalid_file')
-                       THEN LOWER(TRIM(failure_reason))
-                   ELSE 'api_error'
-               END AS failure_reason,
+               COALESCE(NULLIF(failure_reason, ''), 'api_error') AS failure_reason,
                COUNT(*) AS failure_count
         FROM user_activity_events
         WHERE event_type = 'OCR_FAILED'
