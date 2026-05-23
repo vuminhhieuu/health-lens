@@ -43,10 +43,11 @@ const FAILURE_LABELS: Record<string, string> = {
   invalid_file: "Tệp không hợp lệ",
 };
 
+/** API `status=done` maps to OCR_COMPLETED events (OCR pipeline success, aligns with quality charts). */
 const FILTER_TITLES: Record<string, string> = {
-  all: "Tất cả lượt tải lên",
-  done: "Tải lên thành công",
-  ocr_failed: "Tải lên thất bại",
+  all: "Tất cả kết quả OCR trong khoảng",
+  done: "OCR thành công",
+  ocr_failed: "OCR thất bại",
 };
 
 type UploadHistoryModalProps = {

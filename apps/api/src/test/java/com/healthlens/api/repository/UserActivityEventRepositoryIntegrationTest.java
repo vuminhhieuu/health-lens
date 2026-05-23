@@ -4,6 +4,8 @@ import com.healthlens.api.activity.UserActivityEventType;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.entity.UserActivityEvent;
 import com.healthlens.api.entity.UserRole;
+import com.healthlens.api.repository.projection.UploadFailureBreakdownProjection;
+import com.healthlens.api.repository.projection.UploadQualityBucketProjection;
 import com.healthlens.api.support.PostgresTestContainerBase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -16,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,5 +78,43 @@ class UserActivityEventRepositoryIntegrationTest extends PostgresTestContainerBa
 
         assertThat(registeredCount).isEqualTo(1);
         assertThat(ocrFailedCount).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("upload quality buckets aggregate OCR_COMPLETED and OCR_FAILED by day")
+    void findUploadQualityBuckets_aggregatesTerminalOcrEvents() {
+        Instant bucketDay = Instant.parse("2026-03-15T12:00:00Z");
+        Instant from = Instant.parse("2026-03-15T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-03-16T00:00:00Z");
+
+        UserActivityEvent completed = new UserActivityEvent();
+        completed.setUserId(userId);
+        completed.setEventType(UserActivityEventType.OCR_COMPLETED);
+        completed.setRecordId(UUID.randomUUID());
+        completed.setCreatedAt(bucketDay);
+        userActivityEventRepository.save(completed);
+
+        UserActivityEvent failed = new UserActivityEvent();
+        failed.setUserId(userId);
+        failed.setEventType(UserActivityEventType.OCR_FAILED);
+        failed.setRecordId(UUID.randomUUID());
+        failed.setFailureReason("timeout");
+        failed.setCreatedAt(bucketDay.plus(1, ChronoUnit.HOURS));
+        userActivityEventRepository.save(failed);
+
+        List<UploadQualityBucketProjection> buckets =
+                userActivityEventRepository.findUploadQualityBuckets(from, toExclusive, "day");
+
+        assertThat(buckets).hasSize(1);
+        assertThat(buckets.get(0).getBucketDate()).isEqualTo(LocalDate.of(2026, 3, 15));
+        assertThat(buckets.get(0).getSuccessCount()).isEqualTo(1);
+        assertThat(buckets.get(0).getFailedCount()).isEqualTo(1);
+
+        List<UploadFailureBreakdownProjection> breakdown =
+                userActivityEventRepository.findUploadFailureBreakdown(from, toExclusive, "day");
+
+        assertThat(breakdown).hasSize(1);
+        assertThat(breakdown.get(0).getFailureReason()).isEqualTo("timeout");
+        assertThat(breakdown.get(0).getFailureCount()).isEqualTo(1);
     }
 }
