@@ -14,14 +14,14 @@ describe("privacy settings page", () => {
     const source = readFileSync(pagePath, "utf8");
 
     expect(source).toContain("DashboardPageShell");
-    expect(source).toContain('label: "Riêng tư"');
+    expect(source).toContain('breadcrumbFromSettings("Riêng tư")');
     expect(source).toContain("API_ROUTES.CONSENT.ME");
     expect(source).not.toContain("apiClient.post");
     expect(source).not.toContain("ConsentModal");
     expect(source).toContain("useAuthStore");
     expect(source).toContain("ConsentMetricTile");
     expect(source).toContain("Đang hiệu lực");
-    expect(source).toContain("SettingsAccountNav");
+    expect(source).toContain("SettingsAccountSidebar");
     expect(source).toContain('active="privacy"');
     expect(source).toContain("lg:grid-cols-3");
     expect(source).toContain("settingsCardClassName");

@@ -19,16 +19,18 @@ import {
   UserRound,
 } from "lucide-react";
 
-import { DashboardBreadcrumbBar } from "@/components/layout/DashboardBreadcrumbBar";
+import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { breadcrumbFromSettings } from "@/lib/layout/dashboardBreadcrumbTrails";
 import { useAccountDeletion } from "@/hooks/useAccountDeletion";
 import { useAuthStore } from "@/stores/authStore";
 
-/**
- * Story 1.6 — UI theo Stitch (project 2069125245324220624):
- * - Màn “Yêu cầu xóa tài khoản”: bước 1 xác nhận + bước 2 mật khẩu
- * - Sau khi gửi thành công: chuyển thẳng tới đăng nhập
- */
+import { SettingsAccountSidebar } from "../_components/SettingsAccountSidebar";
+import { SettingsDirectContactCard } from "../_components/SettingsDirectContactCard";
+import { settingsCardClassName, settingsTipCardClassName } from "../_components/settingsStyles";
+
+const passwordInputClassName =
+  "h-12 w-full rounded-xl border-none bg-[#e9f6f3] px-4 text-sm font-medium text-[#121e1c] placeholder:text-[#9ba9a6] outline-none transition focus:ring-2 focus:ring-[#00685f]/20";
+
 export default function DeleteAccountPage() {
   const router = useRouter();
   const clearAuth = useAuthStore((state) => state.clearAuth);
@@ -94,179 +96,194 @@ export default function DeleteAccountPage() {
       setPassword("");
       setRequestSent(true);
     } catch {
-      // Hook provides `hookError` displayed by the UI; avoid noisy console.error in production
+      // Hook provides `hookError` displayed by the UI
     }
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-[#effcf9] text-[#121e1c]">
-      <DashboardBreadcrumbBar items={breadcrumbFromSettings("Xóa tài khoản")} />
+    <>
+      {!requestSent ? (
+        <DashboardPageShell
+          title="Xóa tài khoản"
+          subtitle="Thực hiện quyền xóa dữ liệu theo Nghị định 13/2023/NĐ-CP. Hành động này không thể hoàn tác sau thời gian chờ."
+          breadcrumbs={breadcrumbFromSettings("Xóa tài khoản")}
+        >
+          <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
+          <div className="space-y-8 lg:col-span-2">
+            <section className={`${settingsCardClassName} relative overflow-hidden`}>
+              <div className="absolute top-0 right-0 -mt-16 -mr-16 h-32 w-32 rounded-bl-full bg-[#ba1a1a]/5" />
 
-      <main
-        className={
-          requestSent
-            ? "pointer-events-none flex min-h-screen flex-1 select-none flex-col px-4 py-8 opacity-0 md:px-8 md:py-12 lg:px-12"
-            : "flex w-full flex-1 flex-col px-4 py-8 md:px-8 md:py-12 lg:px-12"
-        }
-        aria-hidden={requestSent}
-      >
-        <section className="w-full flex-1 rounded-xl border border-[#bcc9c6]/10 bg-white p-8 shadow-[0_8px_32px_rgba(18,30,28,0.06)] md:p-12">
-          {!requestSent && (
-            <>
-              <div className="mb-10 text-center">
-                <h1 className="mb-3 text-3xl font-bold tracking-tight text-[#121e1c]">
-                  Yêu cầu xóa tài khoản
-                </h1>
-                <p className="mx-auto max-w-lg leading-relaxed text-[#3d4947]">
-                  Chúng tôi rất tiếc khi thấy bạn rời đi. Vui lòng hoàn thành
-                  các bước bên dưới để thực hiện quyền xóa dữ liệu theo Nghị
-                  định 13/2023/NĐ-CP.
+              <div className="relative mb-8 flex flex-col gap-6 md:flex-row md:items-start">
+                <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-[#fff8f7] text-[#ba1a1a] ring-4 ring-[#fff8f7] shadow-md">
+                  <Trash2 className="h-10 w-10" aria-hidden="true" />
+                </div>
+                <div className="min-w-0 flex-grow">
+                  <h2 className="text-2xl font-bold text-[#121e1c]">Yêu cầu xóa tài khoản</h2>
+                  <p className="mt-2 text-sm leading-6 text-[#6d7a77]">
+                    Chúng tôi rất tiếc khi thấy bạn rời đi. Hoàn thành các bước bên dưới để gửi yêu cầu
+                    xóa dữ liệu. Tài khoản sẽ bị khóa đăng nhập ngay và xóa vĩnh viễn sau tối đa 72 giờ.
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSubmit} className="relative space-y-8">
+                <div className="space-y-6">
+                  <p className="text-sm font-bold uppercase tracking-wider text-[#00685f]">
+                    Bước 1 — Đọc và xác nhận hậu quả
+                  </p>
+
+                <div className="rounded-xl border-l-4 border-[#ba1a1a] bg-[#ffdad6]/30 p-6">
+                  <div className="flex gap-4">
+                    <AlertTriangle className="h-5 w-5 shrink-0 text-[#ba1a1a]" aria-hidden="true" />
+                    <div>
+                      <h3 className="mb-2 text-lg font-bold text-[#93000a]">Cảnh báo quan trọng</h3>
+                      <ul className="list-disc space-y-2 pl-4 text-sm leading-relaxed text-[#93000a]">
+                        <li>
+                          Hành động này là <strong>vĩnh viễn</strong> và không thể hoàn tác.
+                        </li>
+                        <li>
+                          Tất cả dữ liệu y tế, lịch sử khám bệnh và hồ sơ sẽ bị xóa sạch khỏi hệ thống.
+                        </li>
+                        <li>
+                          Tài khoản của bạn sẽ bị tạm khóa trong{" "}
+                          <strong>72 giờ</strong> trước khi bị xóa vĩnh viễn.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-[#3d4947]">
+                    Dữ liệu sẽ bị xóa bao gồm
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="flex items-center gap-3 rounded-xl bg-[#e9f6f3] p-4">
+                      <UserRound className="h-5 w-5 text-[#3f6560]" aria-hidden="true" />
+                      <span className="text-sm font-medium">Thông tin định danh (PII)</span>
+                    </div>
+                    <div className="flex items-center gap-3 rounded-xl bg-[#e9f6f3] p-4">
+                      <Stethoscope className="h-5 w-5 text-[#3f6560]" aria-hidden="true" />
+                      <span className="text-sm font-medium">Hồ sơ bệnh án &amp; Vitals</span>
+                    </div>
+                    <div className="flex items-center gap-3 rounded-xl bg-[#e9f6f3] p-4">
+                      <FileUp className="h-5 w-5 text-[#3f6560]" aria-hidden="true" />
+                      <span className="text-sm font-medium">Tệp đính kèm &amp; Kết quả xét nghiệm</span>
+                    </div>
+                    <div className="flex items-center gap-3 rounded-xl bg-[#e9f6f3] p-4">
+                      <ShieldCheck className="h-5 w-5 text-[#3f6560]" aria-hidden="true" />
+                      <span className="text-sm font-medium">Nhật ký đồng thuận dữ liệu</span>
+                    </div>
+                  </div>
+                </div>
+
+                <label
+                  htmlFor="delete-account-ack-consequences"
+                  className="group flex cursor-pointer items-start gap-4 rounded-xl bg-[#e9f6f3] p-4 transition-colors hover:bg-[#d8ebe6]"
+                >
+                  <input
+                    id="delete-account-ack-consequences"
+                    type="checkbox"
+                    checked={hasReadConsequences}
+                    onChange={(e) => setHasReadConsequences(e.target.checked)}
+                    className="mt-1 h-5 w-5 shrink-0 rounded border-[#6d7a77]"
+                  />
+                  <span className="text-sm leading-relaxed text-[#3d4947]">
+                    Tôi đã hiểu và chấp nhận hậu quả của việc xóa tài khoản. Tôi xác nhận rằng HealthLens
+                    đã thông báo đầy đủ về các quyền của tôi theo quy định pháp luật về bảo vệ dữ liệu cá
+                    nhân.
+                  </span>
+                </label>
+                </div>
+
+                <div className="space-y-6 border-t border-[#deebe8] pt-8">
+                  <p className="text-sm font-bold uppercase tracking-wider text-[#00685f]">
+                    Bước 2 — Xác nhận danh tính
+                  </p>
+                  <div>
+                    <label
+                      htmlFor="delete-account-password"
+                      className="mb-2 block text-sm font-bold text-[#6d7a77]"
+                    >
+                      Mật khẩu hiện tại
+                    </label>
+                    <input
+                      id="delete-account-password"
+                      type="password"
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (passwordError) setPasswordError(null);
+                      }}
+                      placeholder="Nhập mật khẩu của bạn"
+                      className={passwordInputClassName}
+                    />
+                  </div>
+
+                  {(hookError || passwordError) && (
+                    <div
+                      role="alert"
+                      aria-live="assertive"
+                      className="flex items-center gap-3 rounded-xl border border-[#ba1a1a]/20 bg-[#ffebee] p-4 text-[#ba1a1a]"
+                    >
+                      <AlertTriangle className="h-5 w-5 shrink-0" />
+                      <p className="text-sm font-semibold leading-5">
+                        {hookError || passwordError}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-4 sm:flex-row">
+                    <button
+                      type="submit"
+                      disabled={isRequesting}
+                      className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#ba1a1a] text-sm font-bold text-white shadow-md transition hover:opacity-90 disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ba1a1a]"
+                    >
+                      <Trash2 className="h-5 w-5" aria-hidden="true" />
+                      {isRequesting ? "Đang xử lý..." : "Gửi yêu cầu xóa"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => router.back()}
+                      className="inline-flex min-h-12 flex-1 items-center justify-center rounded-xl bg-[#deebe8] text-sm font-bold text-[#3d4947] transition hover:bg-[#d8e5e2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00685f]"
+                    >
+                      Hủy bỏ
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </section>
+          </div>
+
+          <aside className="space-y-8">
+            <SettingsAccountSidebar />
+            <section className={settingsTipCardClassName}>
+              <div className="relative z-10">
+                <div className="mb-6 flex items-center gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/50 backdrop-blur-md">
+                    <Info className="h-6 w-6 text-[#00685f]" aria-hidden="true" />
+                  </div>
+                  <h3 className="text-xl font-bold text-[#121e1c]">Thời gian chờ 72 giờ</h3>
+                </div>
+                <p className="text-sm leading-relaxed text-[#274d48]">
+                  Sau khi gửi yêu cầu, bạn vẫn có thể hủy xóa trong thời gian chờ qua liên kết trong email
+                  xác nhận. Đăng nhập sẽ bị khóa ngay để bảo vệ dữ liệu trong lúc xử lý.
                 </p>
               </div>
-
-              <div className="mb-10 flex justify-center gap-3">
-                <div className="h-1.5 w-16 rounded-full bg-[#00685f]" />
-                <div className="h-1.5 w-16 rounded-full bg-[#deebe8]" />
-              </div>
-            </>
-          )}
-
-          {!requestSent ? (
-            <form onSubmit={handleSubmit} className="space-y-8">
-              <div className="rounded-xl border-l-4 border-[#ba1a1a] bg-[#ffdad6]/30 p-6">
-                <div className="flex items-start gap-4">
-                  <AlertTriangle className="mt-1 h-6 w-6 shrink-0 text-[#ba1a1a]" />
-                  <div>
-                    <h2 className="mb-2 text-lg font-bold leading-6 text-[#93000a]">
-                      Cảnh báo quan trọng
-                    </h2>
-                    <ul className="list-disc space-y-2 pl-4 text-sm leading-relaxed text-[#93000a]">
-                      <li>
-                        Hành động này là <strong>vĩnh viễn</strong> và không thể
-                        hoàn tác.
-                      </li>
-                      <li>
-                        Tất cả dữ liệu y tế, lịch sử khám bệnh và hồ sơ sẽ bị
-                        xóa sạch khỏi hệ thống.
-                      </li>
-                      <li>
-                        Tài khoản của bạn sẽ bị tạm khóa trong{" "}
-                        <strong>72 giờ</strong> trước khi bị xóa vĩnh viễn.
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="text-sm font-bold uppercase tracking-widest text-[#3d4947]">
-                  Dữ liệu sẽ bị xóa bao gồm:
-                </h3>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div className="flex items-center gap-3 rounded-xl bg-[#e9f6f3] p-4">
-                    <UserRound className="h-5 w-5 text-[#3f6560]" />
-                    <span className="text-sm font-medium">
-                      Thông tin định danh (PII)
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 rounded-xl bg-[#e9f6f3] p-4">
-                    <Stethoscope className="h-5 w-5 text-[#3f6560]" />
-                    <span className="text-sm font-medium">
-                      Hồ sơ bệnh án &amp; Vitals
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 rounded-xl bg-[#e9f6f3] p-4">
-                    <FileUp className="h-5 w-5 text-[#3f6560]" />
-                    <span className="text-sm font-medium">
-                      Tệp đính kèm &amp; Kết quả xét nghiệm
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 rounded-xl bg-[#e9f6f3] p-4">
-                    <ShieldCheck className="h-5 w-5 text-[#3f6560]" />
-                    <span className="text-sm font-medium">
-                      Nhật ký đồng thuận dữ liệu
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <label
-                htmlFor="delete-account-ack-consequences"
-                className="group flex cursor-pointer items-start gap-4 rounded-xl bg-[#d8e5e2] p-4 transition-colors hover:bg-[#d0ddda]"
-              >
-                <input
-                  id="delete-account-ack-consequences"
-                  type="checkbox"
-                  checked={hasReadConsequences}
-                  onChange={(e) => setHasReadConsequences(e.target.checked)}
-                  className="mt-1 h-5 w-5 shrink-0 rounded border-[#6d7a77]"
-                />
-                <span className="text-sm leading-relaxed text-[#3d4947]">
-                  Tôi đã hiểu và chấp nhận hậu quả của việc xóa tài khoản. Tôi
-                  xác nhận rằng HealthLens đã thông báo đầy đủ về các quyền của
-                  tôi theo quy định pháp luật về bảo vệ dữ liệu cá nhân.
-                </span>
-              </label>
-
-              <div className="space-y-6 border-t border-[#deebe8] pt-10">
-                <div>
-                  <h3 className="mb-2 text-lg font-bold text-[#121e1c]">
-                    Xác nhận danh tính
-                  </h3>
-                  <label htmlFor="delete-account-password" className="mb-2 block text-sm font-bold text-[#121e1c]">
-                    Mật khẩu hiện tại
-                  </label>
-                  <input
-                    id="delete-account-password"
-                    type="password"
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      if (passwordError) setPasswordError(null);
-                    }}
-                    placeholder="Nhập mật khẩu của bạn"
-                    className="h-14 w-full rounded-xl border-none bg-[#d8e5e2] px-5 text-[#121e1c] placeholder:text-[#bcc9c6] focus:outline-none focus:ring-2 focus:ring-[#00685f]"
-                  />
-                </div>
-
-                {(hookError || passwordError) && (
-                  <div
-                    role="alert"
-                    aria-live="assertive"
-                    className="flex items-center gap-3 rounded-xl border border-[#ba1a1a]/20 bg-[#ffebee] p-4 text-[#ba1a1a]"
-                  >
-                    <AlertTriangle className="h-5 w-5 shrink-0" />
-                    <p className="text-sm font-semibold leading-5">
-                      {hookError || passwordError}
-                    </p>
-                  </div>
-                )}
-
-                <div className="flex flex-col gap-4 pt-4 md:flex-row">
-                  <button
-                    type="submit"
-                    disabled={isRequesting}
-                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#ba1a1a] font-bold text-white shadow-md transition-all hover:opacity-90 disabled:opacity-60"
-                  >
-                    <Trash2 className="h-5 w-5" />
-                    {isRequesting ? "Đang xử lý..." : "Gửi yêu cầu xóa"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => router.back()}
-                    className="h-12 flex-1 rounded-xl bg-[#deebe8] font-bold text-[#3d4947] transition-all hover:bg-[#d8e5e2]"
-                  >
-                    Hủy bỏ
-                  </button>
-                </div>
-              </div>
-            </form>
-          ) : (
-            <div className="min-h-[50vh]" aria-hidden />
-          )}
-        </section>
-      </main>
+              <div
+                className="pointer-events-none absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-[#00685f]/10 blur-3xl"
+                aria-hidden="true"
+              />
+            </section>
+            <SettingsDirectContactCard
+              title="Cần hỗ trợ?"
+              description="Liên hệ đội ngũ nếu bạn có thắc mắc về quyền xóa dữ liệu hoặc quy trình chờ 72 giờ."
+            />
+          </aside>
+        </div>
+        </DashboardPageShell>
+      ) : null}
 
       {requestSent &&
         typeof document !== "undefined" &&
@@ -300,9 +317,8 @@ export default function DeleteAccountPage() {
                 </h2>
                 <p className="mx-auto mb-8 max-w-2xl leading-relaxed text-[#3d4947]">
                   Chúng tôi đã tiếp nhận yêu cầu của bạn. Theo{" "}
-                  <strong>Nghị định 13/2023/NĐ-CP</strong> về bảo vệ dữ liệu cá
-                  nhân, toàn bộ dữ liệu của bạn sẽ được xóa vĩnh viễn khỏi hệ
-                  thống trong tối đa{" "}
+                  <strong>Nghị định 13/2023/NĐ-CP</strong> về bảo vệ dữ liệu cá nhân, toàn bộ dữ liệu
+                  của bạn sẽ được xóa vĩnh viễn khỏi hệ thống trong tối đa{" "}
                   <span className="font-bold text-[#00685f]">72 giờ</span>.
                 </p>
 
@@ -337,26 +353,20 @@ export default function DeleteAccountPage() {
                 <div className="mb-8 flex gap-3 rounded-lg border-l-4 border-[#6d7a77] bg-[#d8e5e2] p-4 text-left">
                   <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#3d4947]" />
                   <p className="text-sm text-[#3d4947]">
-                    Tài khoản của bạn sẽ bị{" "}
-                    <strong>vô hiệu hóa đăng nhập</strong> ngay lập tức trong
-                    thời gian chờ xử lý để đảm bảo tính toàn vẹn của tiến trình
-                    xóa.
+                    Tài khoản của bạn sẽ bị <strong>vô hiệu hóa đăng nhập</strong> ngay lập tức trong
+                    thời gian chờ xử lý để đảm bảo tính toàn vẹn của tiến trình xóa.
                   </p>
                 </div>
 
                 <p className="text-sm text-[#3d4947]">
-                  Phiên làm việc sẽ được khóa và bạn được chuyển về đăng nhập
-                  sau{" "}
-                  <span className="font-semibold text-[#00685f]">
-                    {secondsLeft} giây
-                  </span>
-                  .
+                  Phiên làm việc sẽ được khóa và bạn được chuyển về đăng nhập sau{" "}
+                  <span className="font-semibold text-[#00685f]">{secondsLeft} giây</span>.
                 </p>
               </div>
             </div>
           </div>,
           document.body,
         )}
-    </div>
+    </>
   );
 }

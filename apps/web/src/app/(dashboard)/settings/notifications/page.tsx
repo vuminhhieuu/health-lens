@@ -8,8 +8,9 @@ import { NotificationInboxList } from "@/components/features/notifications/Notif
 import { useNotificationEmailPreferences } from "@/hooks/useNotificationEmailPreferences";
 import { useNotificationInbox } from "@/hooks/useNotificationInbox";
 
-import { SettingsAccountNav } from "../_components/SettingsAccountNav";
-import { SettingsPageCard, SettingsPageIntro } from "../_components/SettingsPageCard";
+import { SettingsAccountSidebar } from "../_components/SettingsAccountSidebar";
+import { SettingsDirectContactCard } from "../_components/SettingsDirectContactCard";
+import { SettingsPageIntro } from "../_components/SettingsPageCard";
 import { settingsCardClassName } from "../_components/settingsStyles";
 import { EmailPreferencesForm } from "./_components/EmailPreferencesForm";
 
@@ -113,17 +114,12 @@ export default function NotificationSettingsPage() {
           </p>
         </div>
 
-        <aside className="space-y-6">
-          <SettingsPageCard>
-            <SettingsPageIntro
-              icon={Bell}
-              title="Lối tắt"
-              description="Quay lại các mục cài đặt tài khoản khác."
-            />
-            <div className="mt-6">
-              <SettingsAccountNav active="notifications" />
-            </div>
-          </SettingsPageCard>
+        <aside className="space-y-8">
+          <SettingsAccountSidebar active="notifications" />
+          <SettingsDirectContactCard
+            title="Cần hỗ trợ?"
+            description="Liên hệ đội ngũ nếu bạn có thắc mắc về thông báo trong app hoặc email."
+          />
         </aside>
       </div>
     </DashboardPageShell>

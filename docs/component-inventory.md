@@ -1,6 +1,6 @@
 # Component Inventory
 
-**Last updated:** 2026-05-16
+**Last updated:** 2026-05-23
 
 ## Web App Pages
 
@@ -9,7 +9,7 @@
 | Auth | `login`, `register`, `forgot-password`, `reset-password`, `verify-email` pages under `apps/web/src/app/(auth)` |
 | Dashboard | `home`, `profiles`, `health-records` pages under `apps/web/src/app/(dashboard)` |
 | Admin | `admin/login`, admin dashboard, audit log, reference data pages under `apps/web/src/app/admin` |
-| Account deletion | `apps/web/src/app/cancel-deletion` and settings delete-account tests |
+| Account deletion | `apps/web/src/app/cancel-deletion`, `settings/delete-account` |
 
 ## Web Components
 
@@ -17,7 +17,8 @@
 | --- | --- |
 | Consent | `ConsentModal` |
 | Health records | `DeleteRecordModal`, `HealthMetricCard` |
-| Profiles | `CreateProfileModal`, `EditProfileModal`, `InviteMemberModal`, `ProfileCard` |
+| Profiles | `CreateProfileModal`, `EditProfileModal`, `InviteMemberModal`, `ProfileCard`, `ProfileScopeSelector` |
+| Settings | `SettingsAccountNav`, `SettingsAccountSidebar`, `SettingsDirectContactCard` |
 | Upload/OCR | `UploadButton`, `OcrFailureScreen` |
 | Layout | `DashboardPageShell`, root providers |
 
@@ -38,6 +39,15 @@ The Expo app is present but lighter than the web app.
 | Components | themed text/view, tabs, external link, hint row, animated icon, web badge |
 | Hooks/theme | color-scheme hooks, theme constants, global CSS |
 | API/state | `apps/mobile/lib/api/index.ts`, `apps/mobile/stores/index.ts` |
+
+## Dashboard Workflow Components (Epic 11.4)
+
+| Component | Import | Consumers |
+| --- | --- | --- |
+| `ProfileScopeSelector` | `@/components/features/profiles/ProfileScopeSelector` | `follow-up-reminders/page.tsx`, `visit-summary/page.tsx` |
+| `SettingsAccountSidebar` | `@/components/features/settings/SettingsAccountSidebar` | `settings/privacy`, `security`, `change-password`, `about`, `notifications`, `profile`, `delete-account` |
+| `SettingsAccountNav` | `@/components/features/settings/SettingsAccountNav` | *(dùng qua `SettingsAccountSidebar`)* |
+| `SettingsDirectContactCard` | `@/components/features/settings/SettingsDirectContactCard` | `settings/privacy`, `security`, `change-password`, `about`, `profile`, `notifications`, `delete-account` |
 
 ## Shared Package
 

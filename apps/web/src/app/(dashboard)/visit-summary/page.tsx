@@ -18,6 +18,7 @@ import {
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
+import { ProfileScopeSelector } from "@/components/features/profiles/ProfileScopeSelector";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { breadcrumbFromHome } from "@/lib/layout/dashboardBreadcrumbTrails";
 import { ErrorState, LoadingState } from "@/components/ui";
@@ -223,24 +224,12 @@ function VisitSummaryPageContent() {
             </section>
 
             <div className="visit-summary-screen-only rounded-xl border border-[#bcc9c6]/30 bg-white p-5 shadow-sm">
-              <label
-                htmlFor="visit-summary-profile"
-                className="text-sm font-bold text-[#121e1c]"
-              >
-                Hồ sơ
-              </label>
-              <select
+              <ProfileScopeSelector
                 id="visit-summary-profile"
+                profiles={profiles}
                 value={selectedProfileId}
-                onChange={(event) => setManualProfileId(event.target.value)}
-                className="mt-2 h-12 w-full rounded-xl border border-[#b7e8e0] bg-[#f0faf8] px-4 text-sm font-semibold text-[#3d4947] outline-none transition focus:border-[#008378] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00685f]"
-              >
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.displayName}
-                  </option>
-                ))}
-              </select>
+                onChange={setManualProfileId}
+              />
             </div>
 
             <article className="visit-summary-screen-only rounded-xl border border-[#bcc9c6]/30 bg-white p-6 shadow-sm">

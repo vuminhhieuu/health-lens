@@ -8,7 +8,6 @@ import {
   KeyRound,
   Lock,
   QrCode,
-  Shield,
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
@@ -26,7 +25,7 @@ import { getApiErrorPayload } from "@/lib/i18n/messages";
 import { notify } from "@/lib/notify";
 import { useAuthStore } from "@/stores/authStore";
 
-import { SettingsAccountNav } from "../_components/SettingsAccountNav";
+import { SettingsAccountSidebar } from "../_components/SettingsAccountSidebar";
 import { SettingsDirectContactCard } from "../_components/SettingsDirectContactCard";
 import { settingsCardClassName, settingsTipCardClassName } from "../_components/settingsStyles";
 
@@ -501,13 +500,7 @@ export default function SecuritySettingsPage() {
         </div>
 
         <aside className="space-y-8">
-          <section className={settingsCardClassName}>
-            <div className="mb-8 flex items-center gap-3">
-              <Shield className="h-6 w-6 text-[#00685f]" aria-hidden="true" />
-              <h2 className="text-xl font-bold text-[#121e1c]">Bảo mật & tài khoản</h2>
-            </div>
-            <SettingsAccountNav active="security" />
-          </section>
+          <SettingsAccountSidebar active="security" />
 
           <section className={settingsTipCardClassName}>
             <div className="relative z-10">

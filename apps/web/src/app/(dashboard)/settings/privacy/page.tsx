@@ -21,7 +21,7 @@ import { apiClient } from "@/lib/api/apiClient";
 import { API_ROUTES } from "@/lib/api/routes";
 import { useAuthStore } from "@/stores/authStore";
 
-import { SettingsAccountNav } from "../_components/SettingsAccountNav";
+import { SettingsAccountSidebar } from "../_components/SettingsAccountSidebar";
 import { SettingsDirectContactCard } from "../_components/SettingsDirectContactCard";
 import { settingsCardClassName, settingsTipCardClassName } from "../_components/settingsStyles";
 
@@ -343,13 +343,7 @@ export default function PrivacySettingsPage() {
         </div>
 
         <div className="space-y-8">
-          <section className={settingsCardClassName}>
-            <div className="mb-8 flex items-center gap-3">
-              <Shield className="h-6 w-6 text-[#00685f]" aria-hidden="true" />
-              <h2 className="text-xl font-bold text-[#121e1c]">Bảo mật & tài khoản</h2>
-            </div>
-            <SettingsAccountNav active="privacy" />
-          </section>
+          <SettingsAccountSidebar active="privacy" />
 
           <section className={settingsTipCardClassName}>
             <div className="relative z-10">
