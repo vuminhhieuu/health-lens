@@ -78,7 +78,7 @@ Composer
 - Removed unused `AdminGeneralStats` (superseded by `ActivityVolumePanel`).
 - Extended `AnalyticsServiceTest` and `UserActivityEventRepositoryIntegrationTest` for event-backed quality aggregation.
 - Frontend: `uploadQualityAnalytics.test.ts`; metric labels clarify OCR pipeline vs record `done`.
-- Migration `V050` backfills terminal OCR events from historical `health_records` (idempotent; `failure_reason` matches `FailureReasonNormalizer`).
+- Migration `V050` backfills terminal OCR events from historical `health_records` (idempotent; `failure_reason` matches `FailureReasonNormalizer`; batched `LEFT JOIN` + partial indexes for production).
 
 ### File List
 
@@ -98,3 +98,4 @@ Composer
 - 2026-05-22: Story 4.2 — event-backed OCR upload quality charts; remove dead admin stats component.
 - 2026-05-22: Code review fixes — aligned drill-down, V050 backfill, SQL normalization, frontend tests, removed dead queries.
 - 2026-05-22: Final review — staged V050 + frontend tests; backfill `failure_reason` CASE aligned with analytics SQL; story file list synced.
+- 2026-05-22: V050 perf — batched anti-join backfill, partial indexes on terminal `health_records`; upload-history `status` derived from event type.
