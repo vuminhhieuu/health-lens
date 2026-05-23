@@ -1,6 +1,6 @@
 # Story 6.3: Frontend Bundle And Image Rule Cleanup
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 
@@ -22,10 +22,10 @@ so that build output remains clean and predictable.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 - Review `@radix-ui/themes` usage and import patterns (AC: #1)
-- [ ] Task 2 - Resolve or justify raw `<img>` usages (AC: #2)
-- [ ] Task 3 - Measure bundle/build impact where tooling exists (AC: #3)
-- [ ] Task 4 - Document any intentional lint exceptions (AC: #2, #3)
+- [x] Task 1 - Review `@radix-ui/themes` usage and import patterns (AC: #1)
+- [x] Task 2 - Resolve or justify raw `<img>` usages (AC: #2)
+- [x] Task 3 - Measure bundle/build impact where tooling exists (AC: #3)
+- [x] Task 4 - Document any intentional lint exceptions (AC: #2, #3)
 
 ## Dev Notes
 
@@ -57,4 +57,13 @@ so that build output remains clean and predictable.
 
 ### Completion Notes List
 
+- Replaced the lone `@radix-ui/themes` `Callout` usage in the delete-account flow with a local alert panel, leaving `Theme` and the global Radix stylesheet as the only remaining themes dependency surface in the app shell.
+- Tightened `SafeImage` into a discriminated raw-vs-Next/Image wrapper so blob/data/authenticated image cases still use plain `<img>`, while the optimized branch preserves Next/Image sizing requirements.
+- Verified the web app production build after clearing stale `.next` output; the build completed successfully and the route manifest remained unchanged.
+- Ran `next experimental-analyze --output` before and after the delete-account `Callout` swap; total analyzed bundle size stayed the same at `4,354,194` bytes uncompressed and `831,874` bytes compressed, so the change did not measurably affect the app bundle.
+- `pnpm --dir apps/web lint` still reports one pre-existing warning in `apps/web/src/app/(dashboard)/settings/_components/SettingsAccountNav.tsx:46` about `aria-disabled` on `listitem`; that issue is outside this story's scope.
+
 ### File List
+
+- `apps/web/src/components/ui/SafeImage.tsx`
+- `apps/web/src/app/(dashboard)/settings/delete-account/page.tsx`
