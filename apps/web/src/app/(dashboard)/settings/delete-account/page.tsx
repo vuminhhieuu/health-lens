@@ -102,19 +102,13 @@ export default function DeleteAccountPage() {
 
   return (
     <>
-      <DashboardPageShell
-        title="Xóa tài khoản"
-        subtitle="Thực hiện quyền xóa dữ liệu theo Nghị định 13/2023/NĐ-CP. Hành động này không thể hoàn tác sau thời gian chờ."
-        breadcrumbs={breadcrumbFromSettings("Xóa tài khoản")}
-      >
-        <div
-          className={
-            requestSent
-              ? "pointer-events-none select-none opacity-0"
-              : "grid grid-cols-1 items-start gap-8 lg:grid-cols-3"
-          }
-          aria-hidden={requestSent}
+      {!requestSent ? (
+        <DashboardPageShell
+          title="Xóa tài khoản"
+          subtitle="Thực hiện quyền xóa dữ liệu theo Nghị định 13/2023/NĐ-CP. Hành động này không thể hoàn tác sau thời gian chờ."
+          breadcrumbs={breadcrumbFromSettings("Xóa tài khoản")}
         >
+          <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3">
           <div className="space-y-8 lg:col-span-2">
             <section className={`${settingsCardClassName} relative overflow-hidden`}>
               <div className="absolute top-0 right-0 -mt-16 -mr-16 h-32 w-32 rounded-bl-full bg-[#ba1a1a]/5" />
@@ -133,6 +127,11 @@ export default function DeleteAccountPage() {
               </div>
 
               <form onSubmit={handleSubmit} className="relative space-y-8">
+                <div className="space-y-6">
+                  <p className="text-sm font-bold uppercase tracking-wider text-[#00685f]">
+                    Bước 1 — Đọc và xác nhận hậu quả
+                  </p>
+
                 <div className="rounded-xl border-l-4 border-[#ba1a1a] bg-[#ffdad6]/30 p-6">
                   <div className="flex gap-4">
                     <AlertTriangle className="h-5 w-5 shrink-0 text-[#ba1a1a]" aria-hidden="true" />
@@ -195,6 +194,7 @@ export default function DeleteAccountPage() {
                     nhân.
                   </span>
                 </label>
+                </div>
 
                 <div className="space-y-6 border-t border-[#deebe8] pt-8">
                   <p className="text-sm font-bold uppercase tracking-wider text-[#00685f]">
@@ -282,7 +282,8 @@ export default function DeleteAccountPage() {
             />
           </aside>
         </div>
-      </DashboardPageShell>
+        </DashboardPageShell>
+      ) : null}
 
       {requestSent &&
         typeof document !== "undefined" &&

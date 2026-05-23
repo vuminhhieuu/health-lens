@@ -28,8 +28,7 @@ export function ProfileScopeSelector({
   const hasProfiles = profiles.length > 0;
   const hasValidValue = hasProfiles && profiles.some((profile) => profile.id === value);
   const selectValue = hasValidValue ? value : "";
-  const isDisabled =
-    disabled || !hasProfiles || (value !== "" && !hasValidValue);
+  const isDisabled = disabled || !hasProfiles;
 
   return (
     <div className={className}>
