@@ -16,6 +16,8 @@ public interface AnalyticsRepository extends JpaRepository<HealthRecord, UUID> {
     /**
      * Drill-down rows aligned with OCR terminal events (same time axis as upload-quality charts).
      * {@code eventType}: {@code OCR_COMPLETED}, {@code OCR_FAILED}, or null for both.
+     * {@code status} in results is derived from the terminal event (not {@code health_records.status}):
+     * {@code OCR_COMPLETED} → {@code done}, {@code OCR_FAILED} → {@code ocr_failed}.
      */
     @Query(value = """
         SELECT record_id,
@@ -37,7 +39,11 @@ public interface AnalyticsRepository extends JpaRepository<HealthRecord, UUID> {
                    u.full_name AS user_full_name,
                    h.profile_id AS profile_id,
                    p.display_name AS profile_display_name,
-                   h.status AS status,
+                   CASE
+                       WHEN e.event_type = 'OCR_COMPLETED' THEN 'done'
+                       WHEN e.event_type = 'OCR_FAILED' THEN 'ocr_failed'
+                       ELSE 'ocr_failed'
+                   END AS status,
                    CASE
                        WHEN e.event_type = 'OCR_FAILED' THEN
                            CASE

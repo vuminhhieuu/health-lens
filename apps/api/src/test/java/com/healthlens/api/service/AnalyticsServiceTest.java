@@ -149,6 +149,37 @@ class AnalyticsServiceTest {
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).userEmail()).isEqualTo("user@example.com");
         assertThat(response.items().get(0).failureReason()).isEqualTo("timeout");
+        assertThat(response.items().get(0).status()).isEqualTo("ocr_failed");
+    }
+
+    @Test
+    @DisplayName("getUploadHistory tra ve status=done cho OCR_COMPLETED (khong phai health_records.status)")
+    void getUploadHistory_returnsDoneStatusForOcrCompletedDrillDown() {
+        Instant from = Instant.parse("2026-03-01T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-03-04T00:00:00Z");
+        UUID recordId = UUID.randomUUID();
+
+        UploadHistoryProjection row = historyRow(
+                recordId,
+                UUID.randomUUID(),
+                "user@example.com",
+                "Nguyen Van A",
+                UUID.randomUUID(),
+                "Bo me",
+                "done",
+                null,
+                Instant.parse("2026-03-02T10:00:00Z"));
+
+        when(analyticsRepository.findUploadHistoryByTerminalOcrEvent(
+                        eq(from), eq(toExclusive), eq("OCR_COMPLETED"), isNull(), eq(PageRequest.of(0, 20))))
+                .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
+
+        UploadHistoryPageResponse response = analyticsService.getUploadHistory(
+                from, toExclusive, "done", null, 0, 20);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).status()).isEqualTo("done");
+        assertThat(response.items().get(0).failureReason()).isNull();
     }
 
     @Test
