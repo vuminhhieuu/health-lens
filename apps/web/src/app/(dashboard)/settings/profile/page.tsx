@@ -7,8 +7,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Pencil,
-  Key,
-  Shield,
   Trash2,
   User,
   Users,
@@ -19,6 +17,7 @@ import { apiClient } from "@/lib/api/apiClient";
 import { normalizeOptionalTextField } from "@/lib/forms/normalizeOptionalTextField";
 import { API_ROUTES } from "@/lib/api/routes";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
+import { SettingsAccountSidebar } from "../_components/SettingsAccountSidebar";
 import { SettingsDirectContactCard } from "../_components/SettingsDirectContactCard";
 import { notify } from "@/lib/notify";
 import SafeImage from "@/components/ui/SafeImage";
@@ -649,46 +648,18 @@ export default function ProfileSettingsPage() {
 
         {/* Right Column: Settings & Support */}
         <div className="space-y-8">
-          {/* Account Settings Card */}
-          <section className="bg-white rounded-3xl p-8 shadow-[0_8px_32px_rgba(18,30,28,0.04)] border border-[#bcc9c6]/20">
-            <div className="flex items-center gap-3 mb-8">
-              <Shield className="text-[#00685f] w-6 h-6" />
-              <h2 className="text-xl font-bold text-[#121e1c]">
-                Cài đặt tài khoản
-              </h2>
-            </div>
-
-            <div className="space-y-6">
-              <Link href="/settings/change-password" className="flex items-center justify-between group py-2">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-[#e9f6f3] group-hover:bg-[#008378] group-hover:text-white transition-colors">
-                    <Key className="w-4 h-4" />
-                  </div>
-                  <span className="font-medium text-[#3d4947] group-hover:text-[#00685f] transition-colors">
-                    Đổi mật khẩu
-                  </span>
-                </div>
+          <SettingsAccountSidebar
+            active="profile"
+            footer={
+              <Link
+                href="/settings/delete-account"
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-[#ba1a1a]/20 text-sm font-bold text-[#ba1a1a] transition hover:bg-[#ba1a1a]/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ba1a1a]"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                Xóa tài khoản
               </Link>
-              <Link href="/settings/security" className="flex items-center justify-between group py-2">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-[#e9f6f3] group-hover:bg-[#008378] group-hover:text-white transition-colors">
-                    <Shield className="w-4 h-4" />
-                  </div>
-                  <span className="font-medium text-[#3d4947] group-hover:text-[#00685f] transition-colors">
-                    Xác thực hai yếu tố (2FA)
-                  </span>
-                </div>
-              </Link>
-              <div className="pt-6 border-t border-[#bcc9c6]/20">
-                <Link
-                  href="/settings/delete-account"
-                  className="w-full py-3 rounded-xl border-2 border-[#ba1a1a]/20 text-[#ba1a1a] font-bold hover:bg-[#ba1a1a]/5 transition-colors flex items-center justify-center gap-2 block"
-                >
-                  <Trash2 className="w-4 h-4" /> Xóa tài khoản
-                </Link>
-              </div>
-            </div>
-          </section>
+            }
+          />
 
           <SettingsDirectContactCard
             title="Cần hỗ trợ?"

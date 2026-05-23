@@ -74,3 +74,7 @@
 ## Deferred from: code review of pae-12-notification-email-preferences.md (2026-05-22)
 
 - AC5 ghi `EmailService`/`FollowUpReminderScheduler` nhưng preference check nằm ở `EmailConsumer` (đường gửi email thực tế qua Redis stream). Chức năng đạt; có thể thêm guard trong `EmailService` nếu sau này có gọi SMTP trực tiếp.
+
+## Deferred from: code review of 11-4-shared-dashboard-workflow-components.md (2026-05-22)
+
+- AC#5 full `pnpm test` fail — `privacy-settings.page.test.ts` expect `label: "Riêng tư"` nhưng page dùng `breadcrumbFromSettings("Riêng tư")` — pre-existing, không do story 11.4.

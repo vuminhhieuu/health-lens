@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { changePasswordSchema, type ChangePasswordInput } from "@healthlens/shared/schemas/auth";
-import { Eye, EyeOff, KeyRound, Lock, Mail, Shield, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Lock, Mail, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useForm, type UseFormRegisterReturn } from "react-hook-form";
@@ -14,7 +14,7 @@ import { API_ROUTES } from "@/lib/api/routes";
 import { changePasswordErrorMessage } from "@/lib/i18n/messages";
 import { notify } from "@/lib/notify";
 
-import { SettingsAccountNav } from "../_components/SettingsAccountNav";
+import { SettingsAccountSidebar } from "../_components/SettingsAccountSidebar";
 import { SettingsDirectContactCard } from "../_components/SettingsDirectContactCard";
 import { settingsCardClassName, settingsTipCardClassName } from "../_components/settingsStyles";
 
@@ -235,13 +235,7 @@ export default function ChangePasswordPage() {
         {/* Cột phụ (1/3) — định hướng, mẹo, hỗ trợ */}
         <div className="space-y-8">
           {/* 1. Lối tắt bảo mật (đối xứng “Cài đặt tài khoản” trên profile) */}
-          <section className={settingsCardClassName}>
-            <div className="mb-8 flex items-center gap-3">
-              <Shield className="h-6 w-6 text-[#00685f]" aria-hidden="true" />
-              <h2 className="text-xl font-bold text-[#121e1c]">Bảo mật & tài khoản</h2>
-            </div>
-            <SettingsAccountNav active="change-password" />
-          </section>
+          <SettingsAccountSidebar active="change-password" />
 
           <section className={settingsTipCardClassName}>
             <div className="relative z-10">

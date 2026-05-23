@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 describe("SettingsDirectContactCard", () => {
   const componentPath = join(
     process.cwd(),
-    "src/app/(dashboard)/settings/_components/SettingsDirectContactCard.tsx",
+    "src/components/features/settings/SettingsDirectContactCard.tsx",
   );
 
   it("renders phone and email actions from supportContact", () => {

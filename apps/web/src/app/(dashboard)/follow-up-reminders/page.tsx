@@ -16,6 +16,7 @@ import {
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
+import { ProfileScopeSelector } from "@/components/features/profiles/ProfileScopeSelector";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { breadcrumbFromHome } from "@/lib/layout/dashboardBreadcrumbTrails";
 import { apiClient } from "@/lib/api/apiClient";
@@ -393,29 +394,15 @@ function FollowUpReminderWorkspace({
           </div>
 
           <div className="space-y-4">
-            <div>
-              <label
-                htmlFor="follow-up-profile"
-                className="mb-2 block text-sm font-bold text-[#121e1c]"
-              >
-                Hồ sơ
-              </label>
-              <select
-                id="follow-up-profile"
-                value={selectedProfileId}
-                onChange={(event) => {
-                  onSelectProfile(event.target.value);
-                  setSuccessMessage("");
-                }}
-                className="min-h-12 w-full rounded-xl border border-[#b7e8e0] bg-[#f7fffd] px-4 text-sm font-semibold text-[#3d4947] outline-none transition focus:border-[#00685f] focus:ring-2 focus:ring-[#b7e8e0]"
-              >
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.displayName}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <ProfileScopeSelector
+              id="follow-up-profile"
+              profiles={profiles}
+              value={selectedProfileId}
+              onChange={(profileId) => {
+                onSelectProfile(profileId);
+                setSuccessMessage("");
+              }}
+            />
 
             <div>
               <label
