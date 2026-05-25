@@ -228,19 +228,19 @@ export function UploadQualityPanel() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <MetricCard
-                label="Tổng số tải lên"
+                label="Tổng OCR kết thúc"
                 value={String(data.summary.totalUploads)}
                 variant="neutral"
                 onClick={() => openHistory()}
               />
               <MetricCard
-                label="Tỉ lệ thành công"
+                label="Tỉ lệ OCR thành công"
                 value={formatRate(data.summary.successRate)}
                 variant="success"
                 onClick={() => openHistory({ status: "done" })}
               />
               <MetricCard
-                label="Tỉ lệ thất bại"
+                label="Tỉ lệ OCR thất bại"
                 value={formatRate(data.summary.failureRate)}
                 variant="danger"
                 onClick={() => openHistory({ status: "ocr_failed" })}
@@ -266,8 +266,8 @@ export function UploadQualityPanel() {
 
             {data.summary.totalUploads === 0 ? (
               <EmptyState
-                title="Chưa có upload hoàn tất"
-                description="Thử đổi khoảng thời gian hoặc kiểm tra lại khi có dữ liệu mới."
+                title="Chưa có kết quả OCR trong khoảng"
+                description="Thử đổi khoảng thời gian hoặc kiểm tra lại sau khi có phiên OCR kết thúc."
                 className="min-h-72"
               />
             ) : (

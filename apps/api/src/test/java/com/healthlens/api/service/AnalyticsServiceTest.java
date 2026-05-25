@@ -41,6 +41,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -81,8 +82,8 @@ class AnalyticsServiceTest {
     }
 
     @Test
-    @DisplayName("getUploadQuality tinh success rate va failure breakdown")
-    void getUploadQuality_calculatesRatesAndBreakdown() {
+    @DisplayName("getUploadQuality tinh success rate va failure breakdown tu OCR events")
+    void getUploadQuality_calculatesRatesAndBreakdownFromOcrEvents() {
         Instant from = Instant.parse("2026-03-01T00:00:00Z");
         Instant toExclusive = Instant.parse("2026-03-04T00:00:00Z");
 
@@ -94,9 +95,9 @@ class AnalyticsServiceTest {
                 failure(LocalDate.of(2026, 3, 1), "low_confidence", 1),
                 failure(LocalDate.of(2026, 3, 2), "api_error", 10));
 
-        when(analyticsRepository.findUploadQualityBuckets(from, toExclusive, "day"))
+        when(userActivityEventRepository.findUploadQualityBuckets(from, toExclusive, "day"))
                 .thenReturn(List.of(dayOne, dayTwo));
-        when(analyticsRepository.findUploadFailureBreakdown(from, toExclusive, "day"))
+        when(userActivityEventRepository.findUploadFailureBreakdown(from, toExclusive, "day"))
                 .thenReturn(breakdownRows);
 
         UploadQualityResponse response = analyticsService.getUploadQuality(from, toExclusive, "day");
@@ -137,7 +138,8 @@ class AnalyticsServiceTest {
                 Instant.parse("2026-03-02T10:00:00Z"));
 
         Page<UploadHistoryProjection> page = new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1);
-        when(analyticsRepository.findUploadHistory(eq(from), eq(toExclusive), eq("ocr_failed"), eq("timeout"), eq(PageRequest.of(0, 20))))
+        when(analyticsRepository.findUploadHistoryByTerminalOcrEvent(
+                        eq(from), eq(toExclusive), eq("OCR_FAILED"), eq("timeout"), eq(PageRequest.of(0, 20))))
                 .thenReturn(page);
 
         UploadHistoryPageResponse response = analyticsService.getUploadHistory(
@@ -147,6 +149,54 @@ class AnalyticsServiceTest {
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).userEmail()).isEqualTo("user@example.com");
         assertThat(response.items().get(0).failureReason()).isEqualTo("timeout");
+        assertThat(response.items().get(0).status()).isEqualTo("ocr_failed");
+    }
+
+    @Test
+    @DisplayName("getUploadHistory tra ve status=done cho OCR_COMPLETED (khong phai health_records.status)")
+    void getUploadHistory_returnsDoneStatusForOcrCompletedDrillDown() {
+        Instant from = Instant.parse("2026-03-01T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-03-04T00:00:00Z");
+        UUID recordId = UUID.randomUUID();
+
+        UploadHistoryProjection row = historyRow(
+                recordId,
+                UUID.randomUUID(),
+                "user@example.com",
+                "Nguyen Van A",
+                UUID.randomUUID(),
+                "Bo me",
+                "done",
+                null,
+                Instant.parse("2026-03-02T10:00:00Z"));
+
+        when(analyticsRepository.findUploadHistoryByTerminalOcrEvent(
+                        eq(from), eq(toExclusive), eq("OCR_COMPLETED"), isNull(), eq(PageRequest.of(0, 20))))
+                .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
+
+        UploadHistoryPageResponse response = analyticsService.getUploadHistory(
+                from, toExclusive, "done", null, 0, 20);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).status()).isEqualTo("done");
+        assertThat(response.items().get(0).failureReason()).isNull();
+    }
+
+    @Test
+    @DisplayName("getUploadHistory map status=done sang OCR_COMPLETED cho drill-down")
+    void getUploadHistory_mapsDoneStatusToOcrCompleted() {
+        Instant from = Instant.parse("2026-03-01T00:00:00Z");
+        Instant toExclusive = Instant.parse("2026-03-04T00:00:00Z");
+
+        Page<UploadHistoryProjection> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
+        when(analyticsRepository.findUploadHistoryByTerminalOcrEvent(
+                        eq(from), eq(toExclusive), eq("OCR_COMPLETED"), isNull(), eq(PageRequest.of(0, 20))))
+                .thenReturn(emptyPage);
+
+        analyticsService.getUploadHistory(from, toExclusive, "done", null, 0, 20);
+
+        verify(analyticsRepository).findUploadHistoryByTerminalOcrEvent(
+                eq(from), eq(toExclusive), eq("OCR_COMPLETED"), isNull(), eq(PageRequest.of(0, 20)));
     }
 
     @Test
@@ -472,6 +522,14 @@ class AnalyticsServiceTest {
         assertThat(AnalyticsService.normalizeGranularity("week")).isEqualTo("week");
         assertThatThrownBy(() -> AnalyticsService.normalizeGranularity("month"))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("mapHistoryStatusToEventType map done sang OCR_COMPLETED")
+    void mapHistoryStatusToEventType_mapsDoneToOcrCompleted() {
+        assertThat(AnalyticsService.mapHistoryStatusToEventType("done")).isEqualTo("OCR_COMPLETED");
+        assertThat(AnalyticsService.mapHistoryStatusToEventType("ocr_failed")).isEqualTo("OCR_FAILED");
+        assertThat(AnalyticsService.mapHistoryStatusToEventType(null)).isNull();
     }
 
     @Test

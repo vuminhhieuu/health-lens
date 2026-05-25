@@ -3,6 +3,7 @@ package com.healthlens.api.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.healthlens.api.activity.UserActivityEventType;
 import com.healthlens.api.dto.response.ActivityAnalyticsResponse;
 import com.healthlens.api.dto.response.UploadHistoryItemResponse;
 import com.healthlens.api.dto.response.UploadHistoryPageResponse;
@@ -164,9 +165,9 @@ public class AnalyticsService {
     @Transactional(readOnly = true)
     public UploadQualityResponse getUploadQuality(Instant from, Instant toExclusive, String granularity) {
         String normalizedGranularity = normalizeGranularity(granularity);
-        List<UploadQualityBucketProjection> bucketRows = analyticsRepository.findUploadQualityBuckets(
+        List<UploadQualityBucketProjection> bucketRows = userActivityEventRepository.findUploadQualityBuckets(
                 from, toExclusive, normalizedGranularity);
-        List<UploadFailureBreakdownProjection> breakdownRows = analyticsRepository.findUploadFailureBreakdown(
+        List<UploadFailureBreakdownProjection> breakdownRows = userActivityEventRepository.findUploadFailureBreakdown(
                 from, toExclusive, normalizedGranularity);
 
         Map<LocalDate, Map<String, Long>> breakdownByDate = new HashMap<>();
@@ -219,7 +220,7 @@ public class AnalyticsService {
             String failureReason,
             int page,
             int limit) {
-        String normalizedStatus = normalizeTerminalStatus(status);
+        String eventType = mapHistoryStatusToEventType(status);
         String normalizedFailureReason = failureReason == null || failureReason.isBlank()
                 ? null
                 : normalizeFailureReason(failureReason);
@@ -227,10 +228,10 @@ public class AnalyticsService {
         int safeLimit = Math.min(Math.max(limit, 1), MAX_HISTORY_PAGE_SIZE);
         int safePage = Math.max(page, 0);
 
-        Page<UploadHistoryProjection> result = analyticsRepository.findUploadHistory(
+        Page<UploadHistoryProjection> result = analyticsRepository.findUploadHistoryByTerminalOcrEvent(
                 from,
                 toExclusive,
-                normalizedStatus,
+                eventType,
                 normalizedFailureReason,
                 PageRequest.of(safePage, safeLimit));
 
@@ -243,7 +244,7 @@ public class AnalyticsService {
                         row.getProfileId(),
                         row.getProfileDisplayName(),
                         row.getStatus(),
-                        row.getStatus().equals("ocr_failed")
+                        row.getFailureReason() != null
                                 ? normalizeFailureReason(row.getFailureReason())
                                 : null,
                         row.getCreatedAt(),
@@ -513,6 +514,20 @@ public class AnalyticsService {
             throw new IllegalArgumentException("Trạng thái phải là done hoặc ocr_failed");
         }
         return normalized;
+    }
+
+    /**
+     * Upload-history API keeps {@code status=done|ocr_failed} for compatibility; maps to terminal OCR events
+     * so drill-down matches upload-quality charts ({@code OCR_COMPLETED} / {@code OCR_FAILED}).
+     */
+    static String mapHistoryStatusToEventType(String status) {
+        String normalized = normalizeTerminalStatus(status);
+        if (normalized == null) {
+            return null;
+        }
+        return "done".equals(normalized)
+                ? UserActivityEventType.OCR_COMPLETED
+                : UserActivityEventType.OCR_FAILED;
     }
 
     static String normalizeFailureReason(String reason) {

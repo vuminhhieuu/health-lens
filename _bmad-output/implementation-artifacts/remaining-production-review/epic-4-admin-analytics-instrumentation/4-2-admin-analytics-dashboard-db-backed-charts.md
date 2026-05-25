@@ -1,6 +1,6 @@
 # Story 4.2: Admin Analytics Dashboard DB-Backed Charts
 
-Status: ready-for-dev
+Status: done
 
 ## Execution Scope
 
@@ -24,11 +24,19 @@ so that user growth, WAU/upload volume, and OCR success/failure rates are trustw
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 - Add analytics query endpoints/services over product events (AC: #1, #2, #3)
-- [ ] Task 2 - Wire `/admin/analytics` charts to real API data (AC: #1-#3)
-- [ ] Task 3 - Implement date range filtering and empty/error states (AC: #4)
-- [ ] Task 4 - Remove static/stub chart data (AC: #5)
-- [ ] Task 5 - Add backend query tests and frontend rendering verification (AC: #1-#5)
+- [x] Task 1 - Add analytics query endpoints/services over product events (AC: #1, #2, #3)
+- [x] Task 2 - Wire `/admin/analytics` charts to real API data (AC: #1-#3)
+- [x] Task 3 - Implement date range filtering and empty/error states (AC: #4)
+- [x] Task 4 - Remove static/stub chart data (AC: #5)
+- [x] Task 5 - Add backend query tests and frontend rendering verification (AC: #1-#5)
+
+### Review Findings
+
+- [x] [Review][Decision] Định nghĩa “success” chart khác drill-down — **Resolved:** Chart = `OCR_COMPLETED`/`OCR_FAILED`; drill-down join events on `e.created_at`; API `status=done` → `OCR_COMPLETED`; UI label “OCR thành công/thất bại”.
+- [x] [Review][Decision] Không có backfill event — **Resolved:** `V050__backfill_ocr_terminal_activity_events.sql` idempotent từ `health_records` terminal.
+- [x] [Review][Patch] Chuẩn hóa `failure_reason` trong SQL breakdown — **Resolved:** CASE trong `findUploadFailureBreakdown` khớp `FailureReasonNormalizer`.
+- [x] [Review][Patch] Task 5 thiếu frontend test — **Resolved:** `uploadQualityAnalytics.test.ts` + label/empty-state updates.
+- [x] [Review][Defer] Dead `AnalyticsRepository` upload-quality queries — **Resolved:** Removed; history uses `findUploadHistoryByTerminalOcrEvent` only.
 
 ## Dev Notes
 
@@ -43,7 +51,7 @@ so that user growth, WAU/upload volume, and OCR success/failure rates are trustw
 - `apps/web/src/app/(admin)/admin/analytics/*`
 - `apps/web/src/lib/api.ts`
 - `apps/api/src/main/java/com/healthlens/api/controller/AdminAnalyticsController.java`
-- `apps/api/src/main/java/com/healthlens/api/service/AdminAnalyticsService.java`
+- `apps/api/src/main/java/com/healthlens/api/service/AnalyticsService.java`
 
 ### References
 
@@ -54,10 +62,40 @@ so that user growth, WAU/upload volume, and OCR success/failure rates are trustw
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Composer
 
 ### Debug Log References
 
+- Upload quality migrated from `health_records` to `user_activity_events` (`OCR_COMPLETED` / `OCR_FAILED`).
+- User growth remains `users` table per epic-8 spec 8.1; WAU/upload already event-backed from 8.2.
+- `/admin/analytics` redirects to `/admin` with three API-backed panels (unchanged routing).
+- Post-review: drill-down aligned to terminal OCR events; V050 backfill; dead repository queries removed.
+
 ### Completion Notes List
 
+- Added `findUploadQualityBuckets` and `findUploadFailureBreakdown` on `UserActivityEventRepository` (terminal OCR events only).
+- `AnalyticsService.getUploadQuality` now reads event store; upload-history drill-down joins `user_activity_events` on event `created_at` (API `status=done` → `OCR_COMPLETED`).
+- Removed unused `AdminGeneralStats` (superseded by `ActivityVolumePanel`).
+- Extended `AnalyticsServiceTest` and `UserActivityEventRepositoryIntegrationTest` for event-backed quality aggregation.
+- Frontend: `uploadQualityAnalytics.test.ts`; metric labels clarify OCR pipeline vs record `done`.
+- Migration `V050` backfills terminal OCR events from historical `health_records` (idempotent; `failure_reason` matches `FailureReasonNormalizer`; batched `LEFT JOIN` + partial indexes for production).
+
 ### File List
+
+- `apps/api/src/main/resources/db/migration/V050__backfill_ocr_terminal_activity_events.sql`
+- `apps/api/src/main/java/com/healthlens/api/repository/UserActivityEventRepository.java`
+- `apps/api/src/main/java/com/healthlens/api/repository/AnalyticsRepository.java`
+- `apps/api/src/main/java/com/healthlens/api/service/AnalyticsService.java`
+- `apps/api/src/test/java/com/healthlens/api/service/AnalyticsServiceTest.java`
+- `apps/api/src/test/java/com/healthlens/api/repository/UserActivityEventRepositoryIntegrationTest.java`
+- `apps/web/src/components/admin/UploadQualityPanel.tsx`
+- `apps/web/src/components/admin/UploadHistoryModal.tsx`
+- `apps/web/src/lib/admin/uploadQualityAnalytics.test.ts`
+- `apps/web/src/components/admin/AdminGeneralStats.tsx` (deleted)
+
+## Change Log
+
+- 2026-05-22: Story 4.2 — event-backed OCR upload quality charts; remove dead admin stats component.
+- 2026-05-22: Code review fixes — aligned drill-down, V050 backfill, SQL normalization, frontend tests, removed dead queries.
+- 2026-05-22: Final review — staged V050 + frontend tests; backfill `failure_reason` CASE aligned with analytics SQL; story file list synced.
+- 2026-05-22: V050 perf — batched anti-join backfill, partial indexes on terminal `health_records`; upload-history `status` derived from event type.

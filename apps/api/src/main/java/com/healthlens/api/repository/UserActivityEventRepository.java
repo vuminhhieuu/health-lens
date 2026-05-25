@@ -3,6 +3,8 @@ package com.healthlens.api.repository;
 import com.healthlens.api.entity.UserActivityEvent;
 import com.healthlens.api.repository.projection.ActivityUploadBucketProjection;
 import com.healthlens.api.repository.projection.ActivityWauBucketProjection;
+import com.healthlens.api.repository.projection.UploadFailureBreakdownProjection;
+import com.healthlens.api.repository.projection.UploadQualityBucketProjection;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -125,4 +127,47 @@ public interface UserActivityEventRepository extends JpaRepository<UserActivityE
             @Param("eventType") String eventType,
             @Param("from") Instant from,
             @Param("toExclusive") Instant toExclusive);
+
+    /**
+     * Terminal OCR outcomes per bucket (story 4.2). Denominator = {@code OCR_COMPLETED} + {@code OCR_FAILED} only.
+     */
+    @Query(value = """
+        SELECT CAST(
+                   CASE
+                       WHEN :granularity = 'week' THEN DATE_TRUNC('week', created_at AT TIME ZONE 'UTC')
+                       ELSE DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
+                   END AS DATE) AS bucket_date,
+               SUM(CASE WHEN event_type = 'OCR_COMPLETED' THEN 1 ELSE 0 END) AS success_count,
+               SUM(CASE WHEN event_type = 'OCR_FAILED' THEN 1 ELSE 0 END) AS failed_count
+        FROM user_activity_events
+        WHERE event_type IN ('OCR_COMPLETED', 'OCR_FAILED')
+          AND created_at >= :from
+          AND created_at < :toExclusive
+        GROUP BY 1
+        ORDER BY 1
+        """, nativeQuery = true)
+    List<UploadQualityBucketProjection> findUploadQualityBuckets(
+            @Param("from") Instant from,
+            @Param("toExclusive") Instant toExclusive,
+            @Param("granularity") String granularity);
+
+    @Query(value = """
+        SELECT CAST(
+                   CASE
+                       WHEN :granularity = 'week' THEN DATE_TRUNC('week', created_at AT TIME ZONE 'UTC')
+                       ELSE DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
+                   END AS DATE) AS bucket_date,
+               COALESCE(NULLIF(failure_reason, ''), 'api_error') AS failure_reason,
+               COUNT(*) AS failure_count
+        FROM user_activity_events
+        WHERE event_type = 'OCR_FAILED'
+          AND created_at >= :from
+          AND created_at < :toExclusive
+        GROUP BY 1, 2
+        ORDER BY 1, 2
+        """, nativeQuery = true)
+    List<UploadFailureBreakdownProjection> findUploadFailureBreakdown(
+            @Param("from") Instant from,
+            @Param("toExclusive") Instant toExclusive,
+            @Param("granularity") String granularity);
 }
