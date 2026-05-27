@@ -70,8 +70,8 @@ describe("SEO foundation (pae-4)", () => {
     }
   });
 
-  it("documents HTTP 200 smoke for sitemap URLs (run scripts/smoke-sitemap-urls.mjs with dev server)", () => {
-    const scriptPath = join(process.cwd(), "scripts/smoke-sitemap-urls.mjs");
+  it("documents HTTP 200 smoke for sitemap URLs (run scripts/web/smoke-sitemap-urls.mjs with dev server)", () => {
+    const scriptPath = join(process.cwd(), "../../scripts/web/smoke-sitemap-urls.mjs");
     expect(existsSync(scriptPath)).toBe(true);
   });
 });

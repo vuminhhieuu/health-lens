@@ -3,7 +3,7 @@
  * Smoke: every URL in /sitemap.xml returns HTTP 200.
  * Prerequisite: `pnpm dev` (or `pnpm start`) running.
  *
- * Usage: node scripts/smoke-sitemap-urls.mjs
+ * Usage: node scripts/web/smoke-sitemap-urls.mjs
  * Env: NEXT_PUBLIC_SITE_URL (default http://localhost:3000)
  */
 

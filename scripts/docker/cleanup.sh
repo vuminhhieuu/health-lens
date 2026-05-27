@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # ============================================================================
 # HealthLens Disk Space Cleanup Script - Enhanced
-# 
+#
 # Purpose: Clean up Docker images, containers, volumes, build caches
 #          and dependencies to free up disk space
 #
 # Usage:
-#   ./docker/scripts/cleanup.sh            # Interactive mode (shows what will be deleted)
-#   ./docker/scripts/cleanup.sh --force    # Force delete without confirmation
-#   ./docker/scripts/cleanup.sh --aggressive # Remove ALL images (including tagged)
-#   ./docker/scripts/cleanup.sh --dry-run  # Show what would be deleted (no actual deletion)
-#   ./docker/scripts/cleanup.sh --docker-only # Only clean Docker images/containers/volumes
-#   ./docker/scripts/cleanup.sh --buildkit # Include BuildKit cache cleanup
-#   ./docker/scripts/cleanup.sh --analyze  # Show disk usage analysis
+#   ./scripts/docker/cleanup.sh            # Interactive mode (shows what will be deleted)
+#   ./scripts/docker/cleanup.sh --force    # Force delete without confirmation
+#   ./scripts/docker/cleanup.sh --aggressive # Remove ALL images (including tagged)
+#   ./scripts/docker/cleanup.sh --dry-run  # Show what would be deleted (no actual deletion)
+#   ./scripts/docker/cleanup.sh --docker-only # Only clean Docker images/containers/volumes
+#   ./scripts/docker/cleanup.sh --buildkit # Include BuildKit cache cleanup
+#   ./scripts/docker/cleanup.sh --analyze  # Show disk usage analysis
 #
 # Options:
 #   --dry-run           Show what would be deleted without actually deleting
@@ -28,7 +28,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Colors for output
 RED='\033[0;31m'
@@ -99,7 +99,7 @@ if [ "$SHOW_HELP" = true ]; then
 HealthLens Disk Space Cleanup Script - Enhanced
 
 USAGE:
-  ./docker/scripts/cleanup.sh [OPTIONS]
+  ./scripts/docker/cleanup.sh [OPTIONS]
 
 OPTIONS:
   --dry-run          Show what would be deleted without actually deleting
@@ -113,25 +113,25 @@ OPTIONS:
 
 EXAMPLES:
   # Interactive mode (with confirmations)
-  ./docker/scripts/cleanup.sh
+  ./scripts/docker/cleanup.sh
 
   # Preview what will be deleted
-  ./docker/scripts/cleanup.sh --dry-run
+  ./scripts/docker/cleanup.sh --dry-run
 
   # Full cleanup without confirmations
-  ./docker/scripts/cleanup.sh --force
+  ./scripts/docker/cleanup.sh --force
 
   # Aggressive cleanup (remove all images)
-  ./docker/scripts/cleanup.sh --aggressive --force
+  ./scripts/docker/cleanup.sh --aggressive --force
 
   # Docker only (keep project files)
-  ./docker/scripts/cleanup.sh --docker-only --force
+  ./scripts/docker/cleanup.sh --docker-only --force
 
   # Show what will be deleted and analyze volumes
-  ./docker/scripts/cleanup.sh --analyze --docker-only
+  ./scripts/docker/cleanup.sh --analyze --docker-only
 
   # Include BuildKit cache
-  ./docker/scripts/cleanup.sh --buildkit --force
+  ./scripts/docker/cleanup.sh --buildkit --force
 
 CLEANUP OPERATIONS:
   1. Docker System Prune
@@ -232,7 +232,7 @@ confirm() {
   if [ "$FORCE_DELETE" = true ] || [ "$DRY_RUN" = true ]; then
     return 0
   fi
-  
+
   local prompt="$1"
   local response
   read -p "$prompt (y/n) " response
@@ -264,7 +264,7 @@ echo ""
 # ============================================================================
 if [ "$ANALYZE_ONLY" = true ] || [ "$DRY_RUN" = true ]; then
   echo -e "${BLUE}Disk Usage Analysis:${NC}\n"
-  
+
   # Docker volumes
   echo -e "${CYAN}Docker Volumes:${NC}"
   docker volume ls --format "{{.Name}}" 2>/dev/null | while read -r vol; do
@@ -277,38 +277,38 @@ if [ "$ANALYZE_ONLY" = true ] || [ "$DRY_RUN" = true ]; then
     fi
   done
   echo ""
-  
+
   # Docker images
   echo -e "${CYAN}Docker Images:${NC}"
   docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" 2>/dev/null | tail -n +2 | while read -r repo tag size; do
     echo -e "  ${MAGENTA}$repo:$tag${NC}: $size"
   done
   echo ""
-  
+
   # Docker containers
   echo -e "${CYAN}Docker Containers:${NC}"
   container_count=$(docker ps -a --format "{{.ID}}" 2>/dev/null | wc -l | tr -d ' ')
   echo -e "  Total containers: $container_count"
   echo ""
-  
+
   # Cache directories
   echo -e "${CYAN}Cache Directories:${NC}"
-  
+
   if [ -d ~/.m2/repository ]; then
     m2_size=$(get_dir_size ~/.m2/repository)
     echo -e "  Maven cache: $(format_size "$m2_size")"
   fi
-  
+
   if [ -d ~/.gradle/caches ]; then
     gradle_size=$(get_dir_size ~/.gradle/caches)
     echo -e "  Gradle cache: $(format_size "$gradle_size")"
   fi
-  
+
   node_modules_count=$(find "$PROJECT_ROOT" -name node_modules -type d 2>/dev/null | wc -l | tr -d ' ')
   if [ "$node_modules_count" -gt 0 ]; then
     echo -e "  Node modules directories: $node_modules_count found"
   fi
-  
+
   echo ""
 fi
 
@@ -379,7 +379,7 @@ echo ""
 
 # Only continue with other cleanups if not docker-only
 if [ "$DOCKER_ONLY" = false ]; then
-  
+
   # ============================================================================
   # 2. Maven Cache Cleanup
   # ============================================================================
@@ -389,7 +389,7 @@ if [ "$DOCKER_ONLY" = false ]; then
     M2_SIZE=$(du -sh ~/.m2/repository 2>/dev/null | cut -f1)
     echo "   Current Maven cache size: ${MAGENTA}$M2_SIZE${NC}"
     echo "   Removing ~/.m2/repository..."
-    
+
     if confirm "   Proceed with Maven cache cleanup?"; then
       if [ "$DRY_RUN" = true ]; then
         echo -e "${GRAY}   [DRY-RUN] Would delete: ~/.m2/repository${NC}"
@@ -415,7 +415,7 @@ if [ "$DOCKER_ONLY" = false ]; then
   NODE_MODULES_COUNT=$(find "$PROJECT_ROOT" -name node_modules -type d 2>/dev/null | wc -l | tr -d ' ')
   if [ "$NODE_MODULES_COUNT" -gt 0 ]; then
     echo "   Found ${MAGENTA}$NODE_MODULES_COUNT${NC} node_modules directories"
-    
+
     if confirm "   Proceed with removal?"; then
       if [ "$DRY_RUN" = true ]; then
         echo -e "${GRAY}   [DRY-RUN] Would delete $NODE_MODULES_COUNT directories${NC}"
@@ -459,7 +459,7 @@ if [ "$DOCKER_ONLY" = false ]; then
   if [ -d ~/.gradle/caches ]; then
     GRADLE_SIZE=$(du -sh ~/.gradle/caches 2>/dev/null | cut -f1)
     echo "   Current Gradle cache size: ${MAGENTA}$GRADLE_SIZE${NC}"
-    
+
     if confirm "   Proceed with Gradle cache cleanup?"; then
       if [ "$DRY_RUN" = true ]; then
         echo -e "${GRAY}   [DRY-RUN] Would delete: ~/.gradle/caches${NC}"
@@ -518,7 +518,7 @@ if [ "$DRY_RUN" = true ]; then
 fi
 
 echo -e "${GREEN}✓ Next steps:${NC}"
-echo "   1. Rebuild Docker images: ./docker/scripts/up.sh --build"
+echo "   1. Rebuild Docker images: ./scripts/docker/up.sh --build"
 echo "   2. Or reinstall dependencies:"
 echo "      - Frontend: cd apps/web && pnpm install"
 echo "      - Backend: cd apps/api && ./gradlew build"

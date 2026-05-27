@@ -43,7 +43,7 @@ describe("public legal pages (pae-5)", () => {
       );
     }
 
-    const smokeScript = join(process.cwd(), "scripts/smoke-sitemap-urls.mjs");
+    const smokeScript = join(process.cwd(), "../../scripts/web/smoke-sitemap-urls.mjs");
     expect(existsSync(smokeScript)).toBe(true);
   });
 

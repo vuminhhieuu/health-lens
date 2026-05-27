@@ -29,7 +29,7 @@ require_cmd() {
 usage() {
   cat <<'EOF'
 Usage:
-  ./infisical/scripts/infisical.sh <command>
+  ./scripts/infisical/infisical.sh <command>
 
 Commands:
   bootstrap             Create staging folders (/web, /api) if missing

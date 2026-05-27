@@ -10,9 +10,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPTS_DIR="$(dirname "$SCRIPT_DIR")"
-PROJECT_DIR="$(dirname "$SCRIPTS_DIR")"
-cd "$PROJECT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -107,7 +106,7 @@ if [ "$HELP" = true ]; then
 HealthLens Docker Log Viewer
 
 USAGE:
-  ./logs.sh [OPTIONS] [SERVICE]
+  ./scripts/docker/logs.sh [OPTIONS] [SERVICE]
 
 SERVICES:
   api       - Spring Boot API (port 8080)

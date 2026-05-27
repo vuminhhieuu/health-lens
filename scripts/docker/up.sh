@@ -7,14 +7,14 @@
 # Automatically enables BuildKit for optimized caching.
 #
 # Usage:
-#   ./up.sh                    # Start all services (detached)
-#   ./up.sh --build            # Rebuild all images first (with cache)
-#   ./up.sh --rebuild-api      # Rebuild API image only
-#   ./up.sh --rebuild-web      # Rebuild Web image only
-#   ./up.sh --rebuild-ocr      # Rebuild OCR image only
-#   ./up.sh --no-cache         # Force rebuild without cache
-#   ./up.sh --ocr              # Include OCR service (~2GB RAM)
-#   ./up.sh --foreground       # Stream logs in foreground
+#   ./scripts/docker/up.sh                    # Start all services (detached)
+#   ./scripts/docker/up.sh --build            # Rebuild all images first (with cache)
+#   ./scripts/docker/up.sh --rebuild-api      # Rebuild API image only
+#   ./scripts/docker/up.sh --rebuild-web      # Rebuild Web image only
+#   ./scripts/docker/up.sh --rebuild-ocr      # Rebuild OCR image only
+#   ./scripts/docker/up.sh --no-cache         # Force rebuild without cache
+#   ./scripts/docker/up.sh --ocr              # Include OCR service (~2GB RAM)
+#   ./scripts/docker/up.sh --foreground       # Stream logs in foreground
 #
 # Services:
 #   - API:      http://localhost:8080
@@ -26,9 +26,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPTS_DIR="$(dirname "$SCRIPT_DIR")"
-PROJECT_DIR="$(dirname "$SCRIPTS_DIR")"
-cd "$PROJECT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT"
 
 # ============================================
 # Enable Docker BuildKit for optimized builds
@@ -138,10 +137,10 @@ while [ "$#" -gt 0 ]; do
             echo "  --help           Show this help message"
             echo ""
             echo "Examples:"
-            echo "  ./up.sh                    # Start with cache"
-            echo "  ./up.sh --build            # Rebuild with cache"
-            echo "  ./up.sh --rebuild-api      # Rebuild API only"
-            echo "  ./up.sh --no-cache         # Force full rebuild"
+            echo "  ./scripts/docker/up.sh                    # Start with cache"
+            echo "  ./scripts/docker/up.sh --build            # Rebuild with cache"
+            echo "  ./scripts/docker/up.sh --rebuild-api      # Rebuild API only"
+            echo "  ./scripts/docker/up.sh --no-cache         # Force full rebuild"
             exit 0
             ;;
         *)
@@ -246,8 +245,8 @@ echo ""
 if [ "$FOREGROUND" = true ]; then
     echo_warn "Press Ctrl+C to stop"
 else
-    echo_info "Use './docker/scripts/logs.sh -f' to follow logs"
-    echo_info "Use './docker/scripts/down.sh' to stop services"
+    echo_info "Use './scripts/docker/logs.sh -f' to follow logs"
+    echo_info "Use './scripts/docker/down.sh' to stop services"
 fi
 
 echo ""

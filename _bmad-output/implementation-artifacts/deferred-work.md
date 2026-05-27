@@ -82,3 +82,9 @@
 ## Deferred from: code review of r1-1-capture-refactor-baseline-and-quality-gates.md (2026-05-27)
 
 - Refactor story status tracking is not represented in central `sprint-status.yaml`; R1.1 is tracked only in the refactor story file because the existing sprint status does not contain refactor story keys.
+
+## Deferred from: code review of r1-3-move-automation-scripts-to-root-structure.md (2026-05-27)
+
+- Non-interactive `down.sh` deletes volumes without explicit confirmation at `scripts/docker/down.sh:58`; deferred because the same behavior existed in `docker/scripts/down.sh` before the move.
+- Documentation still points to deleted script paths such as `README.md:88`; deferred because Story R1.3 explicitly leaves docs to the later docs story R1.6.
+- Mobile reset can fail partially but still exit successfully at `scripts/mobile/reset-project.js:94`; deferred because the same catch-and-log behavior existed before the move.

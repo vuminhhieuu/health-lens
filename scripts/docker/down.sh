@@ -6,16 +6,15 @@
 # Stops and cleans up Docker containers.
 #
 # Usage:
-#   ./down.sh           # Stop containers
-#   ./down.sh -v        # Stop and remove volumes (data will be lost!)
-#   ./down.sh --clean   # Full cleanup (containers, volumes, images)
+#   ./scripts/docker/down.sh           # Stop containers
+#   ./scripts/docker/down.sh -v        # Stop and remove volumes (data will be lost!)
+#   ./scripts/docker/down.sh --clean   # Full cleanup (containers, volumes, images)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPTS_DIR="$(dirname "$SCRIPT_DIR")"
-PROJECT_DIR="$(dirname "$SCRIPTS_DIR")"
-cd "$PROJECT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT"
 
 # Colors
 RED='\033[0;31m'
@@ -104,9 +103,9 @@ while [ "$#" -gt 0 ]; do
             echo "  --help           Show this help message"
             echo ""
             echo "Examples:"
-            echo "  ./down.sh                    # Stop containers only"
-            echo "  ./down.sh -v                 # Stop and remove data"
-            echo "  ./down.sh --clean            # Full cleanup"
+            echo "  ./scripts/docker/down.sh                    # Stop containers only"
+            echo "  ./scripts/docker/down.sh -v                 # Stop and remove data"
+            echo "  ./scripts/docker/down.sh --clean            # Full cleanup"
             exit 0
             ;;
         *)
@@ -157,4 +156,4 @@ echo_info "All HealthLens services have been stopped"
 [ "$REMOVE_VOLUMES" = true ] && echo_warn "Volumes have been removed (data is gone)"
 [ "$REMOVE_IMAGES" = true ] && echo_warn "Images have been removed"
 echo ""
-echo_info "Next: Run './docker/scripts/up.sh' to start again"
+echo_info "Next: Run './scripts/docker/up.sh' to start again"
