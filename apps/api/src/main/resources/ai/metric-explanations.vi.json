@@ -1,7 +1,7 @@
 [
   {
     "metricKey": "ALT",
-    "aliases": ["GPT", "SGPT"],
+    "aliases": ["GPT", "SGPT", "ALANINE AMINOTRANSFERASE", "MEN GAN ALT"],
     "language": "vi",
     "whatIsIt": "ALT là men gan phản ánh mức độ tổn thương tế bào gan.",
     "relatedTo": "chức năng gan, viêm gan, gan nhiễm mỡ và tác động của rượu hoặc thuốc.",
@@ -9,7 +9,7 @@
   },
   {
     "metricKey": "AST",
-    "aliases": ["GOT", "SGOT"],
+    "aliases": ["GOT", "SGOT", "ASPARTATE AMINOTRANSFERASE", "MEN GAN AST"],
     "language": "vi",
     "whatIsIt": "AST là men có ở gan, cơ tim và cơ vân.",
     "relatedTo": "tổn thương gan, cơ và một số tình trạng viêm.",
@@ -17,7 +17,7 @@
   },
   {
     "metricKey": "GLUCOSE",
-    "aliases": ["GLU"],
+    "aliases": ["GLU", "DUONG HUYET", "ĐƯỜNG HUYẾT", "GLUCO", "GLYCEMIA"],
     "language": "vi",
     "whatIsIt": "Glucose là nồng độ đường trong máu tại thời điểm xét nghiệm.",
     "relatedTo": "chuyển hóa đường và nguy cơ đái tháo đường.",
@@ -25,7 +25,7 @@
   },
   {
     "metricKey": "HBA1C",
-    "aliases": ["A1C"],
+    "aliases": ["A1C", "HBA1C", "HEMOGLOBIN A1C", "DUONG HUYET TRUNG BINH", "ĐƯỜNG HUYẾT TRUNG BÌNH"],
     "language": "vi",
     "whatIsIt": "HbA1c phản ánh đường huyết trung bình khoảng 3 tháng gần đây.",
     "relatedTo": "kiểm soát đường huyết dài hạn.",
@@ -57,7 +57,7 @@
   },
   {
     "metricKey": "CHOL",
-    "aliases": ["CHOLESTEROL", "TC"],
+    "aliases": ["CHOLESTEROL", "CHOLESTEROL TOTAL", "TOTAL CHOLESTEROL", "TC", "CHOL", "CHOLESTEROL TOAN PHAN", "CHOLESTEROL TOÀN PHẦN"],
     "language": "vi",
     "whatIsIt": "Cholesterol toàn phần là tổng lượng cholesterol trong máu.",
     "relatedTo": "hồ sơ mỡ máu và nguy cơ tim mạch.",
@@ -65,7 +65,7 @@
   },
   {
     "metricKey": "WBC",
-    "aliases": ["LEUKOCYTE"],
+    "aliases": ["WHITE BLOOD CELL", "LEUKOCYTE", "BACH CAU", "BẠCH CẦU", "BC"],
     "language": "vi",
     "whatIsIt": "WBC là số lượng bạch cầu, phản ánh hoạt động miễn dịch.",
     "relatedTo": "nhiễm trùng, viêm và đáp ứng miễn dịch.",
@@ -73,7 +73,7 @@
   },
   {
     "metricKey": "RBC",
-    "aliases": ["ERYTHROCYTE"],
+    "aliases": ["RED BLOOD CELL", "ERYTHROCYTE", "HONG CAU", "HỒNG CẦU", "HC"],
     "language": "vi",
     "whatIsIt": "RBC là số lượng hồng cầu mang oxy đi nuôi cơ thể.",
     "relatedTo": "thiếu máu hoặc cô đặc máu.",
@@ -81,7 +81,7 @@
   },
   {
     "metricKey": "HGB",
-    "aliases": ["HEMOGLOBIN"],
+    "aliases": ["HEMOGLOBIN", "HB", "HUYET SAC TO", "HUYẾT SẮC TỐ"],
     "language": "vi",
     "whatIsIt": "HGB là nồng độ huyết sắc tố trong hồng cầu.",
     "relatedTo": "khả năng vận chuyển oxy và tình trạng thiếu máu.",
@@ -89,10 +89,202 @@
   },
   {
     "metricKey": "PLT",
-    "aliases": ["PLATELET"],
+    "aliases": ["PLATELET", "PLATELETS", "TIEU CAU", "TIỂU CẦU"],
     "language": "vi",
     "whatIsIt": "PLT là số lượng tiểu cầu tham gia quá trình đông máu.",
     "relatedTo": "nguy cơ chảy máu hoặc huyết khối.",
     "impactWhenOutOfRange": "PLT thấp tăng nguy cơ chảy máu; PLT cao có thể liên quan tăng nguy cơ huyết khối."
+  },
+  {
+    "metricKey": "HCT",
+    "aliases": ["HEMATOCRIT", "HCT", "PCV", "DUNG TICH HONG CAU", "THỂ TÍCH HỒNG CẦU"],
+    "language": "vi",
+    "whatIsIt": "Hematocrit là tỷ lệ thể tích hồng cầu trong máu.",
+    "relatedTo": "thiếu máu, mất nước hoặc cô đặc máu.",
+    "impactWhenOutOfRange": "HCT thấp có thể đi cùng thiếu máu; HCT cao có thể gặp khi mất nước hoặc tăng hồng cầu."
+  },
+  {
+    "metricKey": "MCV",
+    "aliases": ["MEAN CORPUSCULAR VOLUME", "THE TICH HONG CAU TRUNG BINH", "THỂ TÍCH HỒNG CẦU TRUNG BÌNH"],
+    "language": "vi",
+    "whatIsIt": "MCV cho biết kích thước trung bình của hồng cầu.",
+    "relatedTo": "phân loại thiếu máu hồng cầu nhỏ, bình thường hoặc to.",
+    "impactWhenOutOfRange": "MCV thấp hoặc cao giúp định hướng nguyên nhân thiếu máu nhưng cần đọc cùng HGB, MCH và RDW."
+  },
+  {
+    "metricKey": "MCH",
+    "aliases": ["MEAN CORPUSCULAR HEMOGLOBIN", "LUONG HB TRUNG BINH HONG CAU", "LƯỢNG HB TRUNG BÌNH HỒNG CẦU"],
+    "language": "vi",
+    "whatIsIt": "MCH là lượng huyết sắc tố trung bình trong mỗi hồng cầu.",
+    "relatedTo": "đánh giá đặc điểm hồng cầu và thiếu máu.",
+    "impactWhenOutOfRange": "MCH thấp thường đi cùng hồng cầu nhược sắc; MCH cao cần đọc cùng MCV và bối cảnh lâm sàng."
+  },
+  {
+    "metricKey": "MCHC",
+    "aliases": ["MEAN CORPUSCULAR HEMOGLOBIN CONCENTRATION", "NONG DO HB TRUNG BINH HONG CAU", "NỒNG ĐỘ HB TRUNG BÌNH HỒNG CẦU"],
+    "language": "vi",
+    "whatIsIt": "MCHC là nồng độ huyết sắc tố trung bình trong khối hồng cầu.",
+    "relatedTo": "đánh giá độ đậm màu của hồng cầu.",
+    "impactWhenOutOfRange": "MCHC lệch ngưỡng có thể hỗ trợ phân loại thiếu máu nhưng không đủ để kết luận nguyên nhân."
+  },
+  {
+    "metricKey": "RDW",
+    "aliases": ["RDW-CV", "RED CELL DISTRIBUTION WIDTH", "DO PHAN BO HONG CAU", "ĐỘ PHÂN BỐ HỒNG CẦU"],
+    "language": "vi",
+    "whatIsIt": "RDW phản ánh mức độ khác nhau về kích thước hồng cầu.",
+    "relatedTo": "thiếu máu do thiếu sắt, thiếu vitamin hoặc rối loạn tạo máu.",
+    "impactWhenOutOfRange": "RDW cao cho thấy hồng cầu không đồng đều kích thước và nên đọc cùng MCV, HGB."
+  },
+  {
+    "metricKey": "NEUTROPHILS",
+    "aliases": ["NEU", "NEUT", "BACH CAU TRUNG TINH", "BẠCH CẦU TRUNG TÍNH"],
+    "language": "vi",
+    "whatIsIt": "Neutrophils là nhóm bạch cầu trung tính tham gia đáp ứng với nhiễm khuẩn và viêm cấp.",
+    "relatedTo": "nhiễm trùng, viêm, stress sinh lý và tác dụng thuốc.",
+    "impactWhenOutOfRange": "Tăng hoặc giảm bạch cầu trung tính cần đọc cùng tổng WBC và dấu hiệu nhiễm trùng."
+  },
+  {
+    "metricKey": "LYMPHOCYTES",
+    "aliases": ["LYM", "LYMPH", "BACH CAU LYMPHO", "BẠCH CẦU LYMPHO"],
+    "language": "vi",
+    "whatIsIt": "Lymphocytes là nhóm bạch cầu lympho liên quan đến miễn dịch đặc hiệu.",
+    "relatedTo": "nhiễm virus, miễn dịch và một số rối loạn huyết học.",
+    "impactWhenOutOfRange": "Lymphocyte lệch ngưỡng cần đọc cùng WBC, neutrophils và triệu chứng đi kèm."
+  },
+  {
+    "metricKey": "MONOCYTES",
+    "aliases": ["MONO", "MONOCYTE", "BACH CAU MONO", "BẠCH CẦU MONO"],
+    "language": "vi",
+    "whatIsIt": "Monocytes là nhóm bạch cầu mono tham gia dọn dẹp mô viêm và đáp ứng miễn dịch.",
+    "relatedTo": "viêm mạn, nhiễm trùng và phục hồi sau nhiễm trùng.",
+    "impactWhenOutOfRange": "Monocyte tăng hoặc giảm thường cần đối chiếu với công thức bạch cầu đầy đủ."
+  },
+  {
+    "metricKey": "EOSINOPHILS",
+    "aliases": ["EOS", "EO", "EOSINOPHIL", "BACH CAU AI TOAN", "BẠCH CẦU ÁI TOAN"],
+    "language": "vi",
+    "whatIsIt": "Eosinophils là bạch cầu ái toan liên quan đến dị ứng và ký sinh trùng.",
+    "relatedTo": "dị ứng, hen, ký sinh trùng và một số phản ứng thuốc.",
+    "impactWhenOutOfRange": "Eosinophils cao có thể gợi ý dị ứng hoặc ký sinh trùng nhưng cần đọc cùng bệnh cảnh."
+  },
+  {
+    "metricKey": "BASOPHILS",
+    "aliases": ["BASO", "BAS", "BASOPHIL", "BACH CAU AI KIEM", "BẠCH CẦU ÁI KIỀM"],
+    "language": "vi",
+    "whatIsIt": "Basophils là bạch cầu ái kiềm tham gia phản ứng dị ứng và viêm.",
+    "relatedTo": "dị ứng, viêm và một số rối loạn huyết học hiếm gặp.",
+    "impactWhenOutOfRange": "Basophils thường chiếm tỷ lệ thấp; lệch ngưỡng cần đọc cùng toàn bộ công thức máu."
+  },
+  {
+    "metricKey": "ALP",
+    "aliases": ["ALKALINE PHOSPHATASE", "PHOSPHATASE KIEM", "PHOSPHATASE KIỀM"],
+    "language": "vi",
+    "whatIsIt": "ALP là enzyme liên quan đến gan mật và xương.",
+    "relatedTo": "tắc mật, bệnh gan mật và chuyển hóa xương.",
+    "impactWhenOutOfRange": "ALP tăng cần đọc cùng GGT, bilirubin, ALT/AST để phân biệt nguồn gan mật hay xương."
+  },
+  {
+    "metricKey": "GGT",
+    "aliases": ["GAMMA GT", "GAMMA GLUTAMYL TRANSFERASE"],
+    "language": "vi",
+    "whatIsIt": "GGT là enzyme thường dùng để hỗ trợ đánh giá gan mật.",
+    "relatedTo": "ứ mật, tổn thương gan và ảnh hưởng rượu hoặc thuốc.",
+    "impactWhenOutOfRange": "GGT tăng giúp củng cố nguồn gan mật khi ALP tăng, nhưng không tự đủ để chẩn đoán."
+  },
+  {
+    "metricKey": "BILIRUBIN TOTAL",
+    "aliases": ["TOTAL BILIRUBIN", "BILIRUBIN TP", "BILIRUBIN TOAN PHAN", "BILIRUBIN TOÀN PHẦN"],
+    "language": "vi",
+    "whatIsIt": "Bilirubin toàn phần là tổng bilirubin trong máu.",
+    "relatedTo": "chuyển hóa hồng cầu, chức năng gan và đường mật.",
+    "impactWhenOutOfRange": "Bilirubin tăng có thể liên quan vàng da, tắc mật hoặc tan máu; cần đọc cùng bilirubin trực tiếp và men gan."
+  },
+  {
+    "metricKey": "BILIRUBIN DIRECT",
+    "aliases": ["DIRECT BILIRUBIN", "BILIRUBIN TT", "BILIRUBIN TRUC TIEP", "BILIRUBIN TRỰC TIẾP"],
+    "language": "vi",
+    "whatIsIt": "Bilirubin trực tiếp là phần bilirubin đã được gan liên hợp.",
+    "relatedTo": "bài tiết mật và chức năng gan mật.",
+    "impactWhenOutOfRange": "Bilirubin trực tiếp tăng có thể gợi ý ứ mật hoặc vấn đề gan mật và cần đọc cùng bilirubin toàn phần."
+  },
+  {
+    "metricKey": "ALBUMIN",
+    "aliases": ["ALB"],
+    "language": "vi",
+    "whatIsIt": "Albumin là protein chính trong huyết thanh giúp duy trì áp lực keo và vận chuyển chất.",
+    "relatedTo": "dinh dưỡng, gan, thận và tình trạng viêm.",
+    "impactWhenOutOfRange": "Albumin thấp có thể gặp trong bệnh gan, mất protein, viêm hoặc suy dinh dưỡng."
+  },
+  {
+    "metricKey": "TOTAL PROTEIN",
+    "aliases": ["TP", "PROTEIN TOTAL", "PROTEIN TOAN PHAN", "PROTEIN TOÀN PHẦN"],
+    "language": "vi",
+    "whatIsIt": "Protein toàn phần là tổng albumin và globulin trong máu.",
+    "relatedTo": "dinh dưỡng, gan, thận, miễn dịch và mất nước.",
+    "impactWhenOutOfRange": "Protein toàn phần lệch ngưỡng cần đọc cùng albumin, globulin và bối cảnh lâm sàng."
+  },
+  {
+    "metricKey": "CREATININE",
+    "aliases": ["CRE", "CR", "CREATININ"],
+    "language": "vi",
+    "whatIsIt": "Creatinine là chất thải từ chuyển hóa cơ được thận lọc khỏi máu.",
+    "relatedTo": "chức năng thận và mức lọc cầu thận.",
+    "impactWhenOutOfRange": "Creatinine cao có thể gợi ý giảm chức năng thận nhưng cần đọc cùng tuổi, giới, eGFR và bối cảnh."
+  },
+  {
+    "metricKey": "BUN",
+    "aliases": ["BLOOD UREA NITROGEN", "UREA NITROGEN", "URE NITROGEN"],
+    "language": "vi",
+    "whatIsIt": "BUN phản ánh lượng nitrogen ure trong máu.",
+    "relatedTo": "chức năng thận, tình trạng nước và chuyển hóa protein.",
+    "impactWhenOutOfRange": "BUN cao hoặc thấp cần đọc cùng creatinine, nước uống, ăn đạm và tình trạng bệnh cấp."
+  },
+  {
+    "metricKey": "UREA",
+    "aliases": ["URE", "UREA", "URÊ"],
+    "language": "vi",
+    "whatIsIt": "Ure là sản phẩm chuyển hóa protein thường dùng để đánh giá gián tiếp chức năng thận.",
+    "relatedTo": "thận, tình trạng nước và chuyển hóa đạm.",
+    "impactWhenOutOfRange": "Ure lệch ngưỡng cần đọc cùng creatinine và đơn vị xét nghiệm vì mỗi labo có thể báo khác nhau."
+  },
+  {
+    "metricKey": "SODIUM",
+    "aliases": ["NA", "NA+", "NATRI"],
+    "language": "vi",
+    "whatIsIt": "Sodium/Natri là điện giải chính ngoài tế bào.",
+    "relatedTo": "cân bằng nước, huyết áp và chức năng thần kinh cơ.",
+    "impactWhenOutOfRange": "Natri quá thấp hoặc quá cao có thể gây triệu chứng thần kinh và cần được đánh giá kịp thời."
+  },
+  {
+    "metricKey": "POTASSIUM",
+    "aliases": ["K", "K+", "KALI"],
+    "language": "vi",
+    "whatIsIt": "Potassium/Kali là điện giải quan trọng cho hoạt động cơ và tim.",
+    "relatedTo": "nhịp tim, thận, thuốc và cân bằng acid-base.",
+    "impactWhenOutOfRange": "Kali lệch rõ có thể ảnh hưởng nhịp tim; cần đọc cùng chức năng thận và thuốc đang dùng."
+  },
+  {
+    "metricKey": "CHLORIDE",
+    "aliases": ["CL", "CL-", "CLORUA", "CHLORUA"],
+    "language": "vi",
+    "whatIsIt": "Chloride/Clorua là điện giải hỗ trợ cân bằng nước và acid-base.",
+    "relatedTo": "dịch cơ thể, thận và rối loạn acid-base.",
+    "impactWhenOutOfRange": "Chloride lệch ngưỡng thường cần đọc cùng natri, kali, bicarbonate và tình trạng mất nước."
+  },
+  {
+    "metricKey": "CALCIUM",
+    "aliases": ["CA", "CA++", "CALCI"],
+    "language": "vi",
+    "whatIsIt": "Calcium/Calci là khoáng chất quan trọng cho xương, cơ và dẫn truyền thần kinh.",
+    "relatedTo": "xương, tuyến cận giáp, thận và albumin.",
+    "impactWhenOutOfRange": "Calci lệch ngưỡng cần đọc cùng albumin, thận và triệu chứng cơ thần kinh."
+  },
+  {
+    "metricKey": "CRP",
+    "aliases": ["C-REACTIVE PROTEIN", "PROTEIN C PHAN UNG", "PROTEIN C PHẢN ỨNG"],
+    "language": "vi",
+    "whatIsIt": "CRP là protein tăng khi cơ thể có phản ứng viêm.",
+    "relatedTo": "viêm, nhiễm trùng, bệnh tự miễn hoặc tổn thương mô.",
+    "impactWhenOutOfRange": "CRP cao cho thấy có phản ứng viêm nhưng không chỉ ra nguyên nhân cụ thể."
   }
 ]

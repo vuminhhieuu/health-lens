@@ -10,10 +10,12 @@ import com.healthlens.api.dto.response.AdminReferenceImportPreviewResponse;
 import com.healthlens.api.dto.response.AdminReferenceMetricResponse;
 import com.healthlens.api.entity.ReferenceDataChangeSet;
 import com.healthlens.api.entity.ReferenceMetric;
+import com.healthlens.api.entity.ReferenceMetricAlias;
 import com.healthlens.api.entity.ReferenceRange;
 import com.healthlens.api.entity.ReferenceRangeAuditLog;
 import com.healthlens.api.entity.UserRole;
 import com.healthlens.api.repository.ReferenceDataChangeSetRepository;
+import com.healthlens.api.repository.ReferenceMetricAliasRepository;
 import com.healthlens.api.repository.ReferenceMetricRepository;
 import com.healthlens.api.repository.ReferenceRangeAuditLogRepository;
 import com.healthlens.api.repository.ReferenceRangeRepository;
@@ -28,8 +30,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -43,6 +48,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.mock;
@@ -54,6 +60,9 @@ class ReferenceDataAdminServiceTest {
 
     @Mock
     private ReferenceMetricRepository referenceMetricRepository;
+
+    @Mock
+    private ReferenceMetricAliasRepository referenceMetricAliasRepository;
 
     @Mock
     private ReferenceRangeRepository referenceRangeRepository;
@@ -80,6 +89,7 @@ class ReferenceDataAdminServiceTest {
     void setUp() {
         referenceDataAdminService = new ReferenceDataAdminService(
                 referenceMetricRepository,
+                referenceMetricAliasRepository,
                 referenceRangeRepository,
                 referenceDataChangeSetRepository,
                 referenceRangeAuditLogRepository,
@@ -612,6 +622,12 @@ class ReferenceDataAdminServiceTest {
             snapshot.put("displayNameVi", "Chỉ số import mới");
             snapshot.put("unit", "mg/dL");
             snapshot.put("status", "pending");
+            snapshot.put("aliases", List.of(Map.of(
+                    "alias", "Import Alias",
+                    "aliasNormalized", "importalias",
+                    "locale", "en",
+                    "active", true
+            )));
             snapshot.put("ranges", List.of(rangePayload));
 
             ReferenceDataChangeSet cs = new ReferenceDataChangeSet();
@@ -638,6 +654,11 @@ class ReferenceDataAdminServiceTest {
                     });
             when(referenceRangeRepository.save(any(ReferenceRange.class)))
                     .thenAnswer(invocation -> invocation.getArgument(0));
+            when(referenceMetricAliasRepository.findAllByMetric_Id(any())).thenReturn(List.of());
+            when(referenceMetricAliasRepository.findByAliasNormalizedAndActiveTrue("importalias"))
+                    .thenReturn(Optional.empty());
+            when(referenceMetricAliasRepository.save(any(ReferenceMetricAlias.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
             when(referenceDataChangeSetRepository.save(any(ReferenceDataChangeSet.class)))
                     .thenAnswer(invocation -> invocation.getArgument(0));
             when(referenceRangeRepository.findAllByMetric_IdOrderByGenderAscMinAgeAscMaxAgeAsc(any()))
@@ -658,6 +679,9 @@ class ReferenceDataAdminServiceTest {
             verify(referenceRangeRepository).save(rangeCaptor.capture());
             assertThat(rangeCaptor.getValue().getStatus()).isEqualTo("active");
             assertThat(rangeCaptor.getValue().getGender()).isEqualTo("male");
+            ArgumentCaptor<ReferenceMetricAlias> aliasCaptor = ArgumentCaptor.forClass(ReferenceMetricAlias.class);
+            verify(referenceMetricAliasRepository).save(aliasCaptor.capture());
+            assertThat(aliasCaptor.getValue().getAliasNormalized()).isEqualTo("importalias");
 
             ArgumentCaptor<ReferenceDataChangeSet> csCaptor = ArgumentCaptor.forClass(ReferenceDataChangeSet.class);
             verify(referenceDataChangeSetRepository).save(csCaptor.capture());
@@ -793,12 +817,270 @@ class ReferenceDataAdminServiceTest {
         MockMultipartFile file = new MockMultipartFile(
                 "file", "ref.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8));
 
+        UUID adminId = UUID.randomUUID();
+        AdminReferenceImportPreviewResponse preview =
+                referenceDataAdminService.previewImport(adminId, file);
+
+        assertThat(preview.errorRows()).isEmpty();
+        assertThat(preview.validRows()).hasSize(1);
+        assertThat(preview.validRows().get(0).metricName()).isEqualTo("bommetric");
+    }
+
+    @Test
+    @DisplayName("initial reference dataset parses cleanly with import preview schema")
+    void previewImport_initialReferenceDataset_parsesCleanly() throws IOException {
+        byte[] csvBytes = Files.readAllBytes(resolveInitialReferenceDatasetPath());
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "initial-reference-ranges.csv",
+                "text/csv",
+                csvBytes
+        );
+
+        UUID adminId = UUID.randomUUID();
+        AdminReferenceImportPreviewResponse preview =
+                referenceDataAdminService.previewImport(adminId, file);
+
+        assertThat(csvBytes.length).isLessThan(5 * 1024 * 1024);
+        assertThat(preview.errorRows()).isEmpty();
+        assertThat(preview.validRows())
+                .extracting(row -> row.metricName())
+                .contains(
+                        "Glucose",
+                        "HbA1c",
+                        "Cholesterol",
+                        "Triglycerides",
+                        "HDL",
+                        "LDL",
+                        "Hemoglobin",
+                        "WBC",
+                        "AST",
+                        "ALT",
+                        "Creatinine",
+                        "Urea"
+                );
+        assertThat(preview.validRows()).allSatisfy(row -> {
+            assertThat(row.metricName()).isNotBlank();
+            assertThat(row.displayNameVi()).isNotBlank();
+            assertThat(row.unit()).isNotBlank();
+            assertThat(row.minValue()).isLessThanOrEqualTo(row.maxValue());
+            assertThat(row.attentionMin()).isEqualByComparingTo(row.minValue());
+            assertThat(row.attentionMax()).isEqualByComparingTo(row.maxValue());
+            if (row.minAge() != null) {
+                assertThat(row.minAge()).isGreaterThanOrEqualTo(0);
+            }
+            if (row.maxAge() != null) {
+                assertThat(row.maxAge()).isGreaterThanOrEqualTo(0);
+            }
+            assertThat(row.gender()).isIn((String) null, "male", "female");
+        });
+
+        when(referenceMetricRepository.findByNameIgnoreCase(anyString())).thenReturn(Optional.empty());
+        when(referenceDataChangeSetRepository.save(any(ReferenceDataChangeSet.class)))
+                .thenAnswer(invocation -> {
+                    ReferenceDataChangeSet cs = invocation.getArgument(0);
+                    if (cs.getId() == null) {
+                        cs.setId(UUID.randomUUID());
+                    }
+                    return cs;
+                });
+
+        AdminReferenceImportConfirmResponse confirm =
+                referenceDataAdminService.confirmImport(adminId, preview.importId());
+
+        assertThat(confirm.draftChangeSetCount()).isEqualTo(12);
+        assertThat(confirm.changeSetIds()).hasSize(12);
+        verify(referenceDataChangeSetRepository, times(12)).save(any(ReferenceDataChangeSet.class));
+    }
+
+    @Test
+    @DisplayName("preview/confirm import preserves attention bounds, aliases and provenance")
+    void confirmImport_extendedDataset_preservesAttentionAliasesAndProvenance() throws Exception {
+        String csv = """
+                metricName,displayNameVi,unit,minValue,maxValue,attentionMin,attentionMax,gender,minAge,maxAge,aliases,sourceUrl,sourceTitle,sourcePublisher,accessedDate,rangeType,reviewerNote,conversionNote,methodSpecimenNote
+                Glucose,Duong huyet,mmol/L,3.9,5.5,3.0,7.0,,18,,Duong huyet|Đường huyết|GLU,https://medlineplus.gov/lab-tests/blood-glucose-test/,Blood Glucose Test,MedlinePlus,2026-05-23,reference_interval,Reviewed for adult fasting glucose,,Serum/plasma
+                """;
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "core-feature-reference-dataset-v1.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8));
+        UUID adminId = UUID.randomUUID();
+
+        AdminReferenceImportPreviewResponse preview = referenceDataAdminService.previewImport(adminId, file);
+
+        assertThat(preview.errorRows()).isEmpty();
+        assertThat(preview.validRows()).hasSize(1);
+        assertThat(preview.validRows().get(0).attentionMin()).isEqualByComparingTo("3.0");
+        assertThat(preview.validRows().get(0).attentionMax()).isEqualByComparingTo("7.0");
+        assertThat(preview.validRows().get(0).attentionMinDefaulted()).isFalse();
+        assertThat(preview.validRows().get(0).attentionMaxDefaulted()).isFalse();
+        assertThat(preview.validRows().get(0).aliases()).contains("Đường huyết");
+        assertThat(preview.validRows().get(0).sourcePublisher()).isEqualTo("MedlinePlus");
+
+        when(referenceMetricRepository.findByNameIgnoreCase("Glucose")).thenReturn(Optional.empty());
+        when(referenceDataChangeSetRepository.save(any(ReferenceDataChangeSet.class)))
+                .thenAnswer(invocation -> {
+                    ReferenceDataChangeSet cs = invocation.getArgument(0);
+                    if (cs.getId() == null) {
+                        cs.setId(UUID.randomUUID());
+                    }
+                    return cs;
+                });
+
+        referenceDataAdminService.confirmImport(adminId, preview.importId());
+
+        ArgumentCaptor<ReferenceDataChangeSet> captor = ArgumentCaptor.forClass(ReferenceDataChangeSet.class);
+        verify(referenceDataChangeSetRepository).save(captor.capture());
+        Map<String, Object> snapshot = objectMapper.readValue(captor.getValue().getChangesJson(), Map.class);
+        assertThat(snapshot.get("aliases").toString()).contains("duonghuyet", "glu");
+        assertThat(snapshot.get("provenance").toString()).contains("MedlinePlus", "reference_interval");
+        assertThat(snapshot.get("ranges").toString())
+                .contains("attentionMin=3.0", "attentionMax=7.0", "Blood Glucose Test");
+    }
+
+    @Test
+    @DisplayName("preview marks legacy imports where attention bounds are defaulted")
+    void previewImport_legacyAttentionBounds_marksDefaulted() {
+        AdminReferenceImportPreviewResponse preview =
+                referenceDataAdminService.previewImport(UUID.randomUUID(), singleRowImportCsv());
+
+        assertThat(preview.errorRows()).isEmpty();
+        assertThat(preview.validRows()).hasSize(1);
+        assertThat(preview.validRows().getFirst().attentionMin()).isEqualByComparingTo("1");
+        assertThat(preview.validRows().getFirst().attentionMax()).isEqualByComparingTo("50");
+        assertThat(preview.validRows().getFirst().attentionMinDefaulted()).isTrue();
+        assertThat(preview.validRows().getFirst().attentionMaxDefaulted()).isTrue();
+    }
+
+    @Test
+    @DisplayName("confirm import for legacy rows does not write an empty aliases list")
+    void confirmImport_legacyRowWithoutAliases_omitsAliasesFromSnapshot() throws Exception {
+        UUID adminId = UUID.randomUUID();
+        AdminReferenceImportPreviewResponse preview =
+                referenceDataAdminService.previewImport(adminId, singleRowImportCsv());
+
+        when(referenceMetricRepository.findByNameIgnoreCase("importadmintestmetric")).thenReturn(Optional.empty());
+        when(referenceDataChangeSetRepository.save(any(ReferenceDataChangeSet.class)))
+                .thenAnswer(invocation -> {
+                    ReferenceDataChangeSet cs = invocation.getArgument(0);
+                    if (cs.getId() == null) {
+                        cs.setId(UUID.randomUUID());
+                    }
+                    return cs;
+                });
+
+        referenceDataAdminService.confirmImport(adminId, preview.importId());
+
+        ArgumentCaptor<ReferenceDataChangeSet> captor = ArgumentCaptor.forClass(ReferenceDataChangeSet.class);
+        verify(referenceDataChangeSetRepository).save(captor.capture());
+        Map<String, Object> snapshot = objectMapper.readValue(captor.getValue().getChangesJson(), Map.class);
+        assertThat(snapshot).doesNotContainKey("aliases");
+    }
+
+    @Test
+    @DisplayName("preview import supports JSON alias arrays and alias-only rows")
+    void previewImport_jsonAliasArrayAndAliasOnlyRow_collectsAliases() throws Exception {
+        String json = """
+                [
+                  {
+                    "metricName": "Glucose",
+                    "displayNameVi": "Duong huyet",
+                    "unit": "mg/dL",
+                    "minValue": 70,
+                    "maxValue": 99,
+                    "attentionMin": 54,
+                    "attentionMax": 125,
+                    "aliases": ["GLU", "Đường huyết"]
+                  },
+                  {
+                    "metricName": "Glucose",
+                    "aliases": ["Glycemia", "Gluco"]
+                  }
+                ]
+                """;
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "ref.json", "application/json", json.getBytes(StandardCharsets.UTF_8));
+        UUID adminId = UUID.randomUUID();
+
+        AdminReferenceImportPreviewResponse preview = referenceDataAdminService.previewImport(adminId, file);
+
+        assertThat(preview.errorRows()).isEmpty();
+        assertThat(preview.validRows()).hasSize(2);
+        assertThat(preview.validRows().get(1).minValue()).isNull();
+
+        when(referenceMetricRepository.findByNameIgnoreCase("Glucose")).thenReturn(Optional.empty());
+        when(referenceDataChangeSetRepository.save(any(ReferenceDataChangeSet.class)))
+                .thenAnswer(invocation -> {
+                    ReferenceDataChangeSet cs = invocation.getArgument(0);
+                    if (cs.getId() == null) {
+                        cs.setId(UUID.randomUUID());
+                    }
+                    return cs;
+                });
+
+        referenceDataAdminService.confirmImport(adminId, preview.importId());
+
+        ArgumentCaptor<ReferenceDataChangeSet> captor = ArgumentCaptor.forClass(ReferenceDataChangeSet.class);
+        verify(referenceDataChangeSetRepository).save(captor.capture());
+        Map<String, Object> snapshot = objectMapper.readValue(captor.getValue().getChangesJson(), Map.class);
+        assertThat(snapshot.get("aliases").toString()).contains("glu", "duonghuyet", "glycemia", "gluco");
+    }
+
+    @Test
+    @DisplayName("preview import preserves quoted multiline provenance fields")
+    void previewImport_quotedMultilineReviewerNote_parsesAsSingleRow() {
+        String csv = """
+                metricName,displayNameVi,unit,minValue,maxValue,attentionMin,attentionMax,reviewerNote
+                Glucose,Duong huyet,mg/dL,70,99,54,125,"Line one
+                Line two"
+                """;
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "ref.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8));
+
         AdminReferenceImportPreviewResponse preview =
                 referenceDataAdminService.previewImport(UUID.randomUUID(), file);
 
         assertThat(preview.errorRows()).isEmpty();
         assertThat(preview.validRows()).hasSize(1);
-        assertThat(preview.validRows().get(0).metricName()).isEqualTo("bommetric");
+        assertThat(preview.validRows().getFirst().reviewerNote()).contains("Line one\nLine two");
+    }
+
+    @Test
+    @DisplayName("core feature reference dataset parses cleanly and contains Priority A aliases")
+    void previewImport_coreFeatureDataset_parsesCleanly() throws IOException {
+        byte[] csvBytes = Files.readAllBytes(resolveCoreFeatureDatasetPath());
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "core-feature-reference-dataset-v1.csv",
+                "text/csv",
+                csvBytes
+        );
+
+        AdminReferenceImportPreviewResponse preview =
+                referenceDataAdminService.previewImport(UUID.randomUUID(), file);
+
+        assertThat(csvBytes.length).isLessThan(5 * 1024 * 1024);
+        assertThat(preview.errorRows()).isEmpty();
+        assertThat(preview.validRows())
+                .extracting(row -> row.metricName())
+                .contains("Glucose", "HbA1c", "Creatinine", "Sodium", "Potassium", "CRP");
+        assertThat(preview.validRows())
+                .allSatisfy(row -> {
+                    assertThat(row.attentionMin()).isLessThanOrEqualTo(row.minValue());
+                    assertThat(row.attentionMax()).isGreaterThanOrEqualTo(row.maxValue());
+                    assertThat(row.sourceUrl()).startsWith("https://");
+                    assertThat(row.rangeType()).isIn(
+                            "reference_interval",
+                            "clinical_decision_threshold",
+                            "lab_specific_interval"
+                    );
+                });
+        assertThat(preview.validRows())
+                .anySatisfy(row -> assertThat(row.aliases()).contains("Bạch cầu"));
+        assertThat(new String(csvBytes, StandardCharsets.UTF_8).toLowerCase())
+                .doesNotContain("patient")
+                .doesNotContain("nguyen")
+                .doesNotContain("dob")
+                .doesNotContain("phone")
+                .doesNotContain("address");
     }
 
     @Test
@@ -854,6 +1136,7 @@ class ReferenceDataAdminServiceTest {
 
         ReferenceDataAdminService svc = new ReferenceDataAdminService(
                 referenceMetricRepository,
+                referenceMetricAliasRepository,
                 referenceRangeRepository,
                 referenceDataChangeSetRepository,
                 referenceRangeAuditLogRepository,
@@ -882,6 +1165,30 @@ class ReferenceDataAdminServiceTest {
                 importadmintestmetric,Test display,mg,1,50,male
                 """;
         return new MockMultipartFile("file", "ref.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static Path resolveInitialReferenceDatasetPath() {
+        List<Path> candidates = List.of(
+                Path.of("..", "..", "docs", "reference-data", "initial-reference-ranges.csv"),
+                Path.of("docs", "reference-data", "initial-reference-ranges.csv")
+        );
+        return candidates.stream()
+                .filter(Files::isRegularFile)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "Cannot find docs/reference-data/initial-reference-ranges.csv from test working directory"));
+    }
+
+    private static Path resolveCoreFeatureDatasetPath() {
+        List<Path> candidates = List.of(
+                Path.of("..", "..", "docs", "reference-data", "core-feature-reference-dataset-v1.csv"),
+                Path.of("docs", "reference-data", "core-feature-reference-dataset-v1.csv")
+        );
+        return candidates.stream()
+                .filter(Files::isRegularFile)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "Cannot find docs/reference-data/core-feature-reference-dataset-v1.csv from test working directory"));
     }
 
     private AdminReferenceMetricRequest buildRequest(String name) {

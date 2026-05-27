@@ -600,6 +600,7 @@ class HealthRecordServiceTest {
                 Profile profile = buildProfile(userId, profileId);
                 HealthRecord record = newOwnedRecord(userId, recordId);
                 record.setProfileId(profileId);
+                record.setFileKey("health-records/test.pdf");
                 record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
                 when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId))
@@ -668,6 +669,7 @@ class HealthRecordServiceTest {
                 Profile profile = buildProfile(userId, profileId);
                 HealthRecord record = newOwnedRecord(userId, recordId);
                 record.setProfileId(profileId);
+                record.setFileKey("health-records/test.pdf");
                 record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
                 MetricExplanationRetrievalService.OnlineCitationMetadata citation = new MetricExplanationRetrievalService.OnlineCitationMetadata(
@@ -1498,7 +1500,7 @@ class HealthRecordServiceTest {
                 when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId))
                                 .thenReturn(Optional.of(record));
                 when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
-                when(referenceDataService.classifyMetricWithoutAudit(anyString(), anyString(), eq(profile),
+                when(referenceDataService.classifyMetricWithoutAudit(anyString(), anyString(), anyString(), eq(profile),
                                 eq(LocalDate.of(2026, 5, 15))))
                                 .thenReturn(new com.healthlens.api.dto.MetricClassificationDto("normal", null,
                                                 "Glucose", null));
@@ -1544,7 +1546,7 @@ class HealthRecordServiceTest {
                 when(healthRecordShareRepository.findByHealthRecordIdAndViewerIdAndRevokedAtIsNull(recordId, viewerId))
                                 .thenReturn(Optional.of(share));
                 when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
-                when(referenceDataService.classifyMetricWithoutAudit(anyString(), anyString(), eq(profile),
+                when(referenceDataService.classifyMetricWithoutAudit(anyString(), anyString(), anyString(), eq(profile),
                                 eq(LocalDate.of(2026, 5, 15))))
                                 .thenReturn(new com.healthlens.api.dto.MetricClassificationDto("normal", null,
                                                 "Glucose", null));
@@ -1577,7 +1579,7 @@ class HealthRecordServiceTest {
                                 profileId, viewerId, "edit"))
                                 .thenReturn(false);
                 when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
-                when(referenceDataService.classifyMetricWithoutAudit(anyString(), anyString(), eq(profile),
+                when(referenceDataService.classifyMetricWithoutAudit(anyString(), anyString(), anyString(), eq(profile),
                                 eq(LocalDate.of(2026, 5, 15))))
                                 .thenReturn(new com.healthlens.api.dto.MetricClassificationDto("normal", null,
                                                 "Glucose", null));
@@ -1658,6 +1660,7 @@ class HealthRecordServiceTest {
 
                 HealthRecord record = newOwnedRecord(userId, recordId);
                 record.setProfileId(profileId);
+                record.setFileKey("health-records/%s/%s/%s/original.pdf".formatted(userId, profileId, recordId));
                 record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
 
                 when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId))
@@ -1804,6 +1807,44 @@ class HealthRecordServiceTest {
 
                 assertThat(response.allNormal()).isFalse();
                 verify(llmService).generateRecommendationsResult(any(), any(), eq("female"), any(), eq(userId));
+        }
+
+        @Test
+        @DisplayName("getDetail ưu tiên reference range in trên phiếu hơn system fallback")
+        void getDetail_documentReferenceRangeWinsOverSystemFallback() throws Exception {
+                UUID userId = UUID.randomUUID();
+                UUID profileId = UUID.randomUUID();
+                UUID recordId = UUID.randomUUID();
+                Profile profile = buildProfile(userId, profileId);
+
+                MetricDto metric = MetricDto.builder()
+                                .name("Glucose")
+                                .value("110")
+                                .unit("mg/dL")
+                                .referenceRange(new ReferenceRangeDto(
+                                                BigDecimal.valueOf(70),
+                                                BigDecimal.valueOf(140),
+                                                BigDecimal.valueOf(54),
+                                                BigDecimal.valueOf(180),
+                                                "mg/dL"))
+                                .build();
+                HealthRecord record = newOwnedRecord(userId, recordId);
+                record.setProfileId(profileId);
+                record.setFileKey("health-records/%s/%s/%s/original.pdf".formatted(userId, profileId, recordId));
+                record.setMetrics(new ObjectMapper().writeValueAsString(List.of(metric)));
+
+                when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId))
+                                .thenReturn(Optional.of(record));
+                when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+                when(storageService.generateDownloadUrl(anyString(), any(Duration.class))).thenReturn("https://download.test/file");
+
+                var response = healthRecordService.getDetail(userId, recordId, profileId);
+
+                MetricDto enriched = response.metrics().get(0);
+                assertThat(enriched.getStatus()).isEqualTo("normal");
+                assertThat(enriched.getReferenceRangeSource()).isEqualTo("document");
+                assertThat(enriched.getStatusSource()).isEqualTo("document");
+                verify(referenceDataService, never()).classifyMetric(anyString(), anyString(), anyString(), any(), any());
         }
 
         private HealthRecord newOwnedRecord(UUID userId, UUID recordId) {

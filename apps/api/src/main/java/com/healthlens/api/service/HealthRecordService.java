@@ -1388,12 +1388,14 @@ public class HealthRecordService {
                 ? referenceDataService.classifyMetric(
                 metric.getName(),
                 metric.getNormalizedValue(),
+                metric.getNormalizedUnit(),
                 profile,
                 examDate
         )
                 : referenceDataService.classifyMetricWithoutAudit(
                 metric.getName(),
                 metric.getNormalizedValue(),
+                metric.getNormalizedUnit(),
                 profile,
                 examDate
         );

@@ -9,8 +9,21 @@ public record AdminReferenceImportPreviewRowResponse(
         String unit,
         BigDecimal minValue,
         BigDecimal maxValue,
+        BigDecimal attentionMin,
+        BigDecimal attentionMax,
+        boolean attentionMinDefaulted,
+        boolean attentionMaxDefaulted,
         String gender,
         Integer minAge,
-        Integer maxAge
+        Integer maxAge,
+        String aliases,
+        String sourceUrl,
+        String sourceTitle,
+        String sourcePublisher,
+        String accessedDate,
+        String rangeType,
+        String reviewerNote,
+        String conversionNote,
+        String methodSpecimenNote
 ) {
 }

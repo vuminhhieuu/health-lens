@@ -193,6 +193,7 @@ public class ProfileService {
         MetricClassificationDto classification = referenceDataService.classifyMetricWithoutAudit(
                 metric.getName(),
                 metricValue,
+                metric.getNormalizedUnit(),
                 profile,
                 record.getExamDate());
         String classifiedStatus = classification != null ? classification.status() : null;

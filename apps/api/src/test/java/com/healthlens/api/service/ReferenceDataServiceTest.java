@@ -25,6 +25,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.anyString;
 
 @ExtendWith(MockitoExtension.class)
 class ReferenceDataServiceTest {
@@ -259,6 +260,92 @@ class ReferenceDataServiceTest {
         assertThat(result.referenceRange()).isNotNull();
         assertThat(result.referenceRange().max()).isEqualByComparingTo("6.0");
         verify(referenceRangeAuditLogRepository).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("classifyMetric resolve representative Vietnamese OCR aliases")
+    void classifyMetric_resolvesRepresentativeVietnameseOcrAliases() {
+        ReferenceMetric metric = new ReferenceMetric();
+        metric.setId(UUID.randomUUID());
+        metric.setName("Creatinine");
+        metric.setDisplayNameVi("Creatinine");
+        metric.setUnit("mg/dL");
+
+        ReferenceMetricAlias alias = new ReferenceMetricAlias();
+        alias.setMetric(metric);
+        alias.setActive(true);
+
+        when(referenceMetricRepository.findByNameIgnoreCase(anyString())).thenReturn(Optional.empty());
+        when(referenceMetricAliasRepository.findByAliasNormalizedAndActiveTrueAndMetricStatusNotOrderByMetricStatusAsc(anyString(), anyString()))
+                .thenReturn(List.of());
+        when(referenceMetricAliasRepository.findByAliasNormalizedAndActiveTrue(anyString()))
+                .thenAnswer(invocation -> {
+                    String normalized = invocation.getArgument(0);
+                    return List.of("creatinin", "cre", "cr").contains(normalized)
+                            ? Optional.of(alias)
+                            : Optional.empty();
+                });
+        when(referenceRangeRepository.findActiveRangesByMetricId(metric.getId()))
+                .thenReturn(List.of(buildRange(0.74, 1.35, 0.5, 2.0, "male", 18, null)));
+
+        for (String ocrName : List.of("Creatinin", "CRE", "Cr")) {
+            MetricClassificationDto result = referenceDataService.classifyMetric(
+                    ocrName,
+                    "1.0",
+                    buildProfile(35, "male"),
+                    LocalDate.now()
+            );
+
+            assertThat(result.status()).isEqualTo("normal");
+        }
+    }
+
+    @Test
+    @DisplayName("classifyMetric tra ve no_data khi unit OCR khong khop reference unit")
+    void classifyMetric_unitMismatchReturnsNoData() {
+        ReferenceMetric metric = new ReferenceMetric();
+        metric.setId(UUID.randomUUID());
+        metric.setName("Glucose");
+        metric.setDisplayNameVi("Duong huyet");
+        metric.setUnit("mg/dL");
+        when(referenceMetricRepository.findByNameIgnoreCase("Glucose")).thenReturn(Optional.of(metric));
+        when(referenceRangeRepository.findActiveRangesByMetricId(metric.getId()))
+                .thenReturn(List.of(buildRange(70.0, 99.0, 54.0, 125.0, null, 18, null)));
+
+        MetricClassificationDto result = referenceDataService.classifyMetric(
+                "Glucose",
+                "5.4",
+                "mmol/L",
+                buildProfile(30, "male"),
+                LocalDate.now()
+        );
+
+        assertThat(result.status()).isEqualTo("no_data");
+        assertThat(result.referenceRange()).isNull();
+    }
+
+    @Test
+    @DisplayName("classifyMetric accepts safe unit spelling variants")
+    void classifyMetric_unitSafeVariantsMatchReferenceUnit() {
+        ReferenceMetric metric = new ReferenceMetric();
+        metric.setId(UUID.randomUUID());
+        metric.setName("WBC");
+        metric.setDisplayNameVi("Bach cau");
+        metric.setUnit("10^9/L");
+        when(referenceMetricRepository.findByNameIgnoreCase("WBC")).thenReturn(Optional.of(metric));
+        when(referenceRangeRepository.findActiveRangesByMetricId(metric.getId()))
+                .thenReturn(List.of(buildRange(3.7, 10.5, 2.0, 15.0, null, 18, null)));
+
+        MetricClassificationDto result = referenceDataService.classifyMetric(
+                "WBC",
+                "8.0",
+                "x10^9/L",
+                buildProfile(30, "male"),
+                LocalDate.now()
+        );
+
+        assertThat(result.status()).isEqualTo("normal");
+        assertThat(result.referenceRange()).isNotNull();
     }
 
     private void mockMetricWithRange(String metricName, ReferenceRange range) {

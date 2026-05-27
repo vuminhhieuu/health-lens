@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.text.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -392,7 +393,11 @@ public class MetricExplanationRetrievalService {
         if (token == null) {
             return "";
         }
-        return token.toString()
+        String normalized = Normalizer.normalize(token.toString(), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .replace("đ", "d")
+                .replace("Đ", "D");
+        return normalized
                 .replaceAll("[^A-Za-z0-9%]", "")
                 .toUpperCase(Locale.ROOT);
     }

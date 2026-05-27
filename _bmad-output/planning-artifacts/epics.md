@@ -743,6 +743,38 @@ So that tôi truy vết ai đã sửa gì và khi nào.
 **Then** hệ thống hiển thị actor, timestamp, diff, source và IP
 **And** hỗ trợ lọc theo thời gian, chỉ số và người thực hiện.
 
+### Story 7.6: Core Feature Reference Dataset v1
+
+As an admin/product owner,
+I want có Core Feature Reference Dataset v1 đã được kiểm nguồn, có alias, provenance, ngưỡng attention và đồng bộ RAG,
+So that OCR review, phân loại chỉ số, Explain/RAG/LLM và khuyến nghị hoạt động nhất quán thay vì rơi về `no_data` hoặc generic fallback.
+
+**Acceptance Criteria:**
+
+**Given** OCR trích xuất tên chỉ số từ phiếu xét nghiệm tiếng Việt/Anh, có viết tắt, có dấu/không dấu hoặc lỗi OCR phổ biến
+**When** hệ thống enrich metric không có reference range in trên tài liệu
+**Then** `ReferenceDataService.classifyMetric(...)` match được metric bằng canonical name hoặc alias active cho toàn bộ Priority A metrics đã chọn.
+
+**Given** dataset Core Feature Reference Dataset v1
+**When** import qua admin import workflow
+**Then** file import có thể tạo/sửa metric, range và alias
+**And** mỗi range có `minValue`, `maxValue`, `attentionMin`, `attentionMax`, `gender`, `minAge`, `maxAge` khi áp dụng.
+
+**Given** Priority A metric có reference data active
+**When** người dùng mở Explain hoặc LLM explanation
+**Then** `metric-explanations.vi.json` hoặc approved RAG corpus có chunk cùng metric key/aliases
+**And** retrieval không rơi về generic fallback cho các metric Priority A trong test.
+
+**Given** tài liệu xét nghiệm đã in reference range riêng
+**When** hệ thống classify metric
+**Then** document-provided range vẫn thắng system fallback range
+**And** UI/source badge vẫn thể hiện đúng `referenceRangeSource=document`.
+
+**Given** dataset được commit
+**When** kiểm provenance và test backend
+**Then** mỗi metric/range có nguồn công khai đáng tin cậy, range type, conversion/review note nếu có
+**And** import preview/confirm, classification alias tests, RAG retrieval tests và PHI checks đều pass.
+
 ## Epic 8: Dashboard Vận Hành và Chỉ Số Sử Dụng
 Goal: Cung cấp số liệu vận hành giúp theo dõi tăng trưởng và chất lượng hệ thống theo thời gian.
 

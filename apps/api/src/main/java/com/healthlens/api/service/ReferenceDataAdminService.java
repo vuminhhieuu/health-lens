@@ -19,12 +19,14 @@ import com.healthlens.api.dto.response.AdminReferenceMetricResponse;
 import com.healthlens.api.dto.response.AdminReferenceRangeResponse;
 import com.healthlens.api.entity.ReferenceDataChangeSet;
 import com.healthlens.api.entity.ReferenceMetric;
+import com.healthlens.api.entity.ReferenceMetricAlias;
 import com.healthlens.api.entity.ReferenceRange;
 import com.healthlens.api.entity.ReferenceRangeAuditLog;
 import com.healthlens.api.entity.User;
 import com.healthlens.api.entity.UserRole;
 import com.healthlens.api.exception.BusinessException;
 import com.healthlens.api.repository.ReferenceDataChangeSetRepository;
+import com.healthlens.api.repository.ReferenceMetricAliasRepository;
 import com.healthlens.api.repository.ReferenceMetricRepository;
 import com.healthlens.api.repository.ReferenceRangeAuditLogRepository;
 import com.healthlens.api.repository.ReferenceRangeRepository;
@@ -68,6 +70,7 @@ public class ReferenceDataAdminService {
     private static final Duration IMPORT_PREVIEW_SESSION_TTL = Duration.ofHours(1);
 
     private final ReferenceMetricRepository referenceMetricRepository;
+    private final ReferenceMetricAliasRepository referenceMetricAliasRepository;
     private final ReferenceRangeRepository referenceRangeRepository;
     private final ReferenceDataChangeSetRepository referenceDataChangeSetRepository;
     private final ReferenceRangeAuditLogRepository referenceRangeAuditLogRepository;
@@ -79,6 +82,7 @@ public class ReferenceDataAdminService {
 
     public ReferenceDataAdminService(
             ReferenceMetricRepository referenceMetricRepository,
+            ReferenceMetricAliasRepository referenceMetricAliasRepository,
             ReferenceRangeRepository referenceRangeRepository,
             ReferenceDataChangeSetRepository referenceDataChangeSetRepository,
             ReferenceRangeAuditLogRepository referenceRangeAuditLogRepository,
@@ -88,6 +92,7 @@ public class ReferenceDataAdminService {
             UnifiedAuditLogWriter unifiedAuditLogWriter
     ) {
         this.referenceMetricRepository = referenceMetricRepository;
+        this.referenceMetricAliasRepository = referenceMetricAliasRepository;
         this.referenceRangeRepository = referenceRangeRepository;
         this.referenceDataChangeSetRepository = referenceDataChangeSetRepository;
         this.referenceRangeAuditLogRepository = referenceRangeAuditLogRepository;
@@ -382,8 +387,10 @@ public class ReferenceDataAdminService {
         for (ImportRowEnvelope raw : rawRows) {
             try {
                 ImportRowCandidate candidate = ImportRowCandidate.fromMap(raw.line(), raw.data());
-                AdminReferenceRangeRequest range = candidate.toRangeRequest();
-                validateRange(candidate.metricName(), range);
+                if (!candidate.aliasOnly()) {
+                    AdminReferenceRangeRequest range = candidate.toRangeRequest();
+                    validateRange(candidate.metricName(), range);
+                }
                 rowLevelValid.add(candidate);
             } catch (Exception ex) {
                 errorRows.add(new AdminReferenceImportErrorRowResponse(raw.line(), ex.getMessage()));
@@ -392,6 +399,7 @@ public class ReferenceDataAdminService {
 
         Map<Integer, String> overlapErrorByLine = new LinkedHashMap<>();
         Map<MetricKey, List<ImportRowCandidate>> byMetric = rowLevelValid.stream()
+                .filter(candidate -> !candidate.aliasOnly())
                 .collect(Collectors.groupingBy(
                         c -> new MetricKey(c.metricName(), c.displayNameVi(), c.unit()),
                         LinkedHashMap::new,
@@ -445,6 +453,7 @@ public class ReferenceDataAdminService {
 
         Map<MetricKey, List<AdminReferenceImportPreviewRowResponse>> groupedRows = session.validRows()
                 .stream()
+                .filter(this::hasRangeValues)
                 .collect(Collectors.groupingBy(
                         row -> new MetricKey(row.metricName(), row.displayNameVi(), row.unit()),
                         LinkedHashMap::new,
@@ -452,14 +461,22 @@ public class ReferenceDataAdminService {
                 ));
 
         List<UUID> changeSetIds = new ArrayList<>();
+        List<AdminReferenceImportPreviewRowResponse> aliasOnlyRows = session.validRows().stream()
+                .filter(row -> !hasRangeValues(row))
+                .toList();
         for (Map.Entry<MetricKey, List<AdminReferenceImportPreviewRowResponse>> entry : groupedRows.entrySet()) {
             MetricKey key = entry.getKey();
+            List<AdminReferenceImportPreviewRowResponse> rowsForMetric = new ArrayList<>(entry.getValue());
+            aliasOnlyRows.stream()
+                    .filter(row -> normalizeMetricName(row.metricName()).equals(normalizeMetricName(key.metricName())))
+                    .forEach(rowsForMetric::add);
             List<AdminReferenceRangeRequest> ranges = entry.getValue().stream()
+                    .filter(this::hasRangeValues)
                     .map(row -> new AdminReferenceRangeRequest(
                             row.minValue(),
                             row.maxValue(),
-                            row.minValue(),
-                            row.maxValue(),
+                            row.attentionMin(),
+                            row.attentionMax(),
                             row.gender(),
                             row.minAge(),
                             row.maxAge()
@@ -484,7 +501,27 @@ public class ReferenceDataAdminService {
                     metricId,
                     "METRIC",
                     metricId == null ? "CREATE" : "UPDATE",
-                    buildSnapshotForImport(metricId, request),
+                    buildSnapshotForImport(metricId, request, rowsForMetric),
+                    "draft"
+            );
+            changeSetIds.add(changeSetId);
+        }
+
+        for (AdminReferenceImportPreviewRowResponse aliasOnlyRow : aliasOnlyRows) {
+            boolean mergedIntoRangeChangeSet = groupedRows.keySet().stream()
+                    .anyMatch(key -> normalizeMetricName(aliasOnlyRow.metricName()).equals(normalizeMetricName(key.metricName())));
+            if (mergedIntoRangeChangeSet) {
+                continue;
+            }
+            ReferenceMetric metric = referenceMetricRepository.findByNameIgnoreCase(aliasOnlyRow.metricName().trim())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Dòng alias-only cần chỉ số đã tồn tại hoặc dòng range cùng chỉ số: " + aliasOnlyRow.metricName()));
+            UUID changeSetId = persistChangeSet(
+                    adminId,
+                    metric.getId(),
+                    "METRIC",
+                    "UPDATE",
+                    buildAliasOnlySnapshot(metric, List.of(aliasOnlyRow)),
                     "draft"
             );
             changeSetIds.add(changeSetId);
@@ -751,32 +788,76 @@ public class ReferenceDataAdminService {
         } catch (IOException ex) {
             throw new IllegalArgumentException("Không thể đọc nội dung file CSV.");
         }
-        String[] lines = content.split("\\r?\\n");
-        if (lines.length < 2) {
+        List<CsvRecord> records = parseCsvRecords(content);
+        if (records.size() < 2) {
             return List.of();
         }
 
-        List<String> headers = parseCsvLine(lines[0]).stream()
+        List<String> headers = parseCsvLine(records.getFirst().text()).stream()
                 .map(this::normalizeHeader)
                 .toList();
         List<ImportRowEnvelope> result = new ArrayList<>();
 
-        for (int i = 1; i < lines.length; i++) {
-            if (lines[i].isBlank()) {
+        for (int i = 1; i < records.size(); i++) {
+            CsvRecord record = records.get(i);
+            if (record.text().isBlank()) {
                 continue;
             }
-            List<String> values = parseCsvLine(lines[i]);
+            List<String> values = parseCsvLine(record.text());
             Map<String, Object> row = new LinkedHashMap<>();
             for (int col = 0; col < headers.size(); col++) {
                 String value = col < values.size() ? values.get(col) : "";
                 row.put(headers.get(col), value);
             }
-            result.add(new ImportRowEnvelope(i + 1, row));
+            result.add(new ImportRowEnvelope(record.startLine(), row));
         }
         return result;
     }
 
     private record ImportRowEnvelope(int line, Map<String, Object> data) {}
+
+    private record CsvRecord(int startLine, String text) {}
+
+    private List<CsvRecord> parseCsvRecords(String content) {
+        if (content == null || content.isBlank()) {
+            return List.of();
+        }
+        List<CsvRecord> records = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inQuotes = false;
+        int line = 1;
+        int recordStartLine = 1;
+        for (int i = 0; i < content.length(); i++) {
+            char ch = content.charAt(i);
+            if (ch == '"') {
+                if (inQuotes && i + 1 < content.length() && content.charAt(i + 1) == '"') {
+                    current.append(ch);
+                    current.append(content.charAt(i + 1));
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                    current.append(ch);
+                }
+            } else if ((ch == '\n' || ch == '\r') && !inQuotes) {
+                records.add(new CsvRecord(recordStartLine, current.toString()));
+                current.setLength(0);
+                if (ch == '\r' && i + 1 < content.length() && content.charAt(i + 1) == '\n') {
+                    i++;
+                }
+                line++;
+                recordStartLine = line;
+            } else {
+                current.append(ch);
+                if (ch == '\n' || ch == '\r') {
+                    line++;
+                }
+            }
+        }
+        if (!current.isEmpty()) {
+            records.add(new CsvRecord(recordStartLine, current.toString()));
+        }
+        return records;
+    }
 
     private List<String> parseCsvLine(String line) {
         if (line == null || line.isEmpty()) {
@@ -835,19 +916,128 @@ public class ReferenceDataAdminService {
         return value == null ? "" : value.toString().trim();
     }
 
-    private Map<String, Object> buildSnapshotForImport(UUID metricId, AdminReferenceMetricRequest request) {
+    private boolean hasRangeValues(AdminReferenceImportPreviewRowResponse row) {
+        return row.minValue() != null || row.maxValue() != null;
+    }
+
+    private Map<String, Object> buildSnapshotForImport(
+            UUID metricId,
+            AdminReferenceMetricRequest request,
+            List<AdminReferenceImportPreviewRowResponse> rows
+    ) {
+        Map<String, Object> snapshot;
         if (metricId != null) {
             ReferenceMetric metric = referenceMetricRepository.findById(metricId)
                     .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy metric hiện hữu để cập nhật."));
-            return buildSnapshot(metric, request, "pending");
+            snapshot = buildSnapshot(metric, request, "pending");
+        } else {
+            ReferenceMetric transientMetric = new ReferenceMetric();
+            transientMetric.setId(UUID.randomUUID());
+            transientMetric.setName(request.name());
+            transientMetric.setDisplayNameVi(request.displayNameVi());
+            transientMetric.setUnit(request.unit());
+            transientMetric.setStatus("pending");
+            snapshot = buildSnapshot(transientMetric, request, "pending");
         }
-        ReferenceMetric transientMetric = new ReferenceMetric();
-        transientMetric.setId(UUID.randomUUID());
-        transientMetric.setName(request.name());
-        transientMetric.setDisplayNameVi(request.displayNameVi());
-        transientMetric.setUnit(request.unit());
-        transientMetric.setStatus("pending");
-        return buildSnapshot(transientMetric, request, "pending");
+        List<Map<String, Object>> aliases = collectAliases(rows);
+        if (!aliases.isEmpty()) {
+            snapshot.put("aliases", aliases);
+        }
+        snapshot.put("provenance", collectProvenance(rows));
+        addRangeProvenance(snapshot, rows);
+        return snapshot;
+    }
+
+    private Map<String, Object> buildAliasOnlySnapshot(
+            ReferenceMetric metric,
+            List<AdminReferenceImportPreviewRowResponse> rows
+    ) {
+        Map<String, Object> snapshot = buildSnapshot(metric, null, "active");
+        List<Map<String, Object>> aliases = collectAliases(rows);
+        if (!aliases.isEmpty()) {
+            snapshot.put("aliases", aliases);
+        }
+        snapshot.put("provenance", collectProvenance(rows));
+        return snapshot;
+    }
+
+    private List<Map<String, Object>> collectAliases(List<AdminReferenceImportPreviewRowResponse> rows) {
+        Map<String, Map<String, Object>> aliasesByNormalized = new LinkedHashMap<>();
+        for (AdminReferenceImportPreviewRowResponse row : rows) {
+            for (String alias : splitAliases(row.aliases())) {
+                String normalized = normalizeMetricName(alias);
+                if (normalized.isBlank()) {
+                    continue;
+                }
+                aliasesByNormalized.putIfAbsent(normalized, Map.of(
+                        "alias", alias,
+                        "aliasNormalized", normalized,
+                        "locale", inferAliasLocale(alias),
+                        "active", true
+                ));
+            }
+        }
+        return new ArrayList<>(aliasesByNormalized.values());
+    }
+
+    private List<Map<String, Object>> collectProvenance(List<AdminReferenceImportPreviewRowResponse> rows) {
+        List<Map<String, Object>> provenance = new ArrayList<>();
+        for (AdminReferenceImportPreviewRowResponse row : rows) {
+            provenance.add(rangeProvenance(row));
+        }
+        return provenance;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void addRangeProvenance(Map<String, Object> snapshot, List<AdminReferenceImportPreviewRowResponse> rows) {
+        Object rangesObj = snapshot.get("ranges");
+        if (!(rangesObj instanceof List<?> rangesList)) {
+            return;
+        }
+        int limit = Math.min(rangesList.size(), rows.size());
+        for (int index = 0; index < limit; index++) {
+            Object rangeItem = rangesList.get(index);
+            if (rangeItem instanceof Map<?, ?> rangeMap) {
+                ((Map<String, Object>) rangeMap).put("provenance", rangeProvenance(rows.get(index)));
+            }
+        }
+    }
+
+    private Map<String, Object> rangeProvenance(AdminReferenceImportPreviewRowResponse row) {
+        Map<String, Object> provenance = new LinkedHashMap<>();
+        provenance.put("line", row.line());
+        provenance.put("sourceUrl", row.sourceUrl());
+        provenance.put("sourceTitle", row.sourceTitle());
+        provenance.put("sourcePublisher", row.sourcePublisher());
+        provenance.put("accessedDate", row.accessedDate());
+        provenance.put("rangeType", row.rangeType());
+        provenance.put("reviewerNote", row.reviewerNote());
+        provenance.put("conversionNote", row.conversionNote());
+        provenance.put("methodSpecimenNote", row.methodSpecimenNote());
+        return provenance;
+    }
+
+    private List<String> splitAliases(String aliases) {
+        if (aliases == null || aliases.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(aliases.split("[|;]"))
+                .map(String::trim)
+                .filter(alias -> !alias.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private String inferAliasLocale(String alias) {
+        if (alias == null || alias.isBlank()) {
+            return null;
+        }
+        String lower = alias.toLowerCase(Locale.ROOT);
+        boolean vietnamese = lower.matches(".*[ăâđêôơưáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ].*")
+                || lower.contains("bach ")
+                || lower.contains("huyet ")
+                || lower.contains("duong ");
+        return vietnamese ? "vi" : "en";
     }
 
     private void pruneExpiredImportPreviewSessions(Instant now) {
@@ -901,9 +1091,23 @@ public class ReferenceDataAdminService {
             String unit,
             BigDecimal minValue,
             BigDecimal maxValue,
+            BigDecimal attentionMin,
+            BigDecimal attentionMax,
+            boolean attentionMinDefaulted,
+            boolean attentionMaxDefaulted,
+            boolean aliasOnly,
             String gender,
             Integer minAge,
-            Integer maxAge
+            Integer maxAge,
+            String aliases,
+            String sourceUrl,
+            String sourceTitle,
+            String sourcePublisher,
+            String accessedDate,
+            String rangeType,
+            String reviewerNote,
+            String conversionNote,
+            String methodSpecimenNote
     ) {
         private static final Set<String> MALE_VALUES = Set.of("male", "m", "nam");
         private static final Set<String> FEMALE_VALUES = Set.of("female", "f", "nu", "nữ");
@@ -914,18 +1118,59 @@ public class ReferenceDataAdminService {
             String unit = pickFirst(row, "unit");
             BigDecimal minValue = toDecimal(pickFirst(row, "minvalue", "min"), "Ngưỡng min");
             BigDecimal maxValue = toDecimal(pickFirst(row, "maxvalue", "max"), "Ngưỡng max");
+            BigDecimal attentionMin = toDecimal(pickFirst(row, "attentionmin", "attention_min"), "Ngưỡng cảnh báo tối thiểu");
+            BigDecimal attentionMax = toDecimal(pickFirst(row, "attentionmax", "attention_max"), "Ngưỡng cảnh báo tối đa");
             String gender = normalizeGender(pickFirst(row, "gender"));
             Integer minAge = toIntegerValue(pickFirst(row, "minage", "agemin"), "Tuổi");
             Integer maxAge = toIntegerValue(pickFirst(row, "maxage", "agemax"), "Tuổi");
+            String aliases = pickFirst(row, "aliases", "alias");
+            String sourceUrl = pickFirst(row, "sourceurl", "source_url");
+            String sourceTitle = pickFirst(row, "sourcetitle", "source_title");
+            String sourcePublisher = pickFirst(row, "sourcepublisher", "source_publisher", "publisher");
+            String accessedDate = pickFirst(row, "accesseddate", "accessed_date");
+            String rangeType = pickFirst(row, "rangetype", "range_type");
+            String reviewerNote = pickFirst(row, "reviewernote", "reviewer_note");
+            String conversionNote = pickFirst(row, "conversionnote", "conversion_note");
+            String methodSpecimenNote = pickFirst(row, "methodspecimennote", "method_specimen_note");
+            boolean attentionMinDefaulted = attentionMin == null;
+            boolean attentionMaxDefaulted = attentionMax == null;
+            boolean aliasOnly = minValue == null && maxValue == null && !aliases.isBlank();
 
             if (metricName.isBlank()) {
                 throw new IllegalArgumentException("Thiếu cột Chỉ số (phần mã kỹ thuật).");
             }
-            if (displayNameVi.isBlank()) {
+            if (displayNameVi.isBlank() && !aliasOnly) {
                 throw new IllegalArgumentException("Thiếu cột Chỉ số (phần tên hiển thị).");
             }
-            if (unit.isBlank()) {
+            if (unit.isBlank() && !aliasOnly) {
                 throw new IllegalArgumentException("Thiếu cột Đơn vị.");
+            }
+            if (aliasOnly) {
+                return new ImportRowCandidate(
+                        line,
+                        metricName,
+                        displayNameVi,
+                        unit,
+                        null,
+                        null,
+                        null,
+                        null,
+                        false,
+                        false,
+                        true,
+                        gender,
+                        minAge,
+                        maxAge,
+                        aliases,
+                        sourceUrl,
+                        sourceTitle,
+                        sourcePublisher,
+                        accessedDate,
+                        rangeType,
+                        reviewerNote,
+                        conversionNote,
+                        methodSpecimenNote
+                );
             }
             if (minValue == null && maxValue == null) {
                 throw new IllegalArgumentException("Thiếu cột Ngưỡng min và Ngưỡng max.");
@@ -936,34 +1181,98 @@ public class ReferenceDataAdminService {
             if (maxValue == null) {
                 throw new IllegalArgumentException("Thiếu cột Ngưỡng max.");
             }
-            return new ImportRowCandidate(line, metricName, displayNameVi, unit, minValue, maxValue, gender, minAge, maxAge);
+            if (attentionMin == null) {
+                attentionMin = minValue;
+            }
+            if (attentionMax == null) {
+                attentionMax = maxValue;
+            }
+            return new ImportRowCandidate(
+                    line,
+                    metricName,
+                    displayNameVi,
+                    unit,
+                    minValue,
+                    maxValue,
+                    attentionMin,
+                    attentionMax,
+                    attentionMinDefaulted,
+                    attentionMaxDefaulted,
+                    false,
+                    gender,
+                    minAge,
+                    maxAge,
+                    aliases,
+                    sourceUrl,
+                    sourceTitle,
+                    sourcePublisher,
+                    accessedDate,
+                    rangeType,
+                    reviewerNote,
+                    conversionNote,
+                    methodSpecimenNote
+            );
         }
 
         AdminReferenceRangeRequest toRangeRequest() {
-            return new AdminReferenceRangeRequest(minValue, maxValue, minValue, maxValue, gender, minAge, maxAge);
+            return new AdminReferenceRangeRequest(minValue, maxValue, attentionMin, attentionMax, gender, minAge, maxAge);
         }
 
         AdminReferenceImportPreviewRowResponse toPreviewRow() {
             return new AdminReferenceImportPreviewRowResponse(
-                    line, metricName, displayNameVi, unit, minValue, maxValue, gender, minAge, maxAge
+                    line,
+                    metricName,
+                    displayNameVi,
+                    unit,
+                    minValue,
+                    maxValue,
+                    attentionMin,
+                    attentionMax,
+                    attentionMinDefaulted,
+                    attentionMaxDefaulted,
+                    gender,
+                    minAge,
+                    maxAge,
+                    aliases,
+                    sourceUrl,
+                    sourceTitle,
+                    sourcePublisher,
+                    accessedDate,
+                    rangeType,
+                    reviewerNote,
+                    conversionNote,
+                    methodSpecimenNote
             );
         }
 
         private static String pickFirst(Map<String, Object> row, String... keys) {
             for (String key : keys) {
                 if (row.containsKey(key)) {
-                    Object value = row.get(key);
-                    return value == null ? "" : value.toString().trim();
+                    return stringifyImportValue(row.get(key));
                 }
             }
             for (Map.Entry<String, Object> entry : row.entrySet()) {
                 String normalizedKey = entry.getKey() == null ? "" : entry.getKey().trim().toLowerCase(Locale.ROOT);
                 if (Arrays.asList(keys).contains(normalizedKey)) {
-                    Object value = entry.getValue();
-                    return value == null ? "" : value.toString().trim();
+                    return stringifyImportValue(entry.getValue());
                 }
             }
             return "";
+        }
+
+        private static String stringifyImportValue(Object value) {
+            if (value == null) {
+                return "";
+            }
+            if (value instanceof List<?> list) {
+                return list.stream()
+                        .filter(Objects::nonNull)
+                        .map(Object::toString)
+                        .map(String::trim)
+                        .filter(item -> !item.isBlank())
+                        .collect(Collectors.joining("|"));
+            }
+            return value.toString().trim();
         }
 
         private static BigDecimal toDecimal(String value, String columnLabel) {
@@ -1240,6 +1549,7 @@ public class ReferenceDataAdminService {
                 metric.setUnit(snapshot.getOrDefault("unit", metric.getUnit()).toString());
                 metric.setStatus("active");
                 referenceMetricRepository.save(metric);
+                replaceMetricAliases(metric, snapshot);
 
                 List<ReferenceRange> ranges = referenceRangeRepository
                         .findAllByMetric_IdOrderByGenderAscMinAgeAscMaxAgeAsc(metric.getId());
@@ -1267,6 +1577,7 @@ public class ReferenceDataAdminService {
             metric.setUnit(snapshot.getOrDefault("unit", metric.getUnit()).toString());
             metric.setStatus("active");
             referenceMetricRepository.save(metric);
+            replaceMetricAliases(metric, snapshot);
 
             // Replace ranges from snapshot
             Object rangesObj = snapshot.get("ranges");
@@ -1352,6 +1663,7 @@ public class ReferenceDataAdminService {
         metric.setUnit(unit);
         metric.setStatus("active");
         ReferenceMetric savedMetric = referenceMetricRepository.save(metric);
+        replaceMetricAliases(savedMetric, snapshot);
 
         Object rangesObj = snapshot.get("ranges");
         if (rangesObj instanceof List<?> rangesList) {
@@ -1373,6 +1685,49 @@ public class ReferenceDataAdminService {
         }
 
         cs.setEntityId(savedMetric.getId());
+    }
+
+    private void replaceMetricAliases(ReferenceMetric metric, Map<String, Object> snapshot) {
+        if (!snapshot.containsKey("aliases")) {
+            return;
+        }
+        List<ReferenceMetricAlias> existingAliases = referenceMetricAliasRepository.findAllByMetric_Id(metric.getId());
+        if (!existingAliases.isEmpty()) {
+            referenceMetricAliasRepository.deleteAll(existingAliases);
+        }
+
+        Object aliasesObj = snapshot.get("aliases");
+        if (!(aliasesObj instanceof List<?> aliasList)) {
+            return;
+        }
+        Set<String> seen = new HashSet<>();
+        for (Object aliasItem : aliasList) {
+            if (!(aliasItem instanceof Map<?, ?> aliasMap)) {
+                continue;
+            }
+            String alias = aliasMap.get("alias") != null ? aliasMap.get("alias").toString().trim() : "";
+            String normalized = aliasMap.get("aliasNormalized") != null
+                    ? aliasMap.get("aliasNormalized").toString().trim()
+                    : normalizeMetricName(alias);
+            if (alias.isBlank() || normalized.isBlank() || !seen.add(normalized)) {
+                continue;
+            }
+
+            referenceMetricAliasRepository.findByAliasNormalizedAndActiveTrue(normalized)
+                    .filter(existing -> existing.getMetric() != null && !metric.getId().equals(existing.getMetric().getId()))
+                    .ifPresent(existing -> {
+                        throw new IllegalArgumentException(
+                                "Alias đã thuộc chỉ số khác: " + alias);
+                    });
+
+            ReferenceMetricAlias entity = new ReferenceMetricAlias();
+            entity.setMetric(metric);
+            entity.setAlias(alias);
+            entity.setAliasNormalized(normalized);
+            entity.setLocale(aliasMap.get("locale") != null ? aliasMap.get("locale").toString() : null);
+            entity.setActive(!Boolean.FALSE.equals(aliasMap.get("active")));
+            referenceMetricAliasRepository.save(entity);
+        }
     }
 
     private void writeUnifiedChangeSetAudit(String action, UUID changeSetId, UUID actorId, ReferenceDataChangeSet cs) {

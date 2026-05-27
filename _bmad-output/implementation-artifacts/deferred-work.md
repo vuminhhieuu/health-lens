@@ -78,3 +78,7 @@
 ## Deferred from: code review of 11-4-shared-dashboard-workflow-components.md (2026-05-22)
 
 - AC#5 full `pnpm test` fail — `privacy-settings.page.test.ts` expect `label: "Riêng tư"` nhưng page dùng `breadcrumbFromSettings("Riêng tư")` — pre-existing, không do story 11.4.
+
+## Deferred from: code review of r1-1-capture-refactor-baseline-and-quality-gates.md (2026-05-27)
+
+- Refactor story status tracking is not represented in central `sprint-status.yaml`; R1.1 is tracked only in the refactor story file because the existing sprint status does not contain refactor story keys.

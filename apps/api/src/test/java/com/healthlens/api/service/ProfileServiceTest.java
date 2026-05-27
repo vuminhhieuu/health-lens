@@ -34,6 +34,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -134,6 +135,7 @@ class ProfileServiceTest {
                                 any(),
                                 any(),
                                 any(),
+                                any(),
                                 any())).thenReturn(new MetricClassificationDto("abnormal", null, null, null));
 
                 List<ProfileResponse> responses = profileService.getProfiles(userId);
@@ -170,6 +172,7 @@ class ProfileServiceTest {
                                 any(),
                                 any(),
                                 any(),
+                                any(),
                                 any())).thenAnswer(invocation -> {
                                         String metricName = invocation.getArgument(0);
                                         if ("glucose".equals(metricName)) {
@@ -185,7 +188,47 @@ class ProfileServiceTest {
         }
 
         @Test
-        void getProfiles_shouldUseDocumentReferenceRangeBeforeRawNormalStatus() throws Exception {
+        void getProfiles_shouldPassNormalizedUnitWhenReclassifyingRawMetric() {
+                Profile profile = new Profile();
+                profile.setId(UUID.randomUUID());
+                profile.setDisplayName("Family Member");
+                profile.setCreatedAt(Instant.now());
+                profile.setUpdatedAt(Instant.now());
+
+                HealthRecord latest = new HealthRecord();
+                latest.setId(UUID.randomUUID());
+                latest.setProfileId(profile.getId());
+                latest.setStatus("done");
+                latest.setExamDate(LocalDate.of(2026, 5, 23));
+                latest.setMetrics(
+                                "[{\"name\":\"WBC\",\"value\":\"8.1\",\"normalizedValue\":\"8.1\",\"normalizedUnit\":\"x10^9/L\",\"status\":\"no_data\"}]");
+
+                when(profileRepository.findAllByUserId(userId)).thenReturn(List.of(profile));
+                when(healthRecordRepository
+                                .findLatestByProfileIdsAndDeletedAtIsNullOrderByProfileIdAscExamDateDescCreatedAtDesc(
+                                                List.of(profile.getId())))
+                                .thenReturn(List.of(latest));
+                when(referenceDataService.classifyMetricWithoutAudit(
+                                any(),
+                                any(),
+                                any(),
+                                any(),
+                                any())).thenReturn(new MetricClassificationDto("normal", null, null, null));
+
+                List<ProfileResponse> responses = profileService.getProfiles(userId);
+
+                assertThat(responses).hasSize(1);
+                assertThat(responses.getFirst().latestStatus()).isEqualTo("normal");
+                verify(referenceDataService).classifyMetricWithoutAudit(
+                                eq("WBC"),
+                                eq("8.1"),
+                                eq("x10^9/L"),
+                                eq(profile),
+                                eq(LocalDate.of(2026, 5, 23)));
+        }
+
+    @Test
+    void getProfiles_shouldUseDocumentReferenceRangeBeforeRawNormalStatus() throws Exception {
                 Profile profile = new Profile();
                 profile.setId(UUID.randomUUID());
                 profile.setDisplayName("Family Member");

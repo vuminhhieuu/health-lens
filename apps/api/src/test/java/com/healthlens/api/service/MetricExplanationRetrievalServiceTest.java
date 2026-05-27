@@ -1,5 +1,7 @@
 package com.healthlens.api.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthlens.api.audit.AuditActions;
 import com.healthlens.api.audit.AuditEventRecorder;
 import com.healthlens.api.audit.AuditResourceTypes;
@@ -166,6 +168,31 @@ class MetricExplanationRetrievalServiceTest {
     }
 
     @Test
+    @DisplayName("Retrieve hit: alias tiếng Việt có dấu được normalize")
+    void retrieve_vietnameseAliasWithDiacritics_hitsQdrantSnippet() {
+        Document hit = Document.builder()
+                .id("metric-expl:WBC:v1")
+                .text("WBC")
+                .metadata(Map.of(
+                        "metricKey", "WBC",
+                        "aliases", List.of("Bạch cầu", "Bach cau"),
+                        "whatIsIt", "WBC là số lượng bạch cầu.",
+                        "relatedTo", "miễn dịch và nhiễm trùng."
+                ))
+                .build();
+        when(vectorStoreService.semanticSearch(anyString(), eq(3),
+                eq("language == 'vi' && sourceVersion == 'v1'")))
+                .thenReturn(List.of(hit));
+
+        MetricExplanationRetrievalService.RetrievalResult result = retrievalService.retrieve(
+                "Bach cau", "normal", sampleRange(), "vi");
+
+        assertThat(result.source()).isEqualTo("qdrant");
+        assertThat(result.hit()).isTrue();
+        assertThat(result.knowledgeSnippet()).contains("WBC là số lượng bạch cầu");
+    }
+
+    @Test
     @DisplayName("Retrieve timeout/error: fallback an toàn, không ném exception")
     void retrieve_timeout_returnsSafeFallback() {
         when(vectorStoreService.semanticSearch(anyString(), eq(3),
@@ -266,6 +293,56 @@ class MetricExplanationRetrievalServiceTest {
         assertThat(result.knowledgeSnippet())
                 .contains("ALT approved chunk")
                 .contains("Profile context (access and consent checked): {\"age\":42,\"gender\":\"male\",\"accessScope\":\"owner\"}");
+    }
+
+    @Test
+    @DisplayName("Curated corpus covers Priority A metric keys")
+    void curatedCorpus_coversPriorityAMetrics() throws Exception {
+        List<Map<String, Object>> chunks = new ObjectMapper().readValue(
+                java.nio.file.Files.readString(resolveMetricExplanationsPath()),
+                new TypeReference<>() {}
+        );
+        assertThat(chunks)
+                .extracting(chunk -> chunk.get("metricKey").toString())
+                .contains(
+                        "GLUCOSE", "HBA1C", "CHOL", "TRIGLYCERIDE", "HDL", "LDL",
+                        "HGB", "WBC", "RBC", "HCT", "PLT", "MCV", "MCH", "MCHC", "RDW",
+                        "NEUTROPHILS", "LYMPHOCYTES", "MONOCYTES", "EOSINOPHILS", "BASOPHILS",
+                        "AST", "ALT", "ALP", "GGT", "BILIRUBIN TOTAL", "BILIRUBIN DIRECT",
+                        "ALBUMIN", "TOTAL PROTEIN", "CREATININE", "BUN", "UREA",
+                        "SODIUM", "POTASSIUM", "CHLORIDE", "CALCIUM", "CRP"
+                );
+    }
+
+    @Test
+    @DisplayName("Retrieve context: Priority A OCR alias hits curated corpus instead of generic fallback")
+    void retrieve_priorityAOcrAlias_hitsCuratedCorpus() {
+        Document hit = Document.builder()
+                .id("metric-expl:WBC:v1")
+                .text("WBC approved chunk")
+                .metadata(Map.of(
+                        "metricKey", "WBC",
+                        "aliases", List.of("WHITE BLOOD CELL", "BẠCH CẦU", "BC"),
+                        "whatIsIt", "WBC là số lượng bạch cầu.",
+                        "relatedTo", "miễn dịch.",
+                        "impactWhenOutOfRange", "WBC lệch ngưỡng có thể gợi ý viêm hoặc nhiễm trùng.",
+                        "score", 0.9
+                ))
+                .build();
+        when(vectorStoreService.semanticSearch(anyString(), eq(3),
+                eq("language == 'vi' && sourceVersion == 'v1'")))
+                .thenReturn(List.of(hit));
+
+        MetricExplanationRetrievalService.RetrievalResult result = retrievalService.retrieve(
+                "Bạch cầu",
+                "abnormal",
+                sampleRange(),
+                "vi");
+
+        assertThat(result.trace().source()).isEqualTo("qdrant");
+        assertThat(result.trace().hit()).isTrue();
+        assertThat(result.knowledgeSnippet()).contains("WBC approved chunk");
+        verify(referenceDataService, never()).buildMetricKnowledgeSnippet(anyString(), anyString(), any());
     }
 
     @Test
@@ -483,5 +560,16 @@ class MetricExplanationRetrievalServiceTest {
                 BigDecimal.valueOf(60),
                 "U/L"
         );
+    }
+
+    private java.nio.file.Path resolveMetricExplanationsPath() {
+        List<java.nio.file.Path> candidates = List.of(
+                java.nio.file.Path.of("src", "main", "resources", "ai", "metric-explanations.vi.json"),
+                java.nio.file.Path.of("apps", "api", "src", "main", "resources", "ai", "metric-explanations.vi.json")
+        );
+        return candidates.stream()
+                .filter(java.nio.file.Files::isRegularFile)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Cannot find metric-explanations.vi.json"));
     }
 }

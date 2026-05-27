@@ -50,7 +50,38 @@ public class ReferenceDataService {
             Map.entry("WBC", "hệ miễn dịch và nhiễm trùng"),
             Map.entry("RBC", "vận chuyển oxy và tình trạng thiếu máu"),
             Map.entry("HGB", "vận chuyển oxy và thiếu máu"),
+            Map.entry("HEMOGLOBIN", "vận chuyển oxy và thiếu máu"),
+            Map.entry("HEMATOCRIT", "tỷ lệ hồng cầu, thiếu máu và cô đặc máu"),
+            Map.entry("HCT", "tỷ lệ hồng cầu, thiếu máu và cô đặc máu"),
             Map.entry("PLT", "đông máu và nguy cơ chảy máu"),
+            Map.entry("PLATELET", "đông máu và nguy cơ chảy máu"),
+            Map.entry("MCV", "kích thước hồng cầu và phân loại thiếu máu"),
+            Map.entry("MCH", "lượng huyết sắc tố trong hồng cầu"),
+            Map.entry("MCHC", "nồng độ huyết sắc tố trong hồng cầu"),
+            Map.entry("RDW", "độ biến thiên kích thước hồng cầu"),
+            Map.entry("NEUTROPHILS", "miễn dịch, viêm cấp và nhiễm khuẩn"),
+            Map.entry("LYMPHOCYTES", "miễn dịch đặc hiệu và nhiễm virus"),
+            Map.entry("MONOCYTES", "viêm mạn và đáp ứng miễn dịch"),
+            Map.entry("EOSINOPHILS", "dị ứng, miễn dịch và ký sinh trùng"),
+            Map.entry("BASOPHILS", "viêm, dị ứng và miễn dịch"),
+            Map.entry("ALP", "gan mật và chuyển hóa xương"),
+            Map.entry("GGT", "gan mật, ứ mật và tác động rượu hoặc thuốc"),
+            Map.entry("BILIRUBINTOTAL", "chuyển hóa bilirubin, gan và đường mật"),
+            Map.entry("BILIRUBINDIRECT", "bài tiết mật và chức năng gan mật"),
+            Map.entry("ALBUMIN", "dinh dưỡng, gan, thận và tình trạng viêm"),
+            Map.entry("TOTALPROTEIN", "dinh dưỡng, miễn dịch, gan và thận"),
+            Map.entry("CREATININE", "chức năng thận và mức lọc cầu thận"),
+            Map.entry("BUN", "chức năng thận, tình trạng nước và chuyển hóa đạm"),
+            Map.entry("UREA", "chức năng thận và chuyển hóa đạm"),
+            Map.entry("SODIUM", "cân bằng nước, huyết áp và thần kinh cơ"),
+            Map.entry("NA", "cân bằng nước, huyết áp và thần kinh cơ"),
+            Map.entry("POTASSIUM", "nhịp tim, thận và cân bằng điện giải"),
+            Map.entry("K", "nhịp tim, thận và cân bằng điện giải"),
+            Map.entry("CHLORIDE", "cân bằng nước và acid-base"),
+            Map.entry("CL", "cân bằng nước và acid-base"),
+            Map.entry("CALCIUM", "xương, cơ và dẫn truyền thần kinh"),
+            Map.entry("CA", "xương, cơ và dẫn truyền thần kinh"),
+            Map.entry("CRP", "phản ứng viêm, nhiễm trùng và tổn thương mô"),
             Map.entry("HBSAG", "sàng lọc nhiễm virus viêm gan B")
     );
 
@@ -95,14 +126,41 @@ public class ReferenceDataService {
     }
 
     public MetricClassificationDto classifyMetric(String metricName, String rawValue, Profile profile, LocalDate examDate) {
-        return classifyMetric(metricName, rawValue, profile, examDate, true);
+        return classifyMetric(metricName, rawValue, null, profile, examDate, true);
+    }
+
+    public MetricClassificationDto classifyMetric(
+            String metricName,
+            String rawValue,
+            String rawUnit,
+            Profile profile,
+            LocalDate examDate
+    ) {
+        return classifyMetric(metricName, rawValue, rawUnit, profile, examDate, true);
     }
 
     public MetricClassificationDto classifyMetricWithoutAudit(String metricName, String rawValue, Profile profile, LocalDate examDate) {
-        return classifyMetric(metricName, rawValue, profile, examDate, false);
+        return classifyMetric(metricName, rawValue, null, profile, examDate, false);
     }
 
-    private MetricClassificationDto classifyMetric(String metricName, String rawValue, Profile profile, LocalDate examDate, boolean persistAudit) {
+    public MetricClassificationDto classifyMetricWithoutAudit(
+            String metricName,
+            String rawValue,
+            String rawUnit,
+            Profile profile,
+            LocalDate examDate
+    ) {
+        return classifyMetric(metricName, rawValue, rawUnit, profile, examDate, false);
+    }
+
+    private MetricClassificationDto classifyMetric(
+            String metricName,
+            String rawValue,
+            String rawUnit,
+            Profile profile,
+            LocalDate examDate,
+            boolean persistAudit
+    ) {
         Optional<ReferenceRangeWithMeta> matched = findMatchingRange(metricName, profile, examDate);
         if (matched.isEmpty()) {
             return new MetricClassificationDto("no_data", null, null, null);
@@ -110,6 +168,9 @@ public class ReferenceDataService {
 
         ReferenceRangeWithMeta data = matched.get();
         ReferenceRange range = data.range();
+        if (!unitMatches(rawUnit, data.metric().getUnit())) {
+            return new MetricClassificationDto("no_data", null, data.metric().getDisplayNameVi(), data.rangeContext());
+        }
         if (persistAudit) {
             persistAuditLog(data.metric().getId(), range.getId(), profile != null ? profile.getId() : null);
         }
@@ -337,6 +398,38 @@ public class ReferenceDataService {
         } catch (NumberFormatException ex) {
             return Optional.empty();
         }
+    }
+
+    private boolean unitMatches(String rawUnit, String referenceUnit) {
+        if (rawUnit == null) {
+            return true;
+        }
+        if (rawUnit.isBlank() || referenceUnit == null || referenceUnit.isBlank()) {
+            return false;
+        }
+        return normalizeUnit(rawUnit).equals(normalizeUnit(referenceUnit));
+    }
+
+    private String normalizeUnit(String unit) {
+        String normalized = unit.trim()
+                .replace("µ", "u")
+                .replace("μ", "u")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("\\s+", "");
+        normalized = normalized
+                .replace("×", "x")
+                .replace("*", "x")
+                .replace("^", "")
+                .replace("10e", "10")
+                .replace("per", "/");
+        if (normalized.equals("k/ul") || normalized.equals("k/uL".toLowerCase(Locale.ROOT))) {
+            return "10e3/ul";
+        }
+        return normalized
+                .replace("x109/l", "10e9/l")
+                .replace("109/l", "10e9/l")
+                .replace("x103/ul", "10e3/ul")
+                .replace("103/ul", "10e3/ul");
     }
 
     private String normalizeGender(String gender) {
