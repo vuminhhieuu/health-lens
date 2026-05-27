@@ -27,18 +27,8 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
-CYAN='\033[0;36m'
-GRAY='\033[0;90m'
-NC='\033[0m' # No Color
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
+hl_docker_cd_project_root
 
 # Flags
 FORCE_DELETE=false
@@ -159,73 +149,8 @@ HELP_TEXT
   exit 0
 fi
 
-if [ "$CI_MODE" = true ] || [ ! -t 1 ] || [ "${NO_COLOR:-}" = "1" ]; then
-  RED=''
-  GREEN=''
-  YELLOW=''
-  BLUE=''
-  MAGENTA=''
-  CYAN=''
-  GRAY=''
-  NC=''
-fi
-
-if ! command -v docker >/dev/null 2>&1; then
-  echo "[ERR] docker command not found" >&2
-  exit 1
-fi
-if ! docker info >/dev/null 2>&1; then
-  echo "[ERR] Docker daemon is not running" >&2
-  exit 1
-fi
-if ! docker compose version >/dev/null 2>&1; then
-  echo "[ERR] Docker Compose v2 is not available" >&2
-  exit 1
-fi
-
-hl_format_human_bytes() {
-  hl_bytes="${1:-0}"
-  case "$hl_bytes" in
-    '' | *[!0-9]*) hl_bytes=0 ;;
-  esac
-  if [ "$hl_bytes" -lt 1024 ]; then
-    printf '%sB' "$hl_bytes"
-    return 0
-  fi
-  hl_kb=$((hl_bytes / 1024))
-  if [ "$hl_kb" -lt 1024 ]; then
-    printf '%sKB' "$hl_kb"
-    return 0
-  fi
-  hl_mb=$((hl_kb / 1024))
-  if [ "$hl_mb" -lt 1024 ]; then
-    printf '%sMB' "$hl_mb"
-    return 0
-  fi
-  hl_gb=$((hl_mb / 1024))
-  printf '%sGB' "$hl_gb"
-}
-
-hl_dir_size_bytes() {
-  hl_dir="$1"
-  if [ ! -d "$hl_dir" ]; then
-    printf '%s' "0"
-    return 0
-  fi
-  if du -sb "$hl_dir" >/dev/null 2>&1; then
-    du -sb "$hl_dir" 2>/dev/null | awk '{print $1; exit}'
-  else
-    du -sk "$hl_dir" 2>/dev/null | awk '{print $1 * 1024; exit}'
-  fi
-}
-
-format_size() {
-  hl_format_human_bytes "$1"
-}
-
-get_dir_size() {
-  hl_dir_size_bytes "$1"
-}
+disable_colors_if_needed
+preflight_docker
 
 # Function to ask for confirmation
 confirm() {

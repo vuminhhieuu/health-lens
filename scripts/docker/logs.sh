@@ -9,19 +9,8 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-cd "$PROJECT_ROOT"
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
-CYAN='\033[0;36m'
-WHITE='\033[1;37m'
-GRAY='\033[0;90m'
-NC='\033[0m'
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
+hl_docker_cd_project_root
 
 SERVICE=""
 FOLLOW=false
@@ -132,30 +121,8 @@ HELP_TEXT
   exit 0
 fi
 
-if [ "$CI_MODE" = true ] || [ ! -t 1 ] || [ "${NO_COLOR:-}" = "1" ]; then
-  RED=''
-  GREEN=''
-  YELLOW=''
-  BLUE=''
-  MAGENTA=''
-  CYAN=''
-  WHITE=''
-  GRAY=''
-  NC=''
-fi
-
-if ! command -v docker >/dev/null 2>&1; then
-  echo "docker command not found" >&2
-  exit 1
-fi
-if ! docker info >/dev/null 2>&1; then
-  echo "Docker daemon is not running" >&2
-  exit 1
-fi
-if ! docker compose version >/dev/null 2>&1; then
-  echo "Docker Compose v2 is not available" >&2
-  exit 1
-fi
+disable_colors_if_needed
+preflight_docker
 
 if [ "$SHOW_MENU" = true ]; then
   if [ ! -t 0 ]; then

@@ -88,3 +88,12 @@
 - Non-interactive `down.sh` deletes volumes without explicit confirmation at `scripts/docker/down.sh:58`; deferred because the same behavior existed in `docker/scripts/down.sh` before the move.
 - Documentation still points to deleted script paths such as `README.md:88`; deferred because Story R1.3 explicitly leaves docs to the later docs story R1.6.
 - Mobile reset can fail partially but still exit successfully at `scripts/mobile/reset-project.js:94`; deferred because the same catch-and-log behavior existed before the move.
+
+## Deferred from: code review of r1-4-extract-shared-docker-script-utilities.md (2026-05-27)
+
+- Non-interactive `down.sh` destructive mode bypasses explicit confirmation at `scripts/docker/down.sh:31`; deferred because the behavior existed before R1.4 and was already recorded from R1.3.
+- Symlinked Docker script launchers resolve `_common.sh` relative to the symlink directory at `scripts/docker/up.sh:28`; deferred because supported invocation remains the documented repo path and symlink launchers were not introduced as a requirement.
+- `cleanup.sh --ci` without `--force` can no-op and still finish successfully at `scripts/docker/cleanup.sh:156`; deferred because the confirmation behavior predates this utility extraction.
+- `cleanup.sh --dry-run` and `--analyze` still require Docker daemon preflight at `scripts/docker/cleanup.sh:152`; deferred because the preflight order predates this utility extraction.
+- `NO_COLOR` only disables colors when set to `1` at `scripts/docker/_common.sh:23`; deferred because this preserves the pre-existing script behavior, though a future cleanup can adopt the broader NO_COLOR convention.
+- `format_duration` does not normalize non-numeric input at `scripts/docker/_common.sh:59`; deferred because current callers pass numeric `date +%s` deltas and this is inherited helper behavior.

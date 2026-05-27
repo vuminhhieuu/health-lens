@@ -12,35 +12,8 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-cd "$PROJECT_ROOT"
-
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
-echo_info() { echo -e "${GREEN}[OK]${NC} $1"; }
-echo_warn() { echo -e "${YELLOW}[WARN]${NC} $1" >&2; }
-echo_error() { echo -e "${RED}[ERR]${NC} $1" >&2; }
-echo_header() { echo -e "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n${BLUE}$1${NC}\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"; }
-preflight_docker() {
-    if ! command -v docker >/dev/null 2>&1; then
-        echo_error "docker command not found"
-        exit 1
-    fi
-    if ! docker info >/dev/null 2>&1; then
-        echo_error "Docker daemon is not running"
-        exit 1
-    fi
-    if ! docker compose version >/dev/null 2>&1; then
-        echo_error "Docker Compose v2 is not available"
-        exit 1
-    fi
-}
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
+hl_docker_cd_project_root
 remove_compose_dev_images() {
     local tmpfile
     tmpfile="$(mktemp)" || return 1
@@ -90,6 +63,7 @@ while [ "$#" -gt 0 ]; do
             ;;
         --ci)
             CI_MODE=true
+            disable_colors_if_needed
             shift
             ;;
         --help|-h)
@@ -115,13 +89,7 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-if [ "$CI_MODE" = true ] || [ ! -t 1 ] || [ "${NO_COLOR:-}" = "1" ]; then
-    RED=''
-    GREEN=''
-    YELLOW=''
-    BLUE=''
-    NC=''
-fi
+disable_colors_if_needed
 
 preflight_docker
 
