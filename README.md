@@ -61,8 +61,10 @@ health-lens/
 │   └── shared/             # Shared types/schemas
 ├── docker/
 │   ├── compose.yml
-│   ├── compose.dev.yml
-│   └── scripts/
+│   └── compose.dev.yml
+├── scripts/
+│   ├── db/
+│   └── docker/
 ├── docs/
 └── .env.example
 ```
@@ -85,18 +87,18 @@ Update required keys in `.env` (at minimum: `AI_CHAT_*` and Qdrant settings for 
 ### 2) Start services
 
 ```bash
-./docker/scripts/up.sh
+pnpm docker:up
 ```
 
 Useful variants:
 
 ```bash
-./docker/scripts/up.sh --build          # rebuild all images with cache
-./docker/scripts/up.sh --no-cache       # force rebuild without cache
-./docker/scripts/up.sh --ocr            # include OCR service (extra RAM)
-./docker/scripts/up.sh --rebuild-api    # rebuild API image only
-./docker/scripts/up.sh --rebuild-web    # rebuild Web image only
-./docker/scripts/up.sh --ci             # plain output for CI/non-TTY
+pnpm docker:up:build                    # rebuild all images with cache
+pnpm docker:up --no-cache               # force rebuild without cache
+pnpm docker:up:ocr                      # include OCR service (extra RAM)
+pnpm docker:up --rebuild-api            # rebuild API image only
+pnpm docker:up --rebuild-web            # rebuild Web image only
+pnpm docker:up --ci                     # plain output for CI/non-TTY
 ```
 
 `up.sh` is optimized for fast local loop: by default it starts containers without rebuilding images.
@@ -113,15 +115,16 @@ At the end of each run, it prints build/start/total timing summary.
 ### 4) Logs and shutdown
 
 ```bash
-./docker/scripts/logs.sh api -f
-./docker/scripts/logs.sh --menu         # interactive selector
-./docker/scripts/logs.sh mailhog --tail 100
-./docker/scripts/down.sh
-./docker/scripts/down.sh -v        # remove volumes
-./docker/scripts/down.sh --clean   # remove compose images + volumes
-./docker/scripts/down.sh --clean --yes
-./docker/scripts/cleanup.sh --dry-run
+pnpm docker:logs api -f
+pnpm docker:logs --menu                 # interactive selector
+pnpm docker:logs mailhog --tail 100
+pnpm docker:down
+pnpm docker:down:volumes           # remove volumes
+./scripts/docker/down.sh --clean --yes  # remove compose images + volumes
+pnpm docker:cleanup:dry-run
 ```
+
+For npm, pass package-script arguments after `--`, for example `npm run docker:logs -- api -f`.
 
 `logs.sh`, `down.sh`, and `cleanup.sh` also support `--ci` for plain, non-colored output.  
 You can also disable ANSI colors via `NO_COLOR=1` (for all Docker scripts).
@@ -148,6 +151,7 @@ From repository root:
 
 ```bash
 pnpm test
+pnpm db:analyze:flyway-squash
 ```
 
 Targeted commands:

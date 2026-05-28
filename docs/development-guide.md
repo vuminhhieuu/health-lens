@@ -39,19 +39,22 @@ Important variables include:
 Start the default development stack:
 
 ```bash
-./docker/scripts/up.sh
+pnpm docker:up
 ```
 
 Useful variants:
 
 ```bash
-./docker/scripts/up.sh --build
-./docker/scripts/up.sh --no-cache
-./docker/scripts/up.sh --ocr
-./docker/scripts/up.sh --rebuild-api
-./docker/scripts/up.sh --rebuild-web
-./docker/scripts/up.sh --ci
+pnpm docker:up:build
+pnpm docker:up --no-cache
+pnpm docker:up:ocr
+pnpm docker:up --rebuild-api
+pnpm docker:up --rebuild-web
+pnpm docker:up --ci
 ```
+
+With pnpm, pass package-script arguments directly, for example `pnpm docker:logs api -f`.
+With npm, pass them after `--`, for example `npm run docker:logs -- api -f`.
 
 Default endpoints:
 
@@ -71,6 +74,10 @@ From the repository root:
 pnpm dev
 pnpm build
 pnpm test
+pnpm docker:up
+pnpm docker:logs
+pnpm docker:down
+pnpm db:analyze:flyway-squash
 ```
 
 Targeted commands:

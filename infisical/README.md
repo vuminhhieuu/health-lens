@@ -10,7 +10,7 @@ Folder này chứa tài liệu và script vận hành Infisical cho dự án `he
 
 ## Cấu trúc
 
-- `scripts/infisical.sh`: script all-in-one để push/pull/check/bootstrap.
+- `scripts/infisical/infisical.sh`: script all-in-one để push/pull/check/bootstrap.
 - `ONBOARDING.md`: hướng dẫn thành viên mới.
 
 ## Script chính
@@ -18,32 +18,40 @@ Folder này chứa tài liệu và script vận hành Infisical cho dự án `he
 Chạy từ root repo:
 
 ```bash
-./infisical/scripts/infisical.sh help
+./scripts/infisical/infisical.sh help
+```
+
+Sau khi pull env, dùng package script ở root để chạy stack local:
+
+```bash
+pnpm docker:up
+pnpm docker:up:ocr
+pnpm docker:down
 ```
 
 Các lệnh hay dùng:
 
 ```bash
 # tạo folder staging /web và /api nếu thiếu
-./infisical/scripts/infisical.sh bootstrap
+./scripts/infisical/infisical.sh bootstrap
 
 # push
-./infisical/scripts/infisical.sh push-dev
-./infisical/scripts/infisical.sh push-staging-web
-./infisical/scripts/infisical.sh push-staging-api
-./infisical/scripts/infisical.sh push-staging
-./infisical/scripts/infisical.sh push-prod
+./scripts/infisical/infisical.sh push-dev
+./scripts/infisical/infisical.sh push-staging-web
+./scripts/infisical/infisical.sh push-staging-api
+./scripts/infisical/infisical.sh push-staging
+./scripts/infisical/infisical.sh push-prod
 
 # pull
-./infisical/scripts/infisical.sh pull-dev
-./infisical/scripts/infisical.sh pull-staging-web
-./infisical/scripts/infisical.sh pull-staging-api
-./infisical/scripts/infisical.sh pull-staging
-./infisical/scripts/infisical.sh pull-prod
+./scripts/infisical/infisical.sh pull-dev
+./scripts/infisical/infisical.sh pull-staging-web
+./scripts/infisical/infisical.sh pull-staging-api
+./scripts/infisical/infisical.sh pull-staging
+./scripts/infisical/infisical.sh pull-prod
 
 # ví dụ: dùng dev path riêng cho team
-DEV_PATH=/shared ./infisical/scripts/infisical.sh push-dev
-DEV_PATH=/shared ./infisical/scripts/infisical.sh pull-dev
+DEV_PATH=/shared ./scripts/infisical/infisical.sh push-dev
+DEV_PATH=/shared ./scripts/infisical/infisical.sh pull-dev
 ```
 
 ## Mapping mặc định
@@ -56,8 +64,8 @@ DEV_PATH=/shared ./infisical/scripts/infisical.sh pull-dev
 Mặc định script dùng `DEV_PATH=/shared`. Khi cần backup riêng, override tạm:
 
 ```bash
-DEV_PATH=/backup ./infisical/scripts/infisical.sh push-dev
-DEV_PATH=/backup ./infisical/scripts/infisical.sh pull-dev
+DEV_PATH=/backup ./scripts/infisical/infisical.sh push-dev
+DEV_PATH=/backup ./scripts/infisical/infisical.sh pull-dev
 ```
 
 ## Ghi chú quan trọng

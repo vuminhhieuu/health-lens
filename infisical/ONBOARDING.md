@@ -82,21 +82,31 @@ Sau bước này phải có file `.infisical.json` ở root.
 ## 4) Pull secrets về local
 
 ```bash
-./infisical/scripts/infisical.sh pull-dev
-./infisical/scripts/infisical.sh pull-staging-web
-./infisical/scripts/infisical.sh pull-staging-api
-./infisical/scripts/infisical.sh pull-staging
+./scripts/infisical/infisical.sh pull-dev
+./scripts/infisical/infisical.sh pull-staging-web
+./scripts/infisical/infisical.sh pull-staging-api
+./scripts/infisical/infisical.sh pull-staging
 ```
 
 Mặc định script đã dùng folder dev shared (`DEV_PATH=/shared`), nên chỉ cần:
 
 ```bash
-./infisical/scripts/infisical.sh pull-dev
+./scripts/infisical/infisical.sh pull-dev
 ```
 
 ## 5) Chạy ứng dụng local
 
-Bạn có thể chạy app theo flow hiện tại của team sau khi pull env.
+Sau khi pull env, chạy stack local từ root repo:
+
+```bash
+pnpm docker:up
+```
+
+Khi cần chạy kèm OCR:
+
+```bash
+pnpm docker:up:ocr
+```
 
 ## 6) Quy định phân quyền
 
@@ -106,15 +116,15 @@ Bạn có thể chạy app theo flow hiện tại của team sau khi pull env.
 - Có thể tạo thêm folder `backup` trong `dev` và chỉ cấp quyền cho tech lead; member chỉ dùng folder shared (`/shared`).
 - Khi cần thao tác backup riêng, override:
   ```bash
-  DEV_PATH=/backup ./infisical/scripts/infisical.sh push-dev
-  DEV_PATH=/backup ./infisical/scripts/infisical.sh pull-dev
+  DEV_PATH=/backup ./scripts/infisical/infisical.sh push-dev
+  DEV_PATH=/backup ./scripts/infisical/infisical.sh pull-dev
   ```
 
 ## 7) Khi có thông báo thay đổi ENV
 
 1. Pull lại env tương ứng:
    ```bash
-   ./infisical/scripts/infisical.sh pull-dev
+   ./scripts/infisical/infisical.sh pull-dev
    ```
 2. Restart service local.
 
@@ -125,7 +135,7 @@ Bạn có thể chạy app theo flow hiện tại của team sau khi pull env.
 - Lỗi `Folder with path ... not found`:
   - Chạy:
     ```bash
-    ./infisical/scripts/infisical.sh bootstrap
+    ./scripts/infisical/infisical.sh bootstrap
     ```
 - Lỗi empty value khi push:
   - `push-dev` tự bỏ qua key rỗng.

@@ -8,7 +8,8 @@ Local development uses Docker Compose:
 
 - `docker/compose.yml` provides base Redis and MinIO services.
 - `docker/compose.dev.yml` adds PostgreSQL, Mailhog, API, web, and optional OCR.
-- `docker/scripts/up.sh`, `logs.sh`, `down.sh`, and `cleanup.sh` wrap common lifecycle commands.
+- `scripts/docker/up.sh`, `logs.sh`, `down.sh`, and `cleanup.sh` wrap common lifecycle commands.
+- Root `package.json` exposes convenience aliases such as `pnpm docker:up`, `pnpm docker:logs`, `pnpm docker:down`, and `pnpm db:analyze:flyway-squash`.
 
 ## Staging Reference
 

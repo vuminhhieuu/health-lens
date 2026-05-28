@@ -39,8 +39,10 @@ health-lens/
 │   └── ocr-service/          # FastAPI EasyOCR microservice
 ├── docker/
 │   ├── compose.yml           # Base Redis/MinIO services
-│   ├── compose.dev.yml       # Local API/web/Postgres/Mailhog/OCR stack
-│   └── scripts/              # up/logs/down/cleanup helper scripts
+│   └── compose.dev.yml       # Local API/web/Postgres/Mailhog/OCR stack
+├── scripts/
+│   ├── db/                   # DB analysis and migration helper scripts
+│   └── docker/               # up/logs/down/cleanup helper scripts
 ├── docs/                     # Project knowledge for humans and AI agents
 ├── _bmad-output/             # BMad planning and implementation artifacts
 └── .github/workflows/        # CI and deployment workflows
@@ -58,7 +60,7 @@ health-lens/
 | API route registry | `apps/api/src/main/java/com/healthlens/api/constants/ApiRoutes.java` |
 | API config | `apps/api/src/main/resources/application.yml` |
 | OCR service | `services/ocr-service/app.py` |
-| Local stack | `docker/compose.yml`, `docker/compose.dev.yml`, `docker/scripts/up.sh` |
+| Local stack | `docker/compose.yml`, `docker/compose.dev.yml`, `scripts/docker/up.sh` |
 
 ## Generated/Excluded Paths
 
@@ -69,4 +71,3 @@ Avoid treating these as source of truth during code analysis:
 - `.gradle/`
 - `apps/api/build/`
 - `services/ocr-service/__pycache__/`
-

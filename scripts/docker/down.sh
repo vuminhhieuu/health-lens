@@ -31,8 +31,13 @@ remove_compose_dev_images() {
 confirm_destructive() {
     local message="$1"
     local response
-    if [ "$FORCE" = true ] || [ ! -t 0 ]; then
+    if [ "$FORCE" = true ]; then
         return 0
+    fi
+    if [ ! -t 0 ]; then
+        echo_warn "$message"
+        echo_error "Refusing destructive non-interactive shutdown without --yes or --force."
+        return 1
     fi
     echo_warn "$message"
     printf '%s' "Type 'yes' to continue: "
@@ -79,7 +84,8 @@ while [ "$#" -gt 0 ]; do
             echo "Examples:"
             echo "  ./scripts/docker/down.sh                    # Stop containers only"
             echo "  ./scripts/docker/down.sh -v                 # Stop and remove data"
-            echo "  ./scripts/docker/down.sh --clean            # Full cleanup"
+            echo "  ./scripts/docker/down.sh -v --yes           # Non-interactive volume removal"
+            echo "  ./scripts/docker/down.sh --clean --yes      # Non-interactive full cleanup"
             exit 0
             ;;
         *)

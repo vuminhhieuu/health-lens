@@ -23,12 +23,14 @@
 
 | Task | Command |
 | --- | --- |
-| Start stack | `./docker/scripts/up.sh` |
-| Start with OCR | `./docker/scripts/up.sh --ocr` |
-| View logs | `./docker/scripts/logs.sh` |
-| Stop stack | `./docker/scripts/down.sh` |
-| Remove volumes | `./docker/scripts/down.sh -v` |
-| Clean all | `./docker/scripts/down.sh --clean --yes` |
+| Start stack | `pnpm docker:up` |
+| Start with OCR | `pnpm docker:up:ocr` |
+| View logs | `pnpm docker:logs` |
+| Stop stack | `pnpm docker:down` |
+| Remove volumes | `pnpm docker:down:volumes` |
+| Clean all | `./scripts/docker/down.sh --clean --yes` |
+| Preview cleanup | `pnpm docker:cleanup:dry-run` |
+| Analyze Flyway squash groups | `pnpm db:analyze:flyway-squash` |
 
 ## Failure Triage
 
