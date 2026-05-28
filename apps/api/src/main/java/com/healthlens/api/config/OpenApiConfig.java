@@ -14,7 +14,7 @@ public class OpenApiConfig {
 
     @Bean
     public OpenAPI healthLensOpenAPI() {
-        final String securitySchemeName = "Bearer Authentication";
+        final String securitySchemeName = "BearerAuthentication";
 
         return new OpenAPI()
                 .info(new Info()

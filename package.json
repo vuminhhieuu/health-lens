@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "pnpm --filter web dev",
     "build": "pnpm -r --if-present build",
-    "test": "pnpm run test:db && pnpm -r --if-present test",
+    "test": "pnpm run test:db && pnpm run test:openapi && pnpm -r --if-present test",
     "test:db": "node --test scripts/db/*.test.mjs",
+    "test:openapi": "node --test scripts/openapi/*.test.mjs",
+    "openapi:generate": "node scripts/openapi/generate.mjs",
     "docker:up": "./scripts/docker/up.sh",
     "docker:up:build": "./scripts/docker/up.sh --build",
     "docker:up:ocr": "./scripts/docker/up.sh --ocr",
@@ -17,5 +19,8 @@
     "docker:cleanup": "./scripts/docker/cleanup.sh",
     "docker:cleanup:dry-run": "./scripts/docker/cleanup.sh --dry-run",
     "db:analyze:flyway-squash": "node scripts/db/analyze-flyway-squash-groups.mjs"
+  },
+  "devDependencies": {
+    "@openapitools/openapi-generator-cli": "2.15.3"
   }
 }

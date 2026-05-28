@@ -12,6 +12,7 @@
     "index.ts",
     "types/**/*.ts",
     "schemas/**/*.ts",
-    "constants/**/*.ts"
+    "constants/**/*.ts",
+    "generated/**/*.ts"
   ]
 }

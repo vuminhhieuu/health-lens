@@ -1,0 +1,8 @@
+generatorName: typescript-fetch
+additionalProperties:
+  enumPropertyNaming: original
+  modelPropertyNaming: original
+  stringEnums: true
+  supportsES6: true
+  useSingleRequestParameter: true
+  withoutRuntimeChecks: true
