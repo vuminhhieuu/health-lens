@@ -29,3 +29,10 @@ export interface NotificationInboxItem {
   actionUrl: string;
   read: boolean;
 }
+
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}

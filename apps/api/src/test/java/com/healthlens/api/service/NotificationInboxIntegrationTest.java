@@ -65,14 +65,20 @@ class NotificationInboxIntegrationTest extends PostgresTestContainerBase {
 
         var inviteeItems = notificationInboxService.listInbox(inviteeId);
         var otherItems = notificationInboxService.listInbox(otherUserId);
+        var inviteePage = notificationInboxService.listInbox(inviteeId, 0, 10);
+        var otherPage = notificationInboxService.listInbox(otherUserId, 0, 10);
 
         assertThat(inviteeItems).hasSize(1);
         assertThat(inviteeItems.get(0).type()).isEqualTo(NotificationInboxItemType.PROFILE_INVITATION);
         assertThat(inviteeItems.get(0).id()).startsWith("PROFILE_INVITATION:");
         assertThat(inviteeItems.get(0).read()).isFalse();
         assertThat(inviteeItems.get(0).actionUrl()).contains("/invitations/accept");
+        assertThat(inviteePage.data()).hasSize(1);
+        assertThat(inviteePage.unreadCount()).isEqualTo(1);
 
         assertThat(otherItems).isEmpty();
+        assertThat(otherPage.data()).isEmpty();
+        assertThat(otherPage.unreadCount()).isZero();
     }
 
     @Test

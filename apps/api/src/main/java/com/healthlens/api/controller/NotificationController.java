@@ -2,11 +2,10 @@ package com.healthlens.api.controller;
 
 import com.healthlens.api.constants.ApiRoutes;
 import com.healthlens.api.dto.request.MarkNotificationInboxReadRequest;
-import com.healthlens.api.dto.response.NotificationInboxItemResponse;
+import com.healthlens.api.dto.response.NotificationInboxPageResponse;
 import com.healthlens.api.service.NotificationInboxService;
 import jakarta.validation.Valid;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +14,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -28,14 +28,19 @@ public class NotificationController {
     }
 
     @GetMapping("/inbox")
-    public ResponseEntity<Map<String, Object>> listInbox(Authentication authentication) {
+    public ResponseEntity<Map<String, Object>> listInbox(
+            Authentication authentication,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int limit) {
         UUID userId = UUID.fromString(authentication.getName());
-        List<NotificationInboxItemResponse> items = notificationInboxService.listInbox(userId);
+        NotificationInboxPageResponse response = notificationInboxService.listInbox(userId, page, limit);
         return ResponseEntity.ok(Map.of(
-                "data", items,
+                "data", response.data(),
+                "pagination", response.pagination(),
                 "meta", Map.of(
                         "timestamp", Instant.now().toString(),
-                        "requestId", UUID.randomUUID().toString()
+                        "requestId", UUID.randomUUID().toString(),
+                        "unreadCount", response.unreadCount()
                 )
         ));
     }

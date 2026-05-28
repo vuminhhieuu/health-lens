@@ -1,8 +1,10 @@
 package com.healthlens.api.controller;
 
 import com.healthlens.api.config.SecurityConfig;
+import com.healthlens.api.dto.response.NotificationInboxPageResponse;
 import com.healthlens.api.dto.response.NotificationInboxItemResponse;
 import com.healthlens.api.dto.response.NotificationInboxItemType;
+import com.healthlens.api.dto.response.PaginationResponse;
 import com.healthlens.api.exception.GlobalExceptionHandler;
 import com.healthlens.api.security.CustomUserDetailsService;
 import com.healthlens.api.security.JwtAuthenticationFilter;
@@ -76,8 +78,8 @@ class NotificationControllerTest {
     void listInbox_authenticated_returnsItems() throws Exception {
         UUID userId = UUID.randomUUID();
         Instant createdAt = Instant.parse("2026-03-01T08:00:00Z");
-        when(notificationInboxService.listInbox(eq(userId)))
-                .thenReturn(List.of(new NotificationInboxItemResponse(
+        when(notificationInboxService.listInbox(eq(userId), eq(0), eq(10)))
+                .thenReturn(new NotificationInboxPageResponse(List.of(new NotificationInboxItemResponse(
                         "PROFILE_INVITATION:" + UUID.randomUUID(),
                         NotificationInboxItemType.PROFILE_INVITATION,
                         "Lời mời xem hồ sơ",
@@ -85,7 +87,7 @@ class NotificationControllerTest {
                         createdAt,
                         "/invitations/accept?token=abc",
                         false
-                )));
+                )), new PaginationResponse(0, 10, 12, 2), 7));
 
         mockMvc.perform(get("/api/v1/notifications/inbox")
                         .with(SecurityMockMvcRequestPostProcessors.user(userId.toString()))
@@ -93,9 +95,40 @@ class NotificationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].type").value("PROFILE_INVITATION"))
                 .andExpect(jsonPath("$.data[0].read").value(false))
-                .andExpect(jsonPath("$.data[0].actionUrl").value("/invitations/accept?token=abc"));
+                .andExpect(jsonPath("$.data[0].actionUrl").value("/invitations/accept?token=abc"))
+                .andExpect(jsonPath("$.pagination.page").value(0))
+                .andExpect(jsonPath("$.pagination.limit").value(10))
+                .andExpect(jsonPath("$.pagination.total").value(12))
+                .andExpect(jsonPath("$.pagination.totalPages").value(2))
+                .andExpect(jsonPath("$.meta.unreadCount").value(7))
+                .andExpect(jsonPath("$.meta.timestamp").exists())
+                .andExpect(jsonPath("$.meta.requestId").exists());
 
-        verify(notificationInboxService).listInbox(userId);
+        verify(notificationInboxService).listInbox(userId, 0, 10);
+    }
+
+    @Test
+    @DisplayName("GET /notifications/inbox accepts page and delegates limit normalization to service")
+    void listInbox_withPaginationParams_passesRawValues() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(notificationInboxService.listInbox(eq(userId), eq(2), eq(999)))
+                .thenReturn(new NotificationInboxPageResponse(
+                        List.of(),
+                        new PaginationResponse(2, 50, 0, 0),
+                        0
+                ));
+
+        mockMvc.perform(get("/api/v1/notifications/inbox")
+                        .queryParam("page", "2")
+                        .queryParam("limit", "999")
+                        .with(SecurityMockMvcRequestPostProcessors.user(userId.toString()))
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.pagination.page").value(2))
+                .andExpect(jsonPath("$.pagination.limit").value(50));
+
+        verify(notificationInboxService).listInbox(userId, 2, 999);
     }
 
     @Test

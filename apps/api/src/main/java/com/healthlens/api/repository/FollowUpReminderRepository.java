@@ -31,19 +31,13 @@ public interface FollowUpReminderRepository extends JpaRepository<FollowUpRemind
             SELECT reminder
             FROM FollowUpReminder reminder
             WHERE reminder.profile.user.id = :userId
-              AND (
-                  (reminder.reminderDate >= :today AND reminder.reminderDate <= :horizon)
-                  OR (
-                      reminder.reminderDate < :today
-                      AND reminder.emailSentAt IS NULL
-                      AND reminder.emailSkippedOptOutAt IS NULL
-                  )
-              )
+              AND reminder.reminderDate >= :startDate
+              AND reminder.reminderDate <= :horizon
             ORDER BY reminder.reminderDate ASC, reminder.createdAt ASC
             """)
     List<FollowUpReminder> findActiveRemindersForInbox(
             @Param("userId") UUID userId,
-            @Param("today") LocalDate today,
+            @Param("startDate") LocalDate startDate,
             @Param("horizon") LocalDate horizon
     );
 

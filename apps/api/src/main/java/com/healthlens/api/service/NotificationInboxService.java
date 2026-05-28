@@ -4,6 +4,8 @@ import com.healthlens.api.dto.response.IncomingHealthRecordInvitationResponse;
 import com.healthlens.api.dto.response.IncomingProfileInvitationResponse;
 import com.healthlens.api.dto.response.NotificationInboxItemResponse;
 import com.healthlens.api.dto.response.NotificationInboxItemType;
+import com.healthlens.api.dto.response.NotificationInboxPageResponse;
+import com.healthlens.api.dto.response.PaginationResponse;
 import com.healthlens.api.entity.FollowUpReminder;
 import com.healthlens.api.entity.NotificationInboxReadState;
 import com.healthlens.api.exception.ResourceNotFoundException;
@@ -28,10 +30,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationInboxService {
 
     static final int MAX_ITEMS = 50;
+    private static final int DEFAULT_PAGE = 0;
+    private static final int DEFAULT_LIMIT = 10;
+    private static final int MAX_LIMIT = 50;
     private static final ZoneId VN_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final DateTimeFormatter REMINDER_DATE_FORMAT =
             DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final int UPCOMING_REMINDER_HORIZON_DAYS = 90;
+    private static final int PAST_REMINDER_HORIZON_DAYS = 90;
 
     private final ProfileShareService profileShareService;
     private final HealthRecordShareService healthRecordShareService;
@@ -54,6 +60,38 @@ public class NotificationInboxService {
 
     @Transactional(readOnly = true)
     public List<NotificationInboxItemResponse> listInbox(UUID userId) {
+        return buildInboxWithReadState(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public NotificationInboxPageResponse listInbox(UUID userId, int page, int limit) {
+        List<NotificationInboxItemResponse> items = buildInboxWithReadState(userId);
+        int normalizedPage = Math.max(DEFAULT_PAGE, page);
+        int normalizedLimit = normalizeLimit(limit);
+        long total = items.size();
+        int totalPages = total == 0 ? 0 : (int) Math.ceil((double) total / normalizedLimit);
+        long unreadCount = items.stream().filter(item -> !item.read()).count();
+
+        long offset = (long) normalizedPage * normalizedLimit;
+        List<NotificationInboxItemResponse> pageItems = offset >= items.size()
+                ? List.of()
+                : items.subList((int) offset, Math.min((int) offset + normalizedLimit, items.size()));
+
+        return new NotificationInboxPageResponse(
+                pageItems,
+                new PaginationResponse(normalizedPage, normalizedLimit, total, totalPages),
+                unreadCount
+        );
+    }
+
+    private static int normalizeLimit(int limit) {
+        if (limit <= 0) {
+            return DEFAULT_LIMIT;
+        }
+        return Math.min(limit, MAX_LIMIT);
+    }
+
+    private List<NotificationInboxItemResponse> buildInboxWithReadState(UUID userId) {
         followUpReminderService.dispatchDueReminderEmailsIfEnabled(userId);
         List<NotificationInboxItemResponse> activeItems = applyReadState(userId, buildSortedInbox(userId));
         List<NotificationInboxItemResponse> archivedReadItems = loadArchivedReadItems(userId, activeItems);
@@ -233,7 +271,7 @@ public class NotificationInboxService {
     private List<FollowUpReminder> listUpcomingReminders(UUID userId) {
         LocalDate today = LocalDate.now(VN_ZONE);
         return followUpReminderRepository.findActiveRemindersForInbox(
-                userId, today, today.plusDays(UPCOMING_REMINDER_HORIZON_DAYS));
+                userId, today.minusDays(PAST_REMINDER_HORIZON_DAYS), today.plusDays(UPCOMING_REMINDER_HORIZON_DAYS));
     }
 
     private static NotificationInboxItemResponse mapUpcomingReminder(FollowUpReminder reminder) {
