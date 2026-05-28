@@ -29,7 +29,10 @@ BEGIN
         GET DIAGNOSTICS window_rows = ROW_COUNT;
         EXIT WHEN window_rows = 0;
 
-        SELECT MAX(id) INTO completed_last_seen_id FROM v050_scan_ids;
+        SELECT id INTO completed_last_seen_id
+        FROM v050_scan_ids
+        ORDER BY id DESC
+        LIMIT 1;
 
         INSERT INTO user_activity_events (
             id, user_id, event_type, is_retry, profile_id, record_id, failure_reason, created_at
@@ -69,7 +72,10 @@ BEGIN
         GET DIAGNOSTICS window_rows = ROW_COUNT;
         EXIT WHEN window_rows = 0;
 
-        SELECT MAX(id) INTO failed_last_seen_id FROM v050_scan_ids;
+        SELECT id INTO failed_last_seen_id
+        FROM v050_scan_ids
+        ORDER BY id DESC
+        LIMIT 1;
 
         INSERT INTO user_activity_events (
             id, user_id, event_type, is_retry, profile_id, record_id, failure_reason, created_at

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Bell, Mail } from "lucide-react";
 
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
@@ -15,16 +16,19 @@ import { settingsCardClassName } from "../_components/settingsStyles";
 import { EmailPreferencesForm } from "./_components/EmailPreferencesForm";
 
 export default function NotificationSettingsPage() {
+  const [inboxPage, setInboxPage] = useState(0);
+  const [inboxLimit, setInboxLimit] = useState(5);
   const {
     items,
     unreadCount,
+    pagination,
     isLoading: inboxLoading,
     isError: inboxError,
     refetch: refetchInbox,
     markAsRead,
     markAllAsRead,
     isMarkingAllRead,
-  } = useNotificationInbox();
+  } = useNotificationInbox({ mode: "paged", page: inboxPage, limit: inboxLimit });
 
   const {
     preferences,
@@ -67,6 +71,13 @@ export default function NotificationSettingsPage() {
                 onMarkAllRead={markAllAsRead}
                 isMarkingAllRead={isMarkingAllRead}
                 variant="full"
+                pagination={pagination}
+                onPageChange={setInboxPage}
+                onPageSizeChange={(limit) => {
+                  setInboxLimit(limit);
+                  setInboxPage(0);
+                }}
+                isPaginationDisabled={isMarkingAllRead}
               />
             </div>
 

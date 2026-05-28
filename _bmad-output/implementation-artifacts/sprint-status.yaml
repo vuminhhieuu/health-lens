@@ -48,7 +48,7 @@
 # - Epic 9 (mobile): giữ backlog đến khi Phase 1 hoàn thành
 
 generated: 2026-04-01
-last_updated: 2026-05-22T14:01:00+07:00
+last_updated: 2026-05-28T00:00:00+07:00
 project: health-lens
 project_key: NOKEY
 tracking_system: file-system
@@ -309,6 +309,7 @@ development_status:
   pae-10-notification-inbox-aggregate-api: done
   pae-11-notification-center-ui-and-bell-wiring: done
   pae-12-notification-email-preferences: done
+  pae-13-notification-inbox-pagination: in-progress
   public-account-experience-retrospective: optional
 
 # =====================================================

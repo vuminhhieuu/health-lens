@@ -146,6 +146,52 @@ class NotificationInboxServiceTest {
     }
 
     @Test
+    @DisplayName("listInbox keeps sent overdue follow-up reminders visible after read")
+    void listInbox_keepsSentOverdueReminderAfterRead() {
+        UUID userId = UUID.randomUUID();
+        UUID reminderId = UUID.randomUUID();
+        UUID profileId = UUID.randomUUID();
+        Instant createdAt = Instant.parse("2026-05-20T08:00:00Z");
+        String itemId = "REMINDER_UPCOMING:" + reminderId;
+
+        Profile profile = new Profile();
+        profile.setId(profileId);
+        profile.setDisplayName("Ba");
+
+        FollowUpReminder reminder = new FollowUpReminder();
+        reminder.setId(reminderId);
+        reminder.setProfile(profile);
+        reminder.setReminderDate(LocalDate.now().minusDays(2));
+        reminder.setReminderType("Tái khám");
+        reminder.setEmailSentAt(Instant.parse("2026-05-22T03:00:00Z"));
+        reminder.setCreatedAt(createdAt);
+        reminder.setUpdatedAt(createdAt);
+
+        when(followUpReminderRepository.findActiveRemindersForInbox(
+                        eq(userId), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(reminder));
+        when(profileShareService.listIncomingInvitations(userId)).thenReturn(List.of());
+        when(healthRecordShareService.listIncomingInvitations(userId)).thenReturn(List.of());
+        when(readStateRepository.findByUserIdAndInboxItemId(userId, itemId)).thenReturn(java.util.Optional.empty());
+        when(readStateRepository.findReadInboxItemIds(eq(userId), any()))
+                .thenReturn(List.of())
+                .thenReturn(List.of(itemId));
+
+        var beforeRead = notificationInboxService.listInbox(userId);
+        assertThat(beforeRead).hasSize(1);
+        assertThat(beforeRead.get(0).id()).isEqualTo(itemId);
+        assertThat(beforeRead.get(0).read()).isFalse();
+
+        notificationInboxService.markAsRead(userId, itemId);
+
+        var afterRead = notificationInboxService.listInbox(userId);
+        assertThat(afterRead).hasSize(1);
+        assertThat(afterRead.get(0).id()).isEqualTo(itemId);
+        assertThat(afterRead.get(0).read()).isTrue();
+        assertThat(afterRead.get(0).body()).contains("Quá hạn");
+    }
+
+    @Test
     @DisplayName("listInbox caps merged results at 50 items")
     void listInbox_capsAt50() {
         UUID userId = UUID.randomUUID();
@@ -187,6 +233,93 @@ class NotificationInboxServiceTest {
         assertThat(items).hasSize(50);
         assertThat(items.get(0).type()).isEqualTo(NotificationInboxItemType.HEALTH_RECORD_INVITATION);
         assertThat(items.get(0).createdAt()).isEqualTo(base.plusSeconds(59));
+    }
+
+    @Test
+    @DisplayName("listInbox page response slices after merge and reports unread count for full inbox")
+    void listInbox_paginatesMergedInboxAndReportsFullUnreadCount() {
+        UUID userId = UUID.randomUUID();
+        Instant base = Instant.parse("2026-01-01T00:00:00Z");
+
+        List<IncomingProfileInvitationResponse> profileInvites = new ArrayList<>();
+        List<String> readIds = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            UUID invitationId = UUID.randomUUID();
+            profileInvites.add(new IncomingProfileInvitationResponse(
+                    invitationId,
+                    UUID.randomUUID(),
+                    "Profile " + i,
+                    "Owner",
+                    base.plusSeconds(3600 + i),
+                    base.plusSeconds(i),
+                    "view",
+                    "/invitations/accept?token=p" + i
+            ));
+            if (i < 3) {
+                readIds.add("PROFILE_INVITATION:" + invitationId);
+            }
+        }
+
+        when(profileShareService.listIncomingInvitations(userId)).thenReturn(profileInvites);
+        when(healthRecordShareService.listIncomingInvitations(userId)).thenReturn(List.of());
+        when(readStateRepository.findReadInboxItemIds(eq(userId), any())).thenReturn(readIds);
+
+        var page = notificationInboxService.listInbox(userId, 1, 5);
+
+        assertThat(page.data()).hasSize(5);
+        assertThat(page.pagination().page()).isEqualTo(1);
+        assertThat(page.pagination().limit()).isEqualTo(5);
+        assertThat(page.pagination().total()).isEqualTo(12);
+        assertThat(page.pagination().totalPages()).isEqualTo(3);
+        assertThat(page.unreadCount()).isEqualTo(9);
+    }
+
+    @Test
+    @DisplayName("listInbox page response returns empty data when page exceeds total pages")
+    void listInbox_pageBeyondTotal_returnsEmptyData() {
+        UUID userId = UUID.randomUUID();
+        UUID invitationId = UUID.randomUUID();
+        Instant createdAt = Instant.parse("2026-01-01T10:00:00Z");
+
+        when(profileShareService.listIncomingInvitations(userId))
+                .thenReturn(List.of(new IncomingProfileInvitationResponse(
+                        invitationId,
+                        UUID.randomUUID(),
+                        "Hồ sơ An",
+                        "Lan",
+                        createdAt.plusSeconds(3600),
+                        createdAt,
+                        "view",
+                        "/invitations/accept?token=abc"
+                )));
+        when(healthRecordShareService.listIncomingInvitations(userId)).thenReturn(List.of());
+        when(readStateRepository.findReadInboxItemIds(eq(userId), any())).thenReturn(List.of());
+
+        var page = notificationInboxService.listInbox(userId, 9, 10);
+
+        assertThat(page.data()).isEmpty();
+        assertThat(page.pagination().page()).isEqualTo(9);
+        assertThat(page.pagination().limit()).isEqualTo(10);
+        assertThat(page.pagination().total()).isEqualTo(1);
+        assertThat(page.pagination().totalPages()).isEqualTo(1);
+        assertThat(page.unreadCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("listInbox page response normalizes page and limit bounds")
+    void listInbox_normalizesPaginationBounds() {
+        UUID userId = UUID.randomUUID();
+        when(profileShareService.listIncomingInvitations(userId)).thenReturn(List.of());
+        when(healthRecordShareService.listIncomingInvitations(userId)).thenReturn(List.of());
+
+        var page = notificationInboxService.listInbox(userId, -2, 999);
+
+        assertThat(page.data()).isEmpty();
+        assertThat(page.pagination().page()).isEqualTo(0);
+        assertThat(page.pagination().limit()).isEqualTo(50);
+        assertThat(page.pagination().total()).isZero();
+        assertThat(page.pagination().totalPages()).isZero();
+        assertThat(page.unreadCount()).isZero();
     }
 
     @Test
