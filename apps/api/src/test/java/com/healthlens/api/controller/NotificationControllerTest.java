@@ -108,10 +108,10 @@ class NotificationControllerTest {
     }
 
     @Test
-    @DisplayName("GET /notifications/inbox accepts page and clamps limit to 50")
-    void listInbox_withPaginationParams_passesClampedValues() throws Exception {
+    @DisplayName("GET /notifications/inbox accepts page and delegates limit normalization to service")
+    void listInbox_withPaginationParams_passesRawValues() throws Exception {
         UUID userId = UUID.randomUUID();
-        when(notificationInboxService.listInbox(eq(userId), eq(2), eq(50)))
+        when(notificationInboxService.listInbox(eq(userId), eq(2), eq(999)))
                 .thenReturn(new NotificationInboxPageResponse(
                         List.of(),
                         new PaginationResponse(2, 50, 0, 0),
@@ -128,7 +128,7 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.pagination.page").value(2))
                 .andExpect(jsonPath("$.pagination.limit").value(50));
 
-        verify(notificationInboxService).listInbox(userId, 2, 50);
+        verify(notificationInboxService).listInbox(userId, 2, 999);
     }
 
     @Test

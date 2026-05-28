@@ -33,7 +33,7 @@ public class NotificationController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int limit) {
         UUID userId = UUID.fromString(authentication.getName());
-        NotificationInboxPageResponse response = notificationInboxService.listInbox(userId, page, Math.min(limit, 50));
+        NotificationInboxPageResponse response = notificationInboxService.listInbox(userId, page, limit);
         return ResponseEntity.ok(Map.of(
                 "data", response.data(),
                 "pagination", response.pagination(),

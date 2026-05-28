@@ -53,8 +53,9 @@ export function NotificationInboxList({
   const showPagination = variant === "full" && pagination && onPageChange && pagination.total > 0;
   const isFirstPage = pagination ? pagination.page <= 0 : true;
   const isLastPage = pagination ? pagination.page + 1 >= pagination.totalPages : true;
-  const rangeStart = pagination ? pagination.page * pagination.limit + 1 : 0;
-  const rangeEnd = pagination ? Math.min(pagination.total, rangeStart + items.length - 1) : 0;
+  const hasItems = items.length > 0;
+  const rangeStart = pagination && hasItems ? pagination.page * pagination.limit + 1 : 0;
+  const rangeEnd = pagination && hasItems ? Math.min(pagination.total, rangeStart + items.length - 1) : 0;
 
   if (isLoading) {
     return (
@@ -80,12 +81,6 @@ export function NotificationInboxList({
     );
   }
 
-  if (items.length === 0) {
-    return (
-      <p className="py-16 text-center text-sm font-medium text-[#6d7a77]">{emptyMessage}</p>
-    );
-  }
-
   return (
     <div>
       {showToolbar && onMarkAllRead ? (
@@ -97,18 +92,22 @@ export function NotificationInboxList({
         />
       ) : null}
 
-      <ul className="flex flex-col gap-3">
-        {items.map((item) => (
-          <li key={item.id}>
-            <NotificationInboxItemRow
-              item={item}
-              variant={variant}
-              onNavigate={onItemNavigate}
-              onMarkRead={onMarkRead}
-            />
-          </li>
-        ))}
-      </ul>
+      {hasItems ? (
+        <ul className="flex flex-col gap-3">
+          {items.map((item) => (
+            <li key={item.id}>
+              <NotificationInboxItemRow
+                item={item}
+                variant={variant}
+                onNavigate={onItemNavigate}
+                onMarkRead={onMarkRead}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="py-16 text-center text-sm font-medium text-[#6d7a77]">{emptyMessage}</p>
+      )}
 
       {showPagination ? (
         <div className="mt-4 flex flex-col items-center justify-end gap-4 border-t border-[#e9f6f3] pt-4 text-sm font-medium text-[#3d4947] sm:flex-row sm:gap-8">
@@ -130,7 +129,10 @@ export function NotificationInboxList({
             </select>
           </div>
           <span className="min-w-32 text-center font-semibold text-[#121e1c]">
-            {rangeStart.toLocaleString("vi-VN")}-{rangeEnd.toLocaleString("vi-VN")} trên{" "}
+            {hasItems
+              ? `${rangeStart.toLocaleString("vi-VN")}-${rangeEnd.toLocaleString("vi-VN")}`
+              : "0"}{" "}
+            trên{" "}
             {pagination.total.toLocaleString("vi-VN")} thông báo
           </span>
           <div className="flex items-center gap-3">

@@ -122,7 +122,7 @@ export function useNotificationInbox(options: UseNotificationInboxOptions | bool
       queryClient.setQueriesData<InboxQueryData>({ queryKey: INBOX_QUERY_KEY }, (current) =>
         current ? patchItemRead(current, itemId, decrementUnreadCount) : current,
       );
-      return { previous };
+      return { previous, shouldInvalidate: !decrementUnreadCount };
     },
     onError: (_error, _itemId, context) => {
       if (context?.previous) {
@@ -131,8 +131,10 @@ export function useNotificationInbox(options: UseNotificationInboxOptions | bool
         });
       }
     },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: INBOX_QUERY_KEY });
+    onSuccess: (_data, _itemId, context) => {
+      if (context?.shouldInvalidate) {
+        void queryClient.invalidateQueries({ queryKey: INBOX_QUERY_KEY });
+      }
     },
   });
 
@@ -156,9 +158,6 @@ export function useNotificationInbox(options: UseNotificationInboxOptions | bool
           queryClient.setQueryData(cacheKey, data);
         });
       }
-    },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: INBOX_QUERY_KEY });
     },
   });
 
