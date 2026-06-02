@@ -20,6 +20,6 @@ class OcrProfileDefaultsConfigTest {
         assertThat(content).contains("on-profile: staging");
         assertThat(content).contains("primary: ${OCR_PROVIDER_PRIMARY:gcv}");
         assertThat(content).contains("on-profile: production");
-        assertThat(content).contains("fallback-order: ${OCR_PROVIDER_FALLBACK_ORDER:textract}");
+        assertThat(content).contains("fallback-order: ${OCR_PROVIDER_FALLBACK_ORDER:}");
     }
 }

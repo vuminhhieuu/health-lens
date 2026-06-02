@@ -31,12 +31,20 @@ public interface HealthRecordRepository extends JpaRepository<HealthRecord, UUID
     Page<HealthRecord> findAllByProfileIdAndUserIdAndDeletedAtIsNull(UUID profileId, UUID userId, Pageable pageable);
     List<HealthRecord> findAllByDeletedAtBefore(Instant threshold);
     Page<HealthRecord> findAllByDeletedAtBefore(Instant threshold, Pageable pageable);
-    Page<HealthRecord> findAllByProfileIdAndUserId(UUID profileId, UUID userId, Pageable pageable);
+    @Query("SELECT h FROM HealthRecord h WHERE h.profileId = :profileId AND h.userId = :userId AND h.deletedAt IS NULL")
+    Page<HealthRecord> findAllByProfileIdAndUserId(
+            @Param("profileId") UUID profileId,
+            @Param("userId") UUID userId,
+            Pageable pageable);
 
-    java.util.List<HealthRecord> findAllByUserId(UUID userId);
+    @Query("SELECT h FROM HealthRecord h WHERE h.userId = :userId AND h.deletedAt IS NULL")
+    java.util.List<HealthRecord> findAllByUserId(@Param("userId") UUID userId);
+
+    @Query("SELECT h.fileKey FROM HealthRecord h WHERE h.userId = :userId AND h.deletedAt IS NULL")
+    List<String> findFileKeysByUserId(@Param("userId") UUID userId);
 
     @Query("SELECT h.fileKey FROM HealthRecord h WHERE h.userId = :userId")
-    List<String> findFileKeysByUserId(@Param("userId") UUID userId);
+    List<String> findAllFileKeysByUserIdIncludingDeleted(@Param("userId") UUID userId);
 
     @Query("SELECT MAX(h.createdAt) FROM HealthRecord h WHERE h.profileId = :profileId AND h.deletedAt IS NULL")
     Optional<Instant> findMaxCreatedAtByProfileId(@Param("profileId") UUID profileId);

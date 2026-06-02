@@ -107,7 +107,7 @@ public class HealthRecordPdfService {
 
     private PDFont loadVietnameseFont(PDDocument document) throws IOException {
         InputStream bundledFont = HealthRecordPdfService.class.getClassLoader()
-                .getResourceAsStream("fonts/Arial.ttf");
+                .getResourceAsStream("fonts/DejaVuSans.ttf");
         if (bundledFont != null) {
             try (InputStream stream = bundledFont) {
                 return PDType0Font.load(document, stream);
@@ -126,8 +126,7 @@ public class HealthRecordPdfService {
                 "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
                 "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-                "/Library/Fonts/Arial Unicode.ttf"
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
         )) {
             Path fontPath = Path.of(path);
             if (Files.exists(fontPath)) {
@@ -137,14 +136,13 @@ public class HealthRecordPdfService {
 
         throw new IllegalStateException(
                 "Không tìm thấy font Unicode để tạo PDF tiếng Việt. " +
-                "Hãy bundle fonts/Arial.ttf hoặc fonts/NotoSans-Regular.ttf, " +
-                "hoặc cài đặt NotoSans/Arial Unicode trên host."
+                "Hãy bundle fonts/DejaVuSans.ttf hoặc fonts/NotoSans-Regular.ttf, " +
+                "hoặc cài đặt NotoSans/DejaVuSans trên host."
         );
     }
 
     private PDFont loadVietnameseBoldFont(PDDocument document, PDFont fallbackFont) throws IOException {
         for (String fontPath : List.of(
-                "fonts/Arial-Bold.ttf",
                 "fonts/NotoSans-Bold.ttf",
                 "fonts/DejaVuSans-Bold.ttf"
         )) {
@@ -158,8 +156,7 @@ public class HealthRecordPdfService {
         for (String path : List.of(
                 "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-                "/Library/Fonts/Arial Bold.ttf"
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
         )) {
             Path fontPath = Path.of(path);
             if (Files.exists(fontPath)) {

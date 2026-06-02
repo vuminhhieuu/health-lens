@@ -276,7 +276,9 @@ public class HealthRecordService {
         
         if (cachedStatus != null) {
             try {
-                return objectMapper.readValue(cachedStatus, HealthRecordStatusResponse.class);
+                HealthRecordStatusResponse response = objectMapper.readValue(cachedStatus, HealthRecordStatusResponse.class);
+                AccessibleRecord accessibleRecord = loadAccessibleRecord(userId, recordId);
+                return withFreshFileUrl(response, accessibleRecord.record().getFileKey());
             } catch (Exception e) {
                 log.warn("Failed to parse cached status for {}", recordId);
             }
@@ -315,16 +317,36 @@ public class HealthRecordService {
             record.getAnalyzerModel(),
             record.getTestMethod(),
             record.getLabSite(),
-            storageService.generateDownloadUrl(record.getFileKey(), Duration.ofHours(1))
+            null
         );
         
         try {
-            redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(response), Duration.ofSeconds(5));
+            redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(response), Duration.ofMinutes(5));
         } catch (Exception e) {
             log.warn("Failed to cache status for {}", recordId);
         }
         
-        return response;
+        return withFreshFileUrl(response, record.getFileKey());
+    }
+
+    private HealthRecordStatusResponse withFreshFileUrl(HealthRecordStatusResponse response, String fileKey) {
+        return new HealthRecordStatusResponse(
+                response.id(),
+                response.isOwner(),
+                response.canEdit(),
+                response.status(),
+                response.metrics(),
+                response.hasLowConfidenceMetrics(),
+                response.ocrFailureReason(),
+                response.examDate(),
+                response.recordType(),
+                response.hospitalName(),
+                response.diagnosis(),
+                response.analyzerModel(),
+                response.testMethod(),
+                response.labSite(),
+                storageService.generateDownloadUrl(fileKey, Duration.ofHours(1))
+        );
     }
 
     @Transactional(readOnly = true)

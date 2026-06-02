@@ -11,6 +11,7 @@ import com.healthlens.api.dto.response.RecommendationsResponse;
 import com.healthlens.api.dto.response.DownloadHealthRecordPdfResponse;
 import com.healthlens.api.dto.request.UpdateMetricsRequest;
 import com.healthlens.api.dto.response.ConfirmUploadResponse;
+import com.healthlens.api.dto.response.HealthRecordStatusResponse;
 import com.healthlens.api.dto.response.UploadUrlResponse;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.entity.HealthRecord;
@@ -205,6 +206,46 @@ class HealthRecordServiceTest {
                                 .contains("health-records/" + userId + "/" + profileId + "/" + retryRecordId + "/");
                 verify(valueOperations).set(any(), any(), any(Duration.class));
                 verify(userActivityService).recordUploadStarted(userId, profileId, retryRecordId, "pdf");
+        }
+
+        @Test
+        @DisplayName("getStatus caches metadata only and generates fresh file URL")
+        void getStatus_cacheMetadataOnly_generatesFreshFileUrl() throws Exception {
+                UUID userId = UUID.randomUUID();
+                UUID profileId = UUID.randomUUID();
+                UUID recordId = UUID.randomUUID();
+                HealthRecord record = new HealthRecord();
+                record.setId(recordId);
+                record.setUserId(userId);
+                record.setProfileId(profileId);
+                record.setStatus("done");
+                record.setFileKey("health-records/%s/%s/original.pdf".formatted(userId, recordId));
+                record.setMetrics("[]");
+
+                when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+                when(valueOperations.get("health-record-status:" + userId + ":" + recordId)).thenReturn(null);
+                when(healthRecordRepository.findByIdAndUserIdAndDeletedAtIsNull(recordId, userId))
+                                .thenReturn(Optional.of(record));
+                when(storageService.generateDownloadUrl(eq(record.getFileKey()), any(Duration.class)))
+                                .thenReturn("https://signed-one", "https://signed-two");
+
+                HealthRecordStatusResponse first = healthRecordService.getStatus(userId, recordId);
+
+                ArgumentCaptor<String> cachedJsonCaptor = ArgumentCaptor.forClass(String.class);
+                verify(valueOperations).set(
+                                eq("health-record-status:" + userId + ":" + recordId),
+                                cachedJsonCaptor.capture(),
+                                eq(Duration.ofMinutes(5)));
+                assertThat(new ObjectMapper().readValue(cachedJsonCaptor.getValue(), HealthRecordStatusResponse.class).fileUrl())
+                                .isNull();
+                assertThat(first.fileUrl()).isEqualTo("https://signed-one");
+
+                when(valueOperations.get("health-record-status:" + userId + ":" + recordId))
+                                .thenReturn(cachedJsonCaptor.getValue());
+
+                HealthRecordStatusResponse second = healthRecordService.getStatus(userId, recordId);
+
+                assertThat(second.fileUrl()).isEqualTo("https://signed-two");
         }
 
         @Test

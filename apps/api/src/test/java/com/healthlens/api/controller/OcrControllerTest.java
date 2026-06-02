@@ -2,6 +2,7 @@ package com.healthlens.api.controller;
 
 import com.healthlens.api.annotation.RequiresConsent;
 import com.healthlens.api.dto.OcrResult;
+import com.healthlens.api.dto.request.OcrExtractRequest;
 import com.healthlens.api.exception.OcrProcessingException;
 import com.healthlens.api.service.OcrService;
 import org.junit.jupiter.api.DisplayName;
@@ -11,8 +12,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
-
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -29,7 +28,7 @@ class OcrControllerTest {
     @Test
     @DisplayName("OcrController.extractText has @RequiresConsent annotation")
     void extractText_hasRequiresConsentAnnotation() throws NoSuchMethodException {
-        var method = OcrController.class.getMethod("extractText", Map.class);
+        var method = OcrController.class.getMethod("extractText", OcrExtractRequest.class);
         assertThat(method.isAnnotationPresent(RequiresConsent.class)).isTrue();
     }
 
@@ -42,7 +41,8 @@ class OcrControllerTest {
                 .build();
         when(ocrService.processImage("https://example.com/test.jpg")).thenReturn(expected);
 
-        ResponseEntity<OcrResult> response = controller.extractText(Map.of("imageUrl", "https://example.com/test.jpg"));
+        ResponseEntity<OcrResult> response = controller.extractText(
+                new OcrExtractRequest("https://example.com/test.jpg"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(200));
         assertThat(response.getBody()).isNotNull();
@@ -57,30 +57,10 @@ class OcrControllerTest {
                 OcrResult.builder().text("").confidence(0f).provider("easyocr").language("en").latencyMs(0).build()
         );
 
-        ResponseEntity<OcrResult> response = controller.extractText(Map.of("imageUrl", "http://example.com/test.jpg"));
+        ResponseEntity<OcrResult> response = controller.extractText(
+                new OcrExtractRequest("http://example.com/test.jpg"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(200));
-    }
-
-    @Test
-    @DisplayName("Null imageUrl → returns 400")
-    void extractText_nullImageUrl_returnsBadRequest() {
-        controller = new OcrController(ocrService);
-
-        ResponseEntity<OcrResult> response = controller.extractText(
-                java.util.Collections.singletonMap("imageUrl", null));
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(400));
-    }
-
-    @Test
-    @DisplayName("Blank imageUrl → returns 400")
-    void extractText_blankImageUrl_returnsBadRequest() {
-        controller = new OcrController(ocrService);
-
-        ResponseEntity<OcrResult> response = controller.extractText(Map.of("imageUrl", "   "));
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(400));
     }
 
     @Test
@@ -88,7 +68,8 @@ class OcrControllerTest {
     void extractText_ftpScheme_returnsBadRequest() {
         controller = new OcrController(ocrService);
 
-        ResponseEntity<OcrResult> response = controller.extractText(Map.of("imageUrl", "ftp://example.com/test.jpg"));
+        ResponseEntity<OcrResult> response = controller.extractText(
+                new OcrExtractRequest("ftp://example.com/test.jpg"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(400));
         verifyNoInteractions(ocrService);
@@ -99,7 +80,8 @@ class OcrControllerTest {
     void extractText_fileScheme_returnsBadRequest() {
         controller = new OcrController(ocrService);
 
-        ResponseEntity<OcrResult> response = controller.extractText(Map.of("imageUrl", "file:///etc/passwd"));
+        ResponseEntity<OcrResult> response = controller.extractText(
+                new OcrExtractRequest("file:///etc/passwd"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(400));
         verifyNoInteractions(ocrService);
@@ -110,7 +92,8 @@ class OcrControllerTest {
     void extractText_localhostUrl_returnsBadRequest() {
         controller = new OcrController(ocrService);
 
-        ResponseEntity<OcrResult> response = controller.extractText(Map.of("imageUrl", "http://localhost:8080/internal"));
+        ResponseEntity<OcrResult> response = controller.extractText(
+                new OcrExtractRequest("http://localhost:8080/internal"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(400));
         verifyNoInteractions(ocrService);
@@ -121,7 +104,8 @@ class OcrControllerTest {
     void extractText_privateIpUrl_returnsBadRequest() {
         controller = new OcrController(ocrService);
 
-        ResponseEntity<OcrResult> response = controller.extractText(Map.of("imageUrl", "http://10.0.0.1/internal"));
+        ResponseEntity<OcrResult> response = controller.extractText(
+                new OcrExtractRequest("http://10.0.0.1/internal"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(400));
         verifyNoInteractions(ocrService);
@@ -133,20 +117,11 @@ class OcrControllerTest {
         controller = new OcrController(ocrService);
         when(ocrService.processImage(anyString())).thenThrow(new OcrProcessingException("All providers failed"));
 
-        ResponseEntity<OcrResult> response = controller.extractText(Map.of("imageUrl", "https://example.com/test.jpg"));
+        ResponseEntity<OcrResult> response = controller.extractText(
+                new OcrExtractRequest("https://example.com/test.jpg"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(500));
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getSource()).isEqualTo("error");
-    }
-
-    @Test
-    @DisplayName("Missing imageUrl key → returns 400")
-    void extractText_missingKey_returnsBadRequest() {
-        controller = new OcrController(ocrService);
-
-        ResponseEntity<OcrResult> response = controller.extractText(Map.of());
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(400));
     }
 }

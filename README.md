@@ -53,8 +53,7 @@ flowchart LR
 health-lens/
 ├── apps/
 │   ├── api/                # Spring Boot API
-│   ├── web/                # Next.js web app
-│   └── mobile/             # Expo mobile app (in progress)
+│   └── web/                # Next.js web app
 ├── services/
 │   └── ocr-service/        # FastAPI OCR service
 ├── packages/
@@ -191,6 +190,5 @@ Implemented and active:
 
 Planned / evolving:
 
-- Mobile app hardening
 - Admin analytics dashboards
 - Further documentation and architecture artifacts

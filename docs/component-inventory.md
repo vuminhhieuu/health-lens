@@ -29,17 +29,6 @@
 - `apps/web/src/lib/api/routes.ts` re-exports shared API paths and adds frontend-only routes.
 - `apps/web/src/hooks/useAuthBootstrap.ts` and related hooks coordinate client bootstrap behavior.
 
-## Mobile App
-
-The Expo app is present but lighter than the web app.
-
-| Category | Files |
-| --- | --- |
-| Routes | `apps/mobile/app/index.tsx`, `apps/mobile/src/app/index.tsx`, `apps/mobile/src/app/explore.tsx`, `_layout.tsx` |
-| Components | themed text/view, tabs, external link, hint row, animated icon, web badge |
-| Hooks/theme | color-scheme hooks, theme constants, global CSS |
-| API/state | `apps/mobile/lib/api/index.ts`, `apps/mobile/stores/index.ts` |
-
 ## Dashboard Workflow Components (Epic 11.4)
 
 | Component | Import | Consumers |
@@ -55,4 +44,3 @@ The Expo app is present but lighter than the web app.
 - Consent/status/error constants: `packages/shared/constants/`
 - Auth/profile/user Zod schemas: `packages/shared/schemas/`
 - Shared config/types barrel exports: `packages/shared/index.ts`
-

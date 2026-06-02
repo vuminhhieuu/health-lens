@@ -37,8 +37,8 @@ export const OCR_CONFIG = {
   /** Supported image formats */
   SUPPORTED_FORMATS: ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] as const,
   
-  /** Maximum file size in bytes (10MB) */
-  MAX_FILE_SIZE: 10 * 1024 * 1024,
+  /** SINGLE SOURCE: keep in sync with UPLOAD_MAX_SIZE_BYTES and services/ocr-service/app.py. */
+  MAX_FILE_SIZE: 20 * 1024 * 1024,
 } as const;
 
 /**

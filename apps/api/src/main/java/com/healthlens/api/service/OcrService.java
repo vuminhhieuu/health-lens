@@ -34,16 +34,16 @@ import java.util.regex.Pattern;
 
 
 /**
- * OCR Service — Xử lý OCR với EasyOCR primary và AWS Textract fallback
+ * OCR Service — Xử lý OCR với EasyOCR primary và configured provider fallbacks.
  *
  * <p>Service này gọi EasyOCR microservice (FastAPI) qua REST API.
  * Khi EasyOCR fail (connection error, timeout, HTTP error), service
- * tự động fallback sang AWS Textract.
+ * tự động fallback theo provider đã cấu hình.
  *
  * <p>Architecture (Option B+):
  * <pre>
  *   Upload → Spring API → EasyOCR Service (primary)
- *                       ↘ AWS Textract     (fallback)
+ *                       ↘ configured providers (fallback)
  * </pre>
  *
  * <p>Timeout: Configurable via {@code app.ocr.service.timeout-ms} (default: 10s)
@@ -150,7 +150,6 @@ public class OcrService {
 
     OcrService(
             RestTemplate ocrRestTemplate,
-            AwsTextractClient textractClient,
             GoogleCloudVisionClient googleCloudVisionClient,
             MeterRegistry meterRegistry,
             ChatClient chatClient,
@@ -176,8 +175,7 @@ public class OcrService {
                                         30 * 1024 * 1024,
                                         120
                                 ),
-                                new GoogleCloudVisionOcrProvider(googleCloudVisionClient),
-                                new TextractOcrProvider(textractClient)
+                                new GoogleCloudVisionOcrProvider(googleCloudVisionClient)
                         ),
                         primaryProvider,
                         fallbackProviders
@@ -502,19 +500,6 @@ public class OcrService {
 
     OcrResult callEasyOcrBase64(String imageBase64) {
         return providerRegistry.provider("easyocr").extract(OcrJob.fromBase64(imageBase64, "image/png"));
-    }
-
-    OcrResult callTextractFallback(String imageUrl) {
-        try {
-            OcrResult result = providerRegistry.provider("textract").extract(OcrJob.fromUrl(imageUrl, "image/*"));
-            if ("textract-stub".equals(result.getSource())) {
-                log.warn("Textract fallback returned stub result — OCR will return empty text");
-            }
-            return result;
-        } catch (Exception e) {
-            log.error("Textract fallback failed: {}. All OCR providers exhausted.", e.getMessage());
-            return buildAllProvidersFailedResult();
-        }
     }
 
     OcrResult callGoogleCloudVision(String imageUrl) {

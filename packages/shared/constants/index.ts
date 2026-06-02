@@ -30,6 +30,7 @@ export const GENDER_OPTIONS = ["male", "female", "other"] as const;
 export type ProfileGender = (typeof GENDER_OPTIONS)[number];
 export type GenderOption = ProfileGender;
 
+// SINGLE SOURCE: keep upload limits aligned with OCR_CONFIG.MAX_FILE_SIZE and services/ocr-service/app.py.
 export const UPLOAD_MAX_SIZE_BYTES = 20 * 1024 * 1024;
 export const ALLOWED_FILE_TYPES = [
   "application/pdf",

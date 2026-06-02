@@ -26,7 +26,7 @@ HealthLens là nền tảng giúp người dùng Việt Nam chuyển đổi tài
 | **Development Guide** | Local setup, scripts, tests | [development-guide.md](./development-guide.md) |
 | **Testing Guide** | Verification commands and risk areas | [testing-guide.md](./testing-guide.md) |
 | **Project Overview** | Brownfield project summary | [project-overview.md](./project-overview.md) |
-| **Component Inventory** | Web/mobile/shared component map | [component-inventory.md](./component-inventory.md) |
+| **Component Inventory** | Web/shared component map | [component-inventory.md](./component-inventory.md) |
 
 ## Operational Docs
 
@@ -43,7 +43,6 @@ HealthLens là nền tảng giúp người dùng Việt Nam chuyển đổi tài
 | Part | Path | Stack |
 | --- | --- | --- |
 | Web | `apps/web` | Next.js 16, React 19, TypeScript, Tailwind CSS, Radix UI, TanStack Query, Zustand |
-| Mobile | `apps/mobile` | Expo SDK 55, React Native, Expo Router, TypeScript |
 | API | `apps/api` | Spring Boot 4, Java 21, Gradle, JPA, Redis, Flyway, Spring Security |
 | OCR | `services/ocr-service` | FastAPI, EasyOCR, Pillow, NumPy |
 | Shared | `packages/shared` | TypeScript, Zod, shared API constants |

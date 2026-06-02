@@ -33,6 +33,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -75,17 +76,15 @@ class FollowUpReminderServiceTest {
     }
 
     @Test
-    void list_shouldDispatchDueEmailsWhenPreferenceEnabled() {
+    void list_shouldRemainReadOnlyAndNotDispatchEmails() {
         when(profileRepository.findByIdAndUserId(profileId, userId)).thenReturn(Optional.of(profile));
-        when(notificationPreferenceService.isEmailEnabledForUser(
-                eq(userId), eq(NotificationEmailCategory.FOLLOW_UP_REMINDER))).thenReturn(true);
         when(reminderRepository.findAllByProfileIdOrderByReminderDateAscCreatedAtAsc(profileId))
                 .thenReturn(List.of());
 
         service.list(userId, profileId);
 
-        verify(notificationPreferenceService).isEmailEnabledForUser(
-                eq(userId), eq(NotificationEmailCategory.FOLLOW_UP_REMINDER));
+        verifyNoInteractions(notificationPreferenceService);
+        verifyNoInteractions(emailEventPublisher);
     }
 
     @Test

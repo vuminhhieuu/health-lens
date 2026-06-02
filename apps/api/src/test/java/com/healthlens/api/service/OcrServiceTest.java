@@ -36,17 +36,16 @@ import static org.mockito.Mockito.*;
 /**
  * Unit tests cho OcrService
  *
- * <p>Sử dụng Mockito để mock RestTemplate và AwsTextractClient,
- * tránh phụ thuộc vào EasyOCR microservice và AWS thật.
+ * <p>Sử dụng Mockito để mock RestTemplate và GoogleCloudVisionClient,
+ * tránh phụ thuộc vào EasyOCR microservice và GCV thật.
  *
  * <p>Test covers:
  * <ul>
  *   <li>Primary OCR (EasyOCR) thành công</li>
  *   <li>Fallback khi EasyOCR fail (connection error, timeout)</li>
  *   <li>Fallback khi EasyOCR trả về HTTP error</li>
- *   <li>Textract fallback behavior (stub mode)</li>
  *   <li>Null response handling</li>
- *   <li>Last-resort empty fallback khi cả Textract fail</li>
+ *   <li>Last-resort empty fallback khi configured providers fail</li>
  * </ul>
  */
 @ExtendWith(MockitoExtension.class)
@@ -54,9 +53,6 @@ class OcrServiceTest {
 
     @Mock
     private RestTemplate ocrRestTemplate;
-
-    @Mock
-    private AwsTextractClient textractClient;
 
     @Mock
     private GoogleCloudVisionClient googleCloudVisionClient;
@@ -82,14 +78,13 @@ class OcrServiceTest {
     void setUp() {
         ocrService = new OcrService(
                 ocrRestTemplate,
-                textractClient,
                 googleCloudVisionClient,
                 meterRegistry,
                 chatClient,
                 objectMapper,
                 OCR_SERVICE_URL,
                 "easyocr",
-                "textract",
+                "",
                 "",
                 "https://openrouter.ai/api/v1",
                 "meta-llama/llama-3.3-70b-instruct",
@@ -138,8 +133,7 @@ class OcrServiceTest {
                     any(),
                     eq(OcrService.EasyOcrResponse.class)
             );
-            // Should NOT call Textract when EasyOCR succeeds
-            verifyNoInteractions(textractClient);
+            // Should not call configured fallback providers when EasyOCR succeeds.
             verifyNoInteractions(googleCloudVisionClient);
         }
 
@@ -208,14 +202,13 @@ class OcrServiceTest {
         void processImage_gcvPrimarySuccess_skipsEasyOcr() {
             OcrService gcvPrimaryService = new OcrService(
                     ocrRestTemplate,
-                    textractClient,
                     googleCloudVisionClient,
                     meterRegistry,
                     chatClient,
                     objectMapper,
                     OCR_SERVICE_URL,
                     "gcv",
-                    "textract",
+                    "",
                     "",
                     "https://openrouter.ai/api/v1",
                     "meta-llama/llama-3.3-70b-instruct",
@@ -237,22 +230,20 @@ class OcrServiceTest {
             assertThat(result.getSource()).isEqualTo("gcv");
             verify(googleCloudVisionClient).extract(TEST_IMAGE_URL);
             verifyNoInteractions(ocrRestTemplate);
-            verifyNoInteractions(textractClient);
         }
 
         @Test
-        @DisplayName("Staging/prod: GCV fail thì fallback Textract")
-        void processImage_gcvFail_fallbacksToTextract() {
+        @DisplayName("Staging/prod: GCV fail không rơi sang OCR stub")
+        void processImage_gcvFail_returnsAllProvidersFailed() {
             OcrService gcvPrimaryService = new OcrService(
                     ocrRestTemplate,
-                    textractClient,
                     googleCloudVisionClient,
                     meterRegistry,
                     chatClient,
                     objectMapper,
                     OCR_SERVICE_URL,
                     "gcv",
-                    "textract",
+                    "",
                     "",
                     "https://openrouter.ai/api/v1",
                     "meta-llama/llama-3.3-70b-instruct",
@@ -261,21 +252,11 @@ class OcrServiceTest {
 
             when(googleCloudVisionClient.extract(TEST_IMAGE_URL))
                     .thenThrow(new OcrProcessingException("GCV unavailable"));
-            when(textractClient.extract(TEST_IMAGE_URL)).thenReturn(
-                    OcrResult.builder()
-                            .text("")
-                            .confidence(0.0f)
-                            .provider("textract-stub")
-                            .language("unknown")
-                            .latencyMs(0)
-                            .build()
-            );
 
             OcrResult result = gcvPrimaryService.processImage(TEST_IMAGE_URL);
 
-            assertThat(result.getSource()).isEqualTo("textract-stub");
+            assertThat(result.getSource()).isEqualTo("all-providers-failed");
             verify(googleCloudVisionClient).extract(TEST_IMAGE_URL);
-            verify(textractClient).extract(TEST_IMAGE_URL);
             verifyNoInteractions(ocrRestTemplate);
         }
     }
@@ -330,7 +311,6 @@ class OcrServiceTest {
                     new OcrService.OcrPageResult(1, "pdf-text-layer", 1.0f, "HbA1c 5.6"),
                     new OcrService.OcrPageResult(2, "pdf-text-layer", 1.0f, "Glucose 5.4")
             );
-            verifyNoInteractions(textractClient);
         }
 
         @Test
@@ -346,12 +326,11 @@ class OcrServiceTest {
             assertThat(result.provider()).isEqualTo("pdfbox");
             assertThat(result.result().getText()).contains("HbA1c 5.6");
             verify(ocrRestTemplate, never()).getForObject(any(String.class), eq(byte[].class));
-            verifyNoInteractions(textractClient);
         }
 
         @Test
         @DisplayName("application/pdf scan render từng trang qua EasyOCR khi không có text layer")
-        void processDocument_scannedPdf_usesRenderedPageEasyOcrBeforeTextract() throws Exception {
+        void processDocument_scannedPdf_usesRenderedPageEasyOcr() throws Exception {
             when(ocrRestTemplate.getForObject("https://example.com/scanned.pdf", byte[].class))
                     .thenReturn(buildBlankPdf(1));
             when(ocrRestTemplate.postForObject(
@@ -376,12 +355,11 @@ class OcrServiceTest {
             assertThat(result.result().getLines()).hasSize(1);
             assertThat(result.result().getText()).contains("HBsAg Negative");
             assertThat(result.pages()).containsExactly(new OcrService.OcrPageResult(1, "easyocr", 0.88f, "HBsAg Negative"));
-            verifyNoInteractions(textractClient);
         }
 
         @Test
-        @DisplayName("application/pdf scan fallback dùng document provider khi không có text layer")
-        void processDocument_scannedPdf_usesDocumentProviderFallback() throws Exception {
+        @DisplayName("application/pdf scan không có document provider thì trả all-providers-failed")
+        void processDocument_scannedPdf_withoutDocumentProvider_returnsAllProvidersFailed() throws Exception {
             when(ocrRestTemplate.getForObject("https://example.com/scanned.pdf", byte[].class))
                     .thenReturn(buildBlankPdf(2));
             when(ocrRestTemplate.postForObject(
@@ -395,31 +373,21 @@ class OcrServiceTest {
                     100,
                     0
             ));
-            when(textractClient.extract("https://example.com/scanned.pdf")).thenReturn(
-                    OcrResult.builder()
-                            .text("HbA1c 5.6")
-                            .confidence(0.89f)
-                            .provider("textract")
-                            .language("vi")
-                            .latencyMs(900)
-                            .build()
-            );
 
             OcrService.OcrProcessingResult result = ocrService.processDocument("https://example.com/scanned.pdf", "application/pdf");
 
             assertThat(result.route()).isEqualTo("pdf-document");
-            assertThat(result.provider()).isEqualTo("textract");
+            assertThat(result.provider()).isEqualTo("all-providers-failed");
             assertThat(result.mimeType()).isEqualTo("application/pdf");
             assertThat(result.pages()).containsExactly(
-                    new OcrService.OcrPageResult(1, "textract", 0.89f),
-                    new OcrService.OcrPageResult(2, "textract", 0.89f)
+                    new OcrService.OcrPageResult(1, "all-providers-failed", 0.0f, ""),
+                    new OcrService.OcrPageResult(2, "all-providers-failed", 0.0f, "")
             );
-            verify(textractClient).extract("https://example.com/scanned.pdf");
         }
 
         @Test
-        @DisplayName("application/pdf khi Textract disabled trả provider failure rõ ràng")
-        void processDocument_textractStub_returnsAllProvidersFailed() throws Exception {
+        @DisplayName("application/pdf không có document provider trả provider failure rõ ràng")
+        void processDocument_withoutDocumentProvider_returnsAllProvidersFailed() throws Exception {
             when(ocrRestTemplate.getForObject("https://example.com/scanned.pdf", byte[].class))
                     .thenReturn(buildBlankPdf(1));
             when(ocrRestTemplate.postForObject(
@@ -433,15 +401,6 @@ class OcrServiceTest {
                     100,
                     0
             ));
-            when(textractClient.extract("https://example.com/scanned.pdf")).thenReturn(
-                    OcrResult.builder()
-                            .text("")
-                            .confidence(0.0f)
-                            .provider("textract-stub")
-                            .language("unknown")
-                            .latencyMs(0)
-                            .build()
-            );
 
             OcrService.OcrProcessingResult result = ocrService.processDocument("https://example.com/scanned.pdf", "application/pdf");
 
@@ -453,18 +412,8 @@ class OcrServiceTest {
         }
 
         @Test
-        @DisplayName("application/pdf khi PDFBox lỗi vẫn fallback sang document provider")
-        void processPdfBytes_pdfBoxFailure_stillFallsBackToDocumentProvider() {
-            when(textractClient.extract("https://example.com/scanned.pdf")).thenReturn(
-                    OcrResult.builder()
-                            .text("fallback text")
-                            .confidence(0.82f)
-                            .provider("textract")
-                            .language("vi")
-                            .latencyMs(200)
-                            .build()
-            );
-
+        @DisplayName("application/pdf khi PDFBox lỗi và không có document provider thì trả all-providers-failed")
+        void processPdfBytes_pdfBoxFailure_withoutDocumentProvider_returnsAllProvidersFailed() {
             OcrService.OcrProcessingResult result = ocrService.processPdfBytes(
                     "not-a-valid-pdf".getBytes(StandardCharsets.UTF_8),
                     "https://example.com/scanned.pdf",
@@ -472,9 +421,8 @@ class OcrServiceTest {
             );
 
             assertThat(result.route()).isEqualTo("pdf-document");
-            assertThat(result.provider()).isEqualTo("textract");
-            assertThat(result.result().getText()).isEqualTo("fallback text");
-            verify(textractClient).extract("https://example.com/scanned.pdf");
+            assertThat(result.provider()).isEqualTo("all-providers-failed");
+            assertThat(result.result().getText()).isEmpty();
         }
 
         @Test
@@ -521,65 +469,45 @@ class OcrServiceTest {
     @DisplayName("Fallback — EasyOCR Failure Cases")
     class FallbackTests {
 
-        /**
-         * Cấu hình mock AwsTextractClient trả về stub result (default behavior).
-         */
-        private void mockTextractStub() {
-            when(textractClient.extract(any())).thenReturn(
-                    OcrResult.builder()
-                            .text("")
-                            .confidence(0.0f)
-                            .provider("textract-stub")
-                            .language("unknown")
-                            .latencyMs(0)
-                            .build()
-            );
-        }
-
         @Test
-        @DisplayName("EasyOCR connection refused → fallback sang Textract")
-        void processImage_easyOcrConnectionRefused_fallsBackToTextract() {
+        @DisplayName("EasyOCR connection refused → all-providers-failed")
+        void processImage_easyOcrConnectionRefused_returnsAllProvidersFailed() {
             // Arrange: EasyOCR unreachable
             when(ocrRestTemplate.postForObject(
                     eq(OCR_SERVICE_URL + "/ocr"),
                     any(),
                     eq(OcrService.EasyOcrResponse.class)
             )).thenThrow(new ResourceAccessException("Connection refused"));
-            mockTextractStub();
 
             // Act
             OcrResult result = ocrService.processImage(TEST_IMAGE_URL);
 
-            // Assert: Should get Textract stub result
             assertThat(result).isNotNull();
-            assertThat(result.getSource()).isEqualTo("textract-stub");
+            assertThat(result.getSource()).isEqualTo("all-providers-failed");
             assertThat(result.getText()).isEmpty();
-            verify(textractClient).extract(TEST_IMAGE_URL);
         }
 
         @Test
-        @DisplayName("EasyOCR timeout → fallback sang Textract")
-        void processImage_easyOcrTimeout_fallsBackToTextract() {
+        @DisplayName("EasyOCR timeout → all-providers-failed")
+        void processImage_easyOcrTimeout_returnsAllProvidersFailed() {
             // Arrange: EasyOCR timeout (10s)
             when(ocrRestTemplate.postForObject(
                     eq(OCR_SERVICE_URL + "/ocr"),
                     any(),
                     eq(OcrService.EasyOcrResponse.class)
             )).thenThrow(new ResourceAccessException("Read timed out"));
-            mockTextractStub();
 
             // Act
             OcrResult result = ocrService.processImage(TEST_IMAGE_URL);
 
             // Assert
             assertThat(result).isNotNull();
-            assertThat(result.getSource()).isEqualTo("textract-stub");
-            verify(textractClient).extract(TEST_IMAGE_URL);
+            assertThat(result.getSource()).isEqualTo("all-providers-failed");
         }
 
         @Test
-        @DisplayName("EasyOCR trả về HTTP 500 → fallback sang Textract")
-        void processImage_easyOcrServerError_fallsBackToTextract() {
+        @DisplayName("EasyOCR trả về HTTP 500 → all-providers-failed")
+        void processImage_easyOcrServerError_returnsAllProvidersFailed() {
             // Arrange: EasyOCR 500 error
             when(ocrRestTemplate.postForObject(
                     eq(OCR_SERVICE_URL + "/ocr"),
@@ -592,37 +520,35 @@ class OcrServiceTest {
                     new byte[0],
                     null
             ));
-            mockTextractStub();
 
             // Act
             OcrResult result = ocrService.processImage(TEST_IMAGE_URL);
 
             // Assert
             assertThat(result).isNotNull();
-            assertThat(result.getSource()).isEqualTo("textract-stub");
+            assertThat(result.getSource()).isEqualTo("all-providers-failed");
         }
 
         @Test
-        @DisplayName("EasyOCR trả về null → fallback sang Textract")
-        void processImage_easyOcrNullResponse_fallsBackToTextract() {
+        @DisplayName("EasyOCR trả về null → all-providers-failed")
+        void processImage_easyOcrNullResponse_returnsAllProvidersFailed() {
             // Arrange
             when(ocrRestTemplate.postForObject(
                     eq(OCR_SERVICE_URL + "/ocr"),
                     any(),
                     eq(OcrService.EasyOcrResponse.class)
             )).thenReturn(null);
-            mockTextractStub();
 
             // Act
             OcrResult result = ocrService.processImage(TEST_IMAGE_URL);
 
             // Assert
             assertThat(result).isNotNull();
-            assertThat(result.getSource()).isEqualTo("textract-stub");
+            assertThat(result.getSource()).isEqualTo("all-providers-failed");
         }
 
         @Test
-        @DisplayName("EasyOCR fail + Textract fail → trả về fallback-empty")
+        @DisplayName("EasyOCR fail + no fallback provider → trả về fallback-empty")
         void processImage_bothFail_returnsEmptyFallback() {
             // Arrange: EasyOCR fails
             when(ocrRestTemplate.postForObject(
@@ -630,11 +556,6 @@ class OcrServiceTest {
                     any(),
                     eq(OcrService.EasyOcrResponse.class)
             )).thenThrow(new ResourceAccessException("Connection refused"));
-            // Textract also fails
-            when(textractClient.extract(any())).thenThrow(
-                    new OcrProcessingException("Textract not configured")
-            );
-
             // Act
             OcrResult result = ocrService.processImage(TEST_IMAGE_URL);
 
@@ -675,52 +596,6 @@ class OcrServiceTest {
                     any(OcrService.EasyOcrRequest.class),
                     eq(OcrService.EasyOcrResponse.class)
             );
-        }
-    }
-
-    // =========================================================
-    // callTextractFallback() — Direct Tests
-    // =========================================================
-    @Nested
-    @DisplayName("callTextractFallback() — Delegation Tests")
-    class TextractFallbackTests {
-
-        @Test
-        @DisplayName("Textract stub trả về result từ AwsTextractClient")
-        void callTextractFallback_delegatesToTextractClient() {
-            // Arrange
-            OcrResult textractResult = OcrResult.builder()
-                    .text("")
-                    .confidence(0.0f)
-                    .provider("textract-stub")
-                    .language("unknown")
-                    .latencyMs(0)
-                    .build();
-            when(textractClient.extract(TEST_IMAGE_URL)).thenReturn(textractResult);
-
-            // Act
-            OcrResult result = ocrService.callTextractFallback(TEST_IMAGE_URL);
-
-            // Assert
-            assertThat(result).isNotNull();
-            assertThat(result.getText()).isEmpty();
-            assertThat(result.getConfidence()).isEqualTo(0.0f);
-            assertThat(result.getSource()).isEqualTo("textract-stub");
-            verify(textractClient).extract(TEST_IMAGE_URL);
-        }
-
-        @Test
-        @DisplayName("Textract exception → trả về all-providers-failed")
-        void callTextractFallback_onException_returnsAllProvidersFailed() {
-            when(textractClient.extract(any())).thenThrow(
-                    new OcrProcessingException("AWS not configured")
-            );
-
-            OcrResult result = ocrService.callTextractFallback(TEST_IMAGE_URL);
-
-            assertThat(result).isNotNull();
-            assertThat(result.getSource()).isEqualTo("all-providers-failed");
-            assertThat(result.getText()).isEmpty();
         }
     }
 
@@ -907,9 +782,6 @@ class OcrServiceTest {
             when(ocrRestTemplate.postForObject(
                     eq(OCR_SERVICE_URL + "/ocr"), any(), eq(OcrService.EasyOcrResponse.class)
             )).thenThrow(new ResourceAccessException("Authorization=Bearer abc123 https://secret.example.com/file"));
-            when(textractClient.extract(TEST_IMAGE_URL)).thenReturn(
-                    OcrResult.builder().provider("textract-stub").text("").confidence(0f).language("unknown").latencyMs(0).build()
-            );
 
             OcrResult result = ocrService.processImage(TEST_IMAGE_URL);
 

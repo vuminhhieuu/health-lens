@@ -10,7 +10,6 @@
 | Web app | `cd apps/web && pnpm test` |
 | API | `cd apps/api && ./gradlew test` |
 | Shared package | `cd packages/shared && pnpm build` |
-| Mobile app lint | `cd apps/mobile && pnpm lint` |
 
 ## Web Test Surface
 
@@ -47,4 +46,3 @@
 - Metric explanation routes with encoded metric names
 - Consent enforcement and audit logging
 - Shared API path constants drifting from backend route definitions
-

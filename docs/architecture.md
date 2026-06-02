@@ -4,14 +4,12 @@
 
 ## Executive Summary
 
-HealthLens is a monorepo composed of a Next.js web app, an Expo mobile app, a Spring Boot API, a FastAPI OCR microservice, and a shared TypeScript contracts package. The architecture is service-oriented at the repository level and layered inside the API.
+HealthLens is a monorepo composed of a Next.js web app, a Spring Boot API, a FastAPI OCR microservice, and a shared TypeScript contracts package. The architecture is service-oriented at the repository level and layered inside the API.
 
 ```mermaid
 flowchart LR
     User[User] --> Web[Next.js Web]
-    User --> Mobile[Expo Mobile]
     Web --> API[Spring Boot API]
-    Mobile --> API
     API --> DB[(PostgreSQL)]
     API --> Redis[(Redis)]
     API --> Storage[(MinIO / S3-compatible storage)]
@@ -80,7 +78,6 @@ The canonical decision record is [event-driven-architecture.md](./event-driven-a
 | From | To | Integration |
 | --- | --- | --- |
 | Web | API | REST over Axios using `NEXT_PUBLIC_API_BASE_URL` |
-| Mobile | API | Intended REST client usage through shared/mobile API layer |
 | API | PostgreSQL | JPA/Flyway |
 | API | Redis | Cache and event stream configuration |
 | API | MinIO/S3 | Presigned upload and file access |

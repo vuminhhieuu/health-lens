@@ -29,6 +29,7 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -101,7 +102,26 @@ public class SecurityConfig {
             ))
             .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterAfter(userActivityRecordingFilter, JwtAuthenticationFilter.class);
+            .addFilterAfter(userActivityRecordingFilter, JwtAuthenticationFilter.class)
+            .headers(headers -> headers
+                    .contentSecurityPolicy(csp -> csp.policyDirectives(
+                            "default-src 'self'; "
+                                    + "img-src 'self' data: https:; "
+                                    + "script-src 'self'; "
+                                    + "style-src 'self' 'unsafe-inline'; "
+                                    + "connect-src 'self'; "
+                                    + "frame-ancestors 'none'; "
+                                    + "form-action 'self'"))
+                    .httpStrictTransportSecurity(hsts -> hsts
+                            .includeSubDomains(true)
+                            .maxAgeInSeconds(31536000))
+                    .frameOptions(frame -> frame.deny())
+                    .contentTypeOptions(Customizer.withDefaults())
+                    .referrerPolicy(rp -> rp.policy(
+                            ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+                    .permissionsPolicyHeader(pp -> pp.policy(
+                            "camera=(), microphone=(), geolocation=(), payment=()"))
+            );
 
         return http.build();
     }

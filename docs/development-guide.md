@@ -79,7 +79,6 @@ Targeted commands:
 cd apps/web && pnpm dev
 cd apps/web && pnpm test
 cd apps/api && ./gradlew test
-cd apps/mobile && pnpm start
 cd packages/shared && pnpm build
 ```
 

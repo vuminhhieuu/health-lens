@@ -22,7 +22,7 @@ public class OcrProviderRegistry {
     public OcrProviderRegistry(
             List<OcrProvider> providers,
             @Value("${app.ocr.providers.primary:easyocr}") String primaryProvider,
-            @Value("${app.ocr.providers.fallback-order:textract}") String fallbackProviders
+            @Value("${app.ocr.providers.fallback-order:}") String fallbackProviders
     ) {
         this.providers = new LinkedHashMap<>();
         for (OcrProvider provider : providers) {

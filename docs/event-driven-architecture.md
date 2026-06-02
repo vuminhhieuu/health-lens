@@ -46,7 +46,7 @@ Reviewed sources:
 ## Rules For New Work
 
 1. Use synchronous service calls for validation, authorization, aggregate state transitions, and data required to return the current API response.
-2. Use Redis Stream events for durable side effects that can complete after commit, especially OCR, user-facing emails, owner notifications, analytics, and future mobile sync triggers.
+2. Use Redis Stream events for durable side effects that can complete after commit, especially OCR, user-facing emails, owner notifications, and analytics.
 3. Publish durable stream events only after the transaction commits, so consumers never observe rolled-back state.
 4. Use DB-claimed jobs when the database row is already the durable schedule and claim state, such as follow-up reminders.
 5. Do not introduce new ad hoc `redisTemplate.opsForStream().add(...)` calls inside arbitrary domain services. Story 7.11 should centralize this behind a small application event boundary.

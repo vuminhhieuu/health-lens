@@ -9,6 +9,7 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.SQLDelete;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
@@ -19,6 +20,7 @@ import java.util.UUID;
 @Setter
 @Entity
 @Table(name = "health_records")
+@SQLDelete(sql = "UPDATE health_records SET deleted_at = NOW() WHERE id = ?")
 public class HealthRecord {
 
     @Id

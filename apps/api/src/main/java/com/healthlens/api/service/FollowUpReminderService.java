@@ -68,7 +68,6 @@ public class FollowUpReminderService {
 
     @Transactional(readOnly = true)
     public List<FollowUpReminderResponse> list(UUID userId, UUID profileId) {
-        dispatchDueReminderEmailsIfEnabled(userId);
         requireOwnedProfile(userId, profileId);
         return reminderRepository.findAllByProfileIdOrderByReminderDateAscCreatedAtAsc(profileId)
                 .stream()

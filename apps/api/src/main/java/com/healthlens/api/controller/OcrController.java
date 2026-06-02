@@ -2,15 +2,16 @@ package com.healthlens.api.controller;
 
 import com.healthlens.api.annotation.RequiresConsent;
 import com.healthlens.api.dto.OcrResult;
+import com.healthlens.api.dto.request.OcrExtractRequest;
 import com.healthlens.api.exception.OcrProcessingException;
 import com.healthlens.api.service.OcrService;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.util.Locale;
-import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -38,7 +39,7 @@ public class OcrController {
     /**
      * Extract text từ image URL qua OCR pipeline.
      *
-     * <p>Gọi EasyOCR service (primary), fallback sang Textract khi fail.
+     * <p>Gọi EasyOCR service (primary), fallback theo provider đã cấu hình khi fail.
      * 
      * <p>Requires user consent before processing health data.
      *
@@ -47,13 +48,8 @@ public class OcrController {
      */
     @RequiresConsent
     @PostMapping("/extract")
-    public ResponseEntity<OcrResult> extractText(@RequestBody Map<String, String> request) {
-        String imageUrl = request.get("imageUrl");
-
-        if (imageUrl == null || imageUrl.isBlank()) {
-            log.warn("OCR request missing imageUrl");
-            return ResponseEntity.badRequest().build();
-        }
+    public ResponseEntity<OcrResult> extractText(@Valid @RequestBody OcrExtractRequest request) {
+        String imageUrl = request.imageUrl();
 
         if (!isAllowedScheme(imageUrl)) {
             log.warn("OCR request rejected: invalid URL scheme — {}", imageUrl);

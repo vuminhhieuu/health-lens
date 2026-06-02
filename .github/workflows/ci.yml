@@ -53,9 +53,6 @@ jobs:
       - name: Lint web
         run: pnpm --filter web lint
 
-      - name: Lint mobile
-        run: pnpm --filter mobile lint
-
       - name: Type check shared
         run: pnpm --filter @healthlens/shared build
 

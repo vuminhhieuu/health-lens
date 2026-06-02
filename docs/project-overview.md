@@ -13,7 +13,6 @@ Monorepo with separate deployable parts:
 | Part | Path | Type | Main stack |
 | --- | --- | --- | --- |
 | Web app | `apps/web` | Next.js frontend | Next.js 16, React 19, TypeScript, Tailwind CSS, Radix UI, TanStack Query, Zustand |
-| Mobile app | `apps/mobile` | Expo app | Expo SDK 55, React Native 0.83, Expo Router, TypeScript |
 | API | `apps/api` | Backend API | Spring Boot 4, Java 21, Gradle, JPA, Redis, Flyway, Spring Security |
 | OCR service | `services/ocr-service` | Python microservice | FastAPI, EasyOCR, Pillow, NumPy |
 | Shared package | `packages/shared` | Shared TS contracts | TypeScript, Zod |

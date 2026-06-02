@@ -86,7 +86,7 @@ app:
   ocr:
     providers:
       primary: ${OCR_PROVIDER_PRIMARY:easyocr}
-      fallback-order: ${OCR_PROVIDER_FALLBACK_ORDER:textract}
+      fallback-order: ${OCR_PROVIDER_FALLBACK_ORDER:}
     confidence:
       # Ngưỡng phân loại confidence OCR (0.0-1.0), có thể override bằng env vars.
       high-threshold: ${OCR_CONFIDENCE_HIGH_THRESHOLD:0.85}
@@ -95,9 +95,6 @@ app:
       url: ${OCR_SERVICE_URL:http://localhost:8001}
       timeout-ms: ${OCR_TIMEOUT_MS:60000}
       connect-timeout-ms: 10000
-    textract:
-      enabled: ${OCR_TEXTRACT_ENABLED:false}
-      region: ${OCR_TEXTRACT_REGION:${AWS_REGION:ap-southeast-1}}
     gcv:
       enabled: ${OCR_GCV_ENABLED:false}
       project-id: ${OCR_GCV_PROJECT_ID:}
@@ -199,7 +196,7 @@ app:
   ocr:
     providers:
       primary: ${OCR_PROVIDER_PRIMARY:easyocr}
-      fallback-order: ${OCR_PROVIDER_FALLBACK_ORDER:textract}
+      fallback-order: ${OCR_PROVIDER_FALLBACK_ORDER:}
   mail:
     from: ${MAIL_FROM:no-reply@healthlens.vn}
     driver: ${MAIL_DRIVER:smtp}
@@ -275,7 +272,7 @@ app:
   ocr:
     providers:
       primary: ${OCR_PROVIDER_PRIMARY:gcv}
-      fallback-order: ${OCR_PROVIDER_FALLBACK_ORDER:textract}
+      fallback-order: ${OCR_PROVIDER_FALLBACK_ORDER:}
   mail:
     from: ${MAIL_FROM:noreply@healthlens.vn}
     driver: ${MAIL_DRIVER:smtp}
@@ -343,7 +340,7 @@ app:
   ocr:
     providers:
       primary: ${OCR_PROVIDER_PRIMARY:gcv}
-      fallback-order: ${OCR_PROVIDER_FALLBACK_ORDER:textract}
+      fallback-order: ${OCR_PROVIDER_FALLBACK_ORDER:}
   mail:
     from: ${MAIL_FROM:noreply@healthlens.vn}
     driver: smtp

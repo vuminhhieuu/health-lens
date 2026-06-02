@@ -31,12 +31,17 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,6 +80,7 @@ class DataDeletionServiceTest {
     @Mock private AccountStatusCache accountStatusCache;
     @Mock private DataDeletionService selfProxy;
     @Mock private com.healthlens.api.audit.AuditEventRecorder auditEventRecorder;
+    @Mock private StringRedisTemplate redisTemplate;
 
     private DataDeletionService dataDeletionService;
     private UUID userId;
@@ -103,6 +109,7 @@ class DataDeletionServiceTest {
                 storageService,
                 accountStatusCache,
                 auditEventRecorder,
+                redisTemplate,
                 selfProxy,
                 "http://localhost:3000/cancel-deletion"
         );
@@ -393,7 +400,7 @@ class DataDeletionServiceTest {
     }
 
     @Test
-    @DisplayName("AC #2: executeDataDeletion wipes files, health data, tokens and consent logs")
+    @DisplayName("AC #2: executeDataDeletion wipes active and soft-deleted record files, health data, tokens and consent logs")
     void executeDataDeletion_wipesAllUserData() {
         DataDeletionRequest deletionRequest = new DataDeletionRequest();
         UUID requestId = UUID.randomUUID();
@@ -405,17 +412,26 @@ class DataDeletionServiceTest {
 
         when(deletionRequestRepository.findByIdForUpdate(requestId)).thenReturn(Optional.of(deletionRequest));
         when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
-        when(healthRecordRepository.findFileKeysByUserId(userId))
+        when(healthRecordRepository.findAllFileKeysByUserIdIncludingDeleted(userId))
                 .thenReturn(List.of(
                         "health-records/" + userId + "/profile/record/original.pdf",
                         "custom-imports/" + userId + "/legacy-image.png"
                 ));
+        when(redisTemplate.scan(any(ScanOptions.class))).thenReturn(
+                cursor("llm:explanation:" + userId + ":a"),
+                cursor("user:session:" + userId + ":b"),
+                cursor("rate-limit:login:" + userId),
+                cursor(),
+                cursor(),
+                cursor("health-record-status:" + userId + ":record")
+        );
         String originalEmail = testUser.getEmail();
 
         dataDeletionService.executeDataDeletion(requestId);
 
-        // S3 objects are collected from reachable DB rows before those rows are deleted.
-        verify(healthRecordRepository).findFileKeysByUserId(userId);
+        // S3 objects are collected from active and soft-deleted DB rows before those rows are deleted.
+        verify(healthRecordRepository).findAllFileKeysByUserIdIncludingDeleted(userId);
+        verify(healthRecordRepository, never()).findFileKeysByUserId(userId);
         verify(storageService).deleteObjects(List.of(
                 "health-records/" + userId + "/profile/record/original.pdf",
                 "custom-imports/" + userId + "/legacy-image.png"
@@ -457,6 +473,16 @@ class DataDeletionServiceTest {
         assertThat(saved.isEmailVerified()).isFalse();
 
         verify(accountStatusCache).put(userId, AccountStatus.DELETED);
+        ArgumentCaptor<Set<String>> redisDeleteCaptor = ArgumentCaptor.forClass(Set.class);
+        verify(redisTemplate, times(4)).delete(redisDeleteCaptor.capture());
+        assertThat(redisDeleteCaptor.getAllValues().stream().flatMap(Set::stream).collect(Collectors.toSet()))
+                .isEqualTo(Set.of(
+                        "llm:explanation:" + userId + ":a",
+                        "user:session:" + userId + ":b",
+                        "rate-limit:login:" + userId,
+                        "health-record-status:" + userId + ":record"
+                ));
+        verify(redisTemplate, never()).keys(anyString());
         verify(emailEventPublisher, times(1)).publishDeletionCompletion(any(User.class));
         ArgumentCaptor<Map<String, ?>> auditCaptor = ArgumentCaptor.forClass(Map.class);
         verify(auditEventRecorder).recordEvent(
@@ -484,7 +510,7 @@ class DataDeletionServiceTest {
 
         when(deletionRequestRepository.findByIdForUpdate(requestId)).thenReturn(Optional.of(deletionRequest));
         when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
-        when(healthRecordRepository.findFileKeysByUserId(userId))
+        when(healthRecordRepository.findAllFileKeysByUserIdIncludingDeleted(userId))
                 .thenReturn(List.of("custom/%s/report.pdf".formatted(userId)));
         org.mockito.Mockito.doThrow(new IllegalStateException("storage unavailable"))
                 .when(storageService).deleteObjects(any());
@@ -515,7 +541,7 @@ class DataDeletionServiceTest {
                 eq(DeletionRequestStatus.PENDING.name()), any(Instant.class)))
                 .thenReturn(Optional.of(deletionRequest));
         when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
-        when(healthRecordRepository.findFileKeysByUserId(userId)).thenReturn(List.of());
+        when(healthRecordRepository.findAllFileKeysByUserIdIncludingDeleted(userId)).thenReturn(List.of());
 
         boolean processed = dataDeletionService.executeNextDueDataDeletion(Instant.now());
 
@@ -570,5 +596,49 @@ class DataDeletionServiceTest {
         user.setCreatedAt(Instant.now());
         user.setUpdatedAt(Instant.now());
         return user;
+    }
+
+    private Cursor<String> cursor(String... values) {
+        java.util.Iterator<String> iterator = java.util.Arrays.asList(values).iterator();
+        return new Cursor<>() {
+            private long position;
+            private boolean closed;
+
+            @Override
+            public CursorId getId() {
+                return CursorId.of(0);
+            }
+
+            @Override
+            public long getCursorId() {
+                return 0;
+            }
+
+            @Override
+            public boolean isClosed() {
+                return closed;
+            }
+
+            @Override
+            public long getPosition() {
+                return position;
+            }
+
+            @Override
+            public boolean hasNext() {
+                return iterator.hasNext();
+            }
+
+            @Override
+            public String next() {
+                position++;
+                return iterator.next();
+            }
+
+            @Override
+            public void close() {
+                closed = true;
+            }
+        };
     }
 }

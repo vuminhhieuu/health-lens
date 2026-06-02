@@ -11,7 +11,6 @@ Use this file as compact implementation context before editing HealthLens. It ca
 HealthLens is a healthcare document processing monorepo for Vietnamese users. It contains:
 
 - `apps/web`: Next.js 16 web app.
-- `apps/mobile`: Expo mobile app.
 - `apps/api`: Spring Boot 4 API on Java 21.
 - `services/ocr-service`: FastAPI EasyOCR service.
 - `packages/shared`: shared TypeScript constants, schemas, and types.
@@ -45,7 +44,7 @@ HealthLens is a healthcare document processing monorepo for Vietnamese users. It
 
 - For web changes, run `cd apps/web && pnpm test` when touching UI/auth/API-client behavior.
 - For API changes, run `cd apps/api && ./gradlew test`.
-- For shared package contract changes, run `cd packages/shared && pnpm build`, then relevant web/mobile checks.
+- For shared package contract changes, run `cd packages/shared && pnpm build`, then relevant web checks.
 - For route changes, check both backend route registry and shared frontend route constants.
 
 ## Generated Folders To Ignore
@@ -57,4 +56,3 @@ Do not use these as source-of-truth during analysis:
 - `.gradle/`
 - `apps/api/build/`
 - `services/ocr-service/__pycache__/`
-

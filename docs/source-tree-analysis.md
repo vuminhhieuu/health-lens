@@ -30,9 +30,6 @@ health-lens/
 │   │       ├── hooks/        # Client hooks
 │   │       ├── lib/          # API client and consent helpers
 │   │       └── stores/       # Zustand auth state
-│   └── mobile/               # Expo mobile app, currently lighter than web
-│       ├── app/              # Expo Router entry
-│       └── src/              # Mobile routes, components, hooks, theme
 ├── packages/
 │   └── shared/               # Shared TypeScript constants, schemas, types
 ├── services/
@@ -69,4 +66,3 @@ Avoid treating these as source of truth during code analysis:
 - `.gradle/`
 - `apps/api/build/`
 - `services/ocr-service/__pycache__/`
-

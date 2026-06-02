@@ -28,7 +28,8 @@ from typing import Optional
 from io import BytesIO
 from urllib.parse import urlparse, urljoin
 
-MAX_IMAGE_SIZE_BYTES = 30 * 1024 * 1024
+# SINGLE SOURCE: keep in sync with packages/shared upload limits.
+MAX_IMAGE_SIZE_BYTES = 20 * 1024 * 1024
 MAX_IMAGE_BASE64_LENGTH = math.ceil(MAX_IMAGE_SIZE_BYTES / 3) * 4
 MAX_IMAGE_DIMENSION = 10000
 REMOTE_FETCH_TIMEOUT_SECONDS = int(os.getenv("OCR_REMOTE_FETCH_TIMEOUT_SECONDS", "15"))

@@ -14,12 +14,12 @@ import java.util.Map;
 
 /**
  * Development-only endpoints for testing.
- * Only active when running with 'docker' or 'dev' profile.
+ * Only active when running with the 'dev' profile.
  * NOT available in production.
  */
 @RestController
 @RequestMapping(ApiRoutes.DEV_BASE)
-@Profile({"docker", "dev"})
+@Profile("dev")
 public class DevController {
 
     private final UserRepository userRepository;

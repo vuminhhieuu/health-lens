@@ -34,6 +34,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -47,9 +50,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -97,6 +102,7 @@ public class DataDeletionService {
     private final DataDeletionService selfProxy;
     private final AccountStatusCache accountStatusCache;
     private final AuditEventRecorder auditEventRecorder;
+    private final StringRedisTemplate redisTemplate;
     private final String webCancellationUrl;
 
     public DataDeletionService(
@@ -120,6 +126,7 @@ public class DataDeletionService {
             StorageService storageService,
             AccountStatusCache accountStatusCache,
             AuditEventRecorder auditEventRecorder,
+            StringRedisTemplate redisTemplate,
             @Lazy DataDeletionService selfProxy,
             @Value("${app.frontend.cancellation-url:http://localhost:3000/cancel-deletion}") String webCancellationUrl) {
         this.deletionRequestRepository = deletionRequestRepository;
@@ -142,6 +149,7 @@ public class DataDeletionService {
         this.storageService = storageService;
         this.accountStatusCache = accountStatusCache;
         this.auditEventRecorder = auditEventRecorder;
+        this.redisTemplate = redisTemplate;
         this.selfProxy = selfProxy;
         this.webCancellationUrl = webCancellationUrl;
     }
@@ -343,7 +351,8 @@ public class DataDeletionService {
 
         // 1. Object storage (PDFs / images / avatar): exact-key deletion is fail-fast before DB rows
         // become unreachable; prefix deletion is a best-effort backstop.
-        List<String> healthRecordFileKeys = healthRecordRepository.findFileKeysByUserId(userId);
+        List<String> healthRecordFileKeys =
+                healthRecordRepository.findAllFileKeysByUserIdIncludingDeleted(userId);
         int exactFilesDeleted = storageService.deleteObjects(healthRecordFileKeys);
         int filesDeleted = storageService.deleteObjectsByPrefix("health-records/" + userId + "/");
         int avatarFilesDeleted = storageService.deleteObjectsByPrefix("avatars/" + userId + "/");
@@ -381,7 +390,11 @@ public class DataDeletionService {
             log.error("Failed to send deletion completion email to userId={}", userId, e);
         }
 
-        // 10. Anonymise the user row. We keep the record so foreign keys from external systems
+        // 10. Purge user-scoped Redis caches before anonymising the row so any TTL'd entries
+        // tied to the original userId disappear in the same transaction window.
+        int redisKeysPurged = purgeUserCache(userId);
+
+        // 11. Anonymise the user row. We keep the record so foreign keys from external systems
         // (e.g. audit logs, deletion request itself) remain valid; PII is fully removed.
         user.setAccountStatus(AccountStatus.DELETED);
         user.setEmail("deleted+" + userId + "@deleted.local");
@@ -397,12 +410,13 @@ public class DataDeletionService {
         accountStatusCache.put(userId, AccountStatus.DELETED);
 
         // AC #2 audit-trail line per architecture.md "Chiến Lược Audit Logging"
-        log.info("User data deleted per right-to-delete request: userId={} requestId={} exactFiles={} prefixFiles={} avatarFiles={} recordShares={} recordInvites={} profileShares={} profileInvites={} profileInviteeEmails={} recordInviteeEmails={} reminders={} ocrDeadLetters={} ocrJobs={} records={} profiles={} emailTokens={} resetTokens={} refreshTokens={} consentLogs={}",
+        log.info("User data deleted per right-to-delete request: userId={} requestId={} exactFiles={} prefixFiles={} avatarFiles={} recordShares={} recordInvites={} profileShares={} profileInvites={} profileInviteeEmails={} recordInviteeEmails={} reminders={} ocrDeadLetters={} ocrJobs={} records={} profiles={} emailTokens={} resetTokens={} refreshTokens={} consentLogs={} redisKeys={}",
                 userId, deletionRequestId, exactFilesDeleted, filesDeleted, avatarFilesDeleted,
                 healthRecordSharesDeleted, healthRecordInvitesDeleted, profileSharesDeleted, profileInvitesDeleted,
                 profileInviteeEmailDeleted, healthRecordInviteeEmailDeleted, followUpRemindersDeleted,
                 ocrDeadLettersDeleted, ocrJobsDeleted, healthRecordsDeleted, profilesDeleted,
-                emailVerificationDeleted, passwordResetDeleted, refreshTokensDeleted, consentLogsDeleted);
+                emailVerificationDeleted, passwordResetDeleted, refreshTokensDeleted, consentLogsDeleted,
+                redisKeysPurged);
         auditEventRecorder.recordEvent(
                 userId,
                 AuditActions.COMPLETE_ACCOUNT_DELETION,
@@ -432,6 +446,56 @@ public class DataDeletionService {
                         Map.entry("consentLogs", consentLogsDeleted)
                 )
         );
+    }
+
+    /**
+     * Best-effort purge of Redis entries that key off the user id.
+     */
+    int purgeUserCache(UUID userId) {
+        if (userId == null) {
+            return 0;
+        }
+        try {
+            int count = 0;
+            count += scanAndDelete("llm:explanation:" + userId + ":*");
+            count += scanAndDelete("user:session:" + userId + ":*");
+            count += scanAndDelete("rate-limit:*:" + userId);
+            count += scanAndDelete("totp_used:" + userId + ":*");
+            count += scanAndDelete("user_totp_used:" + userId + ":*");
+            count += scanAndDelete("health-record-status:" + userId + ":*");
+            log.info("Purged {} Redis cache key(s) for userId={}", count, userId);
+            return count;
+        } catch (RuntimeException ex) {
+            log.warn("Redis cache purge failed for userId={}; continuing deletion", userId, ex);
+            return 0;
+        }
+    }
+
+    private int scanAndDelete(String pattern) {
+        int deletedCount = 0;
+        Set<String> batch = new HashSet<>();
+        ScanOptions scanOptions = ScanOptions.scanOptions()
+                .match(pattern)
+                .count(500)
+                .build();
+        try (Cursor<String> cursor = redisTemplate.scan(scanOptions)) {
+            while (cursor.hasNext()) {
+                batch.add(cursor.next());
+                if (batch.size() >= 500) {
+                    deletedCount += deleteBatch(batch);
+                    batch.clear();
+                }
+            }
+        }
+        if (!batch.isEmpty()) {
+            deletedCount += deleteBatch(batch);
+        }
+        return deletedCount;
+    }
+
+    private int deleteBatch(Set<String> keys) {
+        Long deleted = redisTemplate.delete(keys);
+        return deleted == null ? 0 : deleted.intValue();
     }
 
     private String generateCancellationToken() {
