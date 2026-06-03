@@ -180,3 +180,5 @@ _bmad/*
 !.agents/.keep
 .codex/*
 !.codex/.keep
+.claude/*
+!.claude/.keep

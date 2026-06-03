@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { registerSchema } from "@healthlens/shared/schemas/auth";
 import axios from "axios";
-import { Info, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Info, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -53,6 +53,8 @@ export default function RegisterPage() {
       : returnUrl;
   const [successMessage, setSuccessMessage] = useState("");
   const [submitError, setSubmitError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const {
     register,
@@ -176,17 +178,27 @@ export default function RegisterPage() {
               <label htmlFor="password" className="ml-1 block text-sm font-semibold text-[#3d4947]">
                 Mật khẩu
               </label>
-              <input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                {...register("password")}
-                aria-invalid={Boolean(errors.password)}
-                aria-describedby={
-                  errors.password ? "register-password-error" : "register-password-hint"
-                }
-                className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  {...register("password")}
+                  aria-invalid={Boolean(errors.password)}
+                  aria-describedby={
+                    errors.password ? "register-password-error" : "register-password-hint"
+                  }
+                  className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 pr-12 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-[#3d4947] transition hover:bg-[#c8d7d4]"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
               <p id="register-password-hint" className="ml-1 flex items-center gap-1 text-xs text-[#3d4947]">
                 <Info className="h-3.5 w-3.5" aria-hidden="true" />
                 Mật khẩu phải có ít nhất 8 ký tự
@@ -198,15 +210,25 @@ export default function RegisterPage() {
               <label htmlFor="confirmPassword" className="ml-1 block text-sm font-semibold text-[#3d4947]">
                 Xác nhận mật khẩu
               </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                placeholder="••••••••"
-                {...register("confirmPassword")}
-                aria-invalid={Boolean(errors.confirmPassword)}
-                aria-describedby={errors.confirmPassword ? "register-confirm-password-error" : undefined}
-                className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
-              />
+              <div className="relative">
+                <input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  {...register("confirmPassword")}
+                  aria-invalid={Boolean(errors.confirmPassword)}
+                  aria-describedby={errors.confirmPassword ? "register-confirm-password-error" : undefined}
+                  className="h-14 w-full rounded-t-lg border-b-2 border-transparent bg-[#d8e5e2] px-4 pr-12 text-base text-[#121e1c] outline-none transition focus:border-[#00685f]"
+                />
+                <button
+                  type="button"
+                  aria-label={showConfirmPassword ? "Ẩn xác nhận mật khẩu" : "Hiện xác nhận mật khẩu"}
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-[#3d4947] transition hover:bg-[#c8d7d4]"
+                >
+                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
               <InlineFieldError
                 id="register-confirm-password-error"
                 message={errors.confirmPassword?.message}
@@ -226,7 +248,12 @@ export default function RegisterPage() {
                 <label htmlFor="acceptedTerms" className="cursor-pointer">
                   Tôi đã đọc và chấp nhận
                 </label>{" "}
-                <Link href={termsLink?.href ?? "/terms"} className="font-semibold text-[#00685f] hover:underline">
+                <Link
+                  href={termsLink?.href ?? "/terms"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-[#00685f] hover:underline"
+                >
                   Điều khoản sử dụng
                 </Link>
               </p>
