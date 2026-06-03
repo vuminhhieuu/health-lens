@@ -49,6 +49,17 @@ describe("public auth pages link consistency (story 2-6)", () => {
     expect(footer).toContain("{link.label}");
   });
 
+  it("register page lets users reveal passwords and opens terms in a new tab", () => {
+    const register = source(authDir, "register/page.tsx");
+
+    expect(register).toMatch(/<Eye\b/);
+    expect(register).toMatch(/<EyeOff\b/);
+    expect(register).toContain('type={showPassword ? "text" : "password"}');
+    expect(register).toContain('type={showConfirmPassword ? "text" : "password"}');
+    expect(register).toContain('target="_blank"');
+    expect(register).toContain('rel="noopener noreferrer"');
+  });
+
   it("auth header help navigates to public /help", () => {
     const header = source(componentsDir, "AuthPageHeader.tsx");
 
