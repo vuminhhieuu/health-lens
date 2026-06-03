@@ -52,8 +52,8 @@ describe("public auth pages link consistency (story 2-6)", () => {
   it("register page lets users reveal passwords and opens terms in a new tab", () => {
     const register = source(authDir, "register/page.tsx");
 
-    expect(register).toContain("Eye");
-    expect(register).toContain("EyeOff");
+    expect(register).toMatch(/<Eye\b/);
+    expect(register).toMatch(/<EyeOff\b/);
     expect(register).toContain('type={showPassword ? "text" : "password"}');
     expect(register).toContain('type={showConfirmPassword ? "text" : "password"}');
     expect(register).toContain('target="_blank"');
