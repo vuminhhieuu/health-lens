@@ -62,6 +62,7 @@ public final class AuditActions {
 
     public static final String CREATE_PROFILE = "CREATE_PROFILE";
     public static final String UPDATE_PROFILE = "UPDATE_PROFILE";
+    public static final String DELETE_PROFILE = "DELETE_PROFILE";
 
     public static final String OCR_JOB_SUCCEEDED = "OCR_JOB_SUCCEEDED";
     public static final String OCR_JOB_FAILED_RETRYABLE = "OCR_JOB_FAILED_RETRYABLE";

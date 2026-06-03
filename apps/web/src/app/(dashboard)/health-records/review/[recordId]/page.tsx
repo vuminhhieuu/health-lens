@@ -422,13 +422,7 @@ export default function ReviewRecordPage() {
     mutationFn: async (member: HealthRecordSharedMember) => {
       const viewerId = member.viewerId ?? member.id;
       if (member.shareScope === "profile") {
-        if (!data?.profileId) {
-          throw new Error("Missing profile id");
-        }
-        await apiClient.delete(
-          ApiPaths.PROFILES.REVOKE_SHARE(data.profileId, viewerId),
-        );
-        return member;
+        throw new Error("Không thể thu hồi quyền hồ sơ từ chia sẻ kết quả khám.");
       }
       await apiClient.delete(
         ApiPaths.HEALTH_RECORDS.REVOKE_SHARE(recordId, viewerId),
@@ -465,14 +459,7 @@ export default function ReviewRecordPage() {
       accessLevel: "view" | "edit";
     }) => {
       if (payload.member.shareScope === "profile") {
-        if (!data?.profileId) {
-          throw new Error("Missing profile id");
-        }
-        await apiClient.post(ApiPaths.PROFILES.INVITATIONS(data.profileId), {
-          email: payload.member.email,
-          accessLevel: payload.accessLevel,
-        });
-        return;
+        throw new Error("Không thể chỉnh quyền hồ sơ từ chia sẻ kết quả khám.");
       }
       await apiClient.post(ApiPaths.HEALTH_RECORDS.INVITATIONS(recordId), {
         email: payload.member.email,
@@ -2430,6 +2417,7 @@ function RecordShareModal({
               <ul className="max-h-52 space-y-2 overflow-y-auto pr-1">
                 {members.map((member) =>
                   (() => {
+                    const isProfileScoped = member.shareScope === "profile";
                     return (
                       <li
                         key={member.id}
@@ -2440,7 +2428,9 @@ function RecordShareModal({
                             {member.email}
                           </p>
                           <p className="text-xs text-[#6d7a77]">
-                            {recordShareStatusLabel(member.status)}
+                            {isProfileScoped
+                              ? "Quyền kế thừa từ chia sẻ hồ sơ"
+                              : recordShareStatusLabel(member.status)}
                           </p>
                         </div>
                         <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -2449,6 +2439,7 @@ function RecordShareModal({
                               disabled={
                                 isUpdatingAccess ||
                                 isRevoking ||
+                                isProfileScoped ||
                                 member.status === "revoked" ||
                                 member.status === "expired"
                               }
@@ -2470,7 +2461,8 @@ function RecordShareModal({
                             >
                               <option value="view">Chỉ xem</option>
                               <option value="edit">Có thể chỉnh sửa</option>
-                              {member.status === "accepted" ? (
+                              {!isProfileScoped &&
+                              member.status === "accepted" ? (
                                 <option value="revoke">
                                   Thu hồi quyền truy cập
                                 </option>
