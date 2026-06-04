@@ -86,6 +86,16 @@ public class ProfileController {
         return ResponseEntity.ok(buildResponseBody(profile));
     }
 
+    @DeleteMapping(ApiRoutes.PROFILE_BY_ID_REL)
+    public ResponseEntity<Void> deleteProfile(
+            Authentication authentication,
+            @PathVariable UUID profileId
+    ) {
+        UUID userId = extractUserId(authentication);
+        profileService.deleteProfile(userId, profileId);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/{profileId}/health-records")
     public ResponseEntity<Map<String, Object>> getProfileHealthRecords(
             Authentication authentication,

@@ -9,6 +9,7 @@ import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -375,7 +376,7 @@ public class EmailService {
             mailSender.send(message);
             log.info("[EmailService] Follow-up reminder email sent successfully to: {}", recipient);
             return true;
-        } catch (MessagingException e) {
+        } catch (MessagingException | MailException e) {
             log.error("[EmailService] Failed to send follow-up reminder to {}", recipient, e);
             return false;
         }

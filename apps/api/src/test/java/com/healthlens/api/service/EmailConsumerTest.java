@@ -398,6 +398,42 @@ class EmailConsumerTest {
     }
 
     @Test
+    void handleRecord_followUpReminder_sendFalse_releasesClaimForRetry() {
+        UUID reminderId = UUID.randomUUID();
+        FollowUpReminder reminder = reminder(reminderId);
+        when(followUpReminderService.findReminderForEmail(reminderId)).thenReturn(Optional.of(reminder));
+        when(emailService.sendFollowUpReminderEmail(reminder)).thenReturn(false);
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+                consumer.handleRecord(record(Map.of(
+                        "eventType", EmailEvent.Type.FOLLOW_UP_REMINDER.streamValue(),
+                        "reminderId", reminderId.toString()
+                ))));
+
+        assertThat(ex.getMessage()).isEqualTo("Follow-up reminder email was not sent: " + reminderId);
+        verify(followUpReminderService).releaseEmailClaim(reminderId);
+        verify(followUpReminderService, never()).markEmailSent(any(UUID.class), any(Instant.class));
+    }
+
+    @Test
+    void handleRecord_followUpReminder_sendException_releasesClaimForRetry() {
+        UUID reminderId = UUID.randomUUID();
+        FollowUpReminder reminder = reminder(reminderId);
+        when(followUpReminderService.findReminderForEmail(reminderId)).thenReturn(Optional.of(reminder));
+        when(emailService.sendFollowUpReminderEmail(reminder)).thenThrow(new IllegalStateException("smtp down"));
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+                consumer.handleRecord(record(Map.of(
+                        "eventType", EmailEvent.Type.FOLLOW_UP_REMINDER.streamValue(),
+                        "reminderId", reminderId.toString()
+                ))));
+
+        assertThat(ex.getMessage()).isEqualTo("smtp down");
+        verify(followUpReminderService).releaseEmailClaim(reminderId);
+        verify(followUpReminderService, never()).markEmailSent(any(UUID.class), any(Instant.class));
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void consumeEmailEvents_deadLetterRedactsSensitiveFields() {
         StreamOperations<String, Object, Object> streamOps = mock(StreamOperations.class);

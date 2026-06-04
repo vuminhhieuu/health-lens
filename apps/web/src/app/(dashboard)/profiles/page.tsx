@@ -3,7 +3,7 @@
 import React, { Suspense, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Plus, AlertCircle, Mail } from "lucide-react";
+import { Plus, AlertCircle, Mail, Trash2 } from "lucide-react";
 
 import { ApiPaths } from "@healthlens/shared/constants";
 
@@ -15,15 +15,14 @@ import {
   mapProfilesResponse,
   mapSharedProfilesResponse,
 } from "@/lib/profileMappings";
-import type {
-  Profile,
-} from "@/lib/profileMappings";
+import type { Profile } from "@/lib/profileMappings";
 import {
   ProfileCard,
   HealthStatus,
 } from "@/components/features/profiles/ProfileCard";
 import { CreateProfileModal } from "@/components/features/profiles/CreateProfileModal";
 import { EditProfileModal } from "@/components/features/profiles/EditProfileModal";
+import { DeleteRecordModal } from "@/components/features/health-records/DeleteRecordModal";
 import { MarkInboxReadFromUrl } from "@/components/features/notifications/MarkInboxReadFromUrl";
 import { DashboardPageShell } from "@/components/layout/DashboardPageShell";
 import { useNotificationInbox } from "@/hooks/useNotificationInbox";
@@ -67,6 +66,9 @@ export default function ProfilesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [deletingProfileId, setDeletingProfileId] = useState<string | null>(
+    null,
+  );
   const {
     data: otherProfiles = [],
     isLoading: isProfilesLoading,
@@ -235,6 +237,29 @@ export default function ProfilesPage() {
     },
   });
 
+  const deleteProfileMutation = useMutation({
+    mutationFn: async (profileId: string) => {
+      await apiClient.delete(ApiPaths.PROFILES.DELETE(profileId));
+      return profileId;
+    },
+    onError: (error: unknown) => {
+      notify.error(extractApiDetail(error, "Đã xảy ra lỗi khi xóa hồ sơ."));
+    },
+    onSuccess: (deletedProfileId) => {
+      queryClient.setQueryData<Profile[]>(["profiles"], (old = []) =>
+        old.filter((profile) => profile.id !== deletedProfileId),
+      );
+      void queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      void queryClient.invalidateQueries({ queryKey: ["shared-profiles"] });
+      if (editingProfileId === deletedProfileId) {
+        setIsEditModalOpen(false);
+        setEditingProfileId(null);
+      }
+      setDeletingProfileId(null);
+      notify.success("Đã xóa hồ sơ gia đình.");
+    },
+  });
+
   const allProfiles = useMemo(() => {
     const familyProfiles = otherProfiles
       .filter((p) => !p.isDefault)
@@ -252,6 +277,7 @@ export default function ProfilesPage() {
         lastRecordAt: profile.lastRecordAt,
         isSharedProfile: false,
         canEdit: true,
+        canDelete: true,
         birthDate: profile.birthDate,
         gender: profile.gender,
       }));
@@ -275,6 +301,7 @@ export default function ProfilesPage() {
       lastRecordAt: profile.lastRecordAt,
       isSharedProfile: true,
       canEdit: profile.accessLevel === "edit",
+      canDelete: false,
       birthDate: profile.birthDate,
       gender: profile.gender,
     }));
@@ -286,6 +313,11 @@ export default function ProfilesPage() {
     () =>
       allProfiles.find((profile) => profile.id === editingProfileId) ?? null,
     [allProfiles, editingProfileId],
+  );
+  const deletingProfile = useMemo(
+    () =>
+      allProfiles.find((profile) => profile.id === deletingProfileId) ?? null,
+    [allProfiles, deletingProfileId],
   );
 
   const familyProfileCount = otherProfiles.filter((p) => !p.isDefault).length;
@@ -437,15 +469,29 @@ export default function ProfilesPage() {
               name={profile.displayName}
               relationship={profile.relationship}
               lastRecordAt={profile.lastRecordAt}
-              notes={profile.isSharedProfile 
-                 ? (profile.notes || (profile.canEdit ? "Bạn có thể chỉnh sửa dữ liệu hồ sơ này." : "Bạn chỉ có quyền xem hồ sơ này.")) 
-                 : profile.notes}
+              notes={
+                profile.isSharedProfile
+                  ? profile.notes ||
+                    (profile.canEdit
+                      ? "Bạn có thể chỉnh sửa dữ liệu hồ sơ này."
+                      : "Bạn chỉ có quyền xem hồ sơ này.")
+                  : profile.notes
+              }
               latestStatus={profile.latestStatus}
               lastUpdated={profile.lastUpdated}
               onPress={() => {
-                 setEditingProfileId(profile.id);
-                 setIsEditModalOpen(true);
-               }}
+                setEditingProfileId(profile.id);
+                setIsEditModalOpen(true);
+              }}
+              secondaryAction={
+                profile.canDelete
+                  ? {
+                      label: "Xóa",
+                      icon: Trash2,
+                      onClick: () => setDeletingProfileId(profile.id),
+                    }
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -501,6 +547,29 @@ export default function ProfilesPage() {
           updateProfileMutation.mutate({ profileId, data })
         }
         isLoading={updateProfileMutation.isPending}
+      />
+
+      <DeleteRecordModal
+        open={Boolean(deletingProfile)}
+        title="Xóa hồ sơ gia đình?"
+        description={
+          deletingProfile
+            ? `Bạn có chắc muốn xóa hồ sơ ${deletingProfile.displayName}? Các kết quả khám, lời mời và quyền chia sẻ liên quan đến hồ sơ này sẽ bị xóa theo.`
+            : undefined
+        }
+        onCancel={() => {
+          if (!deleteProfileMutation.isPending) {
+            setDeletingProfileId(null);
+          }
+        }}
+        onConfirm={() => {
+          if (deletingProfile) {
+            deleteProfileMutation.mutate(deletingProfile.id);
+          }
+        }}
+        isPending={deleteProfileMutation.isPending}
+        confirmLabel="Xóa hồ sơ"
+        pendingLabel="Đang xóa hồ sơ..."
       />
     </DashboardPageShell>
   );

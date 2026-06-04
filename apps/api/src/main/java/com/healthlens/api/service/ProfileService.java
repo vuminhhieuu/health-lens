@@ -52,6 +52,7 @@ public class ProfileService {
     private final ReferenceDataService referenceDataService;
     private final ObjectMapper objectMapper;
     private final AuditEventRecorder auditEventRecorder;
+    private final StorageService storageService;
 
     public ProfileService(
             ProfileRepository profileRepository,
@@ -60,7 +61,8 @@ public class ProfileService {
             UserRepository userRepository,
             ReferenceDataService referenceDataService,
             ObjectMapper objectMapper,
-            AuditEventRecorder auditEventRecorder
+            AuditEventRecorder auditEventRecorder,
+            StorageService storageService
     ) {
         this.profileRepository = profileRepository;
         this.profileShareRepository = profileShareRepository;
@@ -69,6 +71,7 @@ public class ProfileService {
         this.referenceDataService = referenceDataService;
         this.objectMapper = objectMapper;
         this.auditEventRecorder = auditEventRecorder;
+        this.storageService = storageService;
     }
 
     @Transactional(readOnly = true)
@@ -415,6 +418,39 @@ public class ProfileService {
                 Map.of("displayName", updatedProfile.getDisplayName()));
 
         return mapToResponse(updatedProfile);
+    }
+
+    @Transactional
+    public void deleteProfile(UUID userId, UUID profileId) {
+        Profile profile = profileRepository.findById(profileId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy hồ sơ"));
+
+        UUID profileOwnerId = profile.getUser().getId();
+        if (!userId.equals(profileOwnerId)) {
+            throw new AccessDeniedException("Chỉ chủ tài khoản mới có thể xóa hồ sơ này");
+        }
+        if (profile.isDefault()) {
+            throw new IllegalArgumentException("Không thể xóa hồ sơ mặc định");
+        }
+
+        String displayName = profile.getDisplayName();
+        List<String> healthRecordFileKeys =
+                healthRecordRepository.findFileKeysByProfileIdAndUserId(profileId, userId);
+        int exactFilesDeleted = storageService.deleteObjects(healthRecordFileKeys);
+        int prefixFilesDeleted =
+                storageService.deleteObjectsByPrefix("health-records/" + userId + "/" + profileId + "/");
+        profileRepository.delete(profile);
+
+        auditEventRecorder.recordEvent(
+                userId,
+                AuditActions.DELETE_PROFILE,
+                AuditResourceTypes.PROFILE,
+                profileId,
+                Map.of(
+                        "displayName", displayName,
+                        "healthRecordFiles", healthRecordFileKeys.size(),
+                        "exactFilesDeleted", exactFilesDeleted,
+                        "prefixFilesDeleted", prefixFilesDeleted));
     }
 
     private String normalizeOptionalText(String value) {

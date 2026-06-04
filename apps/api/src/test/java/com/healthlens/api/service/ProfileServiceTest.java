@@ -1,6 +1,8 @@
 package com.healthlens.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.healthlens.api.audit.AuditActions;
+import com.healthlens.api.audit.AuditResourceTypes;
 import com.healthlens.api.dto.MetricClassificationDto;
 import com.healthlens.api.dto.ReferenceRangeDto;
 import com.healthlens.api.dto.request.CreateProfileRequest;
@@ -28,12 +30,14 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -58,6 +62,9 @@ class ProfileServiceTest {
         @Mock
         private ReferenceDataService referenceDataService;
 
+        @Mock
+        private StorageService storageService;
+
         private ProfileService profileService;
 
         private User testUser;
@@ -74,7 +81,8 @@ class ProfileServiceTest {
                 userRepository,
                 referenceDataService,
                 new ObjectMapper(),
-                auditEventRecorder
+                auditEventRecorder,
+                storageService
         );
     }
 
@@ -381,6 +389,107 @@ class ProfileServiceTest {
                 assertThatThrownBy(() -> profileService.createProfile(userId, request))
                                 .isInstanceOf(ResourceNotFoundException.class)
                                 .hasMessageContaining("Người dùng không tồn tại");
+        }
+
+        @Test
+        void deleteProfile_OwnedFamilyProfile_ShouldDeleteAndAudit() {
+                UUID profileId = UUID.randomUUID();
+                Profile profile = new Profile();
+                profile.setId(profileId);
+                profile.setUser(testUser);
+                profile.setDisplayName("Mẹ");
+                profile.setDefault(false);
+
+                when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+                when(healthRecordRepository.findFileKeysByProfileIdAndUserId(profileId, userId))
+                                .thenReturn(List.of(
+                                                "health-records/" + userId + "/" + profileId + "/record-a/original.pdf",
+                                                "health-records/" + userId + "/" + profileId + "/record-b/original.jpg"));
+                when(storageService.deleteObjects(any())).thenReturn(2);
+                when(storageService.deleteObjectsByPrefix("health-records/" + userId + "/" + profileId + "/"))
+                                .thenReturn(0);
+
+                profileService.deleteProfile(userId, profileId);
+
+                verify(storageService).deleteObjects(List.of(
+                                "health-records/" + userId + "/" + profileId + "/record-a/original.pdf",
+                                "health-records/" + userId + "/" + profileId + "/record-b/original.jpg"));
+                verify(storageService).deleteObjectsByPrefix("health-records/" + userId + "/" + profileId + "/");
+                verify(profileRepository).delete(profile);
+                verify(auditEventRecorder).recordEvent(
+                                userId,
+                                AuditActions.DELETE_PROFILE,
+                                AuditResourceTypes.PROFILE,
+                                profileId,
+                                Map.of(
+                                                "displayName", "Mẹ",
+                                                "healthRecordFiles", 2,
+                                                "exactFilesDeleted", 2,
+                                                "prefixFilesDeleted", 0));
+        }
+
+        @Test
+        void deleteProfile_StorageDeleteFails_ShouldNotDeleteDatabaseRow() {
+                UUID profileId = UUID.randomUUID();
+                Profile profile = new Profile();
+                profile.setId(profileId);
+                profile.setUser(testUser);
+                profile.setDisplayName("Mẹ");
+                profile.setDefault(false);
+                List<String> fileKeys = List.of(
+                                "health-records/" + userId + "/" + profileId + "/record-a/original.pdf");
+
+                when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+                when(healthRecordRepository.findFileKeysByProfileIdAndUserId(profileId, userId))
+                                .thenReturn(fileKeys);
+                when(storageService.deleteObjects(fileKeys))
+                                .thenThrow(new IllegalStateException("Failed to delete explicit storage objects"));
+
+                assertThatThrownBy(() -> profileService.deleteProfile(userId, profileId))
+                                .isInstanceOf(IllegalStateException.class)
+                                .hasMessageContaining("Failed to delete explicit storage objects");
+                verify(profileRepository, never()).delete(any());
+                verify(auditEventRecorder, never()).recordEvent(any(), any(), any(), any(), any());
+        }
+
+        @Test
+        void deleteProfile_DefaultProfile_ShouldThrow() {
+                UUID profileId = UUID.randomUUID();
+                Profile profile = new Profile();
+                profile.setId(profileId);
+                profile.setUser(testUser);
+                profile.setDisplayName("Tôi");
+                profile.setDefault(true);
+
+                when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+
+                assertThatThrownBy(() -> profileService.deleteProfile(userId, profileId))
+                                .isInstanceOf(IllegalArgumentException.class)
+                                .hasMessageContaining("Không thể xóa hồ sơ mặc định");
+                verify(storageService, never()).deleteObjects(any());
+                verify(profileRepository, never()).delete(any());
+                verify(auditEventRecorder, never()).recordEvent(any(), any(), any(), any(), any());
+        }
+
+        @Test
+        void deleteProfile_NonOwner_ShouldThrowAccessDenied() {
+                UUID profileId = UUID.randomUUID();
+                User owner = new User();
+                owner.setId(UUID.randomUUID());
+                Profile profile = new Profile();
+                profile.setId(profileId);
+                profile.setUser(owner);
+                profile.setDisplayName("Bố");
+                profile.setDefault(false);
+
+                when(profileRepository.findById(profileId)).thenReturn(Optional.of(profile));
+
+                assertThatThrownBy(() -> profileService.deleteProfile(userId, profileId))
+                                .isInstanceOf(AccessDeniedException.class)
+                                .hasMessageContaining("Chỉ chủ tài khoản mới có thể xóa hồ sơ này");
+                verify(storageService, never()).deleteObjects(any());
+                verify(profileRepository, never()).delete(any());
+                verify(auditEventRecorder, never()).recordEvent(any(), any(), any(), any(), any());
         }
 
         @Test

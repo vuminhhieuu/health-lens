@@ -75,6 +75,7 @@ public final class ApiRoutes {
             PROFILE_FOLLOW_UP_REMINDERS + "/{reminderId}";
     public static final String PROFILE_SHARE_BY_VIEWER = PROFILES_BASE + "/{profileId}/shares/{viewerId}";
     // Relative variants (for controllers already annotated with @RequestMapping(PROFILES_BASE))
+    public static final String PROFILE_BY_ID_REL = "/{profileId}";
     public static final String PROFILE_SHARE_BY_VIEWER_REL = "/{profileId}/shares/{viewerId}";
     public static final String SHARED_PROFILES = API_V1 + "/shared-profiles";
 

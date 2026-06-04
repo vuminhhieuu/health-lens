@@ -269,8 +269,15 @@ public class EmailConsumer {
             followUpReminderService.markEmailSkippedOptOut(reminderId, Instant.now());
             return;
         }
-        boolean sent = emailService.sendFollowUpReminderEmail(reminder);
+        boolean sent;
+        try {
+            sent = emailService.sendFollowUpReminderEmail(reminder);
+        } catch (RuntimeException ex) {
+            followUpReminderService.releaseEmailClaim(reminderId);
+            throw ex;
+        }
         if (!sent) {
+            followUpReminderService.releaseEmailClaim(reminderId);
             throw new IllegalStateException("Follow-up reminder email was not sent: " + reminderId);
         }
         followUpReminderService.markEmailSent(reminderId, Instant.now());

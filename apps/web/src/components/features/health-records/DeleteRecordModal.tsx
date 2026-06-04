@@ -10,6 +10,8 @@ type DeleteRecordModalProps = {
   onCancel: () => void;
   onConfirm: () => void;
   isPending?: boolean;
+  confirmLabel?: string;
+  pendingLabel?: string;
 };
 
 const DEFAULT_TITLE = "Xác nhận xóa kết quả?";
@@ -23,6 +25,8 @@ export function DeleteRecordModal({
   onCancel,
   onConfirm,
   isPending = false,
+  confirmLabel = "Xóa kết quả",
+  pendingLabel = "Đang xóa...",
 }: DeleteRecordModalProps) {
   const titleId = useId();
   const descriptionId = useId();
@@ -55,7 +59,7 @@ export function DeleteRecordModal({
               className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#ba1a1a] py-4 font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {isPending ? "Đang xóa..." : "Xóa kết quả"}
+              {isPending ? pendingLabel : confirmLabel}
             </button>
             <button
               type="button"
